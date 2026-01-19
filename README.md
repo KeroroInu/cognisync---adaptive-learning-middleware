@@ -13,17 +13,17 @@ cognisync/
 │   ├── services/
 │   └── package.json
 │
-├── backend/                  # 后端项目 (FastAPI + Python 3.11+)
-│   ├── app/
-│   │   ├── main.py
-│   │   ├── api/
-│   │   ├── schemas/
+├── backend/                  # 后端项目 (Node.js + Express + TypeScript)
+│   ├── src/
+│   │   ├── index.ts
+│   │   ├── routes/
+│   │   ├── controllers/
 │   │   ├── models/
 │   │   ├── services/
 │   │   └── middlewares/
 │   ├── tests/
 │   ├── Dockerfile
-│   └── README.md
+│   └── package.json
 │
 ├── docker-compose.yml        # Docker Compose 配置
 ├── Makefile                  # 自动化命令
@@ -48,11 +48,11 @@ npm run dev
 
 ```bash
 cd backend
-pip install -e ".[dev]"
-uvicorn app.main:app --reload
+npm install
+npm run dev
 ```
 
-访问: http://localhost:8000/docs
+访问: http://localhost:8000
 
 详见 [backend/README.md](backend/README.md)
 
@@ -85,9 +85,9 @@ docker-compose down
 - Tailwind CSS
 
 ### 后端
-- FastAPI + Python 3.11+
-- SQLAlchemy 2.0 + Pydantic v2
-- PostgreSQL + Redis
+- Node.js + Express + TypeScript
+- PostgreSQL + Prisma ORM
+- Redis
 - Docker + Docker Compose
 
 ## 📝 开发命令
