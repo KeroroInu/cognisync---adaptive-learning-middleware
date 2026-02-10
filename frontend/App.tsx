@@ -8,7 +8,7 @@ import { Evidence } from './views/Evidence';
 import { useAppStore } from './services/store';
 
 function App() {
-  const { state, toggleResearchMode, setLanguage, addMessage, addCalibrationLog, updateNode } = useAppStore();
+  const { state, toggleResearchMode, setLanguage, addMessage, addCalibrationLog, updateNode, updateProfile } = useAppStore();
   const [currentView, setCurrentView] = useState<'dashboard' | 'chat' | 'graph' | 'calibration' | 'evidence'>('dashboard');
 
   const renderContent = () => {
@@ -16,7 +16,15 @@ function App() {
       case 'dashboard':
         return <Dashboard profile={state.profile} onNavigate={setCurrentView} language={state.language} />;
       case 'chat':
-        return <Chat messages={state.messages} onSendMessage={addMessage} language={state.language} />;
+        return (
+          <Chat
+            messages={state.messages}
+            onSendMessage={addMessage}
+            onUpdateProfile={updateProfile}
+            language={state.language}
+            isResearchMode={state.isResearchMode}
+          />
+        );
       case 'graph':
         return (
           <KnowledgeGraph 

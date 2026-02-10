@@ -1,0 +1,54 @@
+[tool.poetry]
+name = "cognisync-backend"
+version = "0.1.0"
+description = "CogniSync Adaptive Learning Middleware - Backend API"
+authors = ["CogniSync Team <contact@cognisync.dev>"]
+readme = "README.md"
+packages = [{include = "app"}]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+fastapi = "^0.115.0"
+uvicorn = {extras = ["standard"], version = "^0.32.0"}
+pydantic = "^2.10.0"
+pydantic-settings = "^2.6.0"
+sqlalchemy = {extras = ["asyncio"], version = "^2.0.36"}
+asyncpg = "^0.30.0"
+neo4j = "^5.28.0"
+httpx = "^0.28.1"
+python-dotenv = "^1.0.1"
+python-multipart = "^0.0.20"
+alembic = "^1.14.0"
+tenacity = "^9.0.0"
+openai = "^1.58.1"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3.4"
+pytest-asyncio = "^0.24.0"
+pytest-cov = "^6.0.0"
+black = "^24.10.0"
+ruff = "^0.8.4"
+mypy = "^1.13.0"
+httpx = "^0.28.1"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.black]
+line-length = 100
+target-version = ['py311']
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.mypy]
+python_version = "3.11"
+strict = false
+ignore_missing_imports = true
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

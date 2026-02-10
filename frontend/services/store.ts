@@ -77,12 +77,20 @@ export const useAppStore = () => {
     }));
   };
 
+  const updateProfile = (profile: UserProfile) => {
+    setState(prev => ({
+      ...prev,
+      profile
+    }));
+  };
+
   return {
     state,
     toggleResearchMode,
     setLanguage,
     addMessage,
     addCalibrationLog,
-    updateNode
+    updateNode,
+    updateProfile
   };
 };
