@@ -10,9 +10,10 @@ interface Props {
   onNodeUpdate: (id: string, updates: Partial<Node>) => void;
   onLogCalibration: (log: Omit<CalibrationLog, 'id' | 'timestamp'>) => void;
   language: Language;
+  theme: 'light' | 'dark';
 }
 
-export const KnowledgeGraph: React.FC<Props> = ({ nodes, edges, onNodeUpdate, onLogCalibration, language }) => {
+export const KnowledgeGraph: React.FC<Props> = ({ nodes, edges, onNodeUpdate, onLogCalibration, language, theme }) => {
   const t = translations[language];
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -67,8 +68,9 @@ export const KnowledgeGraph: React.FC<Props> = ({ nodes, edges, onNodeUpdate, on
     const link = linkGroup.selectAll("line")
         .data(d3Links)
         .join("line")
-        .attr("stroke", "#334155")
-        .attr("stroke-width", 1.5);
+        .attr("stroke", "#94a3b8")
+        .attr("stroke-width", 1.5)
+        .attr("opacity", 0.4);
 
     const node = nodeGroup.selectAll("g")
         .data(d3Nodes)
@@ -124,9 +126,9 @@ export const KnowledgeGraph: React.FC<Props> = ({ nodes, edges, onNodeUpdate, on
         .attr("dy", (d: any) => 30 + d.frequency)
         .attr("text-anchor", "middle")
         .text((d: any) => d.name)
-        .attr("fill", "#cbd5e1")
-        .attr("font-size", "10px")
-        .attr("font-weight", "500")
+        .attr("fill", "#94a3b8")
+        .attr("font-size", "11px")
+        .attr("font-weight", "600")
         .style("pointer-events", "none")
         .style("user-select", "none");
 
@@ -199,107 +201,198 @@ export const KnowledgeGraph: React.FC<Props> = ({ nodes, edges, onNodeUpdate, on
   return (
     <div className="flex h-[calc(100vh-8rem)] gap-6">
       {/* Graph Area */}
-      <div ref={containerRef} className="flex-1 bg-slate-900 border border-slate-800 rounded-xl relative overflow-hidden flex flex-col">
+      <div ref={containerRef} className="flex-1 glass-card relative overflow-hidden flex flex-col animate-fade-in">
          {/* Controls */}
          <div className="absolute top-4 left-4 z-10 w-64">
             <div className="relative">
-                <Search size={16} className="absolute left-3 top-3 text-slate-500" />
-                <input 
-                    type="text" 
+                <Search size={16} className="absolute left-3 top-3" style={{
+                  color: theme === 'light' ? '#9ca3af' : '#94a3b8'
+                }} />
+                <input
+                    type="text"
                     placeholder={t.searchConcept}
                     value={searchTerm}
                     onChange={e => setSearchTerm(e.target.value)}
-                    className="w-full bg-slate-950/80 backdrop-blur border border-slate-700 rounded-lg py-2 pl-9 pr-4 text-sm text-slate-200 focus:outline-none focus:border-indigo-500"
+                    className="w-full backdrop-blur rounded-lg py-2 pl-9 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-sm"
+                    style={{
+                      backgroundColor: theme === 'light' ? 'rgba(255, 255, 255, 0.9)' : '#1e293b',
+                      border: `1px solid ${theme === 'light' ? 'rgba(0, 0, 0, 0.1)' : 'rgba(255, 255, 255, 0.1)'}`,
+                      color: theme === 'light' ? '#000000' : '#f8fafc'
+                    }}
                 />
             </div>
          </div>
-         
+
          {/* Legends */}
-         <div className="absolute bottom-4 left-4 z-10 flex space-x-4 bg-slate-950/80 p-2 rounded-lg border border-slate-800">
-            <div className="flex items-center space-x-1"><div className="w-3 h-3 rounded-full bg-rose-500"></div><span className="text-xs text-slate-400">{t.legendWeak}</span></div>
-            <div className="flex items-center space-x-1"><div className="w-3 h-3 rounded-full bg-amber-500"></div><span className="text-xs text-slate-400">{t.legendDeveloping}</span></div>
-            <div className="flex items-center space-x-1"><div className="w-3 h-3 rounded-full bg-emerald-500"></div><span className="text-xs text-slate-400">{t.legendMastered}</span></div>
+         <div className="absolute bottom-4 left-4 z-10 flex space-x-4 backdrop-blur p-2 rounded-lg shadow-md" style={{
+           backgroundColor: theme === 'light' ? 'rgba(255, 255, 255, 0.9)' : '#1e293b',
+           border: `1px solid ${theme === 'light' ? 'rgba(0, 0, 0, 0.1)' : 'rgba(255, 255, 255, 0.1)'}`
+         }}>
+            <div className="flex items-center space-x-1">
+              <div className="w-3 h-3 rounded-full bg-rose-500 shadow-sm"></div>
+              <span className="text-xs" style={{ color: theme === 'light' ? '#404040' : '#e2e8f0' }}>{t.legendWeak}</span>
+            </div>
+            <div className="flex items-center space-x-1">
+              <div className="w-3 h-3 rounded-full bg-amber-500 shadow-sm"></div>
+              <span className="text-xs" style={{ color: theme === 'light' ? '#404040' : '#e2e8f0' }}>{t.legendDeveloping}</span>
+            </div>
+            <div className="flex items-center space-x-1">
+              <div className="w-3 h-3 rounded-full bg-emerald-500 shadow-sm"></div>
+              <span className="text-xs" style={{ color: theme === 'light' ? '#404040' : '#e2e8f0' }}>{t.legendMastered}</span>
+            </div>
          </div>
 
          {/* SVG Visualization */}
-         <svg ref={svgRef} className="w-full h-full cursor-grab active:cursor-grabbing bg-slate-950/50"></svg>
+         <svg ref={svgRef} className="w-full h-full cursor-grab active:cursor-grabbing" style={{
+           background: theme === 'light' ? '#ffffff' : 'linear-gradient(to bottom right, #0f172a, #1e293b)'
+         }}></svg>
       </div>
 
       {/* Detail Sidebar */}
       {selectedNode ? (
-          <div className="w-80 shrink-0 bg-slate-900 border border-slate-800 rounded-xl p-6 flex flex-col h-full overflow-y-auto animate-in slide-in-from-right duration-300">
+          <div className="w-80 shrink-0 glass-card p-6 flex flex-col h-full overflow-y-auto animate-slide-in-right stagger-2 hover:shadow-xl transition-all duration-300">
             <div className="flex justify-between items-start mb-4">
-                <h3 className="text-xl font-bold text-slate-100">{selectedNode.name}</h3>
-                <button onClick={() => setSelectedNode(null)} className="text-slate-500 hover:text-slate-300"><X size={20}/></button>
+                <h3 className="text-xl font-bold" style={{ color: theme === 'light' ? '#000000' : '#ffffff' }}>{selectedNode.name}</h3>
+                <button onClick={() => setSelectedNode(null)} className="transition-colors" style={{
+                  color: theme === 'light' ? '#9ca3af' : '#94a3b8'
+                }}>
+                  <X size={20}/>
+                </button>
             </div>
-            
+
             <div className="space-y-6">
                 <div>
-                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{t.masteryLevel}</span>
+                    <span className="text-xs font-semibold uppercase tracking-wider" style={{
+                      color: theme === 'light' ? '#404040' : '#e2e8f0'
+                    }}>{t.masteryLevel}</span>
                     <div className="flex items-center space-x-3 mt-2">
-                        <div className="flex-1 h-2 bg-slate-800 rounded-full overflow-hidden">
+                        <div className="flex-1 h-2 rounded-full overflow-hidden" style={{
+                          backgroundColor: theme === 'light' ? '#e5e7eb' : '#334155'
+                        }}>
                             <div className="h-full rounded-full transition-all duration-500" style={{ width: `${selectedNode.mastery}%`, backgroundColor: getNodeColor(selectedNode.mastery) }}></div>
                         </div>
-                        <span className="text-sm font-mono text-slate-300">{selectedNode.mastery}%</span>
+                        <span className="text-sm font-mono" style={{
+                          color: theme === 'light' ? '#000000' : '#ffffff'
+                        }}>{selectedNode.mastery}%</span>
                     </div>
                 </div>
 
                 <div>
-                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{t.definition}</span>
-                    <p className="text-sm text-slate-400 mt-1 leading-relaxed">{selectedNode.description}</p>
+                    <span className="text-xs font-semibold uppercase tracking-wider" style={{
+                      color: theme === 'light' ? '#404040' : '#e2e8f0'
+                    }}>{t.definition}</span>
+                    <p className="text-sm mt-1 leading-relaxed" style={{
+                      color: theme === 'light' ? '#000000' : '#ffffff'
+                    }}>{selectedNode.description}</p>
                 </div>
 
                 {/* Evidence Section */}
-                <div className="bg-slate-800/50 rounded-lg p-3">
-                    <span className="text-xs font-semibold text-indigo-400 uppercase tracking-wider block mb-2">{t.evidenceSection}</span>
-                    <p className="text-xs text-slate-400 italic">"User correctly identified gradient descent usage in turn #4..."</p>
+                <div className="rounded-lg p-3" style={{
+                  backgroundColor: theme === 'light' ? '#f0f4ff' : '#334155',
+                  border: `1px solid ${theme === 'light' ? '#d0d9ff' : '#475569'}`
+                }}>
+                    <span className="text-xs font-semibold uppercase tracking-wider block mb-2" style={{
+                      color: theme === 'light' ? '#4338ca' : '#a5b4fc'
+                    }}>{t.evidenceSection}</span>
+                    <p className="text-xs italic" style={{
+                      color: theme === 'light' ? '#404040' : '#e2e8f0'
+                    }}>"User correctly identified gradient descent usage in turn #4..."</p>
                 </div>
 
                 {/* Calibration Section */}
                 {!isCalibrating ? (
-                     <button 
+                     <button
                         onClick={() => setIsCalibrating(true)}
-                        className="w-full py-2 flex items-center justify-center space-x-2 border border-slate-600 rounded-lg text-slate-300 hover:bg-slate-800 hover:border-slate-500 transition-colors text-sm"
+                        className="w-full py-2 flex items-center justify-center space-x-2 rounded-lg transition-all text-sm shadow-sm"
+                        style={{
+                          border: `1px solid ${theme === 'light' ? '#d1d5db' : '#475569'}`,
+                          color: theme === 'light' ? '#000000' : '#ffffff',
+                          backgroundColor: 'transparent'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.backgroundColor = theme === 'light' ? '#f9fafb' : '#334155';
+                          e.currentTarget.style.borderColor = theme === 'light' ? '#9ca3af' : '#64748b';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor = 'transparent';
+                          e.currentTarget.style.borderColor = theme === 'light' ? '#d1d5db' : '#475569';
+                        }}
                      >
                         <Edit3 size={14} />
                         <span>{t.disagree}</span>
                      </button>
                 ) : (
-                    <div className="bg-slate-800 rounded-lg p-4 space-y-4 border border-indigo-500/30">
-                        <h4 className="text-sm font-semibold text-indigo-300">{t.calibrateNode}</h4>
-                        
+                    <div className="rounded-lg p-4 space-y-4 shadow-sm" style={{
+                      backgroundColor: theme === 'light' ? '#f0f4ff' : '#334155',
+                      border: `1px solid ${theme === 'light' ? '#d0d9ff' : '#475569'}`
+                    }}>
+                        <h4 className="text-sm font-semibold" style={{
+                          color: theme === 'light' ? '#4338ca' : '#a5b4fc'
+                        }}>{t.calibrateNode}</h4>
+
                         <div>
-                            <label className="text-xs text-slate-400 block mb-1">{t.yourEstimate}</label>
-                            <input 
-                                type="range" 
-                                min="0" max="100" 
-                                value={calibrateValue} 
+                            <label className="text-xs block mb-1" style={{
+                              color: theme === 'light' ? '#404040' : '#e2e8f0'
+                            }}>{t.yourEstimate}</label>
+                            <input
+                                type="range"
+                                min="0" max="100"
+                                value={calibrateValue}
                                 onChange={(e) => setCalibrateValue(parseInt(e.target.value))}
-                                className="w-full accent-indigo-500"
+                                className="w-full accent-indigo-500 h-2 rounded-lg appearance-none cursor-pointer"
+                                style={{
+                                  backgroundColor: theme === 'light' ? '#e5e7eb' : '#475569'
+                                }}
                             />
-                            <div className="text-right text-xs text-indigo-400 font-mono">{calibrateValue}%</div>
+                            <div className="text-right text-xs font-mono" style={{
+                              color: theme === 'light' ? '#4338ca' : '#a5b4fc'
+                            }}>{calibrateValue}%</div>
                         </div>
 
                         <div>
-                            <label className="text-xs text-slate-400 block mb-1">{t.reason}</label>
-                            <textarea 
+                            <label className="text-xs block mb-1" style={{
+                              color: theme === 'light' ? '#404040' : '#e2e8f0'
+                            }}>{t.reason}</label>
+                            <textarea
                                 value={calibrateReason}
                                 onChange={e => setCalibrateReason(e.target.value)}
-                                className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-xs text-slate-200"
+                                className="w-full rounded p-2 text-xs focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
                                 rows={2}
                                 placeholder="..."
+                                style={{
+                                  backgroundColor: theme === 'light' ? '#ffffff' : '#1e293b',
+                                  border: `1px solid ${theme === 'light' ? '#d1d5db' : '#475569'}`,
+                                  color: theme === 'light' ? '#000000' : '#ffffff'
+                                }}
                             />
                         </div>
 
                         <div className="flex space-x-2">
-                            <button onClick={submitCalibration} className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white text-xs py-2 rounded">{t.submit}</button>
-                            <button onClick={() => setIsCalibrating(false)} className="px-3 bg-slate-700 hover:bg-slate-600 text-white text-xs py-2 rounded">{t.cancel}</button>
+                            <button onClick={submitCalibration} className="flex-1 bg-gradient-to-r from-indigo-500 to-purple-600 hover:shadow-lg hover:shadow-indigo-500/30 text-white text-xs py-2 rounded transition-all duration-300 active:scale-95">{t.submit}</button>
+                            <button
+                              onClick={() => setIsCalibrating(false)}
+                              className="px-3 text-xs py-2 rounded transition-colors"
+                              style={{
+                                backgroundColor: theme === 'light' ? '#e5e7eb' : '#475569',
+                                color: theme === 'light' ? '#000000' : '#ffffff'
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.backgroundColor = theme === 'light' ? '#d1d5db' : '#64748b';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.backgroundColor = theme === 'light' ? '#e5e7eb' : '#475569';
+                              }}
+                            >{t.cancel}</button>
                         </div>
                     </div>
                 )}
-                
+
                 {selectedNode.isFlagged && !isCalibrating && (
-                    <div className="flex items-center space-x-2 text-amber-500 bg-amber-500/10 p-2 rounded text-xs">
+                    <div className="flex items-center space-x-2 p-2 rounded text-xs" style={{
+                      color: theme === 'light' ? '#92400e' : '#fbbf24',
+                      backgroundColor: theme === 'light' ? '#fef3c7' : '#78350f',
+                      border: `1px solid ${theme === 'light' ? '#fde68a' : '#92400e'}`
+                    }}>
                         <AlertTriangle size={14} />
                         <span>{t.flagged}</span>
                     </div>
@@ -307,8 +400,11 @@ export const KnowledgeGraph: React.FC<Props> = ({ nodes, edges, onNodeUpdate, on
             </div>
           </div>
       ) : (
-          <div className="w-80 shrink-0 flex items-center justify-center border border-dashed border-slate-800 rounded-xl text-slate-600">
-              <span className="text-sm">Select a node to view details</span>
+          <div className="w-80 shrink-0 flex items-center justify-center border border-dashed rounded-xl text-sm" style={{
+            borderColor: theme === 'light' ? '#d1d5db' : '#475569',
+            color: theme === 'light' ? '#9ca3af' : '#94a3b8'
+          }}>
+              <span>Select a node to view details</span>
           </div>
       )}
     </div>

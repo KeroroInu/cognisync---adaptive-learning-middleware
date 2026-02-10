@@ -1,9 +1,32 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { AppState, UserProfile, Node, CalibrationLog, ChatMessage, Language } from '../types';
 import { INITIAL_STATE } from '../constants';
 
+export type Theme = 'light' | 'dark';
+
 export const useAppStore = () => {
+  // 从localStorage读取主题偏好，默认为light
+  const [theme, setThemeState] = useState<Theme>(() => {
+    const saved = localStorage.getItem('cognisync-theme');
+    const initialTheme = (saved as Theme) || 'light';
+    // 立即设置到DOM上，避免闪烁
+    if (typeof document !== 'undefined') {
+      document.documentElement.setAttribute('data-theme', initialTheme);
+    }
+    return initialTheme;
+  });
+
   const [state, setState] = useState<AppState>(INITIAL_STATE);
+
+  // 主题切换时更新localStorage和document类名
+  useEffect(() => {
+    localStorage.setItem('cognisync-theme', theme);
+    document.documentElement.setAttribute('data-theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setThemeState(prev => prev === 'light' ? 'dark' : 'light');
+  };
 
   const toggleResearchMode = () => {
     setState(prev => ({ ...prev, isResearchMode: !prev.isResearchMode }));
@@ -63,7 +86,7 @@ export const useAppStore = () => {
       id: `cal_${Date.now()}`,
       timestamp: new Date().toISOString()
     };
-    
+
     setState(prev => ({
       ...prev,
       logs: [newLog, ...prev.logs]
@@ -86,6 +109,8 @@ export const useAppStore = () => {
 
   return {
     state,
+    theme,
+    toggleTheme,
     toggleResearchMode,
     setLanguage,
     addMessage,

@@ -3,23 +3,16 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
     <title>CogniSync Research Prototype</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-      /* Custom Scrollbar for Obsidian-like feel */
-      ::-webkit-scrollbar {
-        width: 8px;
-        height: 8px;
-      }
-      ::-webkit-scrollbar-track {
-        background: #0f172a; 
-      }
-      ::-webkit-scrollbar-thumb {
-        background: #334155; 
-        border-radius: 4px;
-      }
-      ::-webkit-scrollbar-thumb:hover {
-        background: #475569; 
+      /* Smooth transitions for page navigation */
+      #root {
+        height: 100%;
+        width: 100%;
       }
     </style>
   <script type="importmap">
@@ -36,7 +29,7 @@
 </script>
 <link rel="stylesheet" href="/index.css">
 </head>
-  <body class="bg-slate-950 text-slate-200 antialiased overflow-hidden">
+  <body class="antialiased overflow-hidden gradient-mesh">
     <div id="root"></div>
   <script type="module" src="/index.tsx"></script>
 </body>

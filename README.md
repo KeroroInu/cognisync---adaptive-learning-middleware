@@ -270,6 +270,196 @@ CORS_ORIGINS=http://localhost:3000,http://localhost:3001
 - 确认网络连接
 - 查看后端日志获取详细错误信息
 
+---
+
+## 🎨 前端UI优化 - 浅白色 Apple 风格
+
+### ✨ 更新内容
+
+前端界面已全面升级为**浅白色磨砂质感**设计，采用类似 Apple 官网的动效和交互体验：
+
+####  1. 设计语言
+- **配色方案**：从深色主题切换到浅白色主题
+  - 主背景：`#fafafa` (浅灰白色)
+  - 卡片背景：半透明白色 + 毛玻璃效果（Glassmorphism）
+  - 品牌色：`#007aff`（Apple 蓝）、`#34c759`（翠绿）、`#ff2d55`（粉红）
+
+- **视觉效果**：
+  - Glassmorphism（毛玻璃）卡片
+  - 柔和阴影和圆角
+  - 渐变网格背景
+
+#### 2. 动效系统
+- **页面过渡**：淡入淡出 + 平滑滑动
+- **元素动画**：
+  - `fadeIn` - 元素淡入
+  - `slideInRight/Left` - 左右滑入
+  - `scaleIn` - 缩放进入
+  - `float` - 悬浮动画
+- **交互反馈**：
+  - 按钮悬停放大效果
+  - 卡片悬停阴影增强
+  - 图标微动效果
+
+#### 3. 核心样式文件
+
+##### `frontend/index.css`
+完整的 CSS 变量系统 + 动画库：
+
+```css
+/* 主题变量 */
+:root {
+  --bg-primary: #fafafa;
+  --glass-bg: rgba(255, 255, 255, 0.75);
+  --brand-primary: #007aff;
+  --shadow-md: 0 4px 12px 0 rgba(0, 0, 0, 0.08);
+  --transition-base: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+  --blur-md: 20px;
+}
+
+/* 毛玻璃卡片 */
+.glass-card {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--blur-md)) saturate(180%);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: var(--shadow-md);
+  border-radius: 16px;
+}
+
+/* 动画关键帧 */
+@keyframes fadeIn { /* ... */ }
+@keyframes slideInRight { /* ... */ }
+@keyframes scaleIn { /* ... */ }
+```
+
+#### 4. 组件更新
+
+##### `components/Layout.tsx`
+- 侧边栏：玻璃效果 + 圆角边框 + 滑入动画
+- 导航按钮：渐变激活状态 + 悬停阴影
+- 主内容区：圆角卡片容器 + 淡入动画
+
+```tsx
+// 激活状态按钮
+className="bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg shadow-blue-500/30"
+
+// 玻璃卡片
+className="glass-card rounded-r-3xl shadow-xl animate-slide-in-left"
+```
+
+#### 5. 已优化的视图组件
+
+以下组件已更新为浅色主题（保持原有功能，仅样式优化）：
+
+- ✅ **Layout（布局）** - 毛玻璃侧边栏 + 渐变激活效果 + **浅色/深色主题切换**
+- ✅ **Dashboard（仪表盘）** - 毛玻璃卡片 + 渐变图标 + 悬停动效
+- ⏳ **Chat（对话）** - 待更新样式
+- ⏳ **KnowledgeGraph（知识图谱）** - 待更新样式
+- ⏳ **Calibration（校准）** - 待更新样式
+- ⏳ **Evidence（证据）** - 待更新样式
+
+#### 6. 🌗 主题切换功能（新增）
+
+**位置**：侧边栏左下角，语言切换上方
+
+**功能**：
+- 一键切换浅色/深色主题
+- 自动保存到 localStorage
+- 流畅的过渡动画
+- 渐变开关效果（浅色模式：橙色，深色模式：紫色）
+
+**使用方法**：
+点击侧边栏底部的主题切换开关，即可在浅色和深色模式之间切换。
+
+**技术实现**：
+- 状态管理：在 `store.ts` 中添加 `theme` 状态
+- 持久化：使用 `localStorage` 保存用户偏好
+- 样式切换：通过 `data-theme` 属性控制CSS变量
+
+### 🚀 如何使用
+
+#### 1. 已完成的更新
+
+以下文件已自动更新，无需手动操作：
+
+- ✅ `frontend/index.css` - 新主题样式系统
+- ✅ `frontend/index.html` - 背景和样式引用
+- ✅ `frontend/components/Layout.tsx` - 布局组件 + 主题切换按钮
+- ✅ `frontend/views/Dashboard.tsx` - 仪表盘组件（Apple风格）
+- ✅ `frontend/services/store.ts` - 状态管理（添加主题状态）
+- ✅ `frontend/App.tsx` - 主组件（传递主题props）
+
+#### 2. 查看效果
+
+重启前端开发服务器即可看到新UI：
+
+```bash
+cd frontend
+npm run dev
+```
+
+访问 http://localhost:3001 查看浅白色 Apple 风格界面。
+
+#### 3. Dashboard 优化亮点
+
+- **毛玻璃卡片**：顶部三个指标卡片使用glass-card效果
+- **渐变图标背景**：每个图标有独特的渐变色背景
+- **悬停动效**：
+  - 图标放大效果
+  - 卡片阴影增强
+  - 箭头滑动效果
+- **圆角统一**：所有卡片使用16px-20px圆角
+- **渐进动画**：元素依次淡入（stagger animation）
+
+#### 4. 渐进式更新（可选）
+
+其他视图组件（Chat、Graph等）可根据需要逐步更新。主要改动模式：
+
+```tsx
+// 旧样式（深色）
+className="bg-slate-900 border border-slate-800 text-slate-200"
+
+// 新样式（浅色毛玻璃）
+className="glass-card text-gray-900 shadow-md hover:shadow-lg transition-all duration-300"
+```
+
+### 🎯 设计亮点
+
+| 特性 | 说明 |
+|-----|------|
+| **Glassmorphism** | 半透明毛玻璃效果，backdrop-filter 实现 |
+| **Smooth Transitions** | 所有交互使用 cubic-bezier 缓动函数 |
+| **Stagger Animation** | 页面元素依次渐入，层次感强 |
+| **Micro-interactions** | 按钮、卡片的细腻悬停效果 |
+| **Color Palette** | Apple 设计语言的蓝绿粉配色 |
+| **Rounded Corners** | 8px - 20px 渐进圆角系统 |
+| **Soft Shadows** | 多层阴影模拟真实光照 |
+
+### 📝 CSS 类名速查
+
+常用工具类：
+
+- `.glass-card` - 毛玻璃卡片
+- `.text-gradient` - 渐变文字
+- `.animate-fade-in` - 淡入动画
+- `.animate-slide-in-right` - 右滑入
+- `.interactive` - 交互元素（悬停效果）
+- `.stagger-1` ~ `.stagger-5` - 延迟动画
+
+### 🔧 自定义配置
+
+修改 `index.css` 中的 CSS 变量即可调整主题：
+
+```css
+:root {
+  --brand-primary: #007aff;  /* 主品牌色 */
+  --blur-md: 20px;            /* 毛玻璃模糊度 */
+  --transition-base: 250ms;   /* 默认过渡时间 */
+}
+```
+
+---
+
 ## 文档
 
 - [完整项目规格](docs/PROJECT_SPECIFICATION.md)
