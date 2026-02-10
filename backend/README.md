@@ -82,6 +82,8 @@ docker-compose up -d postgres redis
 
 ## API 端点
 
+### 学生端 API
+
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/health` | 健康检查 |
@@ -91,6 +93,26 @@ docker-compose up -d postgres redis
 | GET | `/api/graph/{userId}` | 获取知识图谱 |
 | PUT | `/api/graph/node/{nodeId}` | 更新知识节点 |
 | POST | `/api/calibration` | 记录校准日志 |
+
+### Admin API（需要 X-ADMIN-KEY Header）
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/admin/explorer/tables` | 列出所有可视化表 |
+| GET | `/api/admin/explorer/tables/{table}/schema` | 获取表结构 |
+| GET | `/api/admin/explorer/tables/{table}/data` | 分页查询表数据 |
+| GET | `/api/admin/explorer/tables/{table}/export` | 导出表数据（JSON） |
+| GET | `/api/admin/users` | 用户列表（分页） |
+| GET | `/api/admin/analytics/overview` | 系统统计概览 |
+
+**Admin API 使用示例**：
+```bash
+# 获取所有表
+curl -H "X-ADMIN-KEY: your_admin_key" http://localhost:8000/api/admin/explorer/tables
+
+# 查看 users 表数据
+curl -H "X-ADMIN-KEY: your_admin_key" http://localhost:8000/api/admin/explorer/tables/users/data?page=1&page_size=10
+```
 
 ## 技术栈
 
@@ -146,6 +168,46 @@ python3 -m uvicorn main:app --reload --host 0.0.0.0 --port 8000
 black app/
 isort app/
 ```
+
+### 运行测试
+
+```bash
+# 安装开发依赖（首次运行）
+pip install -r requirements-dev.txt
+
+# 运行所有测试
+pytest tests/ -v
+
+# 运行特定测试文件
+pytest tests/test_admin_endpoints.py -v
+
+# 运行特定测试用例
+pytest tests/test_admin_endpoints.py::test_list_tables -v -s
+
+# 查看测试覆盖率
+pytest tests/ --cov=app --cov-report=html
+```
+
+**测试文件说明**：
+- `tests/test_api_endpoints.py` - 学生端 API 集成测试
+  - 聊天接口测试
+  - 画像管理测试
+  - 知识图谱测试
+  - 用户数据导出测试
+  - 完整用户流程测试
+
+- `tests/test_admin_endpoints.py` - Admin API 集成测试（13 个测试用例）
+  - 鉴权测试（无 Key、错误 Key、正确 Key）
+  - 数据浏览器测试（列表表、获取结构、获取数据、分页、导出）
+  - 用户管理测试
+  - 数据分析测试
+  - 完整 Admin 工作流测试
+
+- `tests/test_text_analyzer.py` - 文本分析服务单元测试
+
+**测试数据库**：
+- 所有测试使用内存 SQLite 数据库（不影响生产数据）
+- 测试数据会在测试结束后自动清理
 
 ## 故障排查
 

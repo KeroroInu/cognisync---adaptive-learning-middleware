@@ -69,6 +69,12 @@ class Settings(BaseSettings):
     DEEPSEEK_BASE_URL: str = "https://api.deepseek.com/v1"
     DEEPSEEK_MODEL: str = "deepseek-chat"
 
+    # Admin 管理员配置
+    ADMIN_KEY: str = Field(
+        default="cognisync_admin_key_2024_secure",
+        description="Admin API 认证密钥（请在生产环境使用强随机字符串）"
+    )
+
     # 日志配置
     LOG_LEVEL: str = "INFO"
     LOG_FORMAT: str = "json"  # json | text

@@ -1,0 +1,36 @@
+{
+  "name": "@cognisync/shared-ui",
+  "version": "1.0.0",
+  "description": "Shared UI components and styles for CogniSync applications",
+  "type": "module",
+  "main": "./components/index.ts",
+  "types": "./components/index.ts",
+  "exports": {
+    ".": "./components/index.ts",
+    "./styles/*": "./styles/*",
+    "./components/*": "./components/*",
+    "./hooks/*": "./hooks/*"
+  },
+  "scripts": {
+    "type-check": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "lucide-react": "^0.562.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "typescript": "~5.8.2"
+  },
+  "keywords": [
+    "ui",
+    "components",
+    "react",
+    "cognisync",
+    "design-system"
+  ],
+  "author": "CogniSync Team",
+  "license": "MIT"
+}

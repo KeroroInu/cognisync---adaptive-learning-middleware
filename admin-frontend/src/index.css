@@ -1,0 +1,9 @@
+/* Admin Frontend - 复用 frontend 的 UI Token */
+@import '../shared/styles/variables.css';
+@import '../shared/styles/animations.css';
+@import '../shared/styles/glass-card.css';
+
+/* Tailwind Directives */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;

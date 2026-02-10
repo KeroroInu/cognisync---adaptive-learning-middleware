@@ -1,0 +1,149 @@
+/* CogniSync - Shared UI Design System Variables */
+/* 抽取自 frontend/index.css，供所有前端工程复用 */
+
+/* ============================================
+   浅色模式变量 (默认)
+   ============================================ */
+:root {
+  /* 背景颜色 - 纯白为主 */
+  --bg-primary: #ffffff;
+  --bg-secondary: #f9fafb;
+  --bg-tertiary: #f3f4f6;
+
+  /* 玻璃效果 - 浅色模式用白色半透明 */
+  --glass-bg: rgba(255, 255, 255, 0.8);
+  --glass-border: rgba(0, 0, 0, 0.1);
+
+  /* 文字颜色 - 深黑色 */
+  --text-primary: #000000;
+  --text-secondary: #1a1a1a;
+  --text-tertiary: #404040;
+  --text-light: #6b7280;
+
+  /* 品牌颜色 */
+  --brand-blue: #3b82f6;
+  --brand-indigo: #6366f1;
+  --brand-purple: #8b5cf6;
+  --brand-green: #10b981;
+  --brand-rose: #f43f5e;
+
+  /* 阴影 */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+
+  /* 圆角 */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+
+  /* 过渡 */
+  --transition-base: 0.3s ease;
+  --transition-fast: 0.15s ease;
+}
+
+/* ============================================
+   深色模式变量
+   ============================================ */
+[data-theme="dark"] {
+  /* 背景颜色 - 深色纯色 */
+  --bg-primary: #0f172a;
+  --bg-secondary: #1e293b;
+  --bg-tertiary: #334155;
+
+  /* 玻璃效果 - 深色模式用纯色 */
+  --glass-bg: rgb(30, 41, 59);
+  --glass-border: rgba(255, 255, 255, 0.1);
+
+  /* 文字颜色 - 纯白 */
+  --text-primary: #ffffff;
+  --text-secondary: #f8fafc;
+  --text-tertiary: #e2e8f0;
+  --text-light: #cbd5e1;
+
+  /* 阴影 - 深色 */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.7);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.8);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.9);
+}
+
+/* ============================================
+   全局重置
+   ============================================ */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow-x: hidden;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", Arial, sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition: background var(--transition-base), color var(--transition-base);
+}
+
+/* ============================================
+   滚动条样式
+   ============================================ */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 10px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+[data-theme="dark"] ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.3);
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.25);
+  background-clip: content-box;
+}
+
+[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.5);
+  background-clip: content-box;
+}
+
+/* ============================================
+   选中样式
+   ============================================ */
+::selection {
+  background: rgba(59, 130, 246, 0.2);
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] ::selection {
+  background: rgba(99, 102, 241, 0.3);
+}
+
+/* ============================================
+   焦点样式
+   ============================================ */
+:focus-visible {
+  outline: 2px solid var(--brand-blue);
+  outline-offset: 2px;
+}

@@ -14,6 +14,7 @@ from app.core.logging import setup_logging
 from app.db.postgres import init_db as init_postgres
 from app.db.neo4j import init_db as init_neo4j, close_db as close_neo4j
 from app.api.router import api_router
+from app.api.admin_router import admin_router
 
 # 设置日志
 setup_logging()
@@ -99,6 +100,9 @@ async def root():
 
 # 注册 API 路由（前缀为 /api）
 app.include_router(api_router, prefix=settings.API_PREFIX)
+
+# 注册 Admin API 路由（前缀为 /api/admin）
+app.include_router(admin_router, prefix=settings.API_PREFIX)
 
 
 # 全局异常处理
