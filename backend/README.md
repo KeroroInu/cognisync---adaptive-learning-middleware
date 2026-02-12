@@ -44,7 +44,16 @@ cd ..
 docker-compose up -d postgres redis
 ```
 
-### 4. 启动服务
+### 4. 初始化数据库表
+
+```bash
+# 创建所有表结构
+python scripts/init_db.py
+```
+
+**注意**：这将使用 SQLAlchemy 的 `create_all()` 创建表。生产环境建议使用 Alembic 进行数据库迁移，详见 [MIGRATION_GUIDE.md](MIGRATION_GUIDE.md)。
+
+### 5. 启动服务
 
 ```bash
 ./run.sh
@@ -98,20 +107,66 @@ docker-compose up -d postgres redis
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
+| **概览** | | |
+| GET | `/api/admin/overview` | 系统概览统计（用户数、会话数、消息数、量表数等） |
+| **数据浏览器** | | |
 | GET | `/api/admin/explorer/tables` | 列出所有可视化表 |
 | GET | `/api/admin/explorer/tables/{table}/schema` | 获取表结构 |
 | GET | `/api/admin/explorer/tables/{table}/data` | 分页查询表数据 |
 | GET | `/api/admin/explorer/tables/{table}/export` | 导出表数据（JSON） |
+| **用户管理** | | |
 | GET | `/api/admin/users` | 用户列表（分页） |
+| GET | `/api/admin/users/{user_id}` | 用户详情 |
+| GET | `/api/admin/users/{user_id}/messages` | 用户消息列表 |
+| GET | `/api/admin/users/{user_id}/profiles` | 用户画像快照列表 |
+| GET | `/api/admin/users/{user_id}/scale-responses` | 用户量表响应列表 |
+| **量表管理** | | |
+| GET | `/api/admin/scales` | 量表模板列表 |
+| POST | `/api/admin/scales/upload` | 上传新量表模板 |
+| PATCH | `/api/admin/scales/{id}` | 更新量表模板 |
+| POST | `/api/admin/scales/{id}/activate` | 激活量表模板 |
+| POST | `/api/admin/scales/{id}/archive` | 归档量表模板 |
+| GET | `/api/admin/scales/{id}/responses` | 获取量表所有响应 |
+| **数据导出** | | |
+| GET | `/api/admin/db/export` | 导出表数据（支持过滤、排序） |
+| **系统分析** | | |
 | GET | `/api/admin/analytics/overview` | 系统统计概览 |
 
 **Admin API 使用示例**：
 ```bash
-# 获取所有表
-curl -H "X-ADMIN-KEY: your_admin_key" http://localhost:8000/api/admin/explorer/tables
+# 1. 系统概览
+curl -H "X-ADMIN-KEY: your_admin_key" \
+  http://localhost:8000/api/admin/overview
 
-# 查看 users 表数据
-curl -H "X-ADMIN-KEY: your_admin_key" http://localhost:8000/api/admin/explorer/tables/users/data?page=1&page_size=10
+# 2. 获取所有表
+curl -H "X-ADMIN-KEY: your_admin_key" \
+  http://localhost:8000/api/admin/explorer/tables
+
+# 3. 查看 users 表数据
+curl -H "X-ADMIN-KEY: your_admin_key" \
+  "http://localhost:8000/api/admin/explorer/tables/users/data?page=1&page_size=10"
+
+# 4. 获取用户详情
+curl -H "X-ADMIN-KEY: your_admin_key" \
+  http://localhost:8000/api/admin/users/{user_id}
+
+# 5. 上传量表模板
+curl -X POST \
+  -H "X-ADMIN-KEY: your_admin_key" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Big Five","schema_json":{"questions":[...]}}' \
+  http://localhost:8000/api/admin/scales/upload
+
+# 6. 导出数据（带过滤）
+curl -H "X-ADMIN-KEY: your_admin_key" \
+  'http://localhost:8000/api/admin/db/export?table=users&filters={"email":{"op":"like","value":"test"}}&order_by=created_at&order=desc'
+```
+
+**过滤操作符**：`eq`, `ne`, `gt`, `gte`, `lt`, `lte`, `like`
+
+**过滤示例**：
+```json
+{"email": {"op": "like", "value": "test"}, "created_at": {"op": "gte", "value": "2024-01-01"}}
 ```
 
 ## 技术栈

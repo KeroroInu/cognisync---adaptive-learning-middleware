@@ -1,39 +1,27 @@
-import React from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Layout } from './components/Layout';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { AdminLayout } from './components/AdminLayout';
 import { Dashboard } from './pages/Dashboard';
+import { Users } from './pages/Users';
+import { UserDetail } from './pages/UserDetail';
+import { Scales } from './pages/Scales';
 import { DataExplorer } from './pages/DataExplorer';
-import { UsersManagement } from './pages/UsersManagement';
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      refetchOnWindowFocus: false,
-      retry: 1,
-    },
-  },
-});
+import { Conversations } from './pages/Conversations';
+import { Exports } from './pages/Exports';
 
 function App() {
-  const [currentView, setCurrentView] = React.useState<'dashboard' | 'explorer' | 'users'>('dashboard');
-
-  const renderContent = () => {
-    switch (currentView) {
-      case 'dashboard':
-        return <Dashboard />;
-      case 'explorer':
-        return <DataExplorer />;
-      case 'users':
-        return <UsersManagement />;
-      default:
-        return <Dashboard />;
-    }
-  };
-
   return (
-    <QueryClientProvider client={queryClient}>
-      <Layout>{renderContent()}</Layout>
-    </QueryClientProvider>
+    <BrowserRouter>
+      <Routes>
+        <Route path="/admin" element={<AdminLayout><Dashboard /></AdminLayout>} />
+        <Route path="/admin/users" element={<AdminLayout><Users /></AdminLayout>} />
+        <Route path="/admin/users/:userId" element={<AdminLayout><UserDetail /></AdminLayout>} />
+        <Route path="/admin/scales" element={<AdminLayout><Scales /></AdminLayout>} />
+        <Route path="/admin/explorer" element={<AdminLayout><DataExplorer /></AdminLayout>} />
+        <Route path="/admin/conversations" element={<AdminLayout><Conversations /></AdminLayout>} />
+        <Route path="/admin/exports" element={<AdminLayout><Exports /></AdminLayout>} />
+        <Route path="/" element={<Navigate to="/admin" replace />} />
+      </Routes>
+    </BrowserRouter>
   );
 }
 

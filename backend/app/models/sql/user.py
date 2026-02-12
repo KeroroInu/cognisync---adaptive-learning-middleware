@@ -3,7 +3,8 @@ User Model - 用户表
 """
 import uuid
 from datetime import datetime
-from sqlalchemy import String
+from typing import Optional
+from sqlalchemy import String, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID, TIMESTAMP
 
@@ -26,6 +27,26 @@ class User(Base, UUIDMixin):
         comment="用户邮箱（唯一）"
     )
 
+    name: Mapped[Optional[str]] = mapped_column(
+        String(100),
+        nullable=True,
+        comment="用户姓名"
+    )
+
+    role: Mapped[str] = mapped_column(
+        String(50),
+        default="learner",
+        nullable=False,
+        comment="用户角色：learner | admin"
+    )
+
+    is_active: Mapped[bool] = mapped_column(
+        Boolean,
+        default=True,
+        nullable=False,
+        comment="是否激活"
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True),
         default=datetime.utcnow,
@@ -33,7 +54,13 @@ class User(Base, UUIDMixin):
         comment="创建时间"
     )
 
-    # 关系（可选，用于查询优化）
+    last_active_at: Mapped[Optional[datetime]] = mapped_column(
+        TIMESTAMP(timezone=True),
+        nullable=True,
+        comment="最后活跃时间"
+    )
+
+    # 关系
     messages: Mapped[list["ChatMessage"]] = relationship(
         "ChatMessage",
         back_populates="user",
@@ -50,6 +77,27 @@ class User(Base, UUIDMixin):
 
     calibration_logs: Mapped[list["CalibrationLog"]] = relationship(
         "CalibrationLog",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        lazy="selectin"
+    )
+
+    sessions: Mapped[list["ChatSession"]] = relationship(
+        "ChatSession",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        lazy="selectin"
+    )
+
+    scale_responses: Mapped[list["ScaleResponse"]] = relationship(
+        "ScaleResponse",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        lazy="selectin"
+    )
+
+    onboarding_sessions: Mapped[list["OnboardingSession"]] = relationship(
+        "OnboardingSession",
         back_populates="user",
         cascade="all, delete-orphan",
         lazy="selectin"
