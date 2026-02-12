@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
-import { AppState, UserProfile, Node, CalibrationLog, ChatMessage, Language } from '../types';
+import { AppState, UserProfile, Node, CalibrationLog, ChatMessage, Language, User } from '../types';
 import { INITIAL_STATE } from '../constants';
+import { getCurrentUser } from './api';
 
 export type Theme = 'light' | 'dark';
 
@@ -16,7 +17,44 @@ export const useAppStore = () => {
     return initialTheme;
   });
 
-  const [state, setState] = useState<AppState>(INITIAL_STATE);
+  // 从 localStorage 读取 token，初始化认证状态
+  const [state, setState] = useState<AppState>(() => {
+    const token = localStorage.getItem('cognisync-token');
+    return {
+      ...INITIAL_STATE,
+      token,
+      user: null,
+    };
+  });
+
+  // 初始化时如果有 token，获取用户信息
+  useEffect(() => {
+    const initAuth = async () => {
+      const token = localStorage.getItem('cognisync-token');
+      if (token && !state.user) {
+        try {
+          const { user, profile } = await getCurrentUser();
+          setState(prev => ({
+            ...prev,
+            user,
+            profile,
+            token,
+          }));
+        } catch (error) {
+          console.error('Failed to get user info:', error);
+          // Token 无效，清除
+          localStorage.removeItem('cognisync-token');
+          setState(prev => ({
+            ...prev,
+            token: null,
+            user: null,
+          }));
+        }
+      }
+    };
+
+    initAuth();
+  }, []);
 
   // 主题切换时更新localStorage和document类名
   useEffect(() => {
@@ -107,6 +145,45 @@ export const useAppStore = () => {
     }));
   };
 
+  // 认证相关方法
+  const setUser = (user: User | null) => {
+    setState(prev => ({
+      ...prev,
+      user,
+    }));
+  };
+
+  const setToken = (token: string | null) => {
+    if (token) {
+      localStorage.setItem('cognisync-token', token);
+    } else {
+      localStorage.removeItem('cognisync-token');
+    }
+    setState(prev => ({
+      ...prev,
+      token,
+    }));
+  };
+
+  const setAuth = (user: User, token: string, profile?: UserProfile) => {
+    localStorage.setItem('cognisync-token', token);
+    setState(prev => ({
+      ...prev,
+      user,
+      token,
+      profile: profile || prev.profile,
+    }));
+  };
+
+  const clearAuth = () => {
+    localStorage.removeItem('cognisync-token');
+    setState(prev => ({
+      ...prev,
+      user: null,
+      token: null,
+    }));
+  };
+
   return {
     state,
     theme,
@@ -116,6 +193,11 @@ export const useAppStore = () => {
     addMessage,
     addCalibrationLog,
     updateNode,
-    updateProfile
+    updateProfile,
+    // 认证方法
+    setUser,
+    setToken,
+    setAuth,
+    clearAuth,
   };
 };

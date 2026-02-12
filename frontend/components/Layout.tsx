@@ -1,7 +1,7 @@
 import React from 'react';
-import { LayoutDashboard, MessageSquareText, Network, Scale, FileText, FlaskConical, Languages, Sun, Moon } from 'lucide-react';
+import { LayoutDashboard, MessageSquareText, Network, Scale, FileText, FlaskConical, Languages, Sun, Moon, LogOut, User as UserIcon } from 'lucide-react';
 import { translations } from '../utils/translations';
-import { Language } from '../types';
+import type { Language, User } from '../types';
 
 type View = 'dashboard' | 'chat' | 'graph' | 'calibration' | 'evidence';
 type Theme = 'light' | 'dark';
@@ -15,6 +15,8 @@ interface Props {
   onSetLanguage: (lang: Language) => void;
   theme: Theme;
   onToggleTheme: () => void;
+  user?: User | null;
+  onLogout?: () => void;
   children: React.ReactNode;
 }
 
@@ -27,7 +29,9 @@ export const Layout: React.FC<Props> = ({
   language,
   onSetLanguage,
   theme,
-  onToggleTheme
+  onToggleTheme,
+  user,
+  onLogout
 }) => {
   const t = translations[language];
 
@@ -158,6 +162,41 @@ export const Layout: React.FC<Props> = ({
               </button>
             </div>
           </div>
+
+          {/* 用户信息和登出 */}
+          {user && onLogout && (
+            <div className="glass-card p-3.5 rounded-xl border shadow-sm">
+              <div className="flex items-center space-x-3 mb-3">
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white shadow-md">
+                  <UserIcon size={16} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold truncate" style={{
+                    color: theme === 'light' ? '#000000' : '#ffffff'
+                  }}>
+                    {user.name}
+                  </p>
+                  <p className="text-xs truncate" style={{
+                    color: theme === 'light' ? '#6b7280' : '#94a3b8'
+                  }}>
+                    {user.email}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={onLogout}
+                className="w-full flex items-center justify-center space-x-2 px-3 py-2 rounded-lg transition-all duration-200 hover:scale-[1.02]"
+                style={{
+                  backgroundColor: theme === 'light' ? '#fee2e2' : '#7f1d1d',
+                  color: theme === 'light' ? '#991b1b' : '#fca5a5',
+                  border: `1px solid ${theme === 'light' ? '#fecaca' : '#991b1b'}`
+                }}
+              >
+                <LogOut size={14} />
+                <span className="text-xs font-semibold">{t.logout}</span>
+              </button>
+            </div>
+          )}
         </div>
       </aside>
 

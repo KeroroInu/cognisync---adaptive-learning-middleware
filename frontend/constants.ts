@@ -3,6 +3,8 @@ import { AppState } from './types';
 export const INITIAL_STATE: AppState = {
   isResearchMode: true,
   language: 'zh',
+  user: null,
+  token: null,
   profile: {
     cognition: 65,
     affect: 42,

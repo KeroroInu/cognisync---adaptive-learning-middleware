@@ -57,4 +57,143 @@ export interface AppState {
   logs: CalibrationLog[];
   isResearchMode: boolean;
   language: Language;
+  user: User | null;
+  token: string | null;
+}
+
+// ============================================
+//  认证相关类型
+// ============================================
+
+export interface User {
+  id: string;
+  email: string;
+  name: string;
+  createdAt: string;
+  hasCompletedOnboarding: boolean;
+}
+
+export interface AuthResponse {
+  success: boolean;
+  data?: {
+    token: string;
+    user: User;
+    initialProfile?: UserProfile;
+  };
+  error?: {
+    code: string;
+    message: string;
+  };
+}
+
+export interface LoginRequest {
+  email: string;
+  password: string;
+}
+
+export interface RegisterRequest {
+  email: string;
+  password: string;
+  name: string;
+  mode: 'scale' | 'ai';
+}
+
+// ============================================
+//  量表注册相关类型
+// ============================================
+
+export interface ScaleQuestion {
+  id: string;
+  text: string;
+  dimension: Dimension;
+}
+
+export interface ScaleTemplate {
+  id: string;
+  name: string;
+  description: string;
+  questions: ScaleQuestion[];
+}
+
+export interface ScaleAnswer {
+  questionId: string;
+  value: number; // 1-5 Likert
+}
+
+export interface ScaleSubmitRequest {
+  answers: ScaleAnswer[];
+}
+
+export interface ScaleSubmitResponse {
+  success: boolean;
+  data?: {
+    scores: {
+      cognition: number;
+      affect: number;
+      behavior: number;
+    };
+    initialProfile: UserProfile;
+  };
+  error?: {
+    code: string;
+    message: string;
+  };
+}
+
+// ============================================
+//  AI 引导注册相关类型
+// ============================================
+
+export interface AIOnboardingSession {
+  sessionId: string;
+  question: string;
+  summary: string;
+  draftProfile?: Partial<UserProfile>;
+  isComplete: boolean;
+}
+
+export interface AIOnboardingStartResponse {
+  success: boolean;
+  data?: {
+    sessionId: string;
+    question: string;
+    summary: string;
+  };
+  error?: {
+    code: string;
+    message: string;
+  };
+}
+
+export interface AIOnboardingStepRequest {
+  sessionId: string;
+  answer: string;
+}
+
+export interface AIOnboardingStepResponse {
+  success: boolean;
+  data?: {
+    sessionId: string;
+    question?: string;
+    summary: string;
+    draftProfile?: Partial<UserProfile>;
+    isComplete: boolean;
+  };
+  error?: {
+    code: string;
+    message: string;
+  };
+}
+
+export interface AIOnboardingFinishResponse {
+  success: boolean;
+  data?: {
+    initialProfile: UserProfile;
+    attributes: string[];
+    conceptSeeds: string[];
+  };
+  error?: {
+    code: string;
+    message: string;
+  };
 }

@@ -67,7 +67,84 @@ export const translations = {
     logsDesc: "系统变化与用户校准的时间轴记录。",
     exportJson: "导出 JSON",
     noLogs: "尚无校准记录。请前往校准或知识图谱页面调整模型。",
-    trustScore: "信任评分"
+    trustScore: "信任评分",
+
+    // 认证 - 登录
+    login: "登录",
+    loginTitle: "登录 CogniSync",
+    loginDesc: "欢迎回来！请登录您的账户",
+    email: "邮箱地址",
+    emailPlaceholder: "your@email.com",
+    password: "密码",
+    passwordPlaceholder: "输入密码",
+    loginButton: "登录",
+    loggingIn: "登录中...",
+    noAccount: "还没有账户？",
+    signUp: "注册",
+    loginError: "登录失败",
+
+    // 认证 - 注册
+    register: "注册",
+    registerTitle: "注册 CogniSync",
+    registerDesc: "创建账户，开始您的个性化学习之旅",
+    name: "姓名",
+    namePlaceholder: "张三",
+    registerButton: "注册",
+    registering: "注册中...",
+    hasAccount: "已有账户？",
+
+    // 注册模式选择
+    chooseOnboardingMode: "选择注册方式",
+    chooseOnboardingDesc: "我们提供两种方式帮助您建立初始学习画像",
+    scaleMode: "量表注册",
+    scaleModeDesc: "完成简短的问卷调查（5-10分钟）",
+    scaleModeFeatures: [
+      "标准化Likert量表",
+      "科学心理测量",
+      "快速完成",
+      "即时生成初始画像"
+    ],
+    aiMode: "AI引导注册",
+    aiModeDesc: "与AI对话，自然探索您的学习特征（10-15分钟）",
+    aiModeFeatures: [
+      "自然对话体验",
+      "深入了解学习习惯",
+      "个性化问题",
+      "更丰富的初始画像"
+    ],
+    selectMode: "选择此方式",
+
+    // 量表注册
+    scaleOnboarding: "量表注册",
+    scaleOnboardingDesc: "请根据您的实际情况回答以下问题",
+    scaleInstruction: "1 = 非常不同意，5 = 非常同意",
+    questionProgress: "问题 {current} / {total}",
+    previous: "上一题",
+    next: "下一题",
+    submitScale: "提交问卷",
+    submittingScale: "提交中...",
+    scaleComplete: "问卷完成",
+    scaleCompleteDesc: "正在生成您的初始学习画像...",
+
+    // AI 引导注册
+    aiOnboarding: "AI 引导注册",
+    aiOnboardingDesc: "AI 将通过对话了解您的学习风格和习惯",
+    aiThinking: "AI 正在思考...",
+    answerPlaceholder: "输入您的回答...",
+    sendAnswer: "发送",
+    sessionSummary: "对话小结",
+    draftProfile: "草稿画像",
+    completeOnboarding: "完成注册",
+    completingOnboarding: "完成中...",
+
+    // 通用
+    loading: "加载中...",
+    error: "错误",
+    success: "成功",
+    welcome: "欢迎",
+    logout: "登出",
+    continueText: "继续",
+    back: "返回"
   },
   en: {
     // Navigation
@@ -136,6 +213,83 @@ export const translations = {
     logsDesc: "Chronological record of system changes and user calibrations.",
     exportJson: "Export JSON",
     noLogs: "No calibration events recorded yet. Go to Calibration or Knowledge Graph to adjust the model.",
-    trustScore: "Trust Score Recorded"
+    trustScore: "Trust Score Recorded",
+
+    // Auth - Login
+    login: "Login",
+    loginTitle: "Login to CogniSync",
+    loginDesc: "Welcome back! Please login to your account",
+    email: "Email Address",
+    emailPlaceholder: "your@email.com",
+    password: "Password",
+    passwordPlaceholder: "Enter password",
+    loginButton: "Login",
+    loggingIn: "Logging in...",
+    noAccount: "Don't have an account?",
+    signUp: "Sign up",
+    loginError: "Login failed",
+
+    // Auth - Register
+    register: "Register",
+    registerTitle: "Register for CogniSync",
+    registerDesc: "Create an account to start your personalized learning journey",
+    name: "Name",
+    namePlaceholder: "John Doe",
+    registerButton: "Register",
+    registering: "Registering...",
+    hasAccount: "Already have an account?",
+
+    // Onboarding Mode Selection
+    chooseOnboardingMode: "Choose Onboarding Mode",
+    chooseOnboardingDesc: "We offer two ways to help you build your initial learning profile",
+    scaleMode: "Scale-based Registration",
+    scaleModeDesc: "Complete a short questionnaire (5-10 minutes)",
+    scaleModeFeatures: [
+      "Standardized Likert scales",
+      "Scientific psychometric measurement",
+      "Quick completion",
+      "Instant initial profile generation"
+    ],
+    aiMode: "AI-Guided Registration",
+    aiModeDesc: "Chat with AI to naturally explore your learning characteristics (10-15 minutes)",
+    aiModeFeatures: [
+      "Natural conversation experience",
+      "Deep understanding of learning habits",
+      "Personalized questions",
+      "Richer initial profile"
+    ],
+    selectMode: "Select This Mode",
+
+    // Scale Onboarding
+    scaleOnboarding: "Scale-based Registration",
+    scaleOnboardingDesc: "Please answer the following questions based on your actual situation",
+    scaleInstruction: "1 = Strongly Disagree, 5 = Strongly Agree",
+    questionProgress: "Question {current} / {total}",
+    previous: "Previous",
+    next: "Next",
+    submitScale: "Submit Questionnaire",
+    submittingScale: "Submitting...",
+    scaleComplete: "Questionnaire Complete",
+    scaleCompleteDesc: "Generating your initial learning profile...",
+
+    // AI Onboarding
+    aiOnboarding: "AI-Guided Registration",
+    aiOnboardingDesc: "AI will understand your learning style and habits through conversation",
+    aiThinking: "AI is thinking...",
+    answerPlaceholder: "Type your answer...",
+    sendAnswer: "Send",
+    sessionSummary: "Session Summary",
+    draftProfile: "Draft Profile",
+    completeOnboarding: "Complete Registration",
+    completingOnboarding: "Completing...",
+
+    // Common
+    loading: "Loading...",
+    error: "Error",
+    success: "Success",
+    welcome: "Welcome",
+    logout: "Logout",
+    continueText: "Continue",
+    back: "Back"
   }
 };
