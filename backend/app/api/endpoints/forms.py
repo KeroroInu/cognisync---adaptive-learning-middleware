@@ -2,13 +2,24 @@
 Forms API Endpoints - 量表相关接口
 """
 import uuid
-from typing import Dict
+from datetime import datetime
+from typing import Dict, Any, Generic, TypeVar
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from app.api.endpoints.auth import get_current_user, save_user_profile
 
 router = APIRouter()
+
+
+# 通用响应包装
+T = TypeVar('T')
+
+class ApiResponse(BaseModel, Generic[T]):
+    """统一API响应格式"""
+    success: bool
+    data: T | None = None
+    error: Dict[str, Any] | None = None
 
 
 class LikertOption(BaseModel):
@@ -76,37 +87,25 @@ async def get_active_template(
     """
     获取当前激活的量表模板
 
-    返回一个示例量表模板（MVP版本）
+    返回一个示例量表模板（MVP版本），使用简化格式
     """
-    # MVP: 返回示例模板
-    return ScaleTemplate(
-        id="template-uuid-123",
-        name="学习画像评估量表 v1.0",
-        description="通过标准化量表快速建立初始学习画像",
-        version="1.0.0",
-        is_active=True,
-        created_at="2026-02-01T10:00:00Z",
-        updated_at="2026-02-10T15:30:00Z",
-        schema_json=ScaleTemplateSchema(
-            title="学习画像评估问卷",
-            description="请根据真实感受作答，没有对错之分",
-            items=[
-                ScaleItem(id="item_1", text="我能够快速理解新概念", subscale="认知能力"),
-                ScaleItem(id="item_2", text="学习新知识让我感到焦虑", subscale="情感状态", reversed=True),
-                ScaleItem(id="item_3", text="我喜欢主动探索新的学习资源", subscale="行为特征"),
-                ScaleItem(id="item_4", text="我能够有效地组织和管理学习时间", subscale="行为特征"),
-                ScaleItem(id="item_5", text="面对困难问题时我能保持冷静", subscale="情感状态"),
-                ScaleItem(id="item_6", text="我能够将新知识与已有知识联系起来", subscale="认知能力"),
-            ],
-            likertOptions=[
-                LikertOption(value=1, label="非常不同意"),
-                LikertOption(value=2, label="不同意"),
-                LikertOption(value=3, label="中立"),
-                LikertOption(value=4, label="同意"),
-                LikertOption(value=5, label="非常同意"),
-            ]
-        )
-    )
+    # MVP: 返回简化的模板格式，匹配前端期望的结构
+    template = {
+        "id": "template-uuid-123",
+        "name": "学习画像评估量表 v1.0",
+        "description": "通过标准化量表快速建立初始学习画像",
+        "questions": [
+            {"id": "item_1", "text": "我能够快速理解新概念", "dimension": "Cognition"},
+            {"id": "item_2", "text": "学习新知识让我感到焦虑", "dimension": "Affect"},
+            {"id": "item_3", "text": "我喜欢主动探索新的学习资源", "dimension": "Behavior"},
+            {"id": "item_4", "text": "我能够有效地组织和管理学习时间", "dimension": "Behavior"},
+            {"id": "item_5", "text": "面对困难问题时我能保持冷静", "dimension": "Affect"},
+            {"id": "item_6", "text": "我能够将新知识与已有知识联系起来", "dimension": "Cognition"},
+        ]
+    }
+
+    # 返回包装格式
+    return ApiResponse(success=True, data={"template": template})
 
 
 @router.post("/{template_id}/submit")
@@ -134,16 +133,22 @@ async def submit_scale_answers(
     save_user_profile(current_user["id"], cognition, affect, behavior)
 
     response_id = str(uuid.uuid4())
+    current_time = datetime.utcnow().isoformat()
 
-    return ScaleSubmitResponse(
-        success=True,
-        scores=[],
-        totalScore=total_score,
-        maxScore=max_score,
-        initialProfile=InitialProfile(
-            cognition=cognition,
-            affect=affect,
-            behavior=behavior
-        ),
-        responseId=response_id
-    )
+    # 构造响应数据
+    response_data = {
+        "scores": {
+            "cognition": cognition,
+            "affect": affect,
+            "behavior": behavior
+        },
+        "initialProfile": {
+            "cognition": cognition,
+            "affect": affect,
+            "behavior": behavior,
+            "lastUpdate": current_time
+        }
+    }
+
+    # 返回包装格式以匹配前端期望的结构
+    return ApiResponse(success=True, data=response_data)

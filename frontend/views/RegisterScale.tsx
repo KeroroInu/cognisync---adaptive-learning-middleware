@@ -94,7 +94,14 @@ export const RegisterScale: React.FC<RegisterScaleProps> = ({
       setIsSubmitting(true);
       setError(null);
 
-      const response = await submitScaleAnswers(template.id, { answers });
+      // 转换答案格式：数组 -> 对象
+      // 从 [{questionId: "item_1", value: 5}, ...] 转为 {"item_1": 5, ...}
+      const answersDict = answers.reduce((acc, answer) => {
+        acc[answer.questionId] = answer.value;
+        return acc;
+      }, {} as Record<string, number>);
+
+      const response = await submitScaleAnswers(template.id, { answers: answersDict });
 
       if (response.success && response.data) {
         setIsComplete(true);

@@ -46,7 +46,21 @@ function App() {
   // 登录成功处理
   const handleLoginSuccess = (token: string, user: any, profile?: UserProfile) => {
     setAuth(user, token, profile);
-    setCurrentView('dashboard');
+
+    // 检查是否完成了onboarding
+    if (user.hasCompletedOnboarding) {
+      setCurrentView('dashboard');
+    } else {
+      // 根据 onboarding 模式跳转
+      const mode = user.onboardingMode || 'scale';
+      setCurrentView(mode === 'ai' ? 'register-ai' : 'register-scale');
+    }
+  };
+
+  // 注册成功处理（设置认证信息并跳转到onboarding）
+  const handleRegisterSuccess = (token: string, user: any, mode: 'scale' | 'ai') => {
+    setAuth(user, token);
+    setCurrentView(mode === 'scale' ? 'register-scale' : 'register-ai');
   };
 
   // 注册完成处理
@@ -86,13 +100,7 @@ function App() {
         return (
           <Register
             language={state.language}
-            onSelectMode={(mode) => {
-              if (mode === 'scale') {
-                setCurrentView('register-scale');
-              } else {
-                setCurrentView('register-ai');
-              }
-            }}
+            onRegisterSuccess={handleRegisterSuccess}
             onNavigateToLogin={() => setCurrentView('login')}
           />
         );
@@ -200,7 +208,12 @@ function App() {
     return <>{renderAuthView()}</>;
   }
 
-  // 已登录状态：使用 Layout 包裹应用内容
+  // 已登录但未完成 onboarding：显示 onboarding 视图（无 Layout）
+  if (['register-scale', 'register-ai'].includes(currentView)) {
+    return <>{renderAuthView()}</>;
+  }
+
+  // 已登录且完成 onboarding：使用 Layout 包裹应用内容
   return (
     <Layout
       currentView={currentView as AppView}

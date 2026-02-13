@@ -2,13 +2,23 @@
 AI Onboarding API Endpoints - AI引导注册接口
 """
 import uuid
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any, Generic, TypeVar
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from app.api.endpoints.auth import get_current_user, save_user_profile
 
 router = APIRouter()
+
+
+# 通用响应包装
+T = TypeVar('T')
+
+class ApiResponse(BaseModel, Generic[T]):
+    """统一API响应格式"""
+    success: bool
+    data: T | None = None
+    error: Dict[str, Any] | None = None
 
 
 class ConfirmedInfo(BaseModel):
@@ -43,7 +53,7 @@ class AiStepResponse(BaseModel):
     question: Optional[str]
     summary: List[ConfirmedInfo]
     draftProfile: Optional[DraftProfile] = None
-    status: str = "ongoing"
+    isComplete: bool = False
 
 
 class AiFinishRequest(BaseModel):
@@ -107,11 +117,14 @@ async def start_ai_onboarding(
         "answers": []
     }
 
-    return AiStartResponse(
+    response_data = AiStartResponse(
         sessionId=session_id,
         question="您好！我是您的学习助手。首先，能告诉我您想通过这个平台学习什么吗？",
         summary=[]
     )
+
+    # 返回包装格式
+    return ApiResponse(success=True, data=response_data)
 
 
 @router.post("/step")
@@ -155,24 +168,27 @@ async def step_ai_onboarding(
 
     if step >= len(questions):
         # 对话结束
-        return AiStepResponse(
+        response_data = AiStepResponse(
             question=None,
             summary=session["summary"],
             draftProfile=DraftProfile(cognition=75, affect=80, behavior=70),
-            status="done"
+            isComplete=True
+        )
+    else:
+        # 返回下一个问题
+        response_data = AiStepResponse(
+            question=questions[step],
+            summary=session["summary"],
+            draftProfile=DraftProfile(
+                cognition=60 + step * 5,
+                affect=65 + step * 5,
+                behavior=55 + step * 5
+            ),
+            isComplete=False
         )
 
-    # 返回下一个问题
-    return AiStepResponse(
-        question=questions[step],
-        summary=session["summary"],
-        draftProfile=DraftProfile(
-            cognition=60 + step * 5,
-            affect=65 + step * 5,
-            behavior=55 + step * 5
-        ),
-        status="ongoing"
-    )
+    # 返回包装格式
+    return ApiResponse(success=True, data=response_data)
 
 
 @router.post("/finish")
@@ -231,9 +247,12 @@ async def finish_ai_onboarding(
     # 清理会话
     del sessions[session_id]
 
-    return AiFinishResponse(
+    response_data = AiFinishResponse(
         sessionId=session_id,
         initialProfile=initial_profile,
         attributes=attributes,
         conceptSeeds=concept_seeds
     )
+
+    # 返回包装格式
+    return ApiResponse(success=True, data=response_data)

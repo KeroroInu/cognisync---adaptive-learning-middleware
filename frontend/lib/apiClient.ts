@@ -89,20 +89,50 @@ async function request<T = any>(
       throw new ApiError('Unauthorized', 'UNAUTHORIZED', 401);
     }
 
-    // 解析 JSON 响应
-    const data: ApiResponse<T> = await response.json();
+    // 解析 JSON响应
+    let data: any;
+    try {
+      data = await response.json();
+    } catch (e) {
+      // 如果无法解析JSON，返回空对象
+      data = {};
+    }
 
-    // 检查业务层面的成功状态
-    if (!response.ok || !data.success) {
+    // 兼容两种响应格式：
+    // 1. 包装格式: {success: boolean, data: any, error: any}
+    // 2. 直接格式: 直接返回数据对象
+    const isWrappedFormat = typeof data === 'object' && 'success' in data;
+
+    // 检查响应是否成功
+    if (!response.ok) {
+      const errorMessage = isWrappedFormat
+        ? (data.error?.message || `HTTP error! status: ${response.status}`)
+        : (data.detail || data.message || `HTTP error! status: ${response.status}`);
+
+      const errorCode = isWrappedFormat
+        ? (data.error?.code || 'REQUEST_FAILED')
+        : 'REQUEST_FAILED';
+
       throw new ApiError(
-        data.error?.message || `HTTP error! status: ${response.status}`,
+        errorMessage,
+        errorCode,
+        response.status,
+        isWrappedFormat ? data.error?.details : data
+      );
+    }
+
+    // 如果是包装格式且success=false，抛出错误
+    if (isWrappedFormat && !data.success) {
+      throw new ApiError(
+        data.error?.message || 'Request failed',
         data.error?.code || 'REQUEST_FAILED',
         response.status,
         data.error?.details
       );
     }
 
-    return data.data as T;
+    // 返回数据：包装格式返回data字段，直接格式返回整个响应
+    return (isWrappedFormat ? data.data : data) as T;
   } catch (error) {
     // 如果已经是 ApiError，直接抛出
     if (error instanceof ApiError) {

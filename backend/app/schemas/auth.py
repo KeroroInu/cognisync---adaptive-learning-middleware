@@ -28,6 +28,7 @@ class UserInfo(BaseModel):
     name: Optional[str] = Field(None, description="用户姓名")
     created_at: datetime = Field(..., alias="createdAt")
     has_completed_onboarding: bool = Field(False, alias="hasCompletedOnboarding")
+    onboarding_mode: Optional[str] = Field(None, alias="onboardingMode", description="注册模式: scale | ai")
 
     model_config = {
         "from_attributes": True,

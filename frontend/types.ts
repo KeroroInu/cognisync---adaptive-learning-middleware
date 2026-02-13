@@ -121,7 +121,7 @@ export interface ScaleAnswer {
 }
 
 export interface ScaleSubmitRequest {
-  answers: ScaleAnswer[];
+  answers: Record<string, number>; // {"item_1": 5, "item_2": 3, ...}
 }
 
 export interface ScaleSubmitResponse {
@@ -144,10 +144,16 @@ export interface ScaleSubmitResponse {
 //  AI 引导注册相关类型
 // ============================================
 
+export interface ConfirmedInfo {
+  key: string;
+  value: string;
+  confidence?: number;
+}
+
 export interface AIOnboardingSession {
   sessionId: string;
   question: string;
-  summary: string;
+  summary: ConfirmedInfo[];
   draftProfile?: Partial<UserProfile>;
   isComplete: boolean;
 }
@@ -157,7 +163,7 @@ export interface AIOnboardingStartResponse {
   data?: {
     sessionId: string;
     question: string;
-    summary: string;
+    summary: ConfirmedInfo[];
   };
   error?: {
     code: string;
@@ -175,7 +181,7 @@ export interface AIOnboardingStepResponse {
   data?: {
     sessionId: string;
     question?: string;
-    summary: string;
+    summary: ConfirmedInfo[];
     draftProfile?: Partial<UserProfile>;
     isComplete: boolean;
   };

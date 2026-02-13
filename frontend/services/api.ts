@@ -25,7 +25,7 @@ function getAuthToken(): string | null {
 }
 
 // 统一请求头
-function getHeaders(includeAuth = false): HeadersInit {
+function getHeaders(includeAuth = true): HeadersInit {
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
   };
@@ -131,22 +131,27 @@ export async function login(credentials: LoginRequest): Promise<AuthResponse> {
   try {
     const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
       method: 'POST',
-      headers: getHeaders(),
+      headers: getHeaders(false),  // 登录请求不需要token
       body: JSON.stringify(credentials),
     });
 
-    const result: AuthResponse = await response.json();
+    const result = await response.json();
 
-    if (!response.ok || !result.success) {
-      throw new Error(result.error?.message || `HTTP error! status: ${response.status}`);
+    if (!response.ok) {
+      throw new Error(result.detail || result.error?.message || `HTTP error! status: ${response.status}`);
     }
 
+    // 后端直接返回 {token, user} 格式
     // 存储 token
-    if (result.data?.token) {
-      localStorage.setItem('cognisync-token', result.data.token);
+    if (result.token) {
+      localStorage.setItem('cognisync-token', result.token);
     }
 
-    return result;
+    // 兼容旧格式，包装成 {success, data}
+    return {
+      success: true,
+      data: result
+    } as AuthResponse;
   } catch (error) {
     console.error('Login failed:', error);
     throw error;
@@ -160,22 +165,27 @@ export async function register(data: RegisterRequest): Promise<AuthResponse> {
   try {
     const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
       method: 'POST',
-      headers: getHeaders(),
+      headers: getHeaders(false),  // 注册请求不需要token
       body: JSON.stringify(data),
     });
 
-    const result: AuthResponse = await response.json();
+    const result = await response.json();
 
-    if (!response.ok || !result.success) {
-      throw new Error(result.error?.message || `HTTP error! status: ${response.status}`);
+    if (!response.ok) {
+      throw new Error(result.detail || result.error?.message || `HTTP error! status: ${response.status}`);
     }
 
+    // 后端直接返回 {token, user} 格式
     // 存储 token
-    if (result.data?.token) {
-      localStorage.setItem('cognisync-token', result.data.token);
+    if (result.token) {
+      localStorage.setItem('cognisync-token', result.token);
     }
 
-    return result;
+    // 兼容旧格式，包装成 {success, data}
+    return {
+      success: true,
+      data: result
+    } as AuthResponse;
   } catch (error) {
     console.error('Registration failed:', error);
     throw error;

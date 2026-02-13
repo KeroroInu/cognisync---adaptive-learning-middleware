@@ -9,6 +9,12 @@ interface Message {
   text: string;
 }
 
+interface ConfirmedInfo {
+  key: string;
+  value: string;
+  confidence?: number;
+}
+
 interface Props {
   language: Language;
   onComplete: (initialProfile: UserProfile, attributes: string[], conceptSeeds: string[]) => void;
@@ -23,7 +29,7 @@ export const RegisterAI: React.FC<Props> = ({ language, onComplete, onBack }) =>
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [currentQuestion, setCurrentQuestion] = useState<string | null>(null);
-  const [sessionSummary, setSessionSummary] = useState<string>('');
+  const [sessionSummary, setSessionSummary] = useState<ConfirmedInfo[]>([]);
   const [draftProfile, setDraftProfile] = useState<Partial<UserProfile> | null>(null);
   const [userAnswer, setUserAnswer] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -257,9 +263,18 @@ export const RegisterAI: React.FC<Props> = ({ language, onComplete, onBack }) =>
                 <Sparkles size={16} />
                 <h3 className="font-semibold text-sm">{t.sessionSummary}</h3>
               </div>
-              <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
-                {sessionSummary || (language === 'zh' ? '对话刚刚开始...' : 'Session just started...')}
-              </p>
+              <div className="text-sm text-gray-700 dark:text-gray-300 space-y-2">
+                {sessionSummary.length === 0 ? (
+                  <p className="leading-relaxed">{language === 'zh' ? '对话刚刚开始...' : 'Session just started...'}</p>
+                ) : (
+                  sessionSummary.map((info, index) => (
+                    <div key={index} className="flex items-start gap-2">
+                      <span className="font-medium text-indigo-600 dark:text-indigo-400">{info.key}:</span>
+                      <span className="flex-1">{info.value}</span>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
 
             {/* Draft Profile */}

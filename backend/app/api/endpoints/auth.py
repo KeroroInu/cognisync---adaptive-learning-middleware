@@ -51,25 +51,39 @@ async def get_current_user(
     authorization: Optional[str] = Header(None)
 ) -> Dict:
     """从 Authorization header 中获取当前用户"""
+    import logging
+    logger = logging.getLogger(__name__)
+
+    logger.info(f"[AUTH] Authorization header: {authorization[:50] if authorization else 'None'}...")
+
     if not authorization or not authorization.startswith("Bearer "):
+        logger.warning("[AUTH] No valid Authorization header")
         raise HTTPException(status_code=401, detail="Not authenticated")
 
     token = authorization.split(" ")[1]
+    logger.info(f"[AUTH] Extracted token: {token[:20]}...")
 
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         user_id: str = payload.get("sub")
+        logger.info(f"[AUTH] Decoded user_id: {user_id}")
+
         if user_id is None:
+            logger.warning("[AUTH] No user_id in token payload")
             raise HTTPException(status_code=401, detail="Invalid token")
     except jwt.ExpiredSignatureError:
+        logger.warning("[AUTH] Token expired")
         raise HTTPException(status_code=401, detail="Token expired")
-    except jwt.InvalidTokenError:
+    except jwt.InvalidTokenError as e:
+        logger.warning(f"[AUTH] Invalid token: {e}")
         raise HTTPException(status_code=401, detail="Invalid token")
 
     user = users_db.get(user_id)
     if user is None:
+        logger.warning(f"[AUTH] User not found: {user_id}")
         raise HTTPException(status_code=401, detail="User not found")
 
+    logger.info(f"[AUTH] ✅ Authentication successful for user: {user['email']}")
     return user
 
 
@@ -105,7 +119,8 @@ async def login(data: LoginRequest):
         email=user["email"],
         name=user["name"],
         createdAt=user["created_at"],
-        hasCompletedOnboarding=has_profile
+        hasCompletedOnboarding=has_profile,
+        onboardingMode=user.get("onboarding_mode")
     )
 
     return AuthResponse(token=token, user=user_info)
@@ -147,13 +162,14 @@ async def register(data: RegisterRequest):
         email=new_user["email"],
         name=new_user["name"],
         createdAt=new_user["created_at"],
-        hasCompletedOnboarding=False
+        hasCompletedOnboarding=False,
+        onboardingMode=new_user["onboarding_mode"]
     )
 
     return AuthResponse(token=token, user=user_info)
 
 
-@router.get("/me", response_model=CurrentUserResponse)
+@router.get("/me")
 async def get_current_user_info(
     current_user: Dict = Depends(get_current_user)
 ):
@@ -179,10 +195,17 @@ async def get_current_user_info(
         email=current_user["email"],
         name=current_user["name"],
         createdAt=current_user["created_at"],
-        hasCompletedOnboarding=profile is not None
+        hasCompletedOnboarding=profile is not None,
+        onboardingMode=current_user.get("onboarding_mode")
     )
 
-    return CurrentUserResponse(user=user_info, profile=profile_data)
+    response_data = CurrentUserResponse(user=user_info, profile=profile_data)
+
+    # 返回包装格式以保持一致性
+    return {
+        "success": True,
+        "data": response_data.model_dump(by_alias=True)
+    }
 
 
 # 辅助函数：保存用户画像（供其他模块使用）
