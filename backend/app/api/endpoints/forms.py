@@ -2,12 +2,16 @@
 Forms API Endpoints - 量表相关接口
 """
 import uuid
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import Dict, Any, Generic, TypeVar
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.endpoints.auth import get_current_user, save_user_profile
+from app.db.postgres import get_db
+from app.models.sql.scale import ScaleTemplate as ScaleTemplateModel, ScaleStatus
 
 router = APIRouter()
 
@@ -82,26 +86,30 @@ class ScaleSubmitResponse(BaseModel):
 
 @router.get("/active")
 async def get_active_template(
-    current_user: Dict = Depends(get_current_user)
+    db: AsyncSession = Depends(get_db)
 ):
     """
     获取当前激活的量表模板
 
-    返回一个示例量表模板（MVP版本），使用简化格式
+    从数据库读取 ACTIVE 状态的量表模板（公开接口，无需认证）
     """
-    # MVP: 返回简化的模板格式，匹配前端期望的结构
+    # 查询数据库中ACTIVE状态的量表模板
+    stmt = select(ScaleTemplateModel).where(
+        ScaleTemplateModel.status == ScaleStatus.ACTIVE
+    ).order_by(ScaleTemplateModel.created_at.desc())
+
+    result = await db.execute(stmt)
+    template_model = result.scalar_one_or_none()
+
+    if not template_model:
+        raise HTTPException(status_code=404, detail="No active scale template found")
+
+    # 转换为前端期望的格式
     template = {
-        "id": "template-uuid-123",
-        "name": "学习画像评估量表 v1.0",
-        "description": "通过标准化量表快速建立初始学习画像",
-        "questions": [
-            {"id": "item_1", "text": "我能够快速理解新概念", "dimension": "Cognition"},
-            {"id": "item_2", "text": "学习新知识让我感到焦虑", "dimension": "Affect"},
-            {"id": "item_3", "text": "我喜欢主动探索新的学习资源", "dimension": "Behavior"},
-            {"id": "item_4", "text": "我能够有效地组织和管理学习时间", "dimension": "Behavior"},
-            {"id": "item_5", "text": "面对困难问题时我能保持冷静", "dimension": "Affect"},
-            {"id": "item_6", "text": "我能够将新知识与已有知识联系起来", "dimension": "Cognition"},
-        ]
+        "id": str(template_model.id),
+        "name": template_model.name,
+        "description": template_model.schema_json.get("description", ""),
+        "questions": template_model.schema_json.get("items", [])
     }
 
     # 返回包装格式
@@ -112,7 +120,8 @@ async def get_active_template(
 async def submit_scale_answers(
     template_id: str,
     data: ScaleSubmitRequest,
-    current_user: Dict = Depends(get_current_user)
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user)
 ):
     """
     提交量表答案
@@ -129,8 +138,8 @@ async def submit_scale_answers(
     affect = min(100, (answers.get("item_2", 3) + answers.get("item_5", 3)) / 2 * 20)
     behavior = min(100, (answers.get("item_3", 3) + answers.get("item_4", 3)) / 2 * 20)
 
-    # 保存用户画像
-    save_user_profile(current_user["id"], cognition, affect, behavior)
+    # 保存用户画像到数据库
+    await save_user_profile(db, current_user.id, cognition, affect, behavior)
 
     response_id = str(uuid.uuid4())
     current_time = datetime.utcnow().isoformat()

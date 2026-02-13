@@ -47,6 +47,25 @@ class User(Base, UUIDMixin):
         comment="是否激活"
     )
 
+    password_hash: Mapped[Optional[str]] = mapped_column(
+        String(255),
+        nullable=True,
+        comment="密码哈希"
+    )
+
+    onboarding_mode: Mapped[Optional[str]] = mapped_column(
+        String(20),
+        nullable=True,
+        comment="引导模式：scale | ai"
+    )
+
+    has_completed_onboarding: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+        comment="是否完成引导"
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True),
         default=datetime.utcnow,

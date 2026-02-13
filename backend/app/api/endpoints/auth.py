@@ -1,10 +1,12 @@
 """
-Auth API Endpoints - 认证相关接口 (In-Memory MVP Version)
+Auth API Endpoints - 认证相关接口 (PostgreSQL Database Version)
 """
 import uuid
 from datetime import datetime, timedelta
 from typing import Optional, Dict
 from fastapi import APIRouter, HTTPException, Header, Depends
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 import jwt
 import bcrypt
 
@@ -16,6 +18,9 @@ from app.schemas.auth import (
     CurrentUserResponse,
     ProfileData
 )
+from app.models.sql.user import User
+from app.models.sql.profile import ProfileSnapshot
+from app.db.postgres import get_db
 
 router = APIRouter()
 
@@ -23,11 +28,6 @@ router = APIRouter()
 SECRET_KEY = "cognisync-dev-secret-key-change-in-production"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 1440  # 24 hours for MVP
-
-# 内存存储（MVP版本）
-users_db: Dict[str, Dict] = {}  # key: user_id, value: user data
-profiles_db: Dict[str, Dict] = {}  # key: user_id, value: profile data
-email_to_user_id: Dict[str, str] = {}  # key: email, value: user_id
 
 
 def create_access_token(user_id: str) -> str:
@@ -48,8 +48,9 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 
 async def get_current_user(
-    authorization: Optional[str] = Header(None)
-) -> Dict:
+    authorization: Optional[str] = Header(None),
+    db: AsyncSession = Depends(get_db)
+) -> User:
     """从 Authorization header 中获取当前用户"""
     import logging
     logger = logging.getLogger(__name__)
@@ -78,92 +79,106 @@ async def get_current_user(
         logger.warning(f"[AUTH] Invalid token: {e}")
         raise HTTPException(status_code=401, detail="Invalid token")
 
-    user = users_db.get(user_id)
+    # 从数据库查询用户
+    stmt = select(User).where(User.id == uuid.UUID(user_id))
+    result = await db.execute(stmt)
+    user = result.scalar_one_or_none()
+
     if user is None:
-        logger.warning(f"[AUTH] User not found: {user_id}")
+        logger.warning(f"[AUTH] User not found in database: {user_id}")
         raise HTTPException(status_code=401, detail="User not found")
 
-    logger.info(f"[AUTH] ✅ Authentication successful for user: {user['email']}")
+    logger.info(f"[AUTH] ✅ Authentication successful for user: {user.email}")
     return user
 
 
 @router.post("/login", response_model=AuthResponse)
-async def login(data: LoginRequest):
+async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
     """
     用户登录
 
-    验证邮箱和密码，返回访问令牌和用户信息。
+    验证邮箱和密码,返回访问令牌和用户信息。
     """
-    # 查找用户
-    user_id = email_to_user_id.get(data.email)
-    if not user_id:
-        raise HTTPException(status_code=401, detail="Invalid email or password")
+    # 从数据库查找用户
+    stmt = select(User).where(User.email == data.email)
+    result = await db.execute(stmt)
+    user = result.scalar_one_or_none()
 
-    user = users_db.get(user_id)
     if not user:
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
     # 验证密码
-    if not verify_password(data.password, user["password_hash"]):
+    if not user.password_hash or not verify_password(data.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
     # 生成token
-    token = create_access_token(user_id)
+    token = create_access_token(str(user.id))
 
     # 检查是否有画像（判断是否完成了onboarding）
-    has_profile = user_id in profiles_db
+    profile_stmt = select(ProfileSnapshot).where(
+        ProfileSnapshot.user_id == user.id
+    ).order_by(ProfileSnapshot.created_at.desc())
+    profile_result = await db.execute(profile_stmt)
+    latest_profile = profile_result.scalar_one_or_none()
+
+    has_profile = latest_profile is not None
 
     # 构造用户信息
     user_info = UserInfo(
-        id=user["id"],
-        email=user["email"],
-        name=user["name"],
-        createdAt=user["created_at"],
-        hasCompletedOnboarding=has_profile,
-        onboardingMode=user.get("onboarding_mode")
+        id=str(user.id),
+        email=user.email,
+        name=user.name or user.email.split("@")[0],
+        createdAt=user.created_at.isoformat(),
+        hasCompletedOnboarding=has_profile or user.has_completed_onboarding,
+        onboardingMode=user.onboarding_mode
     )
 
     return AuthResponse(token=token, user=user_info)
 
 
 @router.post("/register", response_model=AuthResponse)
-async def register(data: RegisterRequest):
+async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
     """
     用户注册
 
     创建新用户账户，返回访问令牌和用户信息。
     """
     # 检查邮箱是否已存在
-    if data.email in email_to_user_id:
+    stmt = select(User).where(User.email == data.email)
+    result = await db.execute(stmt)
+    existing_user = result.scalar_one_or_none()
+
+    if existing_user:
         raise HTTPException(status_code=400, detail="Email already registered")
 
     # 创建新用户
-    user_id = str(uuid.uuid4())
-    new_user = {
-        "id": user_id,
-        "email": data.email,
-        "name": data.name or data.email.split("@")[0],
-        "password_hash": hash_password(data.password),
-        "role": "learner",
-        "is_active": True,
-        "created_at": datetime.utcnow().isoformat(),
-        "onboarding_mode": data.mode  # 'scale' or 'ai'
-    }
+    new_user = User(
+        id=uuid.uuid4(),
+        email=data.email,
+        name=data.name or data.email.split("@")[0],
+        password_hash=hash_password(data.password),
+        role="learner",
+        is_active=True,
+        created_at=datetime.utcnow(),
+        onboarding_mode=data.mode,  # 'scale' or 'ai'
+        has_completed_onboarding=False
+    )
 
-    users_db[user_id] = new_user
-    email_to_user_id[data.email] = user_id
+    db.add(new_user)
+    await db.commit()
+    await db.refresh(new_user)
 
     # 生成token
-    token = create_access_token(user_id)
+    token = create_access_token(str(new_user.id))
 
     # 构造用户信息
     user_info = UserInfo(
-        id=user_id,
-        email=new_user["email"],
-        name=new_user["name"],
-        createdAt=new_user["created_at"],
+        id=str(new_user.id),
+        email=new_user.email,
+        name=new_user.name,
+        createdAt=new_user.created_at.isoformat(),
         hasCompletedOnboarding=False,
-        onboardingMode=new_user["onboarding_mode"]
+        onboardingMode=new_user.onboarding_mode
     )
 
     return AuthResponse(token=token, user=user_info)
@@ -171,32 +186,36 @@ async def register(data: RegisterRequest):
 
 @router.get("/me")
 async def get_current_user_info(
-    current_user: Dict = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
 ):
     """
     获取当前用户信息
 
     从 Authorization header 中解析 token，返回用户信息和画像。
     """
-    user_id = current_user["id"]
+    # 获取最新的画像数据
+    profile_stmt = select(ProfileSnapshot).where(
+        ProfileSnapshot.user_id == current_user.id
+    ).order_by(ProfileSnapshot.created_at.desc())
+    profile_result = await db.execute(profile_stmt)
+    latest_profile = profile_result.scalar_one_or_none()
 
-    # 获取画像数据
-    profile = profiles_db.get(user_id)
     profile_data = None
-    if profile:
+    if latest_profile:
         profile_data = ProfileData(
-            cognition=profile.get("cognition", 0),
-            affect=profile.get("affect", 0),
-            behavior=profile.get("behavior", 0)
+            cognition=latest_profile.cognition,
+            affect=latest_profile.affect,
+            behavior=latest_profile.behavior
         )
 
     user_info = UserInfo(
-        id=current_user["id"],
-        email=current_user["email"],
-        name=current_user["name"],
-        createdAt=current_user["created_at"],
-        hasCompletedOnboarding=profile is not None,
-        onboardingMode=current_user.get("onboarding_mode")
+        id=str(current_user.id),
+        email=current_user.email,
+        name=current_user.name or current_user.email.split("@")[0],
+        createdAt=current_user.created_at.isoformat(),
+        hasCompletedOnboarding=latest_profile is not None or current_user.has_completed_onboarding,
+        onboardingMode=current_user.onboarding_mode
     )
 
     response_data = CurrentUserResponse(user=user_info, profile=profile_data)
@@ -209,12 +228,38 @@ async def get_current_user_info(
 
 
 # 辅助函数：保存用户画像（供其他模块使用）
-def save_user_profile(user_id: str, cognition: float, affect: float, behavior: float):
-    """保存用户画像到内存"""
-    profiles_db[user_id] = {
-        "user_id": user_id,
-        "cognition": cognition,
-        "affect": affect,
-        "behavior": behavior,
-        "recorded_at": datetime.utcnow().isoformat()
-    }
+async def save_user_profile(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    cognition: float,
+    affect: float,
+    behavior: float
+):
+    """保存用户画像到数据库"""
+    from app.models.sql.profile import ProfileSource
+
+    # 创建新的画像快照
+    new_profile = ProfileSnapshot(
+        id=uuid.uuid4(),
+        user_id=user_id,
+        cognition=int(cognition),
+        affect=int(affect),
+        behavior=int(behavior),
+        source=ProfileSource.SYSTEM,
+        created_at=datetime.utcnow()
+    )
+
+    db.add(new_profile)
+    await db.commit()
+    await db.refresh(new_profile)
+
+    # 同时更新用户的 has_completed_onboarding 标记
+    stmt = select(User).where(User.id == user_id)
+    result = await db.execute(stmt)
+    user = result.scalar_one_or_none()
+
+    if user and not user.has_completed_onboarding:
+        user.has_completed_onboarding = True
+        await db.commit()
+
+    return new_profile
