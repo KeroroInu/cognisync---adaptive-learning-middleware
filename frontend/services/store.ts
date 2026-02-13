@@ -37,7 +37,8 @@ export const useAppStore = () => {
           setState(prev => ({
             ...prev,
             user,
-            profile,
+            // 如果 profile 为 null，保留初始默认值
+            profile: profile || prev.profile,
             token,
           }));
         } catch (error) {
