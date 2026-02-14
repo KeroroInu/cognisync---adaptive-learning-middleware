@@ -26,6 +26,14 @@ async def lifespan(app: FastAPI):
     """应用生命周期管理"""
     logger.info("🚀 Starting CogniSync Backend...")
 
+    # 生产环境配置检查
+    if settings.APP_ENV == "production":
+        if not settings.ADMIN_KEY:
+            raise RuntimeError("❌ ADMIN_KEY must be set in production environment!")
+        if settings.LLM_PROVIDER == "mock":
+            logger.warning("⚠️ LLM_PROVIDER is 'mock' in production - AI features will not work!")
+        logger.info("✅ Production config validated")
+
     # 启动时初始化数据库连接
     try:
         await init_postgres()
@@ -42,6 +50,7 @@ async def lifespan(app: FastAPI):
     logger.info(f"🌐 Server running at http://{settings.HOST}:{settings.PORT}")
     logger.info(f"📚 API Docs: http://{settings.HOST}:{settings.PORT}/docs")
     logger.info(f"🔧 Environment: {settings.APP_ENV}")
+    logger.info(f"🤖 LLM Provider: {settings.LLM_PROVIDER}")
 
     yield
 

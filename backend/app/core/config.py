@@ -71,8 +71,8 @@ class Settings(BaseSettings):
 
     # Admin 管理员配置
     ADMIN_KEY: str = Field(
-        default="cognisync_admin_key_2024_secure",
-        description="Admin API 认证密钥（请在生产环境使用强随机字符串）"
+        default="",
+        description="Admin API 认证密钥（⚠️ 生产环境必须设置！）"
     )
 
     # 日志配置
