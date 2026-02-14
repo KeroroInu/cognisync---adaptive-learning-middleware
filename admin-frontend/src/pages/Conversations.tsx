@@ -1,19 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MessageSquare, ChevronRight } from 'lucide-react';
-
-interface ChatSession {
-  id: string;
-  user_id: string;
-  user_email: string;
-  message_count: number;
-  created_at: string;
-  updated_at: string;
-}
+import { MessageSquare, ChevronRight, Eye, Edit2, Trash2 } from 'lucide-react';
+import { adminApi } from '../lib/adminApi';
+import type { SessionItem } from '../types';
 
 export const Conversations = () => {
   const navigate = useNavigate();
-  const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [sessions, setSessions] = useState<SessionItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
   const [page, setPage] = useState(1);
@@ -27,24 +20,34 @@ export const Conversations = () => {
   const loadSessions = async () => {
     try {
       setLoading(true);
-      // Mock implementation - in real app would call a dedicated endpoint
-      // For now, we'll structure the data to work with chat_session model
-      const mockSessions: ChatSession[] = [
-        {
-          id: 'sess_1',
-          user_id: 'user_1',
-          user_email: 'user@example.com',
-          message_count: 45,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        },
-      ];
-      setSessions(mockSessions);
-      setTotal(mockSessions.length);
+      const data = await adminApi.getSessions(page, pageSize);
+      setSessions(data.sessions);
+      setTotal(data.total);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load sessions');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleEdit = (e: React.MouseEvent, session: SessionItem) => {
+    e.stopPropagation();
+    // TODO: Implement edit modal
+    alert(`Edit session: ${session.id}\n(Edit functionality will be implemented)`);
+  };
+
+  const handleDelete = async (e: React.MouseEvent, session: SessionItem) => {
+    e.stopPropagation();
+    if (window.confirm(`Are you sure you want to delete this conversation?\nUser: ${session.user_email}\nMessages: ${session.message_count}`)) {
+      try {
+        // TODO: Implement delete API endpoint
+        alert(`Delete session: ${session.id}\n(Delete API endpoint needs to be implemented)`);
+        // await adminApi.deleteSession(session.id);
+        // loadSessions();
+      } catch (err) {
+        console.error('Failed to delete session:', err);
+        alert('Failed to delete session');
+      }
     }
   };
 
@@ -111,16 +114,32 @@ export const Conversations = () => {
                       {new Date(session.created_at).toLocaleDateString()}
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">
-                      {new Date(session.updated_at).toLocaleDateString()}
+                      {session.updated_at ? new Date(session.updated_at).toLocaleDateString() : 'N/A'}
                     </td>
                     <td className="px-6 py-4 text-sm">
-                      <button
-                        onClick={() => navigate(`/admin/conversations/${session.id}`)}
-                        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-200 dark:hover:bg-indigo-800 transition-colors font-medium"
-                      >
-                        View
-                        <ChevronRight size={16} />
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => navigate(`/admin/conversations/${session.id}`)}
+                          className="p-2 rounded-lg bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-200 dark:hover:bg-indigo-800 transition-colors"
+                          title="View Conversation"
+                        >
+                          <Eye size={16} />
+                        </button>
+                        <button
+                          onClick={(e) => handleEdit(e, session)}
+                          className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors"
+                          title="Edit Session"
+                        >
+                          <Edit2 size={16} />
+                        </button>
+                        <button
+                          onClick={(e) => handleDelete(e, session)}
+                          className="p-2 rounded-lg bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-800 transition-colors"
+                          title="Delete Session"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { adminApi } from '../lib/adminApi';
 import type { ScaleTemplate } from '../types';
-import { Upload, CheckCircle, Archive, Eye } from 'lucide-react';
+import { Upload, CheckCircle, Archive, Eye, Edit2, Trash2 } from 'lucide-react';
 
 export const Scales = () => {
   const [scales, setScales] = useState<ScaleTemplate[]>([]);
@@ -85,6 +85,27 @@ export const Scales = () => {
       await adminApi.getScaleResponses(scaleId);
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const handleEdit = (e: React.MouseEvent, scale: ScaleTemplate) => {
+    e.stopPropagation();
+    // TODO: Implement edit modal
+    alert(`Edit scale: ${scale.name}\n(Edit functionality will be implemented)`);
+  };
+
+  const handleDelete = async (e: React.MouseEvent, scale: ScaleTemplate) => {
+    e.stopPropagation();
+    if (window.confirm(`Are you sure you want to delete scale "${scale.name}"?\nThis action cannot be undone.`)) {
+      try {
+        // TODO: Implement delete API endpoint
+        alert(`Delete scale: ${scale.name}\n(Delete API endpoint needs to be implemented)`);
+        // await adminApi.deleteScale(scale.id);
+        // loadScales();
+      } catch (err) {
+        console.error('Failed to delete scale:', err);
+        alert('Failed to delete scale');
+      }
     }
   };
 
@@ -258,10 +279,10 @@ export const Scales = () => {
                               e.stopPropagation();
                               handleArchive(scale.id);
                             }}
-                            className="px-3 py-1 rounded-lg bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-800 transition-colors text-xs font-semibold inline-flex items-center gap-1"
+                            className="p-2 rounded-lg bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-300 hover:bg-yellow-200 dark:hover:bg-yellow-800 transition-colors"
+                            title="Archive Scale"
                           >
                             <Archive size={14} />
-                            Archive
                           </button>
                         )}
                         <button
@@ -269,10 +290,24 @@ export const Scales = () => {
                             e.stopPropagation();
                             handleViewResponses(scale.id);
                           }}
-                          className="px-3 py-1 rounded-lg bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-200 dark:hover:bg-indigo-800 transition-colors text-xs font-semibold inline-flex items-center gap-1"
+                          className="p-2 rounded-lg bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-200 dark:hover:bg-indigo-800 transition-colors"
+                          title="View Responses"
                         >
                           <Eye size={14} />
-                          Responses
+                        </button>
+                        <button
+                          onClick={(e) => handleEdit(e, scale)}
+                          className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors"
+                          title="Edit Scale"
+                        >
+                          <Edit2 size={14} />
+                        </button>
+                        <button
+                          onClick={(e) => handleDelete(e, scale)}
+                          className="p-2 rounded-lg bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-800 transition-colors"
+                          title="Delete Scale"
+                        >
+                          <Trash2 size={14} />
                         </button>
                       </div>
                     </td>

@@ -11,6 +11,9 @@ import type {
   TableInfo,
   ColumnInfo,
   TableRowsResponse,
+  SessionsListResponse,
+  SessionDetail,
+  SessionMessagesResponse,
 } from '../types';
 
 const BASE_URL = (import.meta.env.VITE_API_BASE_URL as string) || 'http://localhost:8000/api';
@@ -126,6 +129,27 @@ class AdminApiClient {
 
   async getScaleResponses(scaleId: string): Promise<ScaleResponse[]> {
     return this.request<ScaleResponse[]>(`/scales/${scaleId}/responses`);
+  }
+
+  // Sessions
+  async getSessions(page: number = 1, pageSize: number = 10): Promise<SessionsListResponse> {
+    const params = new URLSearchParams({
+      page: page.toString(),
+      page_size: pageSize.toString(),
+    });
+    return this.request<SessionsListResponse>(`/sessions?${params}`);
+  }
+
+  async getSessionDetail(sessionId: string): Promise<SessionDetail> {
+    return this.request<SessionDetail>(`/sessions/${sessionId}`);
+  }
+
+  async getSessionMessages(sessionId: string, limit: number = 100, offset: number = 0): Promise<SessionMessagesResponse> {
+    const params = new URLSearchParams({
+      limit: limit.toString(),
+      offset: offset.toString(),
+    });
+    return this.request<SessionMessagesResponse>(`/sessions/${sessionId}/messages?${params}`);
   }
 
   // Data Explorer

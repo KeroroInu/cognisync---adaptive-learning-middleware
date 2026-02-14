@@ -119,3 +119,44 @@ export interface TableRowsResponse {
   limit: number;
   offset: number;
 }
+
+export interface SessionItem {
+  id: string;
+  user_id: string;
+  user_email: string;
+  message_count: number;
+  created_at: string;
+  updated_at: string | null;
+}
+
+export interface SessionsListResponse {
+  sessions: SessionItem[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface SessionDetail {
+  id: string;
+  user_id: string;
+  user_email: string;
+  message_count: number;
+  created_at: string;
+  updated_at: string | null;
+}
+
+export interface SessionMessageItem {
+  id: string;
+  role: 'user' | 'assistant';
+  text: string;
+  timestamp: string;
+  analysis?: Record<string, unknown>;
+}
+
+export interface SessionMessagesResponse {
+  messages: SessionMessageItem[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+

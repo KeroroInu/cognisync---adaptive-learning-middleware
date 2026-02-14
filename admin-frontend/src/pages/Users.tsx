@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { adminApi } from '../lib/adminApi';
 import type { User } from '../types';
-import { Search, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, ChevronLeft, ChevronRight, Edit2, Trash2, Eye } from 'lucide-react';
 
 export const Users = () => {
   const navigate = useNavigate();
@@ -33,6 +33,27 @@ export const Users = () => {
   const handleSearch = (value: string) => {
     setQuery(value);
     setPage(1);
+  };
+
+  const handleEdit = (e: React.MouseEvent, user: User) => {
+    e.stopPropagation();
+    // TODO: Implement edit modal
+    alert(`Edit user: ${user.email}\n(Edit functionality will be implemented)`);
+  };
+
+  const handleDelete = async (e: React.MouseEvent, user: User) => {
+    e.stopPropagation();
+    if (window.confirm(`Are you sure you want to delete user ${user.email}?`)) {
+      try {
+        // TODO: Implement delete API endpoint
+        alert(`Delete user: ${user.email}\n(Delete API endpoint needs to be implemented)`);
+        // await adminApi.deleteUser(user.id);
+        // loadUsers();
+      } catch (err) {
+        console.error('Failed to delete user:', err);
+        alert('Failed to delete user');
+      }
+    }
   };
 
   const totalPages = Math.ceil(total / pageSize);
@@ -69,12 +90,13 @@ export const Users = () => {
                 <th className="px-6 py-4 text-left text-sm font-semibold">Role</th>
                 <th className="px-6 py-4 text-left text-sm font-semibold">Status</th>
                 <th className="px-6 py-4 text-left text-sm font-semibold">Last Active</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold">Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-12 text-center">
+                  <td colSpan={6} className="px-6 py-12 text-center">
                     <div className="flex justify-center">
                       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500"></div>
                     </div>
@@ -82,7 +104,7 @@ export const Users = () => {
                 </tr>
               ) : users.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-12 text-center text-gray-500">
+                  <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
                     No users found
                   </td>
                 </tr>
@@ -90,8 +112,7 @@ export const Users = () => {
                 users.map((user) => (
                   <tr
                     key={user.id}
-                    onClick={() => navigate(`/admin/users/${user.id}`)}
-                    className="border-t cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                    className="border-t hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                     style={{ borderColor: 'var(--glass-border)' }}
                   >
                     <td className="px-6 py-4 text-sm">{user.email}</td>
@@ -111,6 +132,31 @@ export const Users = () => {
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">
                       {user.last_active_at ? new Date(user.last_active_at).toLocaleDateString() : 'Never'}
+                    </td>
+                    <td className="px-6 py-4 text-sm">
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => navigate(`/admin/users/${user.id}`)}
+                          className="p-2 rounded-lg bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-200 dark:hover:bg-indigo-800 transition-colors"
+                          title="View Details"
+                        >
+                          <Eye size={16} />
+                        </button>
+                        <button
+                          onClick={(e) => handleEdit(e, user)}
+                          className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors"
+                          title="Edit User"
+                        >
+                          <Edit2 size={16} />
+                        </button>
+                        <button
+                          onClick={(e) => handleDelete(e, user)}
+                          className="p-2 rounded-lg bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-800 transition-colors"
+                          title="Delete User"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
