@@ -1,0 +1,98 @@
+{
+  "nav": {
+    "dashboard": "Dashboard",
+    "users": "Users",
+    "conversations": "Conversations",
+    "scales": "Scales",
+    "dataExplorer": "Data Explorer",
+    "exports": "Exports"
+  },
+  "common": {
+    "adminPanel": "Admin Panel",
+    "darkMode": "Dark Mode",
+    "lightMode": "Light Mode",
+    "search": "Search",
+    "filter": "Filter",
+    "export": "Export",
+    "download": "Download",
+    "loading": "Loading...",
+    "error": "Error",
+    "success": "Success",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "delete": "Delete",
+    "edit": "Edit",
+    "save": "Save",
+    "back": "Back",
+    "next": "Next",
+    "previous": "Previous",
+    "total": "Total",
+    "noData": "No Data",
+    "actions": "Actions"
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "overview": "System Overview",
+    "totalUsers": "Total Users",
+    "totalSessions": "Total Sessions",
+    "totalMessages": "Total Messages",
+    "scaleTemplates": "Scale Templates",
+    "scaleResponses": "Scale Responses"
+  },
+  "users": {
+    "title": "User Management",
+    "searchPlaceholder": "Search username or email...",
+    "userId": "User ID",
+    "username": "Username",
+    "email": "Email",
+    "createdAt": "Created At",
+    "viewDetails": "View Details",
+    "userDetail": "User Details",
+    "basicInfo": "Basic Info",
+    "chatHistory": "Chat History",
+    "profiles": "Profile Snapshots",
+    "scaleResponses": "Scale Responses"
+  },
+  "conversations": {
+    "title": "Conversations",
+    "sessionId": "Session ID",
+    "user": "User",
+    "messageCount": "Messages",
+    "lastMessage": "Last Message",
+    "createdAt": "Created At"
+  },
+  "scales": {
+    "title": "Scale Management",
+    "uploadScale": "Upload Scale",
+    "scaleName": "Scale Name",
+    "scaleType": "Scale Type",
+    "version": "Version",
+    "status": "Status",
+    "responses": "Responses",
+    "activate": "Activate",
+    "archive": "Archive",
+    "active": "Active",
+    "archived": "Archived"
+  },
+  "dataExplorer": {
+    "title": "Data Explorer",
+    "description": "Browse and export database tables",
+    "selectTable": "Select Table",
+    "tableName": "Table Name",
+    "rowCount": "Row Count",
+    "exportJson": "Export JSON",
+    "copyQuery": "Copy Query",
+    "sortBy": "Sort By"
+  },
+  "exports": {
+    "title": "Data Export",
+    "exportType": "Export Type",
+    "format": "Format",
+    "dateRange": "Date Range",
+    "exportData": "Export Data"
+  },
+  "language": {
+    "chinese": "中文",
+    "english": "English"
+  }
+}

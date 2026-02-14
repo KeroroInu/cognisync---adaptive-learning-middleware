@@ -75,6 +75,16 @@ class Settings(BaseSettings):
         description="Admin API 认证密钥（⚠️ 生产环境必须设置！）"
     )
 
+    # JWT 认证配置
+    JWT_SECRET: str = Field(
+        default="",
+        description="JWT 签名密钥（⚠️ 生产环境必须设置强随机字符串！）"
+    )
+    JWT_EXPIRES_IN: int = Field(
+        default=1440,
+        description="JWT 过期时间（分钟），默认 24 小时"
+    )
+
     # 日志配置
     LOG_LEVEL: str = "INFO"
     LOG_FORMAT: str = "json"  # json | text

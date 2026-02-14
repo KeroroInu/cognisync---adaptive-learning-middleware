@@ -1,0 +1,98 @@
+{
+  "nav": {
+    "dashboard": "仪表盘",
+    "users": "用户管理",
+    "conversations": "对话管理",
+    "scales": "量表管理",
+    "dataExplorer": "数据浏览器",
+    "exports": "数据导出"
+  },
+  "common": {
+    "adminPanel": "管理面板",
+    "darkMode": "深色模式",
+    "lightMode": "浅色模式",
+    "search": "搜索",
+    "filter": "筛选",
+    "export": "导出",
+    "download": "下载",
+    "loading": "加载中...",
+    "error": "错误",
+    "success": "成功",
+    "cancel": "取消",
+    "confirm": "确认",
+    "delete": "删除",
+    "edit": "编辑",
+    "save": "保存",
+    "back": "返回",
+    "next": "下一页",
+    "previous": "上一页",
+    "total": "总计",
+    "noData": "暂无数据",
+    "actions": "操作"
+  },
+  "dashboard": {
+    "title": "仪表盘",
+    "overview": "系统概览",
+    "totalUsers": "总用户数",
+    "totalSessions": "总会话数",
+    "totalMessages": "总消息数",
+    "scaleTemplates": "量表模板",
+    "scaleResponses": "量表响应"
+  },
+  "users": {
+    "title": "用户管理",
+    "searchPlaceholder": "搜索用户名或邮箱...",
+    "userId": "用户ID",
+    "username": "用户名",
+    "email": "邮箱",
+    "createdAt": "创建时间",
+    "viewDetails": "查看详情",
+    "userDetail": "用户详情",
+    "basicInfo": "基本信息",
+    "chatHistory": "聊天记录",
+    "profiles": "画像快照",
+    "scaleResponses": "量表响应"
+  },
+  "conversations": {
+    "title": "对话管理",
+    "sessionId": "会话ID",
+    "user": "用户",
+    "messageCount": "消息数",
+    "lastMessage": "最后消息",
+    "createdAt": "创建时间"
+  },
+  "scales": {
+    "title": "量表管理",
+    "uploadScale": "上传量表",
+    "scaleName": "量表名称",
+    "scaleType": "量表类型",
+    "version": "版本",
+    "status": "状态",
+    "responses": "响应数",
+    "activate": "激活",
+    "archive": "归档",
+    "active": "活跃",
+    "archived": "已归档"
+  },
+  "dataExplorer": {
+    "title": "数据浏览器",
+    "description": "浏览和导出数据库表",
+    "selectTable": "选择表",
+    "tableName": "表名",
+    "rowCount": "行数",
+    "exportJson": "导出 JSON",
+    "copyQuery": "复制查询",
+    "sortBy": "排序"
+  },
+  "exports": {
+    "title": "数据导出",
+    "exportType": "导出类型",
+    "format": "格式",
+    "dateRange": "日期范围",
+    "exportData": "导出数据"
+  },
+  "language": {
+    "chinese": "中文",
+    "english": "English"
+  }
+}

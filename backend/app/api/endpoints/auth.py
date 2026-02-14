@@ -21,13 +21,14 @@ from app.schemas.auth import (
 from app.models.sql.user import User
 from app.models.sql.profile import ProfileSnapshot
 from app.db.postgres import get_db
+from app.core.config import settings
 
 router = APIRouter()
 
 # JWT配置
-SECRET_KEY = "cognisync-dev-secret-key-change-in-production"
+SECRET_KEY = settings.JWT_SECRET or "cognisync-dev-secret-key-change-in-production"
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 1440  # 24 hours for MVP
+ACCESS_TOKEN_EXPIRE_MINUTES = settings.JWT_EXPIRES_IN
 
 
 def create_access_token(user_id: str) -> str:

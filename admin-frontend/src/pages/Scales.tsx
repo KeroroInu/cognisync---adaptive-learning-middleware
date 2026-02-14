@@ -20,7 +20,7 @@ export const Scales = () => {
     try {
       setLoading(true);
       const data = await adminApi.getScales();
-      setScales(data);
+      setScales(data.templates);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load scales');
     } finally {

@@ -6,6 +6,7 @@ import type {
   MessagesListResponse,
   ProfileSnapshot,
   ScaleTemplate,
+  ScalesListResponse,
   ScaleResponse,
   TableInfo,
   ColumnInfo,
@@ -85,8 +86,8 @@ class AdminApiClient {
   }
 
   // Scales
-  async getScales(): Promise<ScaleTemplate[]> {
-    return this.request<ScaleTemplate[]>('/scales');
+  async getScales(): Promise<ScalesListResponse> {
+    return this.request<ScalesListResponse>('/scales');
   }
 
   async uploadScale(data: FormData): Promise<ScaleTemplate> {

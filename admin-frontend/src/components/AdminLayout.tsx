@@ -1,11 +1,12 @@
 import { ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { 
-  LayoutDashboard, 
-  Users, 
-  MessageSquare, 
-  FileText, 
-  Database, 
+import { useTranslation } from 'react-i18next';
+import {
+  LayoutDashboard,
+  Users,
+  MessageSquare,
+  FileText,
+  Database,
   Download,
   Sun,
   Moon,
@@ -13,25 +14,27 @@ import {
   X
 } from 'lucide-react';
 import { useTheme } from '../lib/useTheme';
+import { LanguageSwitcher } from './LanguageSwitcher';
 import { useState } from 'react';
 
 interface AdminLayoutProps {
   children: ReactNode;
 }
 
-const navItems = [
-  { path: '/admin', icon: LayoutDashboard, label: 'Dashboard' },
-  { path: '/admin/users', icon: Users, label: 'Users' },
-  { path: '/admin/conversations', icon: MessageSquare, label: 'Conversations' },
-  { path: '/admin/scales', icon: FileText, label: 'Scales' },
-  { path: '/admin/explorer', icon: Database, label: 'Data Explorer' },
-  { path: '/admin/exports', icon: Download, label: 'Exports' },
-];
-
 export const AdminLayout = ({ children }: AdminLayoutProps) => {
   const location = useLocation();
   const { theme, toggleTheme } = useTheme();
+  const { t } = useTranslation();
   const [sidebarOpen, setSidebarOpen] = useState(true);
+
+  const navItems = [
+    { path: '/admin', icon: LayoutDashboard, label: t('nav.dashboard') },
+    { path: '/admin/users', icon: Users, label: t('nav.users') },
+    { path: '/admin/conversations', icon: MessageSquare, label: t('nav.conversations') },
+    { path: '/admin/scales', icon: FileText, label: t('nav.scales') },
+    { path: '/admin/explorer', icon: Database, label: t('nav.dataExplorer') },
+    { path: '/admin/exports', icon: Download, label: t('nav.exports') },
+  ];
 
   return (
     <div className="flex h-screen font-sans gradient-mesh">
@@ -78,15 +81,16 @@ export const AdminLayout = ({ children }: AdminLayoutProps) => {
           })}
         </nav>
 
-        {/* Theme Toggle */}
-        <div className="p-4 border-t" style={{ borderColor: theme === 'light' ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.1)' }}>
+        {/* Theme Toggle & Language Switcher */}
+        <div className="p-4 border-t space-y-1.5" style={{ borderColor: theme === 'light' ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.1)' }}>
           <button
             onClick={toggleTheme}
             className={`w-full flex items-center ${sidebarOpen ? 'space-x-3' : 'justify-center'} px-4 py-3 rounded-xl transition-all duration-300 hover:bg-gray-100 dark:hover:bg-gray-700`}
           >
             {theme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
-            {sidebarOpen && <span>{theme === 'light' ? 'Dark Mode' : 'Light Mode'}</span>}
+            {sidebarOpen && <span>{theme === 'light' ? t('common.darkMode') : t('common.lightMode')}</span>}
           </button>
+          <LanguageSwitcher compact={!sidebarOpen} />
         </div>
       </aside>
 
@@ -95,11 +99,11 @@ export const AdminLayout = ({ children }: AdminLayoutProps) => {
         {/* Header */}
         <header className="h-16 flex items-center justify-between px-8 glass-card rounded-t-3xl shadow-sm">
           <h1 className="text-xl font-semibold">
-            {navItems.find(item => item.path === location.pathname)?.label || 'Admin'}
+            {navItems.find(item => item.path === location.pathname)?.label || t('common.adminPanel')}
           </h1>
           <div className="flex items-center space-x-4">
             <span className="text-sm text-gray-600 dark:text-gray-400">
-              Admin Panel
+              {t('common.adminPanel')}
             </span>
           </div>
         </header>
