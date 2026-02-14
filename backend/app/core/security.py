@@ -22,6 +22,13 @@ async def verify_admin_key(api_key: str = Security(admin_key_header)) -> bool:
     Raises:
         HTTPException: 403 Forbidden 如果 API Key 无效或缺失
     """
+    # 如果服务端未配置 ADMIN_KEY，拒绝所有请求
+    if not settings.ADMIN_KEY:
+        raise HTTPException(
+            status_code=500,
+            detail="Admin API is disabled. ADMIN_KEY must be configured in server."
+        )
+
     if not api_key:
         raise HTTPException(
             status_code=403,
