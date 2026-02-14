@@ -34,3 +34,16 @@ class UpdateNodeRequest(BaseModel):
     """更新节点请求"""
     mastery: Optional[float] = Field(None, ge=0, le=100, description="更新掌握度")
     isFlagged: Optional[bool] = Field(None, description="更新标记状态")
+
+
+class CreateNodeRequest(BaseModel):
+    """创建节点请求"""
+    name: str = Field(..., description="概念名称")
+    description: Optional[str] = Field("", description="概念描述")
+    mastery: Optional[float] = Field(50.0, ge=0, le=100, description="初始掌握度")
+
+
+class CreateEdgeRequest(BaseModel):
+    """创建边请求"""
+    source: str = Field(..., description="源节点 ID（Concept uid）")
+    target: str = Field(..., description="目标节点 ID（Concept uid）")

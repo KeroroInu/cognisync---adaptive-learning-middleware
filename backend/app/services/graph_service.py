@@ -293,3 +293,223 @@ class GraphService:
             frequency=int(row["frequency"]),
             isFlagged=row.get("isFlagged", False)
         )
+
+    async def create_node(
+        self,
+        user_id: str,
+        name: str,
+        description: str = "",
+        mastery: float = 50.0
+    ) -> Node:
+        """
+        为用户创建新的知识节点
+
+        Args:
+            user_id: 用户 ID
+            name: 概念名称
+            description: 概念描述
+            mastery: 初始掌握度 [0-100]
+
+        Returns:
+            创建的 Node 对象
+        """
+        logger.info(f"Creating node '{name}' for user {user_id}")
+
+        # 生成节点 uid
+        node_id = self._slugify(name)
+
+        # 确保 Student 节点存在
+        student_query = """
+        MERGE (s:Student {id: $user_id})
+        ON CREATE SET s.createdAt = datetime()
+        RETURN s.id as userId
+        """
+        await execute_write(student_query, {"user_id": user_id})
+
+        # 创建 Concept 节点和 INTERACTED_WITH 关系
+        create_query = """
+        MATCH (s:Student {id: $user_id})
+        MERGE (c:Concept {uid: $node_id})
+        ON CREATE SET
+            c.name = $name,
+            c.description = $description,
+            c.createdAt = datetime()
+        ON MATCH SET
+            c.name = $name,
+            c.description = $description
+
+        MERGE (s)-[r:INTERACTED_WITH]->(c)
+        ON CREATE SET
+            r.count = 1,
+            r.mastery = $mastery,
+            r.isFlagged = false,
+            r.lastUpdated = datetime()
+        ON MATCH SET
+            r.lastUpdated = datetime()
+
+        RETURN
+            c.uid as id,
+            c.name as name,
+            c.description as description,
+            r.mastery * 100 as mastery,
+            r.count as frequency,
+            COALESCE(r.isFlagged, false) as isFlagged
+        """
+
+        result = await execute_write(
+            create_query,
+            {
+                "user_id": user_id,
+                "node_id": node_id,
+                "name": name,
+                "description": description,
+                "mastery": mastery / 100.0
+            }
+        )
+
+        if not result:
+            raise Exception("Failed to create node")
+
+        row = result[0]
+        node = Node(
+            id=row["id"],
+            name=row["name"],
+            description=row.get("description", ""),
+            mastery=float(row["mastery"]),
+            frequency=min(int(row["frequency"]), 10),
+            isFlagged=row.get("isFlagged", False)
+        )
+
+        logger.info(f"Node created successfully: {node_id}")
+        return node
+
+    async def delete_node(self, user_id: str, node_id: str) -> bool:
+        """
+        删除用户的知识节点
+
+        只删除 Student->Concept 的 INTERACTED_WITH 关系，
+        不删除 Concept 节点本身（其他用户可能也在使用）
+
+        Args:
+            user_id: 用户 ID
+            node_id: 节点 ID（Concept uid）
+
+        Returns:
+            是否删除成功
+        """
+        logger.info(f"Deleting node {node_id} for user {user_id}")
+
+        delete_query = """
+        MATCH (s:Student {id: $user_id})-[r:INTERACTED_WITH]->(c:Concept {uid: $node_id})
+        DELETE r
+        RETURN count(r) as deleted
+        """
+
+        result = await execute_write(delete_query, {"user_id": user_id, "node_id": node_id})
+
+        if not result or result[0]["deleted"] == 0:
+            logger.warning(f"Node not found or already deleted: {node_id}")
+            return False
+
+        logger.info(f"Node deleted successfully: {node_id}")
+        return True
+
+    async def create_edge(self, user_id: str, source: str, target: str) -> Edge:
+        """
+        在两个概念之间创建关系
+
+        只有当用户与两个概念都有 INTERACTED_WITH 关系时才能创建边
+
+        Args:
+            user_id: 用户 ID
+            source: 源节点 ID（Concept uid）
+            target: 目标节点 ID（Concept uid）
+
+        Returns:
+            创建的 Edge 对象
+        """
+        logger.info(f"Creating edge {source} -> {target} for user {user_id}")
+
+        # 验证用户是否与两个节点都有交互
+        verify_query = """
+        MATCH (s:Student {id: $user_id})-[:INTERACTED_WITH]->(c1:Concept {uid: $source})
+        MATCH (s)-[:INTERACTED_WITH]->(c2:Concept {uid: $target})
+        RETURN c1.uid as source, c2.uid as target
+        """
+
+        verify_result = await execute_query(
+            verify_query,
+            {"user_id": user_id, "source": source, "target": target}
+        )
+
+        if not verify_result:
+            raise Exception(f"User has not interacted with one or both concepts: {source}, {target}")
+
+        # 创建 REL 关系
+        create_edge_query = """
+        MATCH (c1:Concept {uid: $source})
+        MATCH (c2:Concept {uid: $target})
+        MERGE (c1)-[r:REL]->(c2)
+        ON CREATE SET r.createdAt = datetime()
+        RETURN c1.uid as source, c2.uid as target
+        """
+
+        result = await execute_write(
+            create_edge_query,
+            {"source": source, "target": target}
+        )
+
+        if not result:
+            raise Exception("Failed to create edge")
+
+        logger.info(f"Edge created successfully: {source} -> {target}")
+        return Edge(source=source, target=target)
+
+    async def delete_edge(self, user_id: str, source: str, target: str) -> bool:
+        """
+        删除两个概念之间的关系
+
+        Args:
+            user_id: 用户 ID（用于验证权限）
+            source: 源节点 ID（Concept uid）
+            target: 目标节点 ID（Concept uid）
+
+        Returns:
+            是否删除成功
+        """
+        logger.info(f"Deleting edge {source} -> {target} for user {user_id}")
+
+        # 验证用户是否与两个节点都有交互（权限检查）
+        verify_query = """
+        MATCH (s:Student {id: $user_id})-[:INTERACTED_WITH]->(c1:Concept {uid: $source})
+        MATCH (s)-[:INTERACTED_WITH]->(c2:Concept {uid: $target})
+        RETURN c1.uid as source, c2.uid as target
+        """
+
+        verify_result = await execute_query(
+            verify_query,
+            {"user_id": user_id, "source": source, "target": target}
+        )
+
+        if not verify_result:
+            logger.warning(f"User does not have permission to delete edge: {source} -> {target}")
+            return False
+
+        # 删除 REL 关系
+        delete_edge_query = """
+        MATCH (c1:Concept {uid: $source})-[r:REL]->(c2:Concept {uid: $target})
+        DELETE r
+        RETURN count(r) as deleted
+        """
+
+        result = await execute_write(
+            delete_edge_query,
+            {"source": source, "target": target}
+        )
+
+        if not result or result[0]["deleted"] == 0:
+            logger.warning(f"Edge not found or already deleted: {source} -> {target}")
+            return False
+
+        logger.info(f"Edge deleted successfully: {source} -> {target}")
+        return True
