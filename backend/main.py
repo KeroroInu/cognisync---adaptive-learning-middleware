@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse
 from app.core.config import settings
 from app.core.logging import setup_logging
 from app.db.postgres import init_db as init_postgres, engine as postgres_engine
-from app.db.neo4j import init_db as init_neo4j, close_db as close_neo4j, driver as neo4j_driver
+from app.db.neo4j import init_db as init_neo4j, close_db as close_neo4j
 from app.api.router import api_router
 from app.api.admin_router import admin_router
 
