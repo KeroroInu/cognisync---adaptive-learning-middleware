@@ -11,8 +11,8 @@ from fastapi.responses import JSONResponse
 
 from app.core.config import settings
 from app.core.logging import setup_logging
-from app.db.postgres import init_db as init_postgres
-from app.db.neo4j import init_db as init_neo4j, close_db as close_neo4j
+from app.db.postgres import init_db as init_postgres, engine as postgres_engine
+from app.db.neo4j import init_db as init_neo4j, close_db as close_neo4j, driver as neo4j_driver
 from app.api.router import api_router
 from app.api.admin_router import admin_router
 
@@ -20,10 +20,17 @@ from app.api.admin_router import admin_router
 setup_logging()
 logger = logging.getLogger(__name__)
 
+# 组件状态追踪
+component_status = {
+    "postgres": False,
+    "neo4j": False,
+}
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
+    global component_status
     logger.info("🚀 Starting CogniSync Backend...")
 
     # 生产环境配置检查
@@ -32,19 +39,25 @@ async def lifespan(app: FastAPI):
             raise RuntimeError("❌ ADMIN_KEY must be set in production environment!")
         if settings.LLM_PROVIDER == "mock":
             logger.warning("⚠️ LLM_PROVIDER is 'mock' in production - AI features will not work!")
+        if settings.CORS_ORIGINS == "*":
+            logger.warning("⚠️ CORS_ORIGINS is '*' in production - this is not recommended!")
         logger.info("✅ Production config validated")
 
     # 启动时初始化数据库连接
     try:
         await init_postgres()
+        component_status["postgres"] = True
         logger.info("✅ PostgreSQL connected")
     except Exception as e:
+        component_status["postgres"] = False
         logger.error(f"❌ PostgreSQL connection failed: {e}")
 
     try:
         await init_neo4j()
+        component_status["neo4j"] = True
         logger.info("✅ Neo4j connected")
     except Exception as e:
+        component_status["neo4j"] = False
         logger.error(f"❌ Neo4j connection failed: {e}")
 
     logger.info(f"🌐 Server running at http://{settings.HOST}:{settings.PORT}")
@@ -84,13 +97,18 @@ app.add_middleware(
 # Health Check Endpoint
 @app.get("/health", tags=["Health"])
 async def health_check():
-    """健康检查端点"""
+    """健康检查端点 - 显示各组件状态"""
     return JSONResponse(
         content={
             "status": "ok",
             "app": settings.APP_NAME,
             "env": settings.APP_ENV,
             "version": "0.1.0",
+            "components": {
+                "postgres": "connected" if component_status["postgres"] else "disconnected",
+                "neo4j": "connected" if component_status["neo4j"] else "disconnected",
+                "llm_provider": settings.LLM_PROVIDER,
+            },
         }
     )
 
