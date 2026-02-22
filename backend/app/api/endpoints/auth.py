@@ -235,12 +235,20 @@ async def get_current_user_info(
 
     从 Authorization header 中解析 token，返回用户信息和画像。
     """
+    import logging
+    logger = logging.getLogger(__name__)
+
+    logger.info(f"[ME] Fetching user info for: {current_user.email}")
+
     # 获取最新的画像数据
     profile_stmt = select(ProfileSnapshot).where(
         ProfileSnapshot.user_id == current_user.id
     ).order_by(ProfileSnapshot.created_at.desc())
     profile_result = await db.execute(profile_stmt)
     latest_profile = profile_result.scalar_one_or_none()
+
+    if latest_profile:
+        logger.info(f"[ME] Found profile for user: {current_user.id}")
 
     profile_data = None
     if latest_profile:
@@ -260,6 +268,8 @@ async def get_current_user_info(
     )
 
     response_data = CurrentUserResponse(user=user_info, profile=profile_data)
+
+    logger.info(f"[ME] ✅ User info retrieved: {current_user.email}")
 
     # 返回包装格式以保持一致性
     return {
