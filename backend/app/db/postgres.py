@@ -54,8 +54,8 @@ async def init_db():
         # 打印已创建的表
         async with engine.begin() as conn:
             def get_table_names(sync_conn):
-                inspector = sync_conn.dialect.get_inspector(sync_conn)
-                return inspector.get_table_names()
+                from sqlalchemy import inspect
+                return inspect(sync_conn).get_table_names()
 
             tables = await conn.run_sync(get_table_names)
             logger.info(f"📊 Created tables: {', '.join(tables)}")
