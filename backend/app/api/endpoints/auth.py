@@ -100,20 +100,30 @@ async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
 
     验证邮箱和密码,返回访问令牌和用户信息。
     """
+    import logging
+    logger = logging.getLogger(__name__)
+
+    logger.info(f"[LOGIN] Attempting login for email: {data.email}")
+
     # 从数据库查找用户
     stmt = select(User).where(User.email == data.email)
     result = await db.execute(stmt)
     user = result.scalar_one_or_none()
 
     if not user:
+        logger.warning(f"[LOGIN] User not found: {data.email}")
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
     # 验证密码
     if not user.password_hash or not verify_password(data.password, user.password_hash):
+        logger.warning(f"[LOGIN] Invalid password for: {data.email}")
         raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    logger.info(f"[LOGIN] Password verified for user: {user.id}")
 
     # 生成token
     token = create_access_token(str(user.id))
+    logger.info(f"[LOGIN] Access token generated for user: {user.id}")
 
     # 检查是否有画像（判断是否完成了onboarding）
     profile_stmt = select(ProfileSnapshot).where(
@@ -134,6 +144,7 @@ async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
         onboardingMode=user.onboarding_mode
     )
 
+    logger.info(f"[LOGIN] ✅ Login successful: {user.email}")
     return AuthResponse(token=token, user=user_info)
 
 
