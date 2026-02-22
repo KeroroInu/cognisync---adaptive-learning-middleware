@@ -209,18 +209,33 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
         initial_profile = None
         initial_graph = None
 
+        # 保存初始画像快照到数据库（system 类型）
+        from app.models.sql.profile import ProfileSnapshot, ProfileSource
+
+        initial_snapshot = ProfileSnapshot(
+            user_id=new_user.id,
+            cognition=50,  # 默认值
+            affect=50,    # 默认值
+            behavior=50,   # 默认值
+            source=ProfileSource.SYSTEM,
+            created_at=datetime.utcnow()
+        )
+
+        db.add(initial_snapshot)
+        await db.commit()
+        logger.info(f"[REGISTER] Initial profile snapshot created for user {new_user.id}")
+
         if data.mode == 'ai':
-            logger.info(f"[REGISTER] Generating initial profile and graph for AI mode")
+            logger.info(f"[REGISTER] Generating initial graph for AI mode")
 
             try:
                 from app.services.personalization_service import PersonalizationService
 
                 personalization_service = PersonalizationService()
 
-                # 生成初始画像（基于 AI 入职对话，这里使用默认值）
-                # 注意：实际的画像值应该在 AI 入职完成后更新
+                # 构造初始画像数据（用于返回）
                 initial_profile = ProfileData(
-                    cognition=50.0,  # 默认值，后续会更新
+                    cognition=50.0,
                     affect=50.0,
                     behavior=50.0
                 )

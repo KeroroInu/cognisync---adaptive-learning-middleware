@@ -197,6 +197,8 @@ class ProfileService:
         """
         获取用户画像的最近变化
 
+        只查询 system 类型的快照，因为用户校准（user 类型）不应该计入变化记录
+
         Args:
             user_id: 用户 ID
             limit: 返回的最大变化数量
@@ -204,10 +206,13 @@ class ProfileService:
         Returns:
             ProfileChange 列表
         """
-        # 获取最近的历史快照（包括 system 和 user）
+        # 获取最近的 system 历史快照
         query = (
             select(ProfileSnapshot)
-            .where(ProfileSnapshot.user_id == user_id)
+            .where(
+                ProfileSnapshot.user_id == user_id,
+                ProfileSnapshot.source == ProfileSource.SYSTEM
+            )
             .order_by(desc(ProfileSnapshot.created_at))
             .limit(limit + 1)  # 多取一个来计算变化
         )
