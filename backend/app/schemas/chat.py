@@ -70,6 +70,7 @@ class ChatResponse(BaseModel):
     message: str = Field(..., description="AI 助手回复")
     analysis: ChatAnalysis = Field(..., description="对话分析结果")
     updatedProfile: UserProfile = Field(..., description="更新后的学习者画像")
+    updatedGraph: Optional[List[dict]] = Field(None, alias="updatedGraph", description="更新后的知识图谱")
 
     class Config:
         json_schema_extra = {
@@ -86,7 +87,15 @@ class ChatResponse(BaseModel):
                     "affect": 32,
                     "behavior": 83,
                     "lastUpdate": "2026-02-09T10:30:00.000Z"
-                }
+                },
+                "updatedGraph": [
+                    {
+                        "name": "反向传播",
+                        "category": "算法",
+                        "importance": 0.8,
+                        "relatedConcepts": ["神经网络", "梯度下降"]
+                    }
+                ]
             }
         }
 

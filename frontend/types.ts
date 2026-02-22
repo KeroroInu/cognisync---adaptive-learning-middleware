@@ -8,6 +8,13 @@ export interface UserProfile {
   lastUpdate: string;
 }
 
+export interface ProfileChange {
+  dimension: string;
+  change: number;
+  timestamp: string;
+  trend: 'up' | 'down' | 'stable';
+}
+
 export interface Node {
   id: string;
   name: string;

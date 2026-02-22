@@ -1,18 +1,41 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { RadarDisplay } from '../components/RadarDisplay';
-import { UserProfile, Language } from '../types';
+import { UserProfile, Language, ProfileChange } from '../types';
 import { ArrowRight, Activity, Brain, Target, TrendingUp } from 'lucide-react';
 import { translations } from '../utils/translations';
+import { getRecentChanges } from '../services/api';
 
 interface Props {
   profile: UserProfile;
   onNavigate: (view: any) => void;
   language: Language;
   theme: 'light' | 'dark';
+  userId?: string;
 }
 
-export const Dashboard: React.FC<Props> = ({ profile, onNavigate, language, theme }) => {
+export const Dashboard: React.FC<Props> = ({ profile, onNavigate, language, theme, userId }) => {
   const t = translations[language];
+  const [recentChanges, setRecentChanges] = useState<ProfileChange[]>([]);
+  const [isLoadingChanges, setIsLoadingChanges] = useState(false);
+
+  // 获取最近的变化
+  useEffect(() => {
+    const fetchRecentChangesData = async () => {
+      if (!userId) return;
+
+      setIsLoadingChanges(true);
+      try {
+        const response = await getRecentChanges(userId);
+        setRecentChanges(response.data?.changes || []);
+      } catch (error) {
+        console.error('Failed to fetch recent changes:', error);
+      } finally {
+        setIsLoadingChanges(false);
+      }
+    };
+
+    fetchRecentChangesData();
+  }, [userId]);
 
   return (
     <div className="grid grid-cols-12 gap-6 h-full">
@@ -104,30 +127,83 @@ export const Dashboard: React.FC<Props> = ({ profile, onNavigate, language, them
               color: theme === 'light' ? '#000000' : '#ffffff'
             }}>{t.recentShifts}</h3>
           </div>
-          <ul className="space-y-4">
-            <li className="flex items-center justify-between p-3 rounded-xl transition-colors duration-200" style={{
-              backgroundColor: theme === 'light' ? '#f0fdf4' : '#14532d',
-              border: `1px solid ${theme === 'light' ? '#bbf7d0' : '#166534'}`
-            }}>
-              <span className="text-sm font-medium" style={{
-                color: theme === 'light' ? '#000000' : '#ffffff'
-              }}>Cognitive Load</span>
-              <span className="text-green-600 dark:text-green-300 flex items-center font-semibold text-sm">
-                +5 <Activity size={14} className="ml-1" />
-              </span>
-            </li>
-            <li className="flex items-center justify-between p-3 rounded-xl transition-colors duration-200" style={{
-              backgroundColor: theme === 'light' ? '#fff1f2' : '#881337',
-              border: `1px solid ${theme === 'light' ? '#fecdd3' : '#9f1239'}`
-            }}>
-              <span className="text-sm font-medium" style={{
-                color: theme === 'light' ? '#000000' : '#ffffff'
-              }}>Frustration</span>
-              <span className="text-rose-600 dark:text-rose-300 flex items-center font-semibold text-sm">
-                +12 <Activity size={14} className="ml-1" />
-              </span>
-            </li>
-          </ul>
+          {isLoadingChanges ? (
+            <div className="text-center py-4" style={{ color: theme === 'light' ? '#000000' : '#ffffff' }}>
+              Loading...
+            </div>
+          ) : recentChanges.length === 0 ? (
+            <div className="text-center py-4 text-sm" style={{ color: theme === 'light' ? '#404040' : '#e2e8f0' }}>
+              {language === 'zh' ? '暂无变化数据' : 'No recent changes'}
+            </div>
+          ) : (
+            <ul className="space-y-4">
+              {recentChanges.map((change, idx) => {
+                const isPositive = change.change > 0;
+                const isStable = change.change === 0;
+
+                // 维度标签
+                const dimensionLabels = {
+                  cognition: t.cognition,
+                  affect: t.affect,
+                  behavior: t.behavior
+                };
+
+                // 背景色
+                const getBgColor = () => {
+                  if (isStable) {
+                    return theme === 'light' ? '#f1f5f9' : '#334155';
+                  } else if (isPositive) {
+                    return theme === 'light' ? '#f0fdf4' : '#14532d';
+                  } else {
+                    return theme === 'light' ? '#fff1f2' : '#881337';
+                  }
+                };
+
+                // 边框色
+                const getBorderColor = () => {
+                  if (isStable) {
+                    return theme === 'light' ? '#cbd5e1' : '#475569';
+                  } else if (isPositive) {
+                    return theme === 'light' ? '#bbf7d0' : '#166534';
+                  } else {
+                    return theme === 'light' ? '#fecdd3' : '#9f1239';
+                  }
+                };
+
+                // 文本色
+                const getTextColor = () => {
+                  if (isStable) {
+                    return 'text-gray-600 dark:text-gray-400';
+                  } else if (isPositive) {
+                    return 'text-green-600 dark:text-green-300';
+                  } else {
+                    return 'text-rose-600 dark:text-rose-300';
+                  }
+                };
+
+                return (
+                  <li
+                    key={idx}
+                    className="flex items-center justify-between p-3 rounded-xl transition-colors duration-200"
+                    style={{
+                      backgroundColor: getBgColor(),
+                      border: `1px solid ${getBorderColor()}`
+                    }}
+                  >
+                    <span className="text-sm font-medium" style={{
+                      color: theme === 'light' ? '#000000' : '#ffffff'
+                    }}>
+                      {dimensionLabels[change.dimension as keyof typeof dimensionLabels] || change.dimension}
+                    </span>
+                    <span className={`${getTextColor()} flex items-center font-semibold text-sm`}>
+                      {change.change > 0 ? '+' : ''}{change.change}
+                      <Activity size={14} className="ml-1" />
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </div>
 
         {/* Quick Actions Card */}

@@ -40,6 +40,8 @@ class AuthResponse(BaseModel):
     """认证响应"""
     token: str = Field(..., description="访问令牌")
     user: UserInfo = Field(..., description="用户信息")
+    initialProfile: Optional[ProfileData] = Field(None, alias="initialProfile", description="初始用户画像")
+    initialGraph: Optional[list] = Field(None, alias="initialGraph", description="初始知识图谱（仅AI模式）")
 
 
 class ProfileData(BaseModel):

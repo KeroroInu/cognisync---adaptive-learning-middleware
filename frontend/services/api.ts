@@ -5,6 +5,7 @@
 import type {
   User,
   UserProfile,
+  ProfileChange,
   AuthResponse,
   LoginRequest,
   RegisterRequest,
@@ -74,6 +75,10 @@ export interface ChatResponse {
 export interface ApiResponse<T> {
   success: boolean;
   data: T;
+}
+
+export interface ProfileChangesResponse {
+  changes: ProfileChange[];
 }
 
 /**
@@ -225,6 +230,34 @@ export async function getCurrentUser(): Promise<{ user: User; profile: UserProfi
 export function logout(): void {
   localStorage.removeItem('cognisync-token');
 }
+
+/**
+ * 获取用户画像的最近变化
+ */
+export async function getRecentChanges(userId: string, limit: number = 5): Promise<ApiResponse<ProfileChangesResponse>> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/profile/${userId}/recent-changes?limit=${limit}`, {
+      method: 'GET',
+      headers: getHeaders(true),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const result: ApiResponse<ProfileChangesResponse> = await response.json();
+
+    if (!result.success) {
+      throw new Error(result.error?.message || 'Failed to fetch recent changes');
+    }
+
+    return result;
+  } catch (error) {
+    console.error('Failed to get recent changes:', error);
+    throw error;
+  }
+}
+
 
 // ============================================
 //  量表注册 API

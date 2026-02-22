@@ -158,7 +158,7 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
     import logging
     logger = logging.getLogger(__name__)
 
-    logger.info(f"[REGISTER] Attempting registration for email: {data.email}")
+    logger.info(f"[REGISTER] Attempting registration for email: {data.email}, mode: {data.mode}")
 
     # 检查邮箱是否已存在
     stmt = select(User).where(User.email == data.email)
@@ -205,8 +205,42 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
             onboardingMode=new_user.onboarding_mode
         )
 
+        # 生成初始画像和知识图谱（仅 AI 模式）
+        initial_profile = None
+        initial_graph = None
+
+        if data.mode == 'ai':
+            logger.info(f"[REGISTER] Generating initial profile and graph for AI mode")
+
+            try:
+                from app.services.personalization_service import PersonalizationService
+
+                personalization_service = PersonalizationService()
+
+                # 生成初始画像（基于 AI 入职对话，这里使用默认值）
+                # 注意：实际的画像值应该在 AI 入职完成后更新
+                initial_profile = ProfileData(
+                    cognition=50.0,  # 默认值，后续会更新
+                    affect=50.0,
+                    behavior=50.0
+                )
+
+                # 生成初始知识图谱
+                initial_graph = await personalization_service.generate_initial_graph(
+                    cognition=50.0,
+                    affect=50.0,
+                    behavior=50.0,
+                    num_concepts=10
+                )
+
+                logger.info(f"[REGISTER] Generated {len(initial_graph)} initial concepts for user {new_user.id}")
+
+            except Exception as e:
+                logger.warning(f"[REGISTER] Failed to generate initial graph: {e}, continuing without it")
+                initial_graph = []
+
         logger.info(f"[REGISTER] ✅ Registration successful: {new_user.email}")
-        return AuthResponse(token=token, user=user_info)
+        return AuthResponse(token=token, user=user_info, initialProfile=initial_profile, initialGraph=initial_graph)
 
     except HTTPException:
         # HTTPException 已经是格式化的错误，直接重新抛出

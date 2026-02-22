@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.sql.user import User
 from app.models.sql.profile import ProfileSnapshot, ProfileSource
 from app.models.sql.calibration_log import CalibrationLog, Dimension, ConflictLevel
-from app.schemas.profile import UserProfile
+from app.schemas.profile import UserProfile, ProfileChange
 from app.schemas.calibration import calculate_conflict_level
 
 logger = logging.getLogger(__name__)
@@ -188,6 +188,73 @@ class ProfileService:
             behavior=user_snapshot.behavior,
             lastUpdate=user_snapshot.created_at.isoformat() + "Z"
         )
+
+    async def get_recent_changes(
+        self,
+        user_id: UUID,
+        limit: int = 5
+    ) -> list[ProfileChange]:
+        """
+        获取用户画像的最近变化
+
+        Args:
+            user_id: 用户 ID
+            limit: 返回的最大变化数量
+
+        Returns:
+            ProfileChange 列表
+        """
+        # 获取最近的历史快照（包括 system 和 user）
+        query = (
+            select(ProfileSnapshot)
+            .where(ProfileSnapshot.user_id == user_id)
+            .order_by(desc(ProfileSnapshot.created_at))
+            .limit(limit + 1)  # 多取一个来计算变化
+        )
+
+        result = await self.db.execute(query)
+        snapshots = result.scalars().all()
+
+        if len(snapshots) < 2:
+            return []
+
+        # 计算相邻快照之间的变化
+        changes = []
+        for i in range(len(snapshots) - 1):
+            current = snapshots[i]
+            previous = snapshots[i + 1]
+
+            # 计算各维度的变化
+            delta_cog = current.cognition - previous.cognition
+            delta_aff = current.affect - previous.affect
+            delta_beh = current.behavior - previous.behavior
+
+            # 只记录有变化的维度
+            if delta_cog != 0:
+                changes.append(ProfileChange(
+                    dimension="cognition",
+                    change=delta_cog,
+                    timestamp=current.created_at.isoformat() + "Z",
+                    trend="up" if delta_cog > 0 else "down"
+                ))
+
+            if delta_aff != 0:
+                changes.append(ProfileChange(
+                    dimension="affect",
+                    change=delta_aff,
+                    timestamp=current.created_at.isoformat() + "Z",
+                    trend="up" if delta_aff > 0 else "down"
+                ))
+
+            if delta_beh != 0:
+                changes.append(ProfileChange(
+                    dimension="behavior",
+                    change=delta_beh,
+                    timestamp=current.created_at.isoformat() + "Z",
+                    trend="up" if delta_beh > 0 else "down"
+                ))
+
+        return changes
 
     async def get_or_create_user(self, user_id_or_email: str) -> User:
         """

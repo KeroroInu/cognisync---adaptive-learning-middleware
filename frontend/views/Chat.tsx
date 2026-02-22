@@ -11,6 +11,7 @@ interface Props {
   language: Language;
   isResearchMode: boolean;
   theme: 'light' | 'dark';
+  userId?: string;
 }
 
 export const Chat: React.FC<Props> = ({
@@ -19,7 +20,8 @@ export const Chat: React.FC<Props> = ({
   onUpdateProfile,
   language,
   isResearchMode,
-  theme
+  theme,
+  userId
 }) => {
   const t = translations[language];
   const [input, setInput] = useState('');
@@ -48,7 +50,7 @@ export const Chat: React.FC<Props> = ({
     try {
       // Call real backend API
       const response = await sendChatMessage({
-        userId: 'user123', // TODO: Get from auth context
+        userId: userId || 'guest',
         message: userText,
         language,
         isResearchMode

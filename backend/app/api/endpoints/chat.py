@@ -220,11 +220,25 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
                 # 继续处理，不因为图谱更新失败而中断
 
         # ========== 6. 生成 AI 回复 ==========
-        # 构建 system prompt
-        system_prompt = build_assistant_system_prompt(
+        # 获取用户当前知识图谱
+        current_graph = []
+        try:
+            graph_service = GraphService()
+            graph_data = await graph_service.get_user_graph(str(user_id))
+            if graph_data and "concepts" in graph_data:
+                current_graph = graph_data["concepts"]
+        except Exception as e:
+            logger.warning(f"Failed to fetch knowledge graph: {e}, using empty graph")
+
+        # 构建个性化 system prompt
+        from app.services.personalization_service import PersonalizationService
+
+        personalization_service = PersonalizationService()
+        system_prompt = personalization_service.build_personalized_prompt(
+            user_profile=updated_profile,
+            knowledge_graph=current_graph,
             emotion=analysis.emotion,
-            language=request.language or "zh",
-            is_research_mode=request.isResearchMode or False
+            language=request.language or "zh"
         )
 
         # 构建 user prompt（包含历史对话）
@@ -266,11 +280,22 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
 
         logger.info(f"Assistant message saved: {assistant_message.id}")
 
-        # ========== 8. 返回响应 ==========
+        # ========== 8. 更新知识图谱（基于对话内容） ==========
+        updated_graph = await personalization_service.update_graph_from_conversation(
+            user_id=str(user_id),
+            message=request.message,
+            current_graph=current_graph,
+            user_profile=updated_profile
+        )
+
+        logger.info(f"Knowledge graph updated: {len(updated_graph)} concepts")
+
+        # ========== 9. 返回响应 ==========
         response = ChatResponse(
             message=assistant_reply,
             analysis=analysis,
-            updatedProfile=updated_profile
+            updatedProfile=updated_profile,
+            updatedGraph=updated_graph
         )
 
         return SuccessResponse(data=response)

@@ -143,6 +143,7 @@ function App() {
             onNavigate={setCurrentView as (view: AppView) => void}
             language={state.language}
             theme={theme}
+            userId={state.user?.id}
           />
         );
 
@@ -155,6 +156,7 @@ function App() {
             language={state.language}
             isResearchMode={state.isResearchMode}
             theme={theme}
+            userId={state.user?.id}
           />
         );
 
