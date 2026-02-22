@@ -67,11 +67,19 @@ async function request<T = any>(
     }
   }
 
+  // 调试日志
+  console.log(`[API] ${fetchConfig.method || 'GET'} ${url}`, {
+    headers: { ...headers, Authorization: headers.Authorization ? '***' : undefined },
+    body: fetchConfig.body ? '(hidden)' : undefined
+  });
+
   try {
     const response = await fetch(url, {
       ...fetchConfig,
       headers,
     });
+
+    console.log(`[API] Response status: ${response.status} ${response.statusText} for ${url}`);
 
     // 处理 401 Unauthorized
     if (response.status === 401 && !skipErrorHandling && !isRedirecting) {
@@ -113,6 +121,14 @@ async function request<T = any>(
         ? (data.error?.code || 'REQUEST_FAILED')
         : 'REQUEST_FAILED';
 
+      console.error(`[API] HTTP Error ${response.status}:`, {
+        url,
+        isWrappedFormat,
+        errorMessage,
+        errorCode,
+        data
+      });
+
       throw new ApiError(
         errorMessage,
         errorCode,
@@ -123,13 +139,25 @@ async function request<T = any>(
 
     // 如果是包装格式且success=false，抛出错误
     if (isWrappedFormat && !data.success) {
+      const errorMessage = data.error?.message || 'Request failed';
+      const errorCode = data.error?.code || 'REQUEST_FAILED';
+
+      console.error(`[API] API Error (success=false):`, {
+        url,
+        errorMessage,
+        errorCode,
+        response: data
+      });
+
       throw new ApiError(
-        data.error?.message || 'Request failed',
-        data.error?.code || 'REQUEST_FAILED',
+        errorMessage,
+        errorCode,
         response.status,
         data.error?.details
       );
     }
+
+    console.log(`[API] Success response from ${url}`);
 
     // 返回数据：包装格式返回data字段，直接格式返回整个响应
     return (isWrappedFormat ? data.data : data) as T;
@@ -140,7 +168,7 @@ async function request<T = any>(
     }
 
     // 网络错误或其他异常
-    console.error('API request failed:', error);
+    console.error(`[API] Request failed for ${url}:`, error);
     throw new ApiError(
       error instanceof Error ? error.message : 'Network error',
       'NETWORK_ERROR'

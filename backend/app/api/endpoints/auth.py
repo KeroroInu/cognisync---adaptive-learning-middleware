@@ -144,45 +144,74 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
 
     创建新用户账户，返回访问令牌和用户信息。
     """
+    import logging
+    logger = logging.getLogger(__name__)
+
+    logger.info(f"[REGISTER] Attempting registration for email: {data.email}")
+
     # 检查邮箱是否已存在
     stmt = select(User).where(User.email == data.email)
     result = await db.execute(stmt)
     existing_user = result.scalar_one_or_none()
 
     if existing_user:
+        logger.warning(f"[REGISTER] Email already registered: {data.email}")
         raise HTTPException(status_code=400, detail="Email already registered")
 
     # 创建新用户
-    new_user = User(
-        id=uuid.uuid4(),
-        email=data.email,
-        name=data.name or data.email.split("@")[0],
-        password_hash=hash_password(data.password),
-        role="learner",
-        is_active=True,
-        created_at=datetime.utcnow(),
-        onboarding_mode=data.mode,  # 'scale' or 'ai'
-        has_completed_onboarding=False
-    )
+    try:
+        new_user = User(
+            id=uuid.uuid4(),
+            email=data.email,
+            name=data.name or data.email.split("@")[0],
+            password_hash=hash_password(data.password),
+            role="learner",
+            is_active=True,
+            created_at=datetime.utcnow(),
+            onboarding_mode=data.mode,  # 'scale' or 'ai'
+            has_completed_onboarding=False
+        )
 
-    db.add(new_user)
-    await db.commit()
-    await db.refresh(new_user)
+        db.add(new_user)
+        await db.commit()
+        logger.info(f"[REGISTER] User created in database: {new_user.id}")
 
-    # 生成token
-    token = create_access_token(str(new_user.id))
+        # 刷新用户对象
+        await db.refresh(new_user)
+        logger.info(f"[REGISTER] User object refreshed successfully")
 
-    # 构造用户信息
-    user_info = UserInfo(
-        id=str(new_user.id),
-        email=new_user.email,
-        name=new_user.name,
-        createdAt=new_user.created_at.isoformat(),
-        hasCompletedOnboarding=False,
-        onboardingMode=new_user.onboarding_mode
-    )
+        # 生成token
+        token = create_access_token(str(new_user.id))
+        logger.info(f"[REGISTER] Access token generated for user: {new_user.id}")
 
-    return AuthResponse(token=token, user=user_info)
+        # 构造用户信息
+        user_info = UserInfo(
+            id=str(new_user.id),
+            email=new_user.email,
+            name=new_user.name,
+            createdAt=new_user.created_at.isoformat(),
+            hasCompletedOnboarding=False,
+            onboardingMode=new_user.onboarding_mode
+        )
+
+        logger.info(f"[REGISTER] ✅ Registration successful: {new_user.email}")
+        return AuthResponse(token=token, user=user_info)
+
+    except Exception as e:
+        logger.error(f"[REGISTER] Error during registration: {str(e)}", exc_info=True)
+
+        # 如果用户已创建但后续步骤失败，尝试回滚
+        try:
+            await db.rollback()
+            logger.info(f"[REGISTER] Database rolled back due to error")
+        except Exception as rollback_error:
+            logger.error(f"[REGISTER] Failed to rollback: {str(rollback_error)}")
+
+        # 抛出友好的错误消息
+        raise HTTPException(
+            status_code=500,
+            detail=f"Registration failed: {str(e)}"
+        )
 
 
 @router.get("/me")

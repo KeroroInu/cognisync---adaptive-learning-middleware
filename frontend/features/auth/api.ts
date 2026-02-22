@@ -14,9 +14,11 @@ export async function login(data: LoginRequest): Promise<AuthResponse> {
     skipAuth: true, // 登录请求不需要 token
   });
 
-  // 登录成功，存储 token
-  if (response.token) {
+  // 登录成功，存储 token（仅在有有效 token 时）
+  if (response && response.token) {
     tokenStorage.setToken(response.token);
+  } else {
+    throw new Error('Invalid login response: missing token');
   }
 
   return response;
@@ -30,9 +32,11 @@ export async function register(data: RegisterRequest): Promise<AuthResponse> {
     skipAuth: true, // 注册请求不需要 token
   });
 
-  // 注册成功，存储 token
-  if (response.token) {
+  // 注册成功，存储 token（仅在有有效 token 时）
+  if (response && response.token) {
     tokenStorage.setToken(response.token);
+  } else {
+    throw new Error('Invalid registration response: missing token');
   }
 
   return response;
