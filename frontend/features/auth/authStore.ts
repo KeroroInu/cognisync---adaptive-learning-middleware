@@ -88,14 +88,19 @@ export function useAuthStore() {
     try {
       const response = await authApi.register(data);
 
-      setAuthState({
-        status: 'authed',
-        user: response.user,
-        profile: response.initialProfile || null,
-        token: response.token,
-      });
+      // 只有在成功获取到 token 和 user 时才更新状态
+      if (response.token && response.user) {
+        setAuthState({
+          status: 'authed',
+          user: response.user,
+          profile: response.initialProfile || null,
+          token: response.token,
+        });
 
-      return response;
+        return response;
+      } else {
+        throw new Error('Invalid response: missing token or user data');
+      }
     } catch (error) {
       throw error;
     }
