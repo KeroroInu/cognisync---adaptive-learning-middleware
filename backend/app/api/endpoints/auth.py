@@ -187,15 +187,15 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
         await db.commit()
         logger.info(f"[REGISTER] User created in database: {new_user.id}")
 
-        # 刷新用户对象
+        # 刷新用户对象（这不会修改数据库，只会重新查询）
         await db.refresh(new_user)
         logger.info(f"[REGISTER] User object refreshed successfully")
 
-        # 生成token
+        # 生成token（这是内存操作，不会失败）
         token = create_access_token(str(new_user.id))
         logger.info(f"[REGISTER] Access token generated for user: {new_user.id}")
 
-        # 构造用户信息
+        # 构造用户信息（这是内存操作，不会失败）
         user_info = UserInfo(
             id=str(new_user.id),
             email=new_user.email,
@@ -208,20 +208,24 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
         logger.info(f"[REGISTER] ✅ Registration successful: {new_user.email}")
         return AuthResponse(token=token, user=user_info)
 
+    except HTTPException:
+        # HTTPException 已经是格式化的错误，直接重新抛出
+        raise
     except Exception as e:
-        logger.error(f"[REGISTER] Error during registration: {str(e)}", exc_info=True)
+        logger.error(f"[REGISTER] Unexpected error during registration: {str(e)}", exc_info=True)
 
         # 如果用户已创建但后续步骤失败，尝试回滚
+        # 注意：如果 commit 已经成功，回滚可能无效，但我们仍然尝试
         try:
             await db.rollback()
-            logger.info(f"[REGISTER] Database rolled back due to error")
+            logger.info(f"[REGISTER] Attempted database rollback (may be no-op if already committed)")
         except Exception as rollback_error:
             logger.error(f"[REGISTER] Failed to rollback: {str(rollback_error)}")
 
         # 抛出友好的错误消息
         raise HTTPException(
             status_code=500,
-            detail=f"Registration failed: {str(e)}"
+            detail=f"Registration failed due to server error"
         )
 
 
