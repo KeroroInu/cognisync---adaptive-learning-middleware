@@ -263,14 +263,24 @@ class ProfileService:
 
     async def get_or_create_user(self, user_id_or_email: str) -> User:
         """
-        获取或创建用户（MVP 简化版）
+        获取或创建用户
 
         Args:
-            user_id_or_email: 用户 ID 或邮箱
+            user_id_or_email: 用户 UUID 字符串或邮箱
 
         Returns:
             User
         """
+        # 优先按 UUID 查找（前端 Auth 登录后传递的是 user.id）
+        try:
+            user_uuid = UUID(user_id_or_email)
+            result = await self.db.execute(select(User).where(User.id == user_uuid))
+            user = result.scalar_one_or_none()
+            if user:
+                return user
+        except ValueError:
+            pass  # 不是 UUID 格式，继续用邮箱查找
+
         # 标准化邮箱格式
         email = f"{user_id_or_email}@cognisync.local" if "@" not in user_id_or_email else user_id_or_email
 

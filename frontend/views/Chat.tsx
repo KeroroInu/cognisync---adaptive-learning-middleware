@@ -29,6 +29,7 @@ export const Chat: React.FC<Props> = ({
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [latestProfile, setLatestProfile] = useState<UserProfile | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const greetingFetchedRef = useRef(false);
 
@@ -99,6 +100,7 @@ export const Chat: React.FC<Props> = ({
 
       onSendMessage(response.message, 'assistant', response.analysis);
       onUpdateProfile(response.updatedProfile);
+      setLatestProfile(response.updatedProfile);
       refreshSessions();
 
     } catch (err) {
@@ -281,17 +283,28 @@ export const Chat: React.FC<Props> = ({
               <div>
                 <span className="text-xs block mb-1" style={{ color: textSecondary }}>{t.profileImpact}</span>
                 <div className="grid grid-cols-3 gap-1.5">
-                  {Object.entries(latestAnalysis.analysis.delta || {}).map(([key, val]) => (
-                    <div key={key} className={`text-center p-1 rounded border text-xs ${
-                      (val as number) > 0
-                        ? 'bg-emerald-50 dark:bg-emerald-950 border-emerald-200 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300'
-                        : (val as number) < 0
-                          ? 'bg-rose-50 dark:bg-rose-950 border-rose-200 dark:border-rose-700 text-rose-700 dark:text-rose-300'
-                          : 'bg-gray-100 dark:bg-slate-700 border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300'
-                    }`}>
-                      {t[key as keyof typeof t]?.toString().substring(0, 3)} {(val as number) > 0 ? '+' : ''}{val}
-                    </div>
-                  ))}
+                  {(['cognition', 'affect', 'behavior'] as const).map((key) => {
+                    const delta = (latestAnalysis.analysis.delta as Record<string, number>)?.[key] ?? 0;
+                    const absVal = latestProfile?.[key];
+                    const label = language === 'zh'
+                      ? { cognition: '认知', affect: '情感', behavior: '行为' }[key]
+                      : key.slice(0, 3);
+                    return (
+                      <div key={key} className={`text-center p-1.5 rounded border text-xs ${
+                        delta > 0
+                          ? 'bg-emerald-50 dark:bg-emerald-950 border-emerald-200 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300'
+                          : delta < 0
+                            ? 'bg-rose-50 dark:bg-rose-950 border-rose-200 dark:border-rose-700 text-rose-700 dark:text-rose-300'
+                            : 'bg-gray-100 dark:bg-slate-700 border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300'
+                      }`}>
+                        <div className="font-medium">{label}</div>
+                        {absVal !== undefined && (
+                          <div className="font-bold text-sm">{absVal}</div>
+                        )}
+                        <div className="opacity-80">{delta > 0 ? '+' : ''}{delta}</div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </div>

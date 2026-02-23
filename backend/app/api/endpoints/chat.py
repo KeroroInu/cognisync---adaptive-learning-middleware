@@ -16,9 +16,30 @@ from app.services.graph_service import GraphService
 from app.services.text_analyzer import TextAnalyzer
 from app.services.llm_provider import get_provider
 from app.models.sql.message import ChatMessage, MessageRole
+from app.models.sql.chat_session import ChatSession
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+async def get_or_create_active_session(db: AsyncSession, user_id: UUID) -> ChatSession:
+    """获取最近 30 分钟内的活跃会话，不存在则创建新会话"""
+    from sqlalchemy import select
+    cutoff = datetime.utcnow() - timedelta(minutes=30)
+    result = await db.execute(
+        select(ChatSession)
+        .where(ChatSession.user_id == user_id, ChatSession.created_at >= cutoff)
+        .order_by(ChatSession.created_at.desc())
+        .limit(1)
+    )
+    session = result.scalar_one_or_none()
+    if not session:
+        session = ChatSession(user_id=user_id)
+        db.add(session)
+        await db.commit()
+        await db.refresh(session)
+        logger.info(f"Created new chat session for user {user_id}: {session.id}")
+    return session
 
 
 def build_assistant_system_prompt(
@@ -428,6 +449,9 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
         user_id = user.id
 
         logger.info(f"User identified: {user.email} (id={user_id})")
+
+        # 创建/获取活跃会话（供管理后台 Conversations 页面使用）
+        await get_or_create_active_session(db, user_id)
 
         # ========== 2. 保存用户消息 ==========
         user_message = ChatMessage(
