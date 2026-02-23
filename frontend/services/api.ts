@@ -260,6 +260,64 @@ export async function getRecentChanges(userId: string, limit: number = 5): Promi
 
 
 // ============================================
+//  知识图谱 & 问候 API
+// ============================================
+
+/**
+ * 获取用户知识图谱
+ */
+export async function getKnowledgeGraph(userId: string): Promise<{ nodes: any[]; edges: any[] }> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/graph/${userId}`, {
+      method: 'GET',
+      headers: getHeaders(true),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const result = await response.json();
+    if (!result.success) {
+      throw new Error(result.error?.message || 'Failed to fetch knowledge graph');
+    }
+
+    const data = result.data || {};
+    return { nodes: data.nodes || [], edges: data.edges || [] };
+  } catch (error) {
+    console.error('Failed to get knowledge graph:', error);
+    return { nodes: [], edges: [] };
+  }
+}
+
+/**
+ * 获取个性化开场问候语
+ */
+export async function getChatGreeting(
+  userId: string,
+  language: 'zh' | 'en' = 'zh'
+): Promise<{ message: string; hasContext: boolean }> {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/api/chat/greeting?userId=${encodeURIComponent(userId)}&language=${language}`,
+      { method: 'GET', headers: getHeaders(true) }
+    );
+
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+
+    const result = await response.json();
+    return result.data || { message: '你好！我是你的学习伙伴。', hasContext: false };
+  } catch (error) {
+    console.error('Failed to get chat greeting:', error);
+    return {
+      message: language === 'zh' ? '你好！我是你的学习伙伴，有什么可以帮你的吗？' : 'Hello! How can I help you today?',
+      hasContext: false,
+    };
+  }
+}
+
+
+// ============================================
 //  量表注册 API
 // ============================================
 

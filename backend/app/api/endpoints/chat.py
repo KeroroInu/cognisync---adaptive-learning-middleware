@@ -3,9 +3,9 @@ Chat Endpoint - 对话接口（完整实现）
 """
 import logging
 from uuid import UUID
-from datetime import datetime
-from typing import List, Dict
-from fastapi import APIRouter, HTTPException, Depends
+from datetime import datetime, timedelta
+from typing import List, Dict, Optional
+from fastapi import APIRouter, HTTPException, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.postgres import get_db
@@ -138,6 +138,133 @@ async def get_recent_messages(
     ]
 
 
+async def get_cross_session_context(
+    db: AsyncSession,
+    user_id: UUID,
+    session_gap_minutes: int = 30
+) -> Optional[str]:
+    """
+    检测是否为新会话，如果是则返回上次会话的关键上下文
+
+    Args:
+        db: 数据库会话
+        user_id: 用户 ID
+        session_gap_minutes: 超过此分钟数视为新会话
+
+    Returns:
+        上次会话的主题摘要字符串，如果是连续会话则返回 None
+    """
+    from sqlalchemy import select, desc
+
+    # 获取最近的消息
+    latest_query = (
+        select(ChatMessage)
+        .where(ChatMessage.user_id == user_id)
+        .order_by(desc(ChatMessage.timestamp))
+        .limit(1)
+    )
+    result = await db.execute(latest_query)
+    last_message = result.scalar_one_or_none()
+
+    if not last_message:
+        return None  # 新用户，无历史
+
+    # 判断是否为新会话
+    time_since = datetime.utcnow() - last_message.timestamp
+    if time_since < timedelta(minutes=session_gap_minutes):
+        return None  # 当前会话仍在继续
+
+    # 获取上次会话的历史消息（最近 10 条）
+    history_query = (
+        select(ChatMessage)
+        .where(ChatMessage.user_id == user_id)
+        .order_by(desc(ChatMessage.timestamp))
+        .limit(10)
+    )
+    result = await db.execute(history_query)
+    history = result.scalars().all()
+
+    if not history:
+        return None
+
+    # 提取对话中检测到的概念
+    concepts = set()
+    for msg in history:
+        if msg.analysis and isinstance(msg.analysis, dict):
+            detected = msg.analysis.get("detectedConcepts", [])
+            for c in detected:
+                if isinstance(c, dict):
+                    name = c.get("name", "")
+                    if name:
+                        concepts.add(name)
+                elif isinstance(c, str) and c:
+                    concepts.add(c)
+
+    if concepts:
+        return f"上次会话涉及的概念：{', '.join(list(concepts)[:5])}"
+
+    # 如果没有提取到概念，用最后一条用户消息摘要
+    last_user_msg = next((m for m in history if m.role.value == "user"), None)
+    if last_user_msg:
+        snippet = last_user_msg.text[:50] + ("..." if len(last_user_msg.text) > 50 else "")
+        return f"上次对话内容：\"{snippet}\""
+
+    return None
+
+
+@router.get("/greeting")
+async def get_greeting(
+    userId: str = Query(..., description="用户 ID"),
+    language: str = Query("zh", description="语言 zh|en"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    获取个性化开场问候语
+
+    根据用户历史会话生成上下文感知的问候，让 AI 能够引用上次讨论内容
+    """
+    try:
+        user_id = UUID(userId)
+    except ValueError:
+        return {"success": True, "data": {
+            "message": "你好！我是你的学习伙伴，有什么可以帮你的吗？" if language == "zh" else "Hello! I'm your learning companion. How can I help?",
+            "hasContext": False
+        }}
+
+    try:
+        context = await get_cross_session_context(db, user_id)
+
+        if not context:
+            # 新用户或继续当前会话 - 简洁问候
+            msg = (
+                "你好！我是你的学习伙伴，有什么我可以帮你的吗？"
+                if language == "zh"
+                else "Hello! I'm your learning companion. How can I help you today?"
+            )
+            return {"success": True, "data": {"message": msg, "hasContext": False}}
+
+        # 有跨会话上下文 - 让 LLM 生成个性化问候
+        llm = get_provider()
+        system = (
+            "你是一个温暖的学习伙伴。根据上次会话的内容，用一句简短友好的话问候回来的用户，自然地提及上次的话题。不超过50个字。"
+            if language == "zh"
+            else "You are a warm learning companion. Based on the last session, greet the returning user with one short friendly sentence that naturally references the previous topic. Keep it under 30 words."
+        )
+        greeting = await llm.complete(
+            system_prompt=system,
+            user_prompt=context,
+            temperature=0.8,
+            max_tokens=100
+        )
+
+        return {"success": True, "data": {"message": greeting.strip(), "hasContext": True}}
+
+    except Exception as e:
+        logger.error(f"Failed to generate greeting: {e}")
+        fallback = "你好！我是你的学习伙伴，有什么可以帮你的吗？" if language == "zh" else "Hello! I'm your learning companion."
+        return {"success": True, "data": {"message": fallback, "hasContext": False}}
+
+
 @router.post("", response_model=SuccessResponse[ChatResponse])
 async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
     """
@@ -240,6 +367,11 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
             emotion=analysis.emotion,
             language=request.language or "zh"
         )
+
+        # 注入跨会话上下文（让 AI 能自然引用上次讨论内容）
+        cross_session_ctx = await get_cross_session_context(db, user_id)
+        if cross_session_ctx:
+            system_prompt += f"\n\n**跨会话上下文（上次对话记录）：**\n{cross_session_ctx}\n如果合适，可以自然地引用上次讨论的内容。\n"
 
         # 构建 user prompt（包含历史对话）
         conversation_context = "\n".join([

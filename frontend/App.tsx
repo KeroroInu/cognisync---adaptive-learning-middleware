@@ -169,6 +169,7 @@ function App() {
             onLogCalibration={addCalibrationLog}
             language={state.language}
             theme={theme}
+            userId={state.user?.id}
           />
         );
 

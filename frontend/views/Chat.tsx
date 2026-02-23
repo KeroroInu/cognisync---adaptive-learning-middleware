@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { ChatMessage, Language, UserProfile } from '../types';
 import { Send, Bot, User, Sparkles, AlertCircle } from 'lucide-react';
 import { translations } from '../utils/translations';
-import { sendChatMessage } from '../services/api';
+import { sendChatMessage, getChatGreeting } from '../services/api';
 
 interface Props {
   messages: ChatMessage[];
@@ -28,6 +28,25 @@ export const Chat: React.FC<Props> = ({
   const [isTyping, setIsTyping] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // 首次进入对话页面时，获取个性化问候语
+  useEffect(() => {
+    if (messages.length === 0 && userId) {
+      setIsTyping(true);
+      getChatGreeting(userId, language)
+        .then(({ message }) => {
+          onSendMessage(message, 'assistant', {
+            intent: 'greeting',
+            emotion: 'neutral',
+            detectedConcepts: [],
+            delta: { cognition: 0, affect: 0, behavior: 0 },
+          });
+        })
+        .catch(console.error)
+        .finally(() => setIsTyping(false));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId]);
 
   useEffect(() => {
     if (scrollRef.current) {

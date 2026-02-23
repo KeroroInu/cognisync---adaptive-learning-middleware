@@ -1,8 +1,9 @@
-import React, { useEffect, useState, useMemo, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import * as d3 from 'd3';
 import { Node, Edge, CalibrationLog, Language } from '../types';
 import { Search, AlertTriangle, Edit3, X } from 'lucide-react';
 import { translations } from '../utils/translations';
+import { getKnowledgeGraph } from '../services/api';
 
 interface Props {
   nodes: Node[];
@@ -11,22 +12,41 @@ interface Props {
   onLogCalibration: (log: Omit<CalibrationLog, 'id' | 'timestamp'>) => void;
   language: Language;
   theme: 'light' | 'dark';
+  userId?: string;
 }
 
-export const KnowledgeGraph: React.FC<Props> = ({ nodes, edges, onNodeUpdate, onLogCalibration, language, theme }) => {
+export const KnowledgeGraph: React.FC<Props> = ({ nodes: propNodes, edges: propEdges, onNodeUpdate, onLogCalibration, language, theme, userId }) => {
   const t = translations[language];
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  
+  const [graphNodes, setGraphNodes] = useState<Node[]>(propNodes);
+  const [graphEdges, setGraphEdges] = useState<Edge[]>(propEdges);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // 从后端加载真实知识图谱
+  useEffect(() => {
+    if (!userId) return;
+    setIsLoading(true);
+    getKnowledgeGraph(userId)
+      .then(({ nodes, edges }) => {
+        if (nodes.length > 0) {
+          setGraphNodes(nodes);
+          setGraphEdges(edges);
+        }
+      })
+      .catch(console.error)
+      .finally(() => setIsLoading(false));
+  }, [userId]);
+
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  
+
   // Store node positions to prevent reset on re-render
   const positionsRef = useRef<{[id: string]: {x: number, y: number, fx?: number | null, fy?: number | null}}>({});
 
   // Simulation State
   const simulationRef = useRef<d3.Simulation<any, undefined> | null>(null);
-  
+
   // D3 Initialization & Update
   useEffect(() => {
     if (!svgRef.current || !containerRef.current) return;
@@ -39,7 +59,7 @@ export const KnowledgeGraph: React.FC<Props> = ({ nodes, edges, onNodeUpdate, on
 
     // Prepare data
     // Map existing nodes to preserve x,y if they exist in local ref, else init center
-    const d3Nodes = nodes.map(n => {
+    const d3Nodes = graphNodes.map(n => {
         const prev = positionsRef.current[n.id];
         return {
             ...n,
@@ -49,8 +69,8 @@ export const KnowledgeGraph: React.FC<Props> = ({ nodes, edges, onNodeUpdate, on
             fy: prev?.fy ?? null
         };
     });
-    
-    const d3Links = edges.map(e => ({ source: e.source, target: e.target }));
+
+    const d3Links = graphEdges.map(e => ({ source: e.source, target: e.target }));
 
     // Create Simulation
     const simulation = d3.forceSimulation(d3Nodes)
@@ -96,7 +116,7 @@ export const KnowledgeGraph: React.FC<Props> = ({ nodes, edges, onNodeUpdate, on
         )
         .on("click", (event, d) => {
             // Find original node object to set as selected
-            const original = nodes.find(n => n.id === d.id);
+            const original = graphNodes.find(n => n.id === d.id);
             if (original) setSelectedNode(original);
         });
 
@@ -153,7 +173,7 @@ export const KnowledgeGraph: React.FC<Props> = ({ nodes, edges, onNodeUpdate, on
     return () => {
         simulation.stop();
     };
-  }, [nodes.length, edges.length]); // Re-run if graph structure changes significantly
+  }, [graphNodes.length, graphEdges.length]); // Re-run if graph structure changes significantly
 
   // Highlight effect for search
   useEffect(() => {
@@ -246,6 +266,30 @@ export const KnowledgeGraph: React.FC<Props> = ({ nodes, edges, onNodeUpdate, on
          <svg ref={svgRef} className="w-full h-full cursor-grab active:cursor-grabbing" style={{
            background: theme === 'light' ? '#ffffff' : 'linear-gradient(to bottom right, #0f172a, #1e293b)'
          }}></svg>
+
+         {/* Loading overlay */}
+         {isLoading && (
+           <div className="absolute inset-0 flex items-center justify-center" style={{
+             backgroundColor: theme === 'light' ? 'rgba(255,255,255,0.8)' : 'rgba(15,23,42,0.8)'
+           }}>
+             <span className="text-sm" style={{ color: theme === 'light' ? '#6b7280' : '#94a3b8' }}>
+               {language === 'zh' ? '加载知识图谱...' : 'Loading knowledge graph...'}
+             </span>
+           </div>
+         )}
+
+         {/* Empty state */}
+         {!isLoading && graphNodes.length === 0 && (
+           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
+             <span className="text-4xl">🌱</span>
+             <p className="text-sm font-medium" style={{ color: theme === 'light' ? '#6b7280' : '#94a3b8' }}>
+               {language === 'zh' ? '知识图谱正在通过对话逐步生成' : 'Knowledge graph grows through conversation'}
+             </p>
+             <p className="text-xs" style={{ color: theme === 'light' ? '#9ca3af' : '#64748b' }}>
+               {language === 'zh' ? '开始聊天后，概念将自动浮现' : 'Start chatting and concepts will appear'}
+             </p>
+           </div>
+         )}
       </div>
 
       {/* Detail Sidebar */}
@@ -286,7 +330,8 @@ export const KnowledgeGraph: React.FC<Props> = ({ nodes, edges, onNodeUpdate, on
                     }}>{selectedNode.description}</p>
                 </div>
 
-                {/* Evidence Section */}
+                {/* Evidence Section — 来自对话的真实记录 */}
+                {selectedNode.description && (
                 <div className="rounded-lg p-3" style={{
                   backgroundColor: theme === 'light' ? '#f0f4ff' : '#334155',
                   border: `1px solid ${theme === 'light' ? '#d0d9ff' : '#475569'}`
@@ -294,10 +339,11 @@ export const KnowledgeGraph: React.FC<Props> = ({ nodes, edges, onNodeUpdate, on
                     <span className="text-xs font-semibold uppercase tracking-wider block mb-2" style={{
                       color: theme === 'light' ? '#4338ca' : '#a5b4fc'
                     }}>{t.evidenceSection}</span>
-                    <p className="text-xs italic" style={{
+                    <p className="text-xs" style={{
                       color: theme === 'light' ? '#404040' : '#e2e8f0'
-                    }}>"User correctly identified gradient descent usage in turn #4..."</p>
+                    }}>{selectedNode.description}</p>
                 </div>
+                )}
 
                 {/* Calibration Section */}
                 {!isCalibrating ? (

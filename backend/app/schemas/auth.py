@@ -36,19 +36,19 @@ class UserInfo(BaseModel):
     }
 
 
+class ProfileData(BaseModel):
+    """用户画像数据"""
+    cognition: float = Field(..., ge=0, le=100, description="认知能力 (0-100)")
+    affect: float = Field(..., ge=0, le=100, description="情感状态 (0-100)")
+    behavior: float = Field(..., ge=0, le=100, description="行为特征 (0-100)")
+
+
 class AuthResponse(BaseModel):
     """认证响应"""
     token: str = Field(..., description="访问令牌")
     user: UserInfo = Field(..., description="用户信息")
     initialProfile: Optional[ProfileData] = Field(None, alias="initialProfile", description="初始用户画像")
     initialGraph: Optional[list] = Field(None, alias="initialGraph", description="初始知识图谱（仅AI模式）")
-
-
-class ProfileData(BaseModel):
-    """用户画像数据"""
-    cognition: float = Field(..., ge=0, le=100, description="认知能力 (0-100)")
-    affect: float = Field(..., ge=0, le=100, description="情感状态 (0-100)")
-    behavior: float = Field(..., ge=0, le=100, description="行为特征 (0-100)")
 
 
 class CurrentUserResponse(BaseModel):
