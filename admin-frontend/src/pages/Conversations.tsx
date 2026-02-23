@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MessageSquare, ChevronRight, Eye, Edit2, Trash2 } from 'lucide-react';
+import { MessageSquare, ChevronRight, Eye, Trash2 } from 'lucide-react';
 import { adminApi } from '../lib/adminApi';
 import type { SessionItem } from '../types';
 
@@ -30,23 +30,15 @@ export const Conversations = () => {
     }
   };
 
-  const handleEdit = (e: React.MouseEvent, session: SessionItem) => {
-    e.stopPropagation();
-    // TODO: Implement edit modal
-    alert(`Edit session: ${session.id}\n(Edit functionality will be implemented)`);
-  };
-
   const handleDelete = async (e: React.MouseEvent, session: SessionItem) => {
     e.stopPropagation();
-    if (window.confirm(`Are you sure you want to delete this conversation?\nUser: ${session.user_email}\nMessages: ${session.message_count}`)) {
+    if (window.confirm(`确定要删除该会话吗？\n用户: ${session.user_email}\n消息数: ${session.message_count}\n此操作不可撤销。`)) {
       try {
-        // TODO: Implement delete API endpoint
-        alert(`Delete session: ${session.id}\n(Delete API endpoint needs to be implemented)`);
-        // await adminApi.deleteSession(session.id);
-        // loadSessions();
+        await adminApi.deleteSession(session.id);
+        await loadSessions();
       } catch (err) {
         console.error('Failed to delete session:', err);
-        alert('Failed to delete session');
+        alert('删除失败：' + (err instanceof Error ? err.message : String(err)));
       }
     }
   };
@@ -124,13 +116,6 @@ export const Conversations = () => {
                           title="View Conversation"
                         >
                           <Eye size={16} />
-                        </button>
-                        <button
-                          onClick={(e) => handleEdit(e, session)}
-                          className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors"
-                          title="Edit Session"
-                        >
-                          <Edit2 size={16} />
                         </button>
                         <button
                           onClick={(e) => handleDelete(e, session)}

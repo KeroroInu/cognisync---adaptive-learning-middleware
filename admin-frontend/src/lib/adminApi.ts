@@ -88,6 +88,17 @@ class AdminApiClient {
     return this.request<ScaleResponse[]>(`/users/${userId}/scale-responses`);
   }
 
+  async deleteUser(userId: string): Promise<{ deleted: boolean }> {
+    return this.request<{ deleted: boolean }>(`/users/${userId}`, { method: 'DELETE' });
+  }
+
+  async updateUser(userId: string, data: { name?: string; is_active?: boolean }): Promise<{ id: string; email: string; name: string; is_active: boolean }> {
+    return this.request(`/users/${userId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
   // Scales
   async getScales(): Promise<ScalesListResponse> {
     return this.request<ScalesListResponse>('/scales');
@@ -131,6 +142,10 @@ class AdminApiClient {
     return this.request<ScaleResponse[]>(`/scales/${scaleId}/responses`);
   }
 
+  async deleteScale(scaleId: string): Promise<{ deleted: boolean }> {
+    return this.request<{ deleted: boolean }>(`/scales/${scaleId}`, { method: 'DELETE' });
+  }
+
   // Sessions
   async getSessions(page: number = 1, pageSize: number = 10): Promise<SessionsListResponse> {
     const params = new URLSearchParams({
@@ -150,6 +165,10 @@ class AdminApiClient {
       offset: offset.toString(),
     });
     return this.request<SessionMessagesResponse>(`/sessions/${sessionId}/messages?${params}`);
+  }
+
+  async deleteSession(sessionId: string): Promise<{ deleted: boolean }> {
+    return this.request<{ deleted: boolean }>(`/sessions/${sessionId}`, { method: 'DELETE' });
   }
 
   // Data Explorer

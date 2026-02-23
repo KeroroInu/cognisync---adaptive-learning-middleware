@@ -220,3 +220,27 @@ async def get_session_messages(
     )
 
     return SuccessResponse(data=response)
+
+
+@router.delete("/sessions/{session_id}", dependencies=[Depends(verify_admin_key)])
+async def delete_session(
+    session_id: str,
+    db: AsyncSession = Depends(get_db)
+) -> SuccessResponse[dict]:
+    """删除会话及其所有消息"""
+    try:
+        sid = UUID(session_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid session_id")
+
+    result = await db.execute(select(ChatSession).where(ChatSession.id == sid))
+    session = result.scalar_one_or_none()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    from sqlalchemy import delete as sql_delete
+    await db.execute(sql_delete(ChatMessage).where(ChatMessage.session_id == sid))
+    await db.delete(session)
+    await db.commit()
+
+    return SuccessResponse(data={"deleted": True, "session_id": session_id})

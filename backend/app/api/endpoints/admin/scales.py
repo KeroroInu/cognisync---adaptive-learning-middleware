@@ -293,3 +293,28 @@ async def get_scale_responses(
         "limit": limit,
         "offset": offset
     })
+
+
+@router.delete("/scales/{template_id}", dependencies=[Depends(verify_admin_key)])
+async def delete_scale(
+    template_id: str,
+    db: AsyncSession = Depends(get_db)
+) -> SuccessResponse[dict]:
+    """删除量表模板（含所有响应记录）"""
+    try:
+        tid = UUID(template_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid template_id")
+
+    result = await db.execute(select(ScaleTemplate).where(ScaleTemplate.id == tid))
+    template = result.scalar_one_or_none()
+    if not template:
+        raise HTTPException(status_code=404, detail="Scale template not found")
+
+    # 删除关联响应
+    from sqlalchemy import delete as sql_delete
+    await db.execute(sql_delete(ScaleResponse).where(ScaleResponse.template_id == tid))
+    await db.delete(template)
+    await db.commit()
+
+    return SuccessResponse(data={"deleted": True, "template_id": template_id})

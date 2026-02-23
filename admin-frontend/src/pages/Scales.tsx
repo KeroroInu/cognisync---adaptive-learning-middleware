@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { adminApi } from '../lib/adminApi';
 import type { ScaleTemplate } from '../types';
-import { Upload, CheckCircle, Archive, Eye, Edit2, Trash2 } from 'lucide-react';
+import { Upload, CheckCircle, Archive, Eye, Trash2 } from 'lucide-react';
 
 export const Scales = () => {
   const [scales, setScales] = useState<ScaleTemplate[]>([]);
@@ -88,23 +88,15 @@ export const Scales = () => {
     }
   };
 
-  const handleEdit = (e: React.MouseEvent, scale: ScaleTemplate) => {
-    e.stopPropagation();
-    // TODO: Implement edit modal
-    alert(`Edit scale: ${scale.name}\n(Edit functionality will be implemented)`);
-  };
-
   const handleDelete = async (e: React.MouseEvent, scale: ScaleTemplate) => {
     e.stopPropagation();
-    if (window.confirm(`Are you sure you want to delete scale "${scale.name}"?\nThis action cannot be undone.`)) {
+    if (window.confirm(`确定要删除量表 "${scale.name}" 吗？这将同时删除所有相关响应记录，此操作不可撤销。`)) {
       try {
-        // TODO: Implement delete API endpoint
-        alert(`Delete scale: ${scale.name}\n(Delete API endpoint needs to be implemented)`);
-        // await adminApi.deleteScale(scale.id);
-        // loadScales();
+        await adminApi.deleteScale(scale.id);
+        await loadScales();
       } catch (err) {
         console.error('Failed to delete scale:', err);
-        alert('Failed to delete scale');
+        setError(err instanceof Error ? err.message : '删除失败');
       }
     }
   };
@@ -294,13 +286,6 @@ export const Scales = () => {
                           title="View Responses"
                         >
                           <Eye size={14} />
-                        </button>
-                        <button
-                          onClick={(e) => handleEdit(e, scale)}
-                          className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors"
-                          title="Edit Scale"
-                        >
-                          <Edit2 size={14} />
                         </button>
                         <button
                           onClick={(e) => handleDelete(e, scale)}

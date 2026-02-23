@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { adminApi } from '../lib/adminApi';
 import type { User } from '../types';
-import { Search, ChevronLeft, ChevronRight, Edit2, Trash2, Eye } from 'lucide-react';
+import { Search, ChevronLeft, ChevronRight, Edit2, Trash2, Eye, X, Save } from 'lucide-react';
 
 export const Users = () => {
   const navigate = useNavigate();
@@ -12,6 +12,13 @@ export const Users = () => {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const pageSize = 10;
+
+  // Edit modal state
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editIsActive, setEditIsActive] = useState(true);
+  const [editLoading, setEditLoading] = useState(false);
+  const [editError, setEditError] = useState('');
 
   useEffect(() => {
     loadUsers();
@@ -37,21 +44,39 @@ export const Users = () => {
 
   const handleEdit = (e: React.MouseEvent, user: User) => {
     e.stopPropagation();
-    // TODO: Implement edit modal
-    alert(`Edit user: ${user.email}\n(Edit functionality will be implemented)`);
+    setEditingUser(user);
+    setEditName(user.name || '');
+    setEditIsActive(user.is_active ?? true);
+    setEditError('');
+  };
+
+  const handleEditSave = async () => {
+    if (!editingUser) return;
+    try {
+      setEditLoading(true);
+      setEditError('');
+      await adminApi.updateUser(editingUser.id, {
+        name: editName,
+        is_active: editIsActive,
+      });
+      setEditingUser(null);
+      await loadUsers();
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : 'Failed to save changes');
+    } finally {
+      setEditLoading(false);
+    }
   };
 
   const handleDelete = async (e: React.MouseEvent, user: User) => {
     e.stopPropagation();
-    if (window.confirm(`Are you sure you want to delete user ${user.email}?`)) {
+    if (window.confirm(`确定要删除用户 ${user.email} 吗？此操作不可撤销。`)) {
       try {
-        // TODO: Implement delete API endpoint
-        alert(`Delete user: ${user.email}\n(Delete API endpoint needs to be implemented)`);
-        // await adminApi.deleteUser(user.id);
-        // loadUsers();
+        await adminApi.deleteUser(user.id);
+        await loadUsers();
       } catch (err) {
         console.error('Failed to delete user:', err);
-        alert('Failed to delete user');
+        alert('删除失败：' + (err instanceof Error ? err.message : String(err)));
       }
     }
   };
@@ -60,6 +85,97 @@ export const Users = () => {
 
   return (
     <div className="space-y-6 animate-fade-in">
+      {/* Edit Modal */}
+      {editingUser && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="glass-card rounded-2xl p-6 w-full max-w-md mx-4">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold">编辑用户</h2>
+              <button
+                onClick={() => setEditingUser(null)}
+                className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">邮箱（只读）</label>
+                <input
+                  type="text"
+                  value={editingUser.email}
+                  disabled
+                  className="w-full px-3 py-2 rounded-lg opacity-50 cursor-not-allowed"
+                  style={{
+                    backgroundColor: 'var(--bg-secondary)',
+                    border: '1px solid var(--glass-border)',
+                    color: 'var(--text-primary)',
+                  }}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">用户名称</label>
+                <input
+                  type="text"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  placeholder="输入用户名称"
+                  className="w-full px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  style={{
+                    backgroundColor: 'var(--bg-secondary)',
+                    border: '1px solid var(--glass-border)',
+                    color: 'var(--text-primary)',
+                  }}
+                />
+              </div>
+
+              <div className="flex items-center gap-3">
+                <label className="text-sm font-medium">账户状态</label>
+                <button
+                  onClick={() => setEditIsActive(!editIsActive)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    editIsActive ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      editIsActive ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+                <span className="text-sm text-gray-600 dark:text-gray-400">
+                  {editIsActive ? '已激活' : '已禁用'}
+                </span>
+              </div>
+
+              {editError && (
+                <p className="text-sm text-red-500">{editError}</p>
+              )}
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={() => setEditingUser(null)}
+                  className="flex-1 px-4 py-2 rounded-lg border transition-colors hover:bg-gray-50 dark:hover:bg-gray-900"
+                  style={{ borderColor: 'var(--glass-border)' }}
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleEditSave}
+                  disabled={editLoading}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+                >
+                  <Save size={16} />
+                  {editLoading ? '保存中...' : '保存'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Search */}
       <div className="glass-card p-4 rounded-xl">
         <div className="relative">
