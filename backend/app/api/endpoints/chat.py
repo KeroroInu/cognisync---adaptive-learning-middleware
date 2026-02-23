@@ -532,7 +532,7 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
         is_understanding_claim = any(kw in student_msg_lower for kw in understanding_keywords) and len(request.message) < 30
 
         if is_understanding_claim:
-            verification_hint = "\n（注意：学生刚说自己理解了，请立即用一个具体问题反问来验证，不要只说"很好"。）"
+            verification_hint = '\n（注意：学生刚说自己理解了，请立即用一个具体问题反问来验证，不要只说"很好"。）'
         else:
             verification_hint = ""
 
