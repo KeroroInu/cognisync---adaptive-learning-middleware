@@ -43,11 +43,9 @@ export interface UserDetail {
   is_active: boolean;
   created_at: string;
   last_active_at: string | null;
-  current_profile: {
-    cognition: number;
-    affect: number;
-    behavior: number;
-  };
+  messages_count: number;
+  sessions_count: number;
+  responses_count: number;
 }
 
 export interface ChatMessage {
@@ -95,6 +93,7 @@ export interface ScaleResponse {
   id: string;
   user_id: string;
   template_id: string;
+  template_name?: string;
   answers_json: Record<string, unknown>;
   scores_json: Record<string, unknown>;
   created_at: string;

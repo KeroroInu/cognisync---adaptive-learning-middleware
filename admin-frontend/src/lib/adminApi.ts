@@ -81,11 +81,13 @@ class AdminApiClient {
   }
 
   async getUserProfiles(userId: string): Promise<ProfileSnapshot[]> {
-    return this.request<ProfileSnapshot[]>(`/users/${userId}/profiles`);
+    const result = await this.request<{ profiles: ProfileSnapshot[]; total: number }>(`/users/${userId}/profiles`);
+    return result.profiles;
   }
 
   async getUserScaleResponses(userId: string): Promise<ScaleResponse[]> {
-    return this.request<ScaleResponse[]>(`/users/${userId}/scale-responses`);
+    const result = await this.request<{ responses: ScaleResponse[]; total: number }>(`/users/${userId}/scale-responses`);
+    return result.responses;
   }
 
   async deleteUser(userId: string): Promise<{ deleted: boolean }> {
