@@ -28,6 +28,7 @@ function App() {
     addCalibrationLog,
     updateNode,
     updateProfile,
+    clearMessages,
     setAuth,
     clearAuth
   } = useAppStore();
@@ -35,6 +36,14 @@ function App() {
   const [currentView, setCurrentView] = useState<View>(
     state.user ? 'dashboard' : 'login'
   );
+
+  // Track chat key to remount Chat when starting a new conversation
+  const [chatKey, setChatKey] = useState(0);
+
+  const handleNewConversation = () => {
+    clearMessages();
+    setChatKey(k => k + 1);
+  };
 
   // 监听认证状态变化
   useEffect(() => {
@@ -150,6 +159,7 @@ function App() {
       case 'chat':
         return (
           <Chat
+            key={chatKey}
             messages={state.messages}
             onSendMessage={addMessage}
             onUpdateProfile={updateProfile}
@@ -157,6 +167,7 @@ function App() {
             isResearchMode={state.isResearchMode}
             theme={theme}
             userId={state.user?.id}
+            onNewConversation={handleNewConversation}
           />
         );
 

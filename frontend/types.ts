@@ -21,6 +21,7 @@ export interface Node {
   mastery: number; // 0-100
   frequency: number; // 1-10 (size)
   description: string;
+  category?: string; // domain/subject area
   x?: number;
   y?: number;
   isFlagged?: boolean; // If user has disputed it
@@ -29,6 +30,8 @@ export interface Node {
 export interface Edge {
   source: string;
   target: string;
+  relType?: string; // "co_occurred" | "prerequisite" | "related"
+  weight?: number;
 }
 
 export interface ChatMessage {

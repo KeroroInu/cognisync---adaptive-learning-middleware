@@ -144,8 +144,17 @@ async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
         onboardingMode=user.onboarding_mode
     )
 
+    # 包含最新画像（如果有），避免前端首次渲染时显示默认值
+    profile_data = None
+    if latest_profile:
+        profile_data = ProfileData(
+            cognition=float(latest_profile.cognition),
+            affect=float(latest_profile.affect),
+            behavior=float(latest_profile.behavior)
+        )
+
     logger.info(f"[LOGIN] ✅ Login successful: {user.email}")
-    return AuthResponse(token=token, user=user_info)
+    return AuthResponse(token=token, user=user_info, initialProfile=profile_data)
 
 
 @router.post("/register", response_model=AuthResponse)

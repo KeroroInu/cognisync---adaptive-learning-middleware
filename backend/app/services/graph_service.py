@@ -12,6 +12,30 @@ from app.schemas.graph import Node, Edge, GraphData, UpdateNodeRequest
 
 logger = logging.getLogger(__name__)
 
+# 概念领域分类关键词（用于自动推断 category）
+_CATEGORY_KEYWORDS: Dict[str, List[str]] = {
+    "机器学习": ["神经网络", "机器学习", "深度学习", "卷积", "梯度", "反向传播", "过拟合", "正则化",
+                  "激活函数", "损失函数", "优化", "特征", "回归", "分类", "聚类", "强化学习",
+                  "transformer", "bert", "gpt", "llm", "embedding", "attention"],
+    "数学": ["线性代数", "微积分", "概率论", "统计", "矩阵", "向量", "导数", "积分",
+             "函数", "方程", "集合", "极限", "偏导", "贝叶斯", "期望", "方差"],
+    "编程": ["算法", "数据结构", "编程", "代码", "函数", "类", "接口", "面向对象",
+             "递归", "排序", "搜索", "复杂度", "python", "java", "javascript", "api", "数据库"],
+    "自然语言处理": ["nlp", "自然语言", "分词", "情感分析", "命名实体", "文本", "语料库",
+                     "词向量", "语言模型", "机器翻译"],
+    "计算机视觉": ["图像识别", "目标检测", "语义分割", "计算机视觉", "cnn", "yolo", "图像处理"],
+}
+
+
+def _infer_category(name: str) -> str:
+    """根据概念名称推断领域类别"""
+    name_lower = name.lower()
+    for category, keywords in _CATEGORY_KEYWORDS.items():
+        for kw in keywords:
+            if kw.lower() in name_lower:
+                return category
+    return "通用"
+
 
 class GraphService:
     """知识图谱服务"""
@@ -39,12 +63,8 @@ class GraphService:
         concepts: List[str]
     ) -> Dict[str, Any]:
         """
-        为用户创建或更新概念节点，并建立 INTERACTED_WITH 关系
-
-        流程：
-        1. 确保 Student 节点存在
-        2. 为每个 concept 创建/更新 Concept 节点（uid 使用 slugify）
-        3. 建立/更新 INTERACTED_WITH 关系（count +1，mastery 初始化为 0.5）
+        为用户创建或更新概念节点，并建立 INTERACTED_WITH 关系。
+        同时在同一对话轮次中出现的概念之间创建 CO_OCCURRED_WITH 关系。
 
         Args:
             user_id: 用户 ID
@@ -74,7 +94,8 @@ class GraphService:
             {
                 "uid": self._slugify(name),
                 "name": name,
-                "description": f"学习者提到的概念：{name}"
+                "description": f"学习者提到的概念：{name}",
+                "category": _infer_category(name)
             }
             for name in concepts
         ]
@@ -86,9 +107,11 @@ class GraphService:
         ON CREATE SET
             c.name = concept.name,
             c.description = concept.description,
+            c.category = concept.category,
             c.createdAt = datetime()
         ON MATCH SET
-            c.name = concept.name
+            c.name = concept.name,
+            c.category = concept.category
 
         MERGE (s)-[r:INTERACTED_WITH]->(c)
         ON CREATE SET
@@ -112,6 +135,28 @@ class GraphService:
 
         stats = result[0] if result else {"created_concepts": 0, "updated_relationships": 0}
 
+        # 3. 为同一轮次共现的概念对建立 CO_OCCURRED_WITH 关系（语义关联）
+        if len(concepts) > 1:
+            slugs = [self._slugify(name) for name in concepts]
+            co_occur_query = """
+            UNWIND $pairs as pair
+            MATCH (c1:Concept {uid: pair[0]})
+            MATCH (c2:Concept {uid: pair[1]})
+            MERGE (c1)-[r:CO_OCCURRED_WITH]->(c2)
+            ON CREATE SET r.count = 1, r.createdAt = datetime()
+            ON MATCH SET r.count = r.count + 1
+            """
+            pairs = [
+                [slugs[i], slugs[j]]
+                for i in range(len(slugs))
+                for j in range(i + 1, len(slugs))
+            ]
+            try:
+                await execute_write(co_occur_query, {"pairs": pairs})
+                logger.info(f"Created/updated {len(pairs)} CO_OCCURRED_WITH edges")
+            except Exception as e:
+                logger.warning(f"Failed to create co-occurrence edges: {e}")
+
         logger.info(
             f"Upserted concepts for user {user_id}: "
             f"{stats.get('created_concepts', 0)} concepts, "
@@ -124,15 +169,11 @@ class GraphService:
         """
         获取用户的知识图谱（nodes + edges）
 
-        返回结构与前端契约完全对齐：
-        - Node: {id, name, mastery, frequency, description, isFlagged}
-        - Edge: {source, target}
-
         Args:
             user_id: 用户 ID
 
         Returns:
-            GraphData 对象（包含 nodes 和 edges）
+            GraphData 对象（包含 nodes 和 edges，edges 带 relType 和 weight）
         """
         logger.info(f"Fetching knowledge graph for user {user_id}")
 
@@ -143,6 +184,7 @@ class GraphService:
             c.uid as id,
             c.name as name,
             c.description as description,
+            COALESCE(c.category, '通用') as category,
             r.mastery * 100 as mastery,
             CASE
                 WHEN r.count > 10 THEN 10
@@ -159,6 +201,7 @@ class GraphService:
                 id=row["id"],
                 name=row["name"],
                 description=row.get("description", ""),
+                category=row.get("category", "通用"),
                 mastery=float(row["mastery"]),
                 frequency=int(row["frequency"]),
                 isFlagged=row.get("isFlagged", False)
@@ -166,19 +209,37 @@ class GraphService:
             for row in (nodes_result or [])
         ]
 
-        # 2. 获取边（Concept 之间的关系）
-        edges_query = """
+        # 2. 获取共现关系边（CO_OCCURRED_WITH）
+        co_edges_query = """
+        MATCH (s:Student {id: $user_id})-[:INTERACTED_WITH]->(c1:Concept)
+        MATCH (s)-[:INTERACTED_WITH]->(c2:Concept)
+        MATCH (c1)-[r:CO_OCCURRED_WITH]->(c2)
+        WHERE c1.uid < c2.uid
+        RETURN DISTINCT c1.uid as source, c2.uid as target, COALESCE(r.count, 1) as weight
+        ORDER BY weight DESC
+        LIMIT 50
+        """
+
+        co_edges_result = await execute_query(co_edges_query, {"user_id": user_id})
+
+        edges = [
+            Edge(source=row["source"], target=row["target"], relType="co_occurred", weight=int(row["weight"]))
+            for row in (co_edges_result or [])
+        ]
+
+        # 3. 获取用户手动创建的 REL 边
+        rel_edges_query = """
         MATCH (s:Student {id: $user_id})-[:INTERACTED_WITH]->(c1:Concept)
         MATCH (s)-[:INTERACTED_WITH]->(c2:Concept)
         MATCH (c1)-[:REL]->(c2)
         RETURN DISTINCT c1.uid as source, c2.uid as target
         """
 
-        edges_result = await execute_query(edges_query, {"user_id": user_id})
+        rel_edges_result = await execute_query(rel_edges_query, {"user_id": user_id})
 
-        edges = [
-            Edge(source=row["source"], target=row["target"])
-            for row in (edges_result or [])
+        edges += [
+            Edge(source=row["source"], target=row["target"], relType="related")
+            for row in (rel_edges_result or [])
         ]
 
         logger.info(f"Retrieved graph for user {user_id}: {len(nodes)} nodes, {len(edges)} edges")

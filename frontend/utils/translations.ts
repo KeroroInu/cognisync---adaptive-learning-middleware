@@ -30,7 +30,14 @@ export const translations = {
     profileImpact: "画像影响",
     systemStatus: "系统状态",
     trackingConcepts: "概念追踪中",
-    
+    chatHistory: "历史对话",
+    analysisPanel: "实时分析",
+    newConversation: "开启新对话",
+    noHistory: "暂无历史对话",
+    messagesCount: "条消息",
+    viewSession: "查看会话",
+    currentSession: "当前会话",
+
     // Graph
     searchConcept: "搜索知识点...",
     masteryLevel: "掌握程度",
@@ -176,6 +183,13 @@ export const translations = {
     profileImpact: "Profile Impact",
     systemStatus: "System Status",
     trackingConcepts: "Tracking Concepts",
+    chatHistory: "Chat History",
+    analysisPanel: "Live Analysis",
+    newConversation: "New Conversation",
+    noHistory: "No previous conversations",
+    messagesCount: "messages",
+    viewSession: "View Session",
+    currentSession: "Current Session",
 
     // Graph
     searchConcept: "Search concept...",

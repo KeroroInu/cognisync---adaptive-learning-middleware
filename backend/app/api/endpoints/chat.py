@@ -273,6 +273,137 @@ async def get_greeting(
         return {"success": True, "data": {"message": fallback, "hasContext": False}}
 
 
+@router.get("/sessions")
+async def get_chat_sessions(
+    userId: str = Query(..., description="用户 ID"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    获取用户的历史对话会话列表
+
+    按 30 分钟间隔将消息分组成会话，返回每个会话的元数据
+    """
+    try:
+        user_id = UUID(userId)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid userId")
+
+    from sqlalchemy import select, asc
+
+    query = (
+        select(ChatMessage)
+        .where(ChatMessage.user_id == user_id)
+        .order_by(asc(ChatMessage.timestamp))
+    )
+    result = await db.execute(query)
+    messages = result.scalars().all()
+
+    if not messages:
+        return {"success": True, "data": {"sessions": []}}
+
+    SESSION_GAP = timedelta(minutes=30)
+    sessions = []
+    current_session_msgs = [messages[0]]
+
+    for msg in messages[1:]:
+        prev_ts = current_session_msgs[-1].timestamp
+        curr_ts = msg.timestamp
+        if prev_ts.tzinfo is None:
+            prev_ts = prev_ts.replace(tzinfo=timezone.utc)
+        if curr_ts.tzinfo is None:
+            curr_ts = curr_ts.replace(tzinfo=timezone.utc)
+
+        if curr_ts - prev_ts > SESSION_GAP:
+            sessions.append(current_session_msgs)
+            current_session_msgs = [msg]
+        else:
+            current_session_msgs.append(msg)
+
+    sessions.append(current_session_msgs)
+
+    session_list = []
+    for idx, sess_msgs in enumerate(reversed(sessions)):
+        first_msg = sess_msgs[0]
+        last_msg = sess_msgs[-1]
+
+        title = ""
+        for m in sess_msgs:
+            if m.role.value == "user":
+                title = m.text[:40] + ("..." if len(m.text) > 40 else "")
+                break
+        if not title:
+            title = f"会话 {len(sessions) - idx}"
+
+        preview = last_msg.text[:60] + ("..." if len(last_msg.text) > 60 else "")
+
+        start_ts = first_msg.timestamp
+        end_ts = last_msg.timestamp
+        if start_ts.tzinfo is None:
+            start_ts = start_ts.replace(tzinfo=timezone.utc)
+        if end_ts.tzinfo is None:
+            end_ts = end_ts.replace(tzinfo=timezone.utc)
+
+        session_list.append({
+            "sessionStart": start_ts.isoformat(),
+            "sessionEnd": end_ts.isoformat(),
+            "title": title,
+            "preview": preview,
+            "messageCount": len(sess_msgs),
+        })
+
+    return {"success": True, "data": {"sessions": session_list}}
+
+
+@router.get("/sessions/messages")
+async def get_session_messages(
+    userId: str = Query(..., description="用户 ID"),
+    sessionStart: str = Query(..., description="会话开始时间 (ISO)"),
+    sessionEnd: str = Query(..., description="会话结束时间 (ISO)"),
+    db: AsyncSession = Depends(get_db)
+):
+    """获取特定会话的所有消息"""
+    try:
+        user_id = UUID(userId)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid userId")
+
+    from sqlalchemy import select, asc
+    from datetime import datetime as dt
+
+    try:
+        start_dt = dt.fromisoformat(sessionStart.replace("Z", "+00:00"))
+        end_dt = dt.fromisoformat(sessionEnd.replace("Z", "+00:00"))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid datetime format")
+
+    start_dt = start_dt - timedelta(seconds=1)
+    end_dt = end_dt + timedelta(seconds=1)
+
+    query = (
+        select(ChatMessage)
+        .where(
+            ChatMessage.user_id == user_id,
+            ChatMessage.timestamp >= start_dt,
+            ChatMessage.timestamp <= end_dt,
+        )
+        .order_by(asc(ChatMessage.timestamp))
+    )
+    result = await db.execute(query)
+    messages = result.scalars().all()
+
+    msg_list = [
+        {
+            "id": str(m.id),
+            "role": m.role.value,
+            "text": m.text,
+            "timestamp": m.timestamp.isoformat(),
+        }
+        for m in messages
+    ]
+
+    return {"success": True, "data": {"messages": msg_list}}
+
+
 @router.post("", response_model=SuccessResponse[ChatResponse])
 async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
     """
@@ -359,9 +490,16 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
         current_graph = []
         try:
             graph_service = GraphService()
-            graph_data = await graph_service.get_user_graph(str(user_id))
-            if graph_data and "concepts" in graph_data:
-                current_graph = graph_data["concepts"]
+            graph_data = await graph_service.get_graph(str(user_id))
+            if graph_data.nodes:
+                current_graph = [
+                    {
+                        "name": n.name,
+                        "category": n.category or "通用",
+                        "importance": min(1.0, n.frequency / 10.0)
+                    }
+                    for n in graph_data.nodes
+                ]
         except Exception as e:
             logger.warning(f"Failed to fetch knowledge graph: {e}, using empty graph")
 
@@ -379,21 +517,29 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
         # 注入跨会话上下文（让 AI 能自然引用上次讨论内容）
         cross_session_ctx = await get_cross_session_context(db, user_id)
         if cross_session_ctx:
-            system_prompt += f"\n\n**跨会话上下文（上次对话记录）：**\n{cross_session_ctx}\n如果合适，可以自然地引用上次讨论的内容。\n"
+            system_prompt += f"\n上次对话涉及：{cross_session_ctx}，如自然可提及。"
 
         # 构建 user prompt（包含历史对话）
         conversation_context = "\n".join([
-            f"{'用户' if msg['role'] == 'user' else '助手'}: {msg['text']}"
+            f"{'学生' if msg['role'] == 'user' else '老师'}: {msg['text']}"
             for msg in recent_messages[-3:]  # 只取最近 3 条
         ])
 
-        user_prompt = f"""**对话历史：**
+        # 检测学生是否表达了"理解/完成"
+        understanding_keywords = ["理解了", "懂了", "明白了", "好的", "知道了", "完成了", "我会了",
+                                   "i understand", "got it", "i see", "ok", "done", "makes sense"]
+        student_msg_lower = request.message.lower().strip()
+        is_understanding_claim = any(kw in student_msg_lower for kw in understanding_keywords) and len(request.message) < 30
+
+        if is_understanding_claim:
+            verification_hint = "\n（注意：学生刚说自己理解了，请立即用一个具体问题反问来验证，不要只说"很好"。）"
+        else:
+            verification_hint = ""
+
+        user_prompt = f"""对话记录：
 {conversation_context}
 
-**当前用户消息：**
-{request.message}
-
-**请根据上述情境生成回复。**"""
+学生说：{request.message}{verification_hint}"""
 
         # 调用 LLM 生成回复
         llm_provider = get_provider()
@@ -401,7 +547,7 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             temperature=0.7,
-            max_tokens=500
+            max_tokens=300
         )
 
         logger.info(f"AI reply generated: {len(assistant_reply)} characters")

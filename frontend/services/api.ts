@@ -59,13 +59,6 @@ export interface ChatAnalysis {
   };
 }
 
-export interface UserProfile {
-  cognition: number;
-  affect: number;
-  behavior: number;
-  lastUpdate: string;
-}
-
 export interface ChatResponse {
   message: string;
   analysis: ChatAnalysis;
@@ -313,6 +306,66 @@ export async function getChatGreeting(
       message: language === 'zh' ? '你好！我是你的学习伙伴，有什么可以帮你的吗？' : 'Hello! How can I help you today?',
       hasContext: false,
     };
+  }
+}
+
+export interface ChatSession {
+  sessionStart: string;
+  sessionEnd: string;
+  title: string;
+  preview: string;
+  messageCount: number;
+}
+
+export interface SessionMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  text: string;
+  timestamp: string;
+}
+
+/**
+ * 获取用户历史对话会话列表
+ */
+export async function getChatSessions(userId: string): Promise<ChatSession[]> {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/api/chat/sessions?userId=${encodeURIComponent(userId)}`,
+      { method: 'GET', headers: getHeaders(true) }
+    );
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+    const result = await response.json();
+    return result.data?.sessions || [];
+  } catch (error) {
+    console.error('Failed to get chat sessions:', error);
+    return [];
+  }
+}
+
+/**
+ * 获取特定会话的消息记录
+ */
+export async function getSessionMessages(
+  userId: string,
+  sessionStart: string,
+  sessionEnd: string
+): Promise<SessionMessage[]> {
+  try {
+    const params = new URLSearchParams({
+      userId,
+      sessionStart,
+      sessionEnd,
+    });
+    const response = await fetch(
+      `${API_BASE_URL}/api/chat/sessions/messages?${params.toString()}`,
+      { method: 'GET', headers: getHeaders(true) }
+    );
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+    const result = await response.json();
+    return result.data?.messages || [];
+  } catch (error) {
+    console.error('Failed to get session messages:', error);
+    return [];
   }
 }
 
