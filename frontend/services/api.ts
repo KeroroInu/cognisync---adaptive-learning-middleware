@@ -139,11 +139,7 @@ export async function login(credentials: LoginRequest): Promise<AuthResponse> {
       throw new Error(result.detail || result.error?.message || `HTTP error! status: ${response.status}`);
     }
 
-    // 后端直接返回 {token, user} 格式
-    // 存储 token
-    if (result.token) {
-      localStorage.setItem('cognisync-token', result.token);
-    }
+    // 注意：token 的存储由调用方通过 setAuth() 统一处理，这里不存储
 
     // 兼容旧格式，包装成 {success, data}
     return {
@@ -173,11 +169,7 @@ export async function register(data: RegisterRequest): Promise<AuthResponse> {
       throw new Error(result.detail || result.error?.message || `HTTP error! status: ${response.status}`);
     }
 
-    // 后端直接返回 {token, user} 格式
-    // 存储 token
-    if (result.token) {
-      localStorage.setItem('cognisync-token', result.token);
-    }
+    // 注意：token 的存储由调用方通过 setAuth() 统一处理，这里不存储
 
     // 兼容旧格式，包装成 {success, data}
     return {

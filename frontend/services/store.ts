@@ -201,6 +201,9 @@ export const useAppStore = () => {
   const clearAuth = () => {
     localStorage.removeItem('cognisync-token');
     localStorage.removeItem('cognisync-profile');
+    // 清除 onboarding 相关的 localStorage 数据
+    localStorage.removeItem('userAttributes');
+    localStorage.removeItem('conceptSeeds');
     setState(prev => ({
       ...prev,
       user: null,

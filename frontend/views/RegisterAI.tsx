@@ -60,9 +60,24 @@ export const RegisterAI: React.FC<Props> = ({ language, onComplete, onBack }) =>
         } else {
           throw new Error(response.error?.message || 'Failed to start session');
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error('Failed to start AI onboarding:', err);
-        setError(err instanceof Error ? err.message : 'Failed to start AI onboarding');
+        const errorMessage = err.message || 'Failed to start AI onboarding';
+
+        // 如果用户已经完成了 onboarding，给出特殊提示
+        if (errorMessage.includes('already completed onboarding') ||
+            errorMessage.includes('已完成 onboarding') ||
+            err.status === 400) {
+          setError(language === 'zh'
+            ? '您已经完成了入职流程。请直接进入系统。'
+            : 'You have already completed onboarding. Please enter the system directly.');
+          // 可选：自动跳转到 dashboard
+          setTimeout(() => {
+            onComplete({ cognition: 50, affect: 50, behavior: 50 }, [], []);
+          }, 2000);
+        } else {
+          setError(errorMessage);
+        }
       } finally {
         setIsLoading(false);
       }
