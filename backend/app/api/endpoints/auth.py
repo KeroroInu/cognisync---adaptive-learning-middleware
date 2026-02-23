@@ -128,11 +128,9 @@ async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
     # 检查是否有画像（判断是否完成了onboarding）
     profile_stmt = select(ProfileSnapshot).where(
         ProfileSnapshot.user_id == user.id
-    ).order_by(ProfileSnapshot.created_at.desc())
+    ).order_by(ProfileSnapshot.created_at.desc()).limit(1)
     profile_result = await db.execute(profile_stmt)
     latest_profile = profile_result.scalar_one_or_none()
-
-    has_profile = latest_profile is not None
 
     # 构造用户信息
     user_info = UserInfo(
@@ -305,7 +303,7 @@ async def get_current_user_info(
     # 获取最新的画像数据
     profile_stmt = select(ProfileSnapshot).where(
         ProfileSnapshot.user_id == current_user.id
-    ).order_by(ProfileSnapshot.created_at.desc())
+    ).order_by(ProfileSnapshot.created_at.desc()).limit(1)
     profile_result = await db.execute(profile_stmt)
     latest_profile = profile_result.scalar_one_or_none()
 

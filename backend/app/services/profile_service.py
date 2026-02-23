@@ -6,12 +6,15 @@ import logging
 from typing import Optional
 from datetime import datetime
 from uuid import UUID
-from sqlalchemy import select, desc
+from sqlalchemy import select, desc, update as sql_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.sql.user import User
 from app.models.sql.profile import ProfileSnapshot, ProfileSource
 from app.models.sql.calibration_log import CalibrationLog, Dimension, ConflictLevel
+from app.models.sql.message import ChatMessage
+from app.models.sql.chat_session import ChatSession
+from app.models.sql.scale import ScaleResponse
 from app.schemas.profile import UserProfile, ProfileChange
 from app.schemas.calibration import calculate_conflict_level
 
@@ -277,6 +280,8 @@ class ProfileService:
             result = await self.db.execute(select(User).where(User.id == user_uuid))
             user = result.scalar_one_or_none()
             if user:
+                # 检查是否存在幽灵用户（旧版本 bug 创建的），若存在则迁移数据
+                await self._migrate_ghost_user(user_uuid)
                 return user
         except ValueError:
             pass  # 不是 UUID 格式，继续用邮箱查找
@@ -312,6 +317,84 @@ class ProfileService:
         return user
 
     # ==================== Private Methods ====================
+
+    async def _migrate_ghost_user(self, real_user_id: UUID) -> None:
+        """
+        迁移幽灵用户数据到真实用户
+
+        当早期版本 bug 将 UUID 用户 ID 误当作邮箱前缀，创建了
+        '{uuid}@cognisync.local' 幽灵用户时，调用此方法将其所有历史
+        数据（消息、画像快照、会话、量表响应）迁移到真实用户，然后删除幽灵用户。
+
+        Args:
+            real_user_id: 真实用户的 UUID
+        """
+        ghost_email = f"{real_user_id}@cognisync.local"
+        result = await self.db.execute(select(User).where(User.email == ghost_email))
+        ghost_user = result.scalar_one_or_none()
+
+        if not ghost_user:
+            return  # 没有幽灵用户，无需迁移
+
+        ghost_id = ghost_user.id
+        logger.info(
+            f"Found ghost user {ghost_email} (id={ghost_id}), "
+            f"migrating data to real user {real_user_id}"
+        )
+
+        # 迁移 PostgreSQL 各表的数据
+        await self.db.execute(
+            sql_update(ChatMessage)
+            .where(ChatMessage.user_id == ghost_id)
+            .values(user_id=real_user_id)
+        )
+        await self.db.execute(
+            sql_update(ProfileSnapshot)
+            .where(ProfileSnapshot.user_id == ghost_id)
+            .values(user_id=real_user_id)
+        )
+        await self.db.execute(
+            sql_update(ChatSession)
+            .where(ChatSession.user_id == ghost_id)
+            .values(user_id=real_user_id)
+        )
+        await self.db.execute(
+            sql_update(ScaleResponse)
+            .where(ScaleResponse.user_id == ghost_id)
+            .values(user_id=real_user_id)
+        )
+        await self.db.execute(
+            sql_update(CalibrationLog)
+            .where(CalibrationLog.user_id == ghost_id)
+            .values(user_id=real_user_id)
+        )
+
+        # 删除幽灵用户
+        await self.db.delete(ghost_user)
+        await self.db.commit()
+
+        logger.info(
+            f"Ghost user migration complete: {ghost_email} → {real_user_id}. "
+            f"Migrated chat messages, profile snapshots, sessions, scale responses, calibration logs."
+        )
+
+        # 迁移 Neo4j 中的 Student 节点 ID
+        try:
+            from app.db.neo4j import execute_write
+            neo4j_query = """
+            MATCH (s:Student {id: $ghost_id})
+            SET s.id = $real_id
+            RETURN count(s) as migrated
+            """
+            neo4j_result = await execute_write(neo4j_query, {
+                "ghost_id": str(ghost_id),
+                "real_id": str(real_user_id)
+            })
+            migrated_count = neo4j_result[0]["migrated"] if neo4j_result else 0
+            logger.info(f"Neo4j Student node migration: {migrated_count} node(s) updated")
+        except Exception as e:
+            # Neo4j 迁移失败不应中断主流程（可能 Neo4j 未启动）
+            logger.warning(f"Neo4j Student node migration failed (non-critical): {e}")
 
     async def _get_latest_profile(
         self,
