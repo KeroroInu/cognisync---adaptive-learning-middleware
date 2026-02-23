@@ -312,7 +312,8 @@ class PersonalizationService:
 
         # 5. 根据知识图谱提供针对性内容
         if knowledge_graph:
-            key_concepts = [c["name"] for c in knowledge_graph[:5]]
+            key_concepts = [c if isinstance(c, str) else c.get("name", "") for c in knowledge_graph[:5]]
+            key_concepts = [c for c in key_concepts if c]  # 过滤空字符串
             concepts_msg = {
                 "zh": f"用户当前关注的知识点：{', '.join(key_concepts)}。在对话中，尽量围绕这些知识点展开。",
                 "en": f"User's current focus areas: {', '.join(key_concepts)}. Try to center the conversation around these topics."
@@ -379,21 +380,26 @@ class PersonalizationService:
             # 计算概念重要性
             new_concepts = []
             for concept in analysis.detectedConcepts:
+                # detectedConcepts 可能是字符串或字典，统一处理
+                if isinstance(concept, str):
+                    concept_name = concept
+                    concept_obj = {"name": concept_name, "category": "general", "importance": 0.5}
+                else:
+                    concept_name = concept.get("name", "")
+                    concept_obj = concept
+
+                if not concept_name:
+                    continue
+
                 # 计算重要性（基于用户画像）
-                importance = self._calculate_concept_importance(
-                    concept,
-                    user_profile
-                )
+                importance = self._calculate_concept_importance(concept_obj, user_profile)
 
                 # 查找相关概念
-                related = self._find_related_concepts(
-                    concept.get("name", ""),
-                    current_graph
-                )
+                related = self._find_related_concepts(concept_name, current_graph)
 
                 new_concepts.append({
-                    "name": concept.get("name", ""),
-                    "category": concept.get("category", "general"),
+                    "name": concept_name,
+                    "category": concept_obj.get("category", "general"),
                     "importance": importance,
                     "relatedConcepts": related
                 })

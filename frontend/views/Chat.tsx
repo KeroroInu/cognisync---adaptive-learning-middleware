@@ -28,10 +28,12 @@ export const Chat: React.FC<Props> = ({
   const [isTyping, setIsTyping] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const greetingFetchedRef = useRef(false);
 
-  // 首次进入对话页面时，获取个性化问候语
+  // 首次进入对话页面时，获取个性化问候语（用 ref 防止 StrictMode 双触发）
   useEffect(() => {
-    if (messages.length === 0 && userId) {
+    if (messages.length === 0 && userId && !greetingFetchedRef.current) {
+      greetingFetchedRef.current = true;
       setIsTyping(true);
       getChatGreeting(userId, language)
         .then(({ message }) => {

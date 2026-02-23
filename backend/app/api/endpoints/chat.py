@@ -3,7 +3,7 @@ Chat Endpoint - 对话接口（完整实现）
 """
 import logging
 from uuid import UUID
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Optional
 from fastapi import APIRouter, HTTPException, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -170,7 +170,7 @@ async def get_cross_session_context(
         return None  # 新用户，无历史
 
     # 判断是否为新会话
-    time_since = datetime.utcnow() - last_message.timestamp
+    time_since = datetime.now(timezone.utc) - last_message.timestamp.replace(tzinfo=timezone.utc) if last_message.timestamp.tzinfo is None else datetime.now(timezone.utc) - last_message.timestamp
     if time_since < timedelta(minutes=session_gap_minutes):
         return None  # 当前会话仍在继续
 
@@ -232,23 +232,31 @@ async def get_greeting(
         }}
 
     try:
+        # 查询用户姓名
+        from sqlalchemy import select
+        from app.models.sql.user import User
+        user_result = await db.execute(select(User).where(User.id == user_id))
+        user = user_result.scalar_one_or_none()
+        user_name = (user.name or "").strip() if user else ""
+        name_part = f"，{user_name}" if user_name else ""
+
         context = await get_cross_session_context(db, user_id)
 
         if not context:
-            # 新用户或继续当前会话 - 简洁问候
+            # 新用户或继续当前会话 - 简洁问候（带用户名）
             msg = (
-                "你好！我是你的学习伙伴，有什么我可以帮你的吗？"
+                f"你好{name_part}！我是你的学习伙伴，有什么我可以帮你的吗？"
                 if language == "zh"
-                else "Hello! I'm your learning companion. How can I help you today?"
+                else f"Hello{', ' + user_name if user_name else ''}! I'm your learning companion. How can I help you today?"
             )
             return {"success": True, "data": {"message": msg, "hasContext": False}}
 
-        # 有跨会话上下文 - 让 LLM 生成个性化问候
+        # 有跨会话上下文 - 让 LLM 生成个性化问候（带用户名）
         llm = get_provider()
         system = (
-            "你是一个温暖的学习伙伴。根据上次会话的内容，用一句简短友好的话问候回来的用户，自然地提及上次的话题。不超过50个字。"
+            f"你是一个温暖的学习伙伴。根据上次会话的内容，用一句简短友好的话问候回来的用户{name_part}，自然地提及上次的话题。不超过50个字。"
             if language == "zh"
-            else "You are a warm learning companion. Based on the last session, greet the returning user with one short friendly sentence that naturally references the previous topic. Keep it under 30 words."
+            else f"You are a warm learning companion. Greet {user_name or 'the user'} with one short friendly sentence that naturally references their previous topic. Keep it under 30 words."
         )
         greeting = await llm.complete(
             system_prompt=system,
