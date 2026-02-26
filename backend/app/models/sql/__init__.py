@@ -9,6 +9,7 @@ from app.models.sql.calibration_log import CalibrationLog, Dimension, ConflictLe
 from app.models.sql.chat_session import ChatSession
 from app.models.sql.onboarding import OnboardingSession
 from app.models.sql.scale import ScaleTemplate, ScaleResponse, ScaleStatus
+from app.models.sql.research import ResearchTask, ResearchTaskSubmission, ResearchTaskStatus
 
 __all__ = [
     "Base",
@@ -26,4 +27,7 @@ __all__ = [
     "ScaleTemplate",
     "ScaleResponse",
     "ScaleStatus",
+    "ResearchTask",
+    "ResearchTaskSubmission",
+    "ResearchTaskStatus",
 ]

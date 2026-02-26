@@ -16,6 +16,7 @@ import type {
   AIOnboardingStepRequest,
   AIOnboardingStepResponse,
   AIOnboardingFinishResponse,
+  ResearchTask,
 } from '@/types';
 
 const API_BASE_URL = 'http://localhost:8000';
@@ -46,6 +47,7 @@ export interface ChatRequest {
   message: string;
   language: 'zh' | 'en';
   isResearchMode: boolean;
+  currentCode?: string;
 }
 
 export interface ChatAnalysis {
@@ -253,7 +255,7 @@ export async function getRecentChanges(userId: string, limit: number = 5): Promi
  */
 export async function getKnowledgeGraph(userId: string): Promise<{ nodes: any[]; edges: any[] }> {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/graph/${userId}`, {
+    const response = await fetch(`${API_BASE_URL}/api/knowledge-graph/${userId}`, {
       method: 'GET',
       headers: getHeaders(true),
     });
@@ -495,4 +497,45 @@ export async function finishAIOnboarding(sessionId: string): Promise<AIOnboardin
     console.error('Failed to finish AI onboarding:', error);
     throw error;
   }
+}
+
+// ============================================
+//  研究任务 API
+// ============================================
+
+/**
+ * 获取当前激活的研究任务（无任务返回 null）
+ */
+export async function getActiveResearchTask(): Promise<ResearchTask | null> {
+  const response = await fetch(`${API_BASE_URL}/api/research/active-task`, {
+    headers: getHeaders(true),
+  });
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  const result = await response.json();
+  return (result.data ?? result) as ResearchTask;
+}
+
+/**
+ * 自动保存学生代码进度
+ */
+export async function saveResearchProgress(taskId: string, code: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/research/tasks/${taskId}/save-progress`, {
+    method: 'POST',
+    headers: getHeaders(true),
+    body: JSON.stringify({ code_submitted: code }),
+  });
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+}
+
+/**
+ * 标记任务完成并保存最终代码
+ */
+export async function completeResearchTask(taskId: string, code: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/research/tasks/${taskId}/complete`, {
+    method: 'POST',
+    headers: getHeaders(true),
+    body: JSON.stringify({ code_submitted: code }),
+  });
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 }

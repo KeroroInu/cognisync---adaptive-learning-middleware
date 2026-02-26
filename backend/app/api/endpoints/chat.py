@@ -45,7 +45,8 @@ async def get_or_create_active_session(db: AsyncSession, user_id: UUID) -> ChatS
 def build_assistant_system_prompt(
     emotion: str,
     language: str,
-    is_research_mode: bool
+    is_research_mode: bool,
+    current_code: Optional[str] = None,
 ) -> str:
     """
     根据分析结果构建 AI 助手的 system prompt
@@ -54,6 +55,7 @@ def build_assistant_system_prompt(
         emotion: 用户情感状态
         language: 界面语言 (zh/en)
         is_research_mode: 是否为研究模式
+        current_code: 学生当前代码（研究模式下使用）
 
     Returns:
         System prompt 字符串
@@ -120,6 +122,15 @@ def build_assistant_system_prompt(
 - 如果涉及技术概念，提供通俗易懂的解释
 - 如果用户有误解，温和地纠正
 """
+
+    # 研究模式：将学生当前代码注入上下文
+    if is_research_mode and current_code:
+        code_snippet = current_code[:3000]  # 防止过长
+        code_context = {
+            "zh": f"\n**学生当前代码：**\n```\n{code_snippet}\n```\n请根据以上代码内容理解学生的进度，结合代码给出引导性提问，帮助学生自己发现问题和解决方案。不要直接给出完整代码答案。\n",
+            "en": f"\n**Student's current code:**\n```\n{code_snippet}\n```\nUse this code to understand the student's progress. Ask guiding questions based on the code to help them discover problems and solutions themselves. Do not give complete code answers directly.\n",
+        }[language]
+        system_prompt += code_context
 
     return system_prompt
 
@@ -542,6 +553,16 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
         cross_session_ctx = await get_cross_session_context(db, user_id)
         if cross_session_ctx:
             system_prompt += f"\n上次对话涉及：{cross_session_ctx}，如自然可提及。"
+
+        # 研究模式：注入学生当前代码
+        if request.isResearchMode and request.currentCode:
+            code_snippet = request.currentCode[:3000]
+            lang = request.language or "zh"
+            code_context = {
+                "zh": f"\n\n**学生当前代码：**\n```\n{code_snippet}\n```\n请根据以上代码内容理解学生进度，给出引导性提问，帮助学生自己发现和解决问题，不要直接给出完整答案。\n",
+                "en": f"\n\n**Student's current code:**\n```\n{code_snippet}\n```\nUse this code to understand the student's progress. Ask guiding questions to help them discover and solve problems themselves. Do not provide complete code answers directly.\n",
+            }[lang]
+            system_prompt += code_context
 
         # 构建 user prompt（包含历史对话）
         conversation_context = "\n".join([

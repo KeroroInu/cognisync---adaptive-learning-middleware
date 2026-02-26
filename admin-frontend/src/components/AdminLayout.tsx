@@ -6,7 +6,7 @@ import {
   Users,
   MessageSquare,
   FileText,
-  Database,
+  FlaskConical,
   Download,
   Sun,
   Moon,
@@ -32,7 +32,7 @@ export const AdminLayout = ({ children }: AdminLayoutProps) => {
     { path: '/admin/users', icon: Users, label: t('nav.users') },
     { path: '/admin/conversations', icon: MessageSquare, label: t('nav.conversations') },
     { path: '/admin/scales', icon: FileText, label: t('nav.scales') },
-    { path: '/admin/explorer', icon: Database, label: t('nav.dataExplorer') },
+    { path: '/admin/explorer', icon: FlaskConical, label: t('nav.research') },
     { path: '/admin/exports', icon: Download, label: t('nav.exports') },
   ];
 

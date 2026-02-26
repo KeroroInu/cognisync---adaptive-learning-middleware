@@ -50,6 +50,10 @@ class ChatRequest(BaseModel):
         default=False,
         description="研究模式（true: 提问式引导；false: 直接回答）"
     )
+    currentCode: Optional[str] = Field(
+        default=None,
+        description="学生当前代码内容（研究模式下使用）"
+    )
 
     class Config:
         json_schema_extra = {

@@ -159,3 +159,69 @@ export interface SessionMessagesResponse {
   offset: number;
 }
 
+export interface CalibrationLog {
+  id: string;
+  timestamp: string;
+  dimension: 'cognition' | 'affect' | 'behavior';
+  system_value: number;
+  user_value: number;
+  conflict_level: 'low' | 'medium' | 'high';
+  user_comment: string | null;
+  likert_trust: number | null;
+}
+
+export interface GraphNode {
+  id: string;
+  name: string;
+  category: string;
+  mastery: number;
+  frequency: number;
+  is_flagged: boolean;
+}
+
+export interface GraphEdge {
+  source: string;
+  target: string;
+  rel_type: string;
+  weight: number;
+}
+
+export interface UserGraph {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+}
+
+export interface ResearchTask {
+  id: string;
+  title: string;
+  description: string | null;
+  instructions: string | null;
+  code_content: string;
+  language: string;
+  status: 'draft' | 'active' | 'archived';
+  submissions_count?: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ResearchTaskSubmission {
+  id: string;
+  task_id: string;
+  user_id: string;
+  user_email?: string;
+  code_submitted: string;
+  is_completed: boolean;
+  submitted_at: string | null;
+  created_at: string;
+}
+
+export interface ResearchTasksResponse {
+  tasks: ResearchTask[];
+  total: number;
+}
+
+export interface ResearchSubmissionsResponse {
+  submissions: ResearchTaskSubmission[];
+  total: number;
+}
+

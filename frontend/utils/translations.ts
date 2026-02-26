@@ -7,6 +7,7 @@ export const translations = {
     graph: "知识图谱",
     calibration: "校准与纠偏",
     evidence: "证据日志",
+    research: "教学研究",
     researchMode: "研究模式",
     systemActive: "系统运行中",
     
@@ -160,6 +161,7 @@ export const translations = {
     graph: "Knowledge Graph",
     calibration: "Calibration",
     evidence: "Evidence",
+    research: "Research",
     researchMode: "Research Mode",
     systemActive: "System Active",
     

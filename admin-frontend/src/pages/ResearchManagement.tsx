@@ -1,0 +1,424 @@
+import { useState, useEffect, useRef } from 'react';
+import { FlaskConical, Plus, Play, Archive, Trash2, Users, ChevronDown, ChevronUp, Loader, Upload } from 'lucide-react';
+import { adminApi } from '../lib/adminApi';
+import type { ResearchTask, ResearchTaskSubmission } from '../types';
+
+const LANGUAGES = [
+  { value: 'python', label: 'Python' },
+  { value: 'javascript', label: 'JavaScript' },
+  { value: 'java', label: 'Java' },
+  { value: 'cpp', label: 'C++' },
+  { value: 'go', label: 'Go' },
+  { value: 'other', label: 'Other' },
+];
+
+const STATUS_BADGE: Record<string, string> = {
+  active: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
+  draft: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400',
+  archived: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400',
+};
+const STATUS_LABEL: Record<string, string> = { active: '活跃', draft: '草稿', archived: '已归档' };
+
+export const ResearchManagement = () => {
+  const [tasks, setTasks] = useState<ResearchTask[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [submissionsModal, setSubmissionsModal] = useState<{
+    task: ResearchTask;
+    submissions: ResearchTaskSubmission[];
+    loading: boolean;
+  } | null>(null);
+  const [expandedCode, setExpandedCode] = useState<string | null>(null);
+
+  // Create form state
+  const [form, setForm] = useState({
+    title: '',
+    description: '',
+    instructions: '',
+    code_content: '',
+    language: 'python',
+  });
+  const [creating, setCreating] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const loadTasks = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const result = await adminApi.getResearchTasks();
+      setTasks(result.tasks);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '加载失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { loadTasks(); }, []);
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      setForm(f => ({ ...f, code_content: ev.target?.result as string || '' }));
+    };
+    reader.readAsText(file);
+  };
+
+  const handleCreate = async () => {
+    if (!form.title.trim() || !form.code_content.trim()) return;
+    try {
+      setCreating(true);
+      await adminApi.createResearchTask({
+        title: form.title,
+        description: form.description || undefined,
+        instructions: form.instructions || undefined,
+        code_content: form.code_content,
+        language: form.language,
+      });
+      setShowCreateModal(false);
+      setForm({ title: '', description: '', instructions: '', code_content: '', language: 'python' });
+      await loadTasks();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '创建失败');
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const handleActivate = async (taskId: string) => {
+    try {
+      await adminApi.activateResearchTask(taskId);
+      await loadTasks();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '激活失败');
+    }
+  };
+
+  const handleArchive = async (taskId: string) => {
+    try {
+      await adminApi.archiveResearchTask(taskId);
+      await loadTasks();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '归档失败');
+    }
+  };
+
+  const handleDelete = async (taskId: string) => {
+    if (!confirm('确定要删除这个任务吗？所有学生提交记录也会被删除。')) return;
+    try {
+      await adminApi.deleteResearchTask(taskId);
+      await loadTasks();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '删除失败');
+    }
+  };
+
+  const handleViewSubmissions = async (task: ResearchTask) => {
+    setSubmissionsModal({ task, submissions: [], loading: true });
+    try {
+      const result = await adminApi.getResearchTaskSubmissions(task.id);
+      setSubmissionsModal({ task, submissions: result.submissions, loading: false });
+    } catch (e) {
+      setSubmissionsModal({ task, submissions: [], loading: false });
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader className="w-8 h-8 animate-spin text-indigo-500" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center space-x-3">
+          <FlaskConical className="w-7 h-7 text-indigo-500" />
+          <h2 className="text-2xl font-bold">教学研究</h2>
+        </div>
+        <button
+          onClick={() => setShowCreateModal(true)}
+          className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl hover:opacity-90 transition-opacity shadow-lg"
+        >
+          <Plus size={18} />
+          <span>创建任务</span>
+        </button>
+      </div>
+
+      {error && (
+        <div className="glass-card p-4 border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 rounded-xl text-red-700 dark:text-red-400">
+          {error}
+        </div>
+      )}
+
+      {/* Task Table */}
+      {tasks.length === 0 ? (
+        <div className="glass-card p-12 text-center rounded-2xl text-gray-500">
+          <FlaskConical className="w-12 h-12 mx-auto mb-4 opacity-30" />
+          <p>暂无研究任务。点击"创建任务"上传代码填空练习。</p>
+        </div>
+      ) : (
+        <div className="glass-card rounded-2xl overflow-hidden">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-200 dark:border-gray-700">
+                <th className="px-6 py-4 text-left font-semibold text-gray-600 dark:text-gray-400">任务名称</th>
+                <th className="px-6 py-4 text-left font-semibold text-gray-600 dark:text-gray-400">语言</th>
+                <th className="px-6 py-4 text-left font-semibold text-gray-600 dark:text-gray-400">状态</th>
+                <th className="px-6 py-4 text-left font-semibold text-gray-600 dark:text-gray-400">提交数</th>
+                <th className="px-6 py-4 text-left font-semibold text-gray-600 dark:text-gray-400">创建时间</th>
+                <th className="px-6 py-4 text-left font-semibold text-gray-600 dark:text-gray-400">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {tasks.map((task) => (
+                <tr key={task.id} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                  <td className="px-6 py-4">
+                    <div>
+                      <p className="font-medium">{task.title}</p>
+                      {task.description && (
+                        <p className="text-xs text-gray-500 mt-0.5 truncate max-w-xs">{task.description}</p>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className="px-2 py-1 bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400 rounded-md text-xs font-mono">
+                      {task.language}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_BADGE[task.status]}`}>
+                      {STATUS_LABEL[task.status]}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-gray-600 dark:text-gray-400">
+                    {task.submissions_count ?? 0}
+                  </td>
+                  <td className="px-6 py-4 text-gray-500 text-xs">
+                    {new Date(task.created_at).toLocaleDateString('zh-CN')}
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center space-x-2">
+                      {task.status !== 'active' && (
+                        <button
+                          onClick={() => handleActivate(task.id)}
+                          className="p-1.5 text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-lg transition-colors"
+                          title="激活"
+                        >
+                          <Play size={16} />
+                        </button>
+                      )}
+                      {task.status === 'active' && (
+                        <button
+                          onClick={() => handleArchive(task.id)}
+                          className="p-1.5 text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-900/20 rounded-lg transition-colors"
+                          title="归档"
+                        >
+                          <Archive size={16} />
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleViewSubmissions(task)}
+                        className="p-1.5 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg transition-colors"
+                        title="查看提交"
+                      >
+                        <Users size={16} />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(task.id)}
+                        className="p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                        title="删除"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Create Task Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="glass-card rounded-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
+            <h3 className="text-xl font-bold mb-6">创建研究任务</h3>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">任务标题 *</label>
+                <input
+                  type="text"
+                  value={form.title}
+                  onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+                  className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  placeholder="例：Python 列表推导式填空练习"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">任务描述</label>
+                <textarea
+                  value={form.description}
+                  onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+                  rows={2}
+                  className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                  placeholder="简短描述任务目的..."
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">给学生的说明</label>
+                <textarea
+                  value={form.instructions}
+                  onChange={e => setForm(f => ({ ...f, instructions: e.target.value }))}
+                  rows={2}
+                  className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                  placeholder="例：请填写所有标注 TODO 的空白处，完成后点击「完成任务」。"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">编程语言 *</label>
+                <select
+                  value={form.language}
+                  onChange={e => setForm(f => ({ ...f, language: e.target.value }))}
+                  className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  {LANGUAGES.map(l => (
+                    <option key={l.value} value={l.value}>{l.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-sm font-medium">代码内容 *</label>
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex items-center space-x-1 text-xs text-indigo-600 hover:text-indigo-800 transition-colors"
+                  >
+                    <Upload size={14} />
+                    <span>上传文件</span>
+                  </button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".py,.js,.ts,.java,.cpp,.c,.go,.txt"
+                    className="hidden"
+                    onChange={handleFileUpload}
+                  />
+                </div>
+                <textarea
+                  value={form.code_content}
+                  onChange={e => setForm(f => ({ ...f, code_content: e.target.value }))}
+                  rows={12}
+                  className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-sm resize-none"
+                  placeholder="# 在此粘贴代码，或点击「上传文件」&#10;&#10;def bubble_sort(arr):&#10;    # TODO: 实现冒泡排序&#10;    pass"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  支持直接粘贴代码，也可上传 .py / .js / .java / .cpp 等文件
+                </p>
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-3 mt-6">
+              <button
+                onClick={() => { setShowCreateModal(false); setForm({ title: '', description: '', instructions: '', code_content: '', language: 'python' }); }}
+                className="px-4 py-2 rounded-xl border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleCreate}
+                disabled={creating || !form.title.trim() || !form.code_content.trim()}
+                className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl hover:opacity-90 disabled:opacity-50 transition-all"
+              >
+                {creating ? <Loader size={16} className="animate-spin" /> : <Plus size={16} />}
+                <span>{creating ? '创建中...' : '创建任务'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Submissions Modal */}
+      {submissionsModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="glass-card rounded-2xl p-6 w-full max-w-3xl max-h-[90vh] overflow-y-auto shadow-2xl">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-xl font-bold">学生提交记录</h3>
+                <p className="text-sm text-gray-500 mt-0.5">{submissionsModal.task.title}</p>
+              </div>
+              <button
+                onClick={() => setSubmissionsModal(null)}
+                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            {submissionsModal.loading ? (
+              <div className="flex items-center justify-center h-32">
+                <Loader className="w-6 h-6 animate-spin text-indigo-500" />
+              </div>
+            ) : submissionsModal.submissions.length === 0 ? (
+              <div className="text-center py-12 text-gray-500">
+                <Users className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                <p>暂无学生提交记录</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {submissionsModal.submissions.map((sub) => (
+                  <div key={sub.id} className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+                    <div className="flex items-center justify-between px-4 py-3 bg-gray-50 dark:bg-gray-800/50">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-xs font-bold">
+                          {(sub.user_email || 'U')[0].toUpperCase()}
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium">{sub.user_email || sub.user_id}</p>
+                          <p className="text-xs text-gray-500">
+                            {sub.submitted_at
+                              ? `完成于 ${new Date(sub.submitted_at).toLocaleString('zh-CN')}`
+                              : `保存于 ${new Date(sub.created_at).toLocaleString('zh-CN')}`}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${sub.is_completed ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'}`}>
+                          {sub.is_completed ? '已完成' : '进行中'}
+                        </span>
+                        <button
+                          onClick={() => setExpandedCode(expandedCode === sub.id ? null : sub.id)}
+                          className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                        >
+                          {expandedCode === sub.id ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                        </button>
+                      </div>
+                    </div>
+                    {expandedCode === sub.id && (
+                      <pre className="px-4 py-3 text-xs font-mono text-gray-700 dark:text-gray-300 bg-gray-900/5 dark:bg-gray-900/50 overflow-x-auto max-h-64 overflow-y-auto">
+                        {sub.code_submitted || '（空）'}
+                      </pre>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};

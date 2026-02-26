@@ -213,3 +213,19 @@ export interface AIOnboardingFinishResponse {
     message: string;
   };
 }
+
+// ============================================
+//  研究任务相关类型
+// ============================================
+
+export interface ResearchTask {
+  id: string;
+  title: string;
+  description: string | null;
+  instructions: string | null;
+  code_content: string;
+  language: string;
+  status: 'draft' | 'active' | 'archived';
+  created_at: string;
+  updated_at: string;
+}

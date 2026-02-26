@@ -5,15 +5,17 @@ import { Chat } from './views/Chat';
 import { KnowledgeGraph } from './views/KnowledgeGraph';
 import { Calibration } from './views/Calibration';
 import { Evidence } from './views/Evidence';
+import { Research } from './views/Research';
 import { Login } from './views/Login';
 import { Register } from './views/Register';
 import { RegisterScale } from './views/RegisterScale';
 import { RegisterAI } from './views/RegisterAI';
 import { useAppStore } from './services/store';
+import { getActiveResearchTask } from './services/api';
 import type { UserProfile } from './types';
 
 // 视图类型定义
-type AppView = 'dashboard' | 'chat' | 'graph' | 'calibration' | 'evidence';
+type AppView = 'dashboard' | 'chat' | 'graph' | 'calibration' | 'evidence' | 'research';
 type AuthView = 'login' | 'register' | 'register-scale' | 'register-ai';
 type View = AppView | AuthView;
 
@@ -53,11 +55,21 @@ function App() {
   }, [state.user, currentView]);
 
   // 登录成功处理
-  const handleLoginSuccess = (token: string, user: any, profile?: UserProfile) => {
+  const handleLoginSuccess = async (token: string, user: any, profile?: UserProfile) => {
     setAuth(user, token, profile);
 
     // 检查是否完成了onboarding
     if (user.hasCompletedOnboarding) {
+      // 检查是否有激活的研究任务
+      try {
+        const task = await getActiveResearchTask();
+        if (task) {
+          setCurrentView('research');
+          return;
+        }
+      } catch {
+        // 无研究任务，正常进入 dashboard
+      }
       setCurrentView('dashboard');
     } else {
       // 根据 onboarding 模式跳转
@@ -90,7 +102,7 @@ function App() {
 
   // 路由守卫：检查是否需要认证
   const requiresAuth = (view: View): boolean => {
-    return ['dashboard', 'chat', 'graph', 'calibration', 'evidence'].includes(view);
+    return ['dashboard', 'chat', 'graph', 'calibration', 'evidence', 'research'].includes(view);
   };
 
   // 渲染认证相关视图
@@ -201,6 +213,18 @@ function App() {
             messages={state.messages}
             language={state.language}
             theme={theme}
+          />
+        );
+
+      case 'research':
+        return (
+          <Research
+            messages={state.messages}
+            onSendMessage={addMessage}
+            onUpdateProfile={updateProfile}
+            language={state.language}
+            theme={theme}
+            userId={state.user?.id}
           />
         );
 

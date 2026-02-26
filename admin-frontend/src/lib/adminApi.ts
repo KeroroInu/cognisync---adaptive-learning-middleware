@@ -14,6 +14,12 @@ import type {
   SessionsListResponse,
   SessionDetail,
   SessionMessagesResponse,
+  CalibrationLog,
+  UserGraph,
+  ResearchTask,
+  ResearchTasksResponse,
+  ResearchTaskSubmission,
+  ResearchSubmissionsResponse,
 } from '../types';
 
 const BASE_URL = (import.meta.env.VITE_API_BASE_URL as string) || 'http://localhost:8000/api';
@@ -90,6 +96,15 @@ class AdminApiClient {
     return result.responses;
   }
 
+  async getUserCalibrationLogs(userId: string): Promise<CalibrationLog[]> {
+    const result = await this.request<{ logs: CalibrationLog[]; total: number }>(`/users/${userId}/calibration-logs`);
+    return result.logs;
+  }
+
+  async getUserGraph(userId: string): Promise<UserGraph> {
+    return this.request<UserGraph>(`/users/${userId}/graph`);
+  }
+
   async deleteUser(userId: string): Promise<{ deleted: boolean }> {
     return this.request<{ deleted: boolean }>(`/users/${userId}`, { method: 'DELETE' });
   }
@@ -141,7 +156,8 @@ class AdminApiClient {
   }
 
   async getScaleResponses(scaleId: string): Promise<ScaleResponse[]> {
-    return this.request<ScaleResponse[]>(`/scales/${scaleId}/responses`);
+    const result = await this.request<{ responses: ScaleResponse[]; total: number } | ScaleResponse[]>(`/scales/${scaleId}/responses`);
+    return Array.isArray(result) ? result : ((result as { responses: ScaleResponse[] }).responses ?? []);
   }
 
   async deleteScale(scaleId: string): Promise<{ deleted: boolean }> {
@@ -209,6 +225,64 @@ class AdminApiClient {
     if (filters) params.append('filters', JSON.stringify(filters));
 
     return this.request<unknown[]>(`/db/export?${params}`);
+  }
+
+  async exportCsv(endpoint: string): Promise<Blob> {
+    const url = `${BASE_URL}/admin${endpoint}`;
+    const response = await fetch(url, {
+      headers: { 'X-ADMIN-KEY': ADMIN_KEY },
+    });
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+    return response.blob();
+  }
+
+  // Research Tasks
+  async getResearchTasks(): Promise<ResearchTasksResponse> {
+    return this.request<ResearchTasksResponse>('/research/tasks');
+  }
+
+  async createResearchTask(data: {
+    title: string;
+    description?: string;
+    instructions?: string;
+    code_content: string;
+    language: string;
+  }): Promise<ResearchTask> {
+    return this.request<ResearchTask>('/research/tasks', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateResearchTask(taskId: string, data: {
+    title?: string;
+    description?: string;
+    instructions?: string;
+    code_content?: string;
+    language?: string;
+  }): Promise<ResearchTask> {
+    return this.request<ResearchTask>(`/research/tasks/${taskId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteResearchTask(taskId: string): Promise<{ deleted: boolean }> {
+    return this.request<{ deleted: boolean }>(`/research/tasks/${taskId}`, { method: 'DELETE' });
+  }
+
+  async activateResearchTask(taskId: string): Promise<{ message: string }> {
+    return this.request<{ message: string }>(`/research/tasks/${taskId}/activate`, { method: 'POST' });
+  }
+
+  async archiveResearchTask(taskId: string): Promise<{ message: string }> {
+    return this.request<{ message: string }>(`/research/tasks/${taskId}/archive`, { method: 'POST' });
+  }
+
+  async getResearchTaskSubmissions(taskId: string): Promise<ResearchSubmissionsResponse> {
+    return this.request<ResearchSubmissionsResponse>(`/research/tasks/${taskId}/submissions`);
   }
 }
 
