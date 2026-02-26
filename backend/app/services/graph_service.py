@@ -133,7 +133,7 @@ class GraphService:
             {"user_id": user_id, "concepts": concepts_data}
         )
 
-        stats = result[0] if result else {"created_concepts": 0, "updated_relationships": 0}
+        stats = result if result else {"created_concepts": 0, "updated_relationships": 0}
 
         # 3. 为同一轮次共现的概念对建立 CO_OCCURRED_WITH 关系（语义关联）
         if len(concepts) > 1:

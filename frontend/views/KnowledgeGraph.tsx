@@ -104,24 +104,32 @@ export const KnowledgeGraph: React.FC<Props> = ({ nodes: propNodes, edges: propE
       .filter(e => nodeById.has(e.source) && nodeById.has(e.target))
       .map(e => ({ source: e.source, target: e.target, relType: e.relType, weight: e.weight || 1 }));
 
-    // Force simulation
+    // Force simulation — links with higher weight pull nodes closer
     const simulation = d3.forceSimulation(d3Nodes)
-      .force("link", d3.forceLink(d3Links).id((d: any) => d.id).distance(130).strength(0.35))
+      .force("link", d3.forceLink(d3Links).id((d: any) => d.id)
+        .distance((d: any) => Math.max(60, 130 - (d.weight - 1) * 6))
+        .strength((d: any) => Math.min(0.7, 0.3 + d.weight * 0.04)))
       .force("charge", d3.forceManyBody().strength(-260))
       .force("center", d3.forceCenter(width / 2, height / 2))
       .force("collide", d3.forceCollide().radius((d: any) => 18 + d.frequency * 1.5 + 10));
 
     simulationRef.current = simulation;
 
+    // Edge color helper: low-weight co-occurrence = slate, high-weight = indigo
+    const edgeColor = (d: any) => {
+      if (d.relType === "related") return "#818cf8";
+      return d.weight >= 3 ? "#6366f1" : "#64748b";
+    };
+
     // Draw links
     const linkGroup = g.append("g").attr("class", "links");
     const link = linkGroup.selectAll("line")
       .data(d3Links)
       .join("line")
-      .attr("stroke", (d: any) => d.relType === "related" ? "#818cf8" : "#94a3b8")
-      .attr("stroke-width", (d: any) => Math.min(3, 1 + Math.log(d.weight || 1)))
+      .attr("stroke", edgeColor)
+      .attr("stroke-width", (d: any) => Math.min(8, 1.5 + Math.log(d.weight || 1) * 2.2))
       .attr("stroke-dasharray", (d: any) => d.relType === "related" ? "5,3" : "none")
-      .attr("opacity", 0.3);
+      .attr("opacity", (d: any) => Math.min(0.85, 0.45 + Math.log(d.weight || 1) * 0.12));
 
     // Draw nodes
     const nodeGroup = g.append("g").attr("class", "nodes");

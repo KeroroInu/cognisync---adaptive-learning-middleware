@@ -14,14 +14,21 @@ from app.schemas.admin.user_detail import (
     MessageItem,
     ProfileItem,
     ScaleResponseItem,
+    CalibrationLogItem,
+    GraphNodeItem,
+    GraphEdgeItem,
     UserMessagesResponse,
     UserProfilesResponse,
-    UserScaleResponsesResponse
+    UserScaleResponsesResponse,
+    UserCalibrationLogsResponse,
+    UserGraphResponse,
 )
 from app.models.sql.user import User
 from app.models.sql.message import ChatMessage
 from app.models.sql.profile import ProfileSnapshot
 from app.models.sql.scale import ScaleResponse, ScaleTemplate
+from app.models.sql.calibration_log import CalibrationLog
+from app.services.graph_service import GraphService
 
 router = APIRouter(tags=["Admin - User Detail"])
 
@@ -224,3 +231,70 @@ async def get_user_scale_responses(
     )
 
     return SuccessResponse(data=response_data)
+
+
+@router.get("/users/{user_id}/calibration-logs", dependencies=[Depends(verify_admin_key)])
+async def get_user_calibration_logs(
+    user_id: UUID,
+    db: AsyncSession = Depends(get_db)
+) -> SuccessResponse[UserCalibrationLogsResponse]:
+    """获取用户校准日志（自评修正记录）"""
+    total = await db.scalar(
+        select(func.count()).select_from(CalibrationLog).where(CalibrationLog.user_id == user_id)
+    ) or 0
+
+    result = await db.execute(
+        select(CalibrationLog)
+        .where(CalibrationLog.user_id == user_id)
+        .order_by(CalibrationLog.timestamp.desc())
+    )
+    logs = result.scalars().all()
+
+    log_items = [
+        CalibrationLogItem(
+            id=log.id,
+            timestamp=log.timestamp,
+            dimension=log.dimension.value,
+            system_value=log.system_value,
+            user_value=log.user_value,
+            conflict_level=log.conflict_level.value,
+            user_comment=log.user_comment,
+            likert_trust=log.likert_trust,
+        )
+        for log in logs
+    ]
+
+    return SuccessResponse(data=UserCalibrationLogsResponse(logs=log_items, total=total))
+
+
+@router.get("/users/{user_id}/graph", dependencies=[Depends(verify_admin_key)])
+async def get_user_graph(user_id: UUID) -> SuccessResponse[UserGraphResponse]:
+    """获取用户知识图谱（来自 Neo4j）"""
+    try:
+        graph_service = GraphService()
+        graph_data = await graph_service.get_graph(str(user_id))
+
+        nodes = [
+            GraphNodeItem(
+                id=n.id,
+                name=n.name,
+                category=n.category,
+                mastery=n.mastery,
+                frequency=n.frequency,
+                is_flagged=n.isFlagged,
+            )
+            for n in graph_data.nodes
+        ]
+        edges = [
+            GraphEdgeItem(
+                source=e.source,
+                target=e.target,
+                rel_type=e.relType,
+                weight=e.weight,
+            )
+            for e in graph_data.edges
+        ]
+        return SuccessResponse(data=UserGraphResponse(nodes=nodes, edges=edges))
+    except Exception:
+        # Neo4j 不可用时返回空图谱
+        return SuccessResponse(data=UserGraphResponse(nodes=[], edges=[]))

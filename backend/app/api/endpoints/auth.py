@@ -131,6 +131,7 @@ async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
     ).order_by(ProfileSnapshot.created_at.desc()).limit(1)
     profile_result = await db.execute(profile_stmt)
     latest_profile = profile_result.scalar_one_or_none()
+    has_profile = latest_profile is not None
 
     # 构造用户信息
     user_info = UserInfo(

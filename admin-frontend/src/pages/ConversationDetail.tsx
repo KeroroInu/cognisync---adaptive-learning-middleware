@@ -152,7 +152,7 @@ export const ConversationDetail = () => {
                 key={message.id}
                 className={`p-4 rounded-xl ${
                   message.role === 'user'
-                    ? 'bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800'
+                    ? 'bg-indigo-50 dark:bg-indigo-900/40 border border-indigo-200 dark:border-indigo-700'
                     : 'bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700'
                 }`}
               >
@@ -160,17 +160,17 @@ export const ConversationDetail = () => {
                   <span
                     className={`px-3 py-1 rounded-full text-sm font-medium ${
                       message.role === 'user'
-                        ? 'bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300'
-                        : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+                        ? 'bg-indigo-100 dark:bg-indigo-800 text-indigo-800 dark:text-indigo-100'
+                        : 'bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-100'
                     }`}
                   >
                     {message.role === 'user' ? 'User' : 'Assistant'}
                   </span>
-                  <span className="text-sm text-gray-500">
+                  <span className="text-sm text-gray-600 dark:text-gray-300">
                     {new Date(message.timestamp).toLocaleString()}
                   </span>
                 </div>
-                <p className="text-gray-800 dark:text-gray-200 whitespace-pre-wrap">{message.text}</p>
+                <p className="text-gray-900 dark:text-white whitespace-pre-wrap">{message.text}</p>
                 {message.analysis && (
                   <details className="mt-3">
                     <summary className="text-sm text-gray-500 cursor-pointer hover:text-gray-700 dark:hover:text-gray-300">

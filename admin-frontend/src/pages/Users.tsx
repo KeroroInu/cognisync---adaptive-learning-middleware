@@ -2,7 +2,10 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { adminApi } from '../lib/adminApi';
 import type { User } from '../types';
-import { Search, ChevronLeft, ChevronRight, Edit2, Trash2, Eye, X, Save } from 'lucide-react';
+import { Search, ChevronLeft, ChevronRight, Edit2, Trash2, Eye, X, Save, Download } from 'lucide-react';
+
+const ADMIN_KEY = (import.meta.env.VITE_ADMIN_KEY as string) || '';
+const BASE_URL = (import.meta.env.VITE_API_BASE_URL as string) || 'http://localhost:8000/api';
 
 export const Users = () => {
   const navigate = useNavigate();
@@ -78,6 +81,25 @@ export const Users = () => {
         console.error('Failed to delete user:', err);
         alert('删除失败：' + (err instanceof Error ? err.message : String(err)));
       }
+    }
+  };
+
+  const handleExportUser = async (e: React.MouseEvent, user: User) => {
+    e.stopPropagation();
+    try {
+      const url = `${BASE_URL}/admin/export/csv/user/${user.id}`;
+      const response = await fetch(url, { headers: { 'X-ADMIN-KEY': ADMIN_KEY } });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const blob = await response.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `user_${user.email}_${new Date().toISOString().split('T')[0]}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(a.href);
+    } catch (err) {
+      alert('导出失败：' + (err instanceof Error ? err.message : String(err)));
     }
   };
 
@@ -264,6 +286,13 @@ export const Users = () => {
                           title="Edit User"
                         >
                           <Edit2 size={16} />
+                        </button>
+                        <button
+                          onClick={(e) => handleExportUser(e, user)}
+                          className="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-200 dark:hover:bg-emerald-800 transition-colors"
+                          title="Export User Data (CSV)"
+                        >
+                          <Download size={16} />
                         </button>
                         <button
                           onClick={(e) => handleDelete(e, user)}

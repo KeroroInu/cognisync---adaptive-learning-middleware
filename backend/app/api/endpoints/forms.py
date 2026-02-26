@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.endpoints.auth import get_current_user, save_user_profile
 from app.db.postgres import get_db
-from app.models.sql.scale import ScaleTemplate as ScaleTemplateModel, ScaleStatus
+from app.models.sql.scale import ScaleTemplate as ScaleTemplateModel, ScaleStatus, ScaleResponse as ScaleResponseModel
 
 router = APIRouter()
 
@@ -104,16 +104,19 @@ async def get_active_template(
     if not template_model:
         raise HTTPException(status_code=404, detail="No active scale template found")
 
-    # 转换为前端期望的格式
+    # 返回前端 ScaleTemplate 接口期望的完整格式
     template = {
         "id": str(template_model.id),
         "name": template_model.name,
         "description": template_model.schema_json.get("description", ""),
-        "questions": template_model.schema_json.get("items", [])
+        "schema_json": template_model.schema_json,
+        "version": str(template_model.version),
+        "is_active": True,
+        "created_at": template_model.created_at.isoformat(),
+        "updated_at": template_model.updated_at.isoformat(),
     }
 
-    # 返回包装格式
-    return ApiResponse(success=True, data={"template": template})
+    return ApiResponse(success=True, data=template)
 
 
 @router.post("/{template_id}/submit")
@@ -140,6 +143,29 @@ async def submit_scale_answers(
 
     # 保存用户画像到数据库
     await save_user_profile(db, current_user.id, cognition, affect, behavior)
+
+    # 保存量表响应记录（不使用 try/except，让 get_db 统一处理错误）
+    import logging
+    logger = logging.getLogger(__name__)
+    try:
+        scale_resp = ScaleResponseModel(
+            user_id=current_user.id,
+            template_id=uuid.UUID(template_id),
+            answers_json=answers,
+            scores_json={
+                "cognition": cognition,
+                "affect": affect,
+                "behavior": behavior,
+                "total_score": total_score,
+                "max_score": max_score,
+            }
+        )
+        db.add(scale_resp)
+        await db.commit()
+        logger.info(f"Scale response saved for user {current_user.id}, template {template_id}")
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"Failed to save scale response for user {current_user.id}, template {template_id}: {e}", exc_info=True)
 
     response_id = str(uuid.uuid4())
     current_time = datetime.utcnow().isoformat()
