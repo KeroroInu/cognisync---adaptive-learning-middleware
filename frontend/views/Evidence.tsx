@@ -24,7 +24,7 @@ export const Evidence: React.FC<Props> = ({ logs, messages, language, theme }) =
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8 animate-fade-in">
+    <div className="max-w-4xl mx-auto space-y-8 animate-fade-in overflow-y-auto flex-1">
       <div className="flex justify-between items-center">
           <div>
             <h2 className="text-2xl font-bold" style={{ color: theme === 'light' ? '#000000' : '#ffffff' }}>{t.researchLogs}</h2>

@@ -17,6 +17,8 @@ from app.services.text_analyzer import TextAnalyzer
 from app.services.llm_provider import get_provider
 from app.models.sql.message import ChatMessage, MessageRole
 from app.models.sql.chat_session import ChatSession
+from app.models.sql.user import User
+from app.api.endpoints.auth import get_current_user
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -246,9 +248,9 @@ async def get_cross_session_context(
 
 @router.get("/greeting")
 async def get_greeting(
-    userId: str = Query(..., description="用户 ID"),
     language: str = Query("zh", description="语言 zh|en"),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     获取个性化开场问候语
@@ -256,20 +258,8 @@ async def get_greeting(
     根据用户历史会话生成上下文感知的问候，让 AI 能够引用上次讨论内容
     """
     try:
-        user_id = UUID(userId)
-    except ValueError:
-        return {"success": True, "data": {
-            "message": "你好！我是你的学习伙伴，有什么可以帮你的吗？" if language == "zh" else "Hello! I'm your learning companion. How can I help?",
-            "hasContext": False
-        }}
-
-    try:
-        # 查询用户姓名
-        from sqlalchemy import select
-        from app.models.sql.user import User
-        user_result = await db.execute(select(User).where(User.id == user_id))
-        user = user_result.scalar_one_or_none()
-        user_name = (user.name or "").strip() if user else ""
+        user_id = current_user.id
+        user_name = (current_user.name or "").strip()
         name_part = f"，{user_name}" if user_name else ""
 
         context = await get_cross_session_context(db, user_id)
@@ -290,11 +280,15 @@ async def get_greeting(
             if language == "zh"
             else f"You are a warm learning companion. Greet {user_name or 'the user'} with one short friendly sentence that naturally references their previous topic. Keep it under 30 words."
         )
-        greeting = await llm.complete(
-            system_prompt=system,
-            user_prompt=context,
-            temperature=0.8,
-            max_tokens=100
+        import asyncio
+        greeting = await asyncio.wait_for(
+            llm.complete(
+                system_prompt=system,
+                user_prompt=context,
+                temperature=0.8,
+                max_tokens=100
+            ),
+            timeout=15.0,
         )
 
         return {"success": True, "data": {"message": greeting.strip(), "hasContext": True}}
@@ -307,18 +301,15 @@ async def get_greeting(
 
 @router.get("/sessions")
 async def get_chat_sessions(
-    userId: str = Query(..., description="用户 ID"),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     获取用户的历史对话会话列表
 
     按 30 分钟间隔将消息分组成会话，返回每个会话的元数据
     """
-    try:
-        user_id = UUID(userId)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid userId")
+    user_id = current_user.id
 
     from sqlalchemy import select, asc
 
@@ -388,16 +379,13 @@ async def get_chat_sessions(
 
 @router.get("/sessions/messages")
 async def get_session_messages(
-    userId: str = Query(..., description="用户 ID"),
     sessionStart: str = Query(..., description="会话开始时间 (ISO)"),
     sessionEnd: str = Query(..., description="会话结束时间 (ISO)"),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """获取特定会话的所有消息"""
-    try:
-        user_id = UUID(userId)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid userId")
+    user_id = current_user.id
 
     from sqlalchemy import select, asc
     from datetime import datetime as dt
@@ -437,12 +425,16 @@ async def get_session_messages(
 
 
 @router.post("", response_model=SuccessResponse[ChatResponse])
-async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
+async def chat(
+    request: ChatRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """
     聊天接口 - 完整实现
 
     流程：
-    1. 创建/获取用户
+    1. 获取当前认证用户
     2. 保存用户消息
     3. 分析消息（intent、emotion、concepts、delta）
     4. 更新画像
@@ -451,17 +443,17 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
     7. 保存 AI 回复
     8. 返回响应
     """
-    logger.info(f"Received chat request from user: {request.userId}")
+    logger.info(f"Received chat request from user: {current_user.id}")
 
     try:
-        # ========== 1. 创建/获取用户 ==========
-        profile_service = ProfileService(db)
-        user = await profile_service.get_or_create_user(request.userId)
+        # ========== 1. 获取认证用户 ==========
+        user = current_user
         user_id = user.id
 
         logger.info(f"User identified: {user.email} (id={user_id})")
 
         # 创建/获取活跃会话（供管理后台 Conversations 页面使用）
+        profile_service = ProfileService(db)
         await get_or_create_active_session(db, user_id)
 
         # ========== 2. 保存用户消息 ==========
@@ -586,14 +578,30 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
 
 学生说：{request.message}{verification_hint}"""
 
-        # 调用 LLM 生成回复
+        # 调用 LLM 生成回复（30 秒超时，失败自动重试一次）
+        import asyncio
         llm_provider = get_provider()
-        assistant_reply = await llm_provider.complete(
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
-            temperature=0.7,
-            max_tokens=300
-        )
+        last_llm_error: Exception | None = None
+        assistant_reply = ""
+        for attempt in range(2):
+            try:
+                assistant_reply = await asyncio.wait_for(
+                    llm_provider.complete(
+                        system_prompt=system_prompt,
+                        user_prompt=user_prompt,
+                        temperature=0.7,
+                        max_tokens=300
+                    ),
+                    timeout=30.0,
+                )
+                break
+            except (asyncio.TimeoutError, Exception) as llm_err:
+                last_llm_error = llm_err
+                logger.warning(f"LLM attempt {attempt + 1} failed: {llm_err}")
+                if attempt == 0:
+                    await asyncio.sleep(1)
+        if not assistant_reply:
+            raise HTTPException(status_code=503, detail="AI service temporarily unavailable, please retry")
 
         logger.info(f"AI reply generated: {len(assistant_reply)} characters")
 

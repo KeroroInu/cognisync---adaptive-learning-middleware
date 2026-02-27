@@ -24,7 +24,6 @@ function App() {
     state,
     theme,
     toggleTheme,
-    toggleResearchMode,
     setLanguage,
     addMessage,
     addCalibrationLog,
@@ -219,8 +218,6 @@ function App() {
       case 'research':
         return (
           <Research
-            messages={state.messages}
-            onSendMessage={addMessage}
             onUpdateProfile={updateProfile}
             language={state.language}
             theme={theme}
@@ -256,8 +253,6 @@ function App() {
     <Layout
       currentView={currentView as AppView}
       onViewChange={setCurrentView as (view: AppView) => void}
-      isResearchMode={state.isResearchMode}
-      onToggleResearch={toggleResearchMode}
       language={state.language}
       onSetLanguage={setLanguage}
       theme={theme}

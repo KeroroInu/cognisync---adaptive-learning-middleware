@@ -44,7 +44,7 @@ export const Chat: React.FC<Props> = ({
     if (messages.length === 0 && userId && !greetingFetchedRef.current) {
       greetingFetchedRef.current = true;
       setIsTyping(true);
-      getChatGreeting(userId, language)
+      getChatGreeting(language)
         .then(({ message }) => {
           onSendMessage(message, 'assistant', {
             intent: 'greeting',
@@ -63,14 +63,14 @@ export const Chat: React.FC<Props> = ({
   useEffect(() => {
     if (userId) {
       setSessionsLoading(true);
-      getChatSessions(userId)
+      getChatSessions()
         .then(setSessions)
         .finally(() => setSessionsLoading(false));
     }
   }, [userId]);
 
   const refreshSessions = () => {
-    if (userId) getChatSessions(userId).then(setSessions);
+    if (userId) getChatSessions().then(setSessions);
   };
 
   useEffect(() => {
@@ -123,8 +123,7 @@ export const Chat: React.FC<Props> = ({
   };
 
   const handleViewSession = async (session: ChatSession) => {
-    if (!userId) return;
-    const msgs = await getSessionMessages(userId, session.sessionStart, session.sessionEnd);
+    const msgs = await getSessionMessages(session.sessionStart, session.sessionEnd);
     setSelectedSession({ session, messages: msgs });
   };
 

@@ -38,7 +38,7 @@ export const Dashboard: React.FC<Props> = ({ profile, onNavigate, language, them
   }, [userId]);
 
   return (
-    <div className="grid grid-cols-12 gap-6 h-full">
+    <div className="grid grid-cols-12 gap-6 h-full overflow-y-auto">
       {/* Top Row: Metrics Cards */}
       <div className="col-span-12 grid grid-cols-3 gap-6">
         {[

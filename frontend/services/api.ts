@@ -83,9 +83,7 @@ export async function sendChatMessage(request: ChatRequest): Promise<ChatRespons
   try {
     const response = await fetch(`${API_BASE_URL}/api/chat`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: getHeaders(true),
       body: JSON.stringify(request),
     });
 
@@ -281,12 +279,11 @@ export async function getKnowledgeGraph(userId: string): Promise<{ nodes: any[];
  * 获取个性化开场问候语
  */
 export async function getChatGreeting(
-  userId: string,
   language: 'zh' | 'en' = 'zh'
 ): Promise<{ message: string; hasContext: boolean }> {
   try {
     const response = await fetch(
-      `${API_BASE_URL}/api/chat/greeting?userId=${encodeURIComponent(userId)}&language=${language}`,
+      `${API_BASE_URL}/api/chat/greeting?language=${language}`,
       { method: 'GET', headers: getHeaders(true) }
     );
 
@@ -321,10 +318,10 @@ export interface SessionMessage {
 /**
  * 获取用户历史对话会话列表
  */
-export async function getChatSessions(userId: string): Promise<ChatSession[]> {
+export async function getChatSessions(): Promise<ChatSession[]> {
   try {
     const response = await fetch(
-      `${API_BASE_URL}/api/chat/sessions?userId=${encodeURIComponent(userId)}`,
+      `${API_BASE_URL}/api/chat/sessions`,
       { method: 'GET', headers: getHeaders(true) }
     );
     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
@@ -340,13 +337,11 @@ export async function getChatSessions(userId: string): Promise<ChatSession[]> {
  * 获取特定会话的消息记录
  */
 export async function getSessionMessages(
-  userId: string,
   sessionStart: string,
   sessionEnd: string
 ): Promise<SessionMessage[]> {
   try {
     const params = new URLSearchParams({
-      userId,
       sessionStart,
       sessionEnd,
     });

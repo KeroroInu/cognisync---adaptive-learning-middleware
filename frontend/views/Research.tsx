@@ -13,8 +13,6 @@ import {
 } from '../services/api';
 
 interface Props {
-  messages: ChatMessage[];
-  onSendMessage: (text: string, role: 'user' | 'assistant', analysis?: any) => void;
   onUpdateProfile: (profile: UserProfile) => void;
   language: Language;
   theme: 'light' | 'dark';
@@ -22,8 +20,6 @@ interface Props {
 }
 
 export const Research: React.FC<Props> = ({
-  messages,
-  onSendMessage,
   onUpdateProfile,
   language,
   theme,
@@ -33,6 +29,7 @@ export const Research: React.FC<Props> = ({
   const [loadingTask, setLoadingTask] = useState(true);
   const [code, setCode] = useState('');
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved');
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -81,7 +78,13 @@ export const Research: React.FC<Props> = ({
     const userText = input;
     setInput('');
     setError(null);
-    onSendMessage(userText, 'user');
+    const userMsg: ChatMessage = {
+      id: `msg_${Date.now()}`,
+      role: 'user',
+      text: userText,
+      timestamp: new Date().toISOString(),
+    };
+    setMessages(prev => [...prev, userMsg]);
     setIsTyping(true);
     try {
       const response = await sendChatMessage({
@@ -91,7 +94,14 @@ export const Research: React.FC<Props> = ({
         isResearchMode: true,
         currentCode: code,
       });
-      onSendMessage(response.message, 'assistant', response.analysis);
+      const assistantMsg: ChatMessage = {
+        id: `msg_${Date.now() + 1}`,
+        role: 'assistant',
+        text: response.message,
+        timestamp: new Date().toISOString(),
+        analysis: response.analysis,
+      };
+      setMessages(prev => [...prev, assistantMsg]);
       if (response.updatedProfile) onUpdateProfile(response.updatedProfile);
     } catch (err) {
       setError(err instanceof Error ? err.message : isZh ? '发送失败' : 'Failed to send');
@@ -151,7 +161,7 @@ export const Research: React.FC<Props> = ({
   }
 
   return (
-    <div className="flex gap-4" style={{ height: 'calc(100vh - 220px)', minHeight: '500px' }}>
+    <div className="flex gap-4 flex-1 min-h-0">
       {/* Left: Code Editor Panel */}
       <div
         className="flex-[3] flex flex-col min-h-0 rounded-2xl overflow-hidden border"
