@@ -122,30 +122,42 @@ export const RegisterScale: React.FC<RegisterScaleProps> = ({
   // 获取维度颜色
   const getDimensionColor = (dimension: Dimension): string => {
     switch (dimension) {
-      case 'Cognition':
-        return 'from-blue-500 to-cyan-600';
-      case 'Affect':
-        return 'from-purple-500 to-pink-600';
-      case 'Behavior':
-        return 'from-green-500 to-emerald-600';
-      default:
-        return 'from-gray-500 to-gray-600';
+      case 'CT':  return 'from-blue-500 to-cyan-600';
+      case 'SE':  return 'from-purple-500 to-violet-600';
+      case 'LM':  return 'from-pink-500 to-rose-600';
+      case 'CPS': return 'from-amber-500 to-orange-600';
+      case 'PA':  return 'from-green-500 to-emerald-600';
+      case 'AIL': return 'from-indigo-500 to-blue-700';
+      // 旧维度兼容
+      case 'Cognition': return 'from-blue-500 to-cyan-600';
+      case 'Affect':    return 'from-purple-500 to-pink-600';
+      case 'Behavior':  return 'from-green-500 to-emerald-600';
+      default:          return 'from-gray-500 to-gray-600';
     }
   };
 
   // 获取维度文本颜色
   const getDimensionTextColor = (dimension: Dimension): string => {
     switch (dimension) {
-      case 'Cognition':
-        return 'text-blue-600 dark:text-blue-400';
-      case 'Affect':
-        return 'text-purple-600 dark:text-purple-400';
-      case 'Behavior':
-        return 'text-green-600 dark:text-green-400';
-      default:
-        return 'text-gray-600 dark:text-gray-400';
+      case 'CT':  return 'text-blue-600 dark:text-blue-400';
+      case 'SE':  return 'text-purple-600 dark:text-purple-400';
+      case 'LM':  return 'text-pink-600 dark:text-pink-400';
+      case 'CPS': return 'text-amber-600 dark:text-amber-400';
+      case 'PA':  return 'text-green-600 dark:text-green-400';
+      case 'AIL': return 'text-indigo-600 dark:text-indigo-400';
+      case 'Cognition': return 'text-blue-600 dark:text-blue-400';
+      case 'Affect':    return 'text-purple-600 dark:text-purple-400';
+      case 'Behavior':  return 'text-green-600 dark:text-green-400';
+      default:          return 'text-gray-600 dark:text-gray-400';
     }
   };
+
+  // 维度显示名（中文标签）
+  const DIM_LABEL: Record<string, string> = {
+    CT: '计算思维', SE: '自我效能感', LM: '学习动机',
+    CPS: '复杂问题解决', PA: '编程能力', AIL: 'AI 素养',
+  };
+  const getDimensionLabel = (dim: string) => DIM_LABEL[dim] || dim;
 
   // 计算进度
   const progress = template ? ((currentQuestionIndex + 1) / template.questions.length) * 100 : 0;
@@ -257,7 +269,7 @@ export const RegisterScale: React.FC<RegisterScaleProps> = ({
           <div className="flex justify-center mb-6">
             <div className={`inline-flex items-center px-4 py-2 rounded-full bg-gradient-to-r ${getDimensionColor(currentQuestion.dimension)} text-white shadow-lg font-medium text-sm`}>
               <div className="w-2 h-2 rounded-full bg-white mr-2 animate-pulse" />
-              {currentQuestion.dimension}
+              {getDimensionLabel(currentQuestion.dimension)}
             </div>
           </div>
 

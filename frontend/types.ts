@@ -1,4 +1,4 @@
-export type Dimension = 'Cognition' | 'Affect' | 'Behavior';
+export type Dimension = 'Cognition' | 'Affect' | 'Behavior' | 'CT' | 'SE' | 'LM' | 'CPS' | 'PA' | 'AIL' | string;
 export type Language = 'zh' | 'en';
 
 export interface UserProfile {
