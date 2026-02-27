@@ -171,8 +171,11 @@ async def seed_scale_templates():
             id, name, version, status, schema_json,
             scoring_json, mapping_json, created_at, updated_at
         ) VALUES (
-            :id, :name, :version, :status, :schema_json::jsonb,
-            :scoring_json::jsonb, :mapping_json::jsonb, :created_at, :updated_at
+            :id, :name, :version, :status,
+            CAST(:schema_json AS jsonb),
+            CAST(:scoring_json AS jsonb),
+            CAST(:mapping_json AS jsonb),
+            :created_at, :updated_at
         )
         """)
 
