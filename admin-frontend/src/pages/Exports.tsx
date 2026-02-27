@@ -31,8 +31,8 @@ const DATASETS: DatasetConfig[] = [
     borderColor: 'border-indigo-200 dark:border-indigo-700',
     filename: 'learner_profiles',
     endpoint: '/admin/export/csv/learner-profiles',
-    fields: ['user_id', 'email', 'registered_at', 'initial_cognition', 'initial_affect', 'initial_behavior', 'current_cognition', 'current_affect', 'current_behavior', 'profile_update_count', 'total_sessions', 'total_messages', 'scale_completions'],
-    researchUse: '适用：学习者特征分析、初始能力水平分组、纵向追踪研究的基线数据',
+    fields: ['user_id', 'student_id', 'name', 'email', 'registered_at', 'initial_cognition', 'initial_affect', 'initial_behavior', 'current_cognition', 'current_affect', 'current_behavior', 'profile_update_count', 'total_sessions', 'total_messages', 'scale_completions'],
+    researchUse: '适用：学习者特征分析、初始能力水平分组、纵向追踪研究的基线数据（student_id 可直接用作去标识化主键）',
   },
   {
     id: 'scale-responses',
@@ -45,7 +45,7 @@ const DATASETS: DatasetConfig[] = [
     borderColor: 'border-emerald-200 dark:border-emerald-700',
     filename: 'scale_responses',
     endpoint: '/admin/export/csv/scale-responses',
-    fields: ['response_id', 'user_id', 'user_email', 'scale_name', 'responded_at', 'item_1 ~ item_N（各题得分）', 'cognition_score', 'affect_score', 'behavior_score', 'total_score', 'max_score'],
+    fields: ['response_id', 'user_id', 'student_id', 'user_name', 'user_email', 'scale_name', 'responded_at', 'item_1 ~ item_N（各题得分）', 'cognition_score', 'affect_score', 'behavior_score', 'total_score', 'max_score'],
     researchUse: '适用：量表信效度验证、维度得分分布分析、与学习结果的相关分析',
   },
   {
@@ -59,7 +59,7 @@ const DATASETS: DatasetConfig[] = [
     borderColor: 'border-violet-200 dark:border-violet-700',
     filename: 'conversation_data',
     endpoint: '/admin/export/csv/conversations',
-    fields: ['message_id', 'user_id', 'user_email', 'session_id', 'role', 'message_time', 'hour_of_day', 'day_of_week', 'message_length_chars', 'extracted_concepts_raw', 'concept_count'],
+    fields: ['message_id', 'user_id', 'student_id', 'user_name', 'user_email', 'role', 'message_time', 'hour_of_day', 'day_of_week', 'message_length_chars', 'extracted_concepts_raw', 'concept_count'],
     researchUse: '适用：学习行为时间分析、对话深度研究、知识领域偏好分析、NLP 语料构建',
   },
   {
@@ -73,7 +73,7 @@ const DATASETS: DatasetConfig[] = [
     borderColor: 'border-amber-200 dark:border-amber-700',
     filename: 'learning_trajectory',
     endpoint: '/admin/export/csv/knowledge-graph',
-    fields: ['user_id', 'user_email', 'snapshot_cognition', 'snapshot_affect', 'snapshot_behavior', 'snapshot_time', 'snapshot_source'],
+    fields: ['user_id', 'student_id', 'user_name', 'user_email', 'snapshot_cognition', 'snapshot_affect', 'snapshot_behavior', 'snapshot_time', 'snapshot_source'],
     researchUse: '适用：纵向学习轨迹分析、干预效果前后对比、增长曲线建模（HLM/LCA）',
   },
 ];
@@ -121,7 +121,7 @@ export const Exports = () => {
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold mb-2">研究数据导出</h1>
-        <p className="text-gray-600 dark:text-gray-400">
+        <p className="text-gray-700 dark:text-gray-300">
           面向社会科学与教育研究的结构化数据集，导出为 CSV 格式，可直接用于 SPSS、R、Python 等分析工具。
         </p>
       </div>
@@ -131,9 +131,9 @@ export const Exports = () => {
         <div className="shrink-0 mt-0.5 text-blue-600 dark:text-blue-400">
           <AlertCircle size={18} />
         </div>
-        <div className="text-sm text-blue-800 dark:text-blue-300 space-y-1">
+        <div className="text-sm text-blue-900 dark:text-blue-100 space-y-1">
           <p className="font-semibold">数据使用说明</p>
-          <p>导出数据包含用户邮箱，请在分析前进行去标识化处理（建议用 user_id 替换 email）。所有数据使用 UTF-8 with BOM 编码，Excel 可直接打开中文内容。</p>
+          <p>导出数据包含用户邮箱，请在分析前进行去标识化处理。建议使用 <code className="px-1 py-0.5 rounded bg-blue-100 dark:bg-blue-800 font-mono text-xs">student_id</code> 作为分析主键替代 email，以符合数据脱敏要求。所有数据使用 UTF-8 with BOM 编码，Excel 可直接打开中文内容。</p>
         </div>
       </div>
 
@@ -157,7 +157,7 @@ export const Exports = () => {
                     </div>
                     <div>
                       <h2 className="text-base font-bold">{dataset.title}</h2>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{dataset.titleEn}</p>
+                      <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">{dataset.titleEn}</p>
                     </div>
                   </div>
                   <button
@@ -170,7 +170,7 @@ export const Exports = () => {
                         ? 'bg-red-500 text-white'
                         : status === 'loading'
                         ? 'bg-gray-300 dark:bg-gray-600 text-gray-500 cursor-not-allowed'
-                        : 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white hover:shadow-lg hover:scale-105'
+                        : 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:shadow-lg hover:scale-105'
                     }`}
                   >
                     {status === 'loading' && <Loader size={15} className="animate-spin" />}
@@ -188,24 +188,24 @@ export const Exports = () => {
 
               {/* Card Body */}
               <div className="p-5 space-y-4">
-                <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
+                <p className="text-sm text-gray-800 dark:text-gray-200 leading-relaxed">
                   {dataset.description}
                 </p>
 
                 {/* Research Use */}
                 <div className="rounded-lg bg-gray-50 dark:bg-gray-800 p-3">
-                  <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">研究适用场景</p>
-                  <p className="text-xs text-gray-700 dark:text-gray-300">{dataset.researchUse}</p>
+                  <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1.5">研究适用场景</p>
+                  <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">{dataset.researchUse}</p>
                 </div>
 
                 {/* Field List */}
                 <div>
-                  <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2">包含字段</p>
+                  <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2">包含字段</p>
                   <div className="flex flex-wrap gap-1.5">
                     {dataset.fields.map(field => (
                       <span
                         key={field}
-                        className="inline-block px-2 py-0.5 rounded text-xs font-mono bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300"
+                        className="inline-block px-2 py-0.5 rounded text-xs font-mono bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200"
                       >
                         {field}
                       </span>
@@ -228,7 +228,7 @@ export const Exports = () => {
         <div className="flex items-center justify-between gap-4">
           <div>
             <h3 className="text-base font-bold mb-1">一键导出全部数据集</h3>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
+            <p className="text-sm text-gray-700 dark:text-gray-300">
               依次下载上述 4 个 CSV 文件，适合完整数据备份或跨数据集联合分析。
             </p>
           </div>

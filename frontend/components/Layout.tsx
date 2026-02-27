@@ -100,7 +100,7 @@ export const Layout: React.FC<Props> = ({
                 onClick={onToggleTheme}
                 className={`relative inline-flex h-6 w-11 items-center rounded-full transition-all duration-300 shadow-inner ${
                   theme === 'dark'
-                    ? 'bg-gradient-to-r from-indigo-500 to-purple-500'
+                    ? 'bg-gradient-to-r from-blue-500 to-indigo-600'
                     : 'bg-gradient-to-r from-amber-400 to-orange-400'
                 }`}
               >

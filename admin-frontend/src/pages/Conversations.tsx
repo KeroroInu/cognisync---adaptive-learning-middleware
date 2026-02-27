@@ -57,8 +57,8 @@ export const Conversations = () => {
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold mb-2">Conversations</h1>
-        <p className="text-gray-600 dark:text-gray-400">Browse and manage all chat sessions</p>
+        <h1 className="text-3xl font-bold mb-2">对话管理</h1>
+        <p className="text-gray-700 dark:text-gray-300">浏览和管理所有聊天会话</p>
       </div>
 
       {/* Error Message */}
@@ -74,18 +74,18 @@ export const Conversations = () => {
           <table className="w-full">
             <thead style={{ backgroundColor: 'var(--bg-tertiary)' }}>
               <tr>
-                <th className="px-6 py-4 text-left text-sm font-semibold">User Email</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold">Messages</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold">Created</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold">Last Updated</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold">Actions</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold">用户邮箱</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold">消息数</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold">创建时间</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold">最后更新</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold">操作</th>
               </tr>
             </thead>
             <tbody>
               {sessions.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="px-6 py-12 text-center text-gray-500">
-                    No conversations found
+                    暂无对话记录
                   </td>
                 </tr>
               ) : (
@@ -99,28 +99,28 @@ export const Conversations = () => {
                     <td className="px-6 py-4 text-sm">
                       <div className="flex items-center gap-2">
                         <MessageSquare size={16} className="text-indigo-500" />
-                        {session.message_count} messages
+                        {session.message_count} 条消息
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">
-                      {new Date(session.created_at).toLocaleDateString()}
+                    <td className="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">
+                      {new Date(session.created_at).toLocaleDateString('zh-CN')}
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">
-                      {session.updated_at ? new Date(session.updated_at).toLocaleDateString() : 'N/A'}
+                    <td className="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">
+                      {session.updated_at ? new Date(session.updated_at).toLocaleDateString('zh-CN') : '—'}
                     </td>
                     <td className="px-6 py-4 text-sm">
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => navigate(`/admin/conversations/${session.id}`)}
                           className="p-2 rounded-lg bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-200 dark:hover:bg-indigo-800 transition-colors"
-                          title="View Conversation"
+                          title="查看对话"
                         >
                           <Eye size={16} />
                         </button>
                         <button
                           onClick={(e) => handleDelete(e, session)}
                           className="p-2 rounded-lg bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-800 transition-colors"
-                          title="Delete Session"
+                          title="删除会话"
                         >
                           <Trash2 size={16} />
                         </button>
@@ -136,8 +136,8 @@ export const Conversations = () => {
         {/* Pagination */}
         {total > pageSize && (
           <div className="flex items-center justify-between px-6 py-4 border-t" style={{ borderColor: 'var(--glass-border)' }}>
-            <div className="text-sm text-gray-600 dark:text-gray-400">
-              Showing {(page - 1) * pageSize + 1} to {Math.min(page * pageSize, total)} of {total} conversations
+            <div className="text-sm text-gray-700 dark:text-gray-300">
+              共 {total} 条，第 {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, total)} 条
             </div>
             <div className="flex space-x-2">
               <button
@@ -145,17 +145,17 @@ export const Conversations = () => {
                 disabled={page === 1}
                 className="px-4 py-2 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
               >
-                Previous
+                上一页
               </button>
               <span className="px-4 py-2">
-                Page {page} of {totalPages}
+                第 {page} / {totalPages} 页
               </span>
               <button
                 onClick={() => setPage(p => Math.min(totalPages, p + 1))}
                 disabled={page === totalPages}
                 className="px-4 py-2 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
               >
-                Next
+                下一页
               </button>
             </div>
           </div>

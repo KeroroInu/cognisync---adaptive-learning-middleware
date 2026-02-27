@@ -129,15 +129,15 @@ body {
 [data-theme="light"] .gradient-mesh {
   background:
     radial-gradient(at 20% 30%, rgba(59, 130, 246, 0.08) 0px, transparent 50%),
-    radial-gradient(at 80% 70%, rgba(139, 92, 246, 0.08) 0px, transparent 50%),
-    radial-gradient(at 50% 50%, rgba(16, 185, 129, 0.06) 0px, transparent 50%);
+    radial-gradient(at 80% 70%, rgba(99, 102, 241, 0.07) 0px, transparent 50%),
+    radial-gradient(at 50% 50%, rgba(20, 184, 166, 0.05) 0px, transparent 50%);
   background-color: #fafafa;
 }
 
 [data-theme="dark"] .gradient-mesh {
   background:
-    radial-gradient(at 20% 30%, rgba(99, 102, 241, 0.1) 0px, transparent 50%),
-    radial-gradient(at 80% 70%, rgba(168, 85, 247, 0.1) 0px, transparent 50%);
+    radial-gradient(at 20% 30%, rgba(59, 130, 246, 0.08) 0px, transparent 50%),
+    radial-gradient(at 80% 70%, rgba(99, 102, 241, 0.08) 0px, transparent 50%);
   background-color: #0f172a;
 }
 
@@ -145,7 +145,7 @@ body {
    渐变文字
    ============================================ */
 .text-gradient {
-  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+  background: linear-gradient(135deg, #2563eb, #4f46e5);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;

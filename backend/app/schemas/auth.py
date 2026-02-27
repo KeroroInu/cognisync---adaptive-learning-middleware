@@ -8,24 +8,26 @@ from pydantic import BaseModel, EmailStr, Field
 
 
 class LoginRequest(BaseModel):
-    """登录请求"""
-    email: EmailStr = Field(..., description="用户邮箱")
+    """登录请求（学号 + 密码）"""
+    student_id: str = Field(..., description="学号")
     password: str = Field(..., min_length=6, description="密码")
 
 
 class RegisterRequest(BaseModel):
-    """注册请求"""
-    email: EmailStr = Field(..., description="用户邮箱")
+    """注册请求（学号 + 姓名 + 密码，邮箱可选）"""
+    student_id: str = Field(..., min_length=1, description="学号（必填）")
+    name: str = Field(..., min_length=1, description="姓名（必填）")
     password: str = Field(..., min_length=6, description="密码（≥6字符）")
-    name: Optional[str] = Field(None, description="用户姓名（可选）")
+    email: Optional[EmailStr] = Field(None, description="邮箱（可选）")
     mode: str = Field(..., description="注册模式：scale | ai")
 
 
 class UserInfo(BaseModel):
     """用户信息"""
     id: UUID = Field(..., description="用户 ID")
-    email: EmailStr = Field(..., description="用户邮箱")
-    name: Optional[str] = Field(None, description="用户姓名")
+    student_id: str = Field(..., description="学号")
+    email: Optional[str] = Field(None, description="邮箱（可选）")
+    name: str = Field(..., description="姓名")
     created_at: datetime = Field(..., alias="createdAt")
     has_completed_onboarding: bool = Field(False, alias="hasCompletedOnboarding")
     onboarding_mode: Optional[str] = Field(None, alias="onboardingMode", description="注册模式: scale | ai")

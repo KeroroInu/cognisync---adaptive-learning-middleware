@@ -157,9 +157,10 @@ async def seed_scale_templates():
             return
 
         # 归档旧的 active 模板（如果有）
+        # 注意：SQLAlchemy 2.x 存储枚举成员的 NAME（大写），不是 value
         archive_sql = text("""
-        UPDATE scale_templates SET status = 'archived', updated_at = :now
-        WHERE status = 'active'
+        UPDATE scale_templates SET status = 'ARCHIVED', updated_at = :now
+        WHERE status = 'ACTIVE'
         """)
         archived = await conn.execute(archive_sql, {"now": now})
         if archived.rowcount:
@@ -185,7 +186,7 @@ async def seed_scale_templates():
                 "id": template_id,
                 "name": TEMPLATE_NAME,
                 "version": 1,
-                "status": "active",
+                "status": "ACTIVE",
                 "schema_json": json.dumps(schema_json, ensure_ascii=False),
                 "scoring_json": json.dumps(scoring_json, ensure_ascii=False),
                 "mapping_json": json.dumps(mapping_json, ensure_ascii=False),
@@ -200,7 +201,7 @@ async def seed_scale_templates():
         print(f"   题目数: {total_items}（CT×7 + SE×6 + LM×6 + CPS×8 + PA×6 + AIL×8）")
         print(f"   反向计分题: cps5")
         print(f"   CAB 映射: Cognition←CT+CPS+AIL  Affect←SE+LM  Behavior←PA")
-        print(f"   状态: active")
+        print(f"   状态: ACTIVE")
 
     await engine.dispose()
 

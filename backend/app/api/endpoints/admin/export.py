@@ -218,8 +218,9 @@ async def export_learner_profiles(db: AsyncSession = Depends(get_db)):
     sql = text("""
         SELECT
             u.id                                                AS user_id,
-            u.email                                             AS email,
+            u.student_id                                        AS student_id,
             u.name                                              AS name,
+            u.email                                             AS email,
             u.created_at                                        AS registered_at,
             u.is_active                                         AS is_active,
             -- 最初画像（第一条 profile_snapshot）
@@ -304,6 +305,8 @@ async def export_scale_responses(db: AsyncSession = Depends(get_db)):
         SELECT
             sr.id                               AS response_id,
             u.id                                AS user_id,
+            u.student_id                        AS student_id,
+            u.name                              AS user_name,
             u.email                             AS user_email,
             st.name                             AS scale_name,
             st.id                               AS template_id,
@@ -357,6 +360,8 @@ async def export_conversations(db: AsyncSession = Depends(get_db)):
         SELECT
             cm.id                               AS message_id,
             u.id                                AS user_id,
+            u.student_id                        AS student_id,
+            u.name                              AS user_name,
             u.email                             AS user_email,
             cm.role                             AS role,
             cm.timestamp                        AS message_time,
@@ -398,6 +403,8 @@ async def export_knowledge_graph(db: AsyncSession = Depends(get_db)):
     sql = text("""
         SELECT
             u.id                                AS user_id,
+            u.student_id                        AS student_id,
+            u.name                              AS user_name,
             u.email                             AS user_email,
             -- 通过 Neo4j 无法直接 JOIN，改为导出 profile_snapshots 中的校准日志
             ps.cognition                        AS snapshot_cognition,
@@ -427,7 +434,7 @@ async def export_knowledge_graph(db: AsyncSession = Depends(get_db)):
 async def export_single_user(user_id: str, db: AsyncSession = Depends(get_db)):
     """单个用户的完整对话数据导出（消息记录 + 画像快照，统一列结构）"""
     # 1. 获取用户基本信息
-    user_sql = text("SELECT id, email, name, created_at FROM users WHERE id = :uid")
+    user_sql = text("SELECT id, student_id, email, name, created_at FROM users WHERE id = :uid")
     user_result = await db.execute(user_sql, {"uid": user_id})
     user_row = user_result.mappings().first()
     if not user_row:
@@ -435,6 +442,7 @@ async def export_single_user(user_id: str, db: AsyncSession = Depends(get_db)):
 
     email = user_row["email"]
     name = user_row["name"] or ""
+    student_id = user_row["student_id"] or ""
 
     # 2. 获取对话消息（含完整文本）
     msg_sql = text("""
@@ -458,6 +466,7 @@ async def export_single_user(user_id: str, db: AsyncSession = Depends(get_db)):
     for r in msg_result:
         row = dict(r._mapping)
         row["user_id"] = user_id
+        row["student_id"] = student_id
         row["user_email"] = email
         row["user_name"] = name
         for k, v in row.items():
@@ -470,7 +479,7 @@ async def export_single_user(user_id: str, db: AsyncSession = Depends(get_db)):
     # 3. 如果没有对话数据，仍返回带表头的空 CSV
     if not rows:
         fieldnames = [
-            "message_id", "user_id", "user_email", "user_name",
+            "message_id", "user_id", "student_id", "user_email", "user_name",
             "role", "message_text", "message_time",
             "message_length_chars", "hour_of_day", "day_of_week",
             "concepts_raw", "concept_count"
@@ -488,7 +497,7 @@ async def export_single_user(user_id: str, db: AsyncSession = Depends(get_db)):
 
     # 统一列顺序
     ordered_fieldnames = [
-        "message_id", "user_id", "user_email", "user_name",
+        "message_id", "user_id", "student_id", "user_email", "user_name",
         "role", "message_text", "message_time",
         "message_length_chars", "hour_of_day", "day_of_week",
         "concepts_raw", "concept_count"
@@ -506,6 +515,7 @@ async def export_user_trajectory(user_id: str, db: AsyncSession = Depends(get_db
     # 画像快照
     snap_sql = text("""
         SELECT
+            u.student_id            AS student_id,
             u.email                 AS user_email,
             u.name                  AS user_name,
             ps.created_at           AS snapshot_time,
@@ -560,6 +570,7 @@ async def export_user_trajectory(user_id: str, db: AsyncSession = Depends(get_db
         row["record_type"] = "calibration"
         row["snapshot_time"] = row.pop("log_time", "")
         row["source"] = "user_calibration"
+        row["student_id"] = ""
         row["user_email"] = ""
         row["user_name"] = ""
         row["cognition"] = ""
@@ -575,7 +586,7 @@ async def export_user_trajectory(user_id: str, db: AsyncSession = Depends(get_db
 
     ordered = [
         "record_type", "snapshot_time", "source",
-        "user_email", "user_name",
+        "student_id", "user_email", "user_name",
         "cognition", "affect", "behavior",
         "dimension", "ai_value", "user_value_calib", "delta",
         "conflict_level", "user_comment", "likert_trust",
@@ -589,8 +600,9 @@ async def export_single_scale_responses(scale_id: str, db: AsyncSession = Depend
         SELECT
             sr.id                                       AS response_id,
             u.id                                        AS user_id,
-            u.email                                     AS user_email,
+            u.student_id                                AS student_id,
             u.name                                      AS user_name,
+            u.email                                     AS user_email,
             sr.created_at                               AS responded_at,
             sr.answers_json                             AS raw_answers,
             (sr.scores_json->>'cognition')::float       AS cognition_score,

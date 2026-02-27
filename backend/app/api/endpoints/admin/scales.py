@@ -257,8 +257,10 @@ async def get_scale_responses(
         offset: 偏移量
 
     Returns:
-        响应列表
+        响应列表（含学生姓名和学号）
     """
+    from app.models.sql.user import User
+
     # 查询总数
     total = await db.scalar(
         select(func.count())
@@ -266,25 +268,27 @@ async def get_scale_responses(
         .where(ScaleResponse.template_id == template_id)
     ) or 0
 
-    # 查询响应
+    # 查询响应（JOIN 用户表获取姓名和学号）
     result = await db.execute(
-        select(ScaleResponse)
+        select(ScaleResponse, User.name, User.student_id)
+        .join(User, ScaleResponse.user_id == User.id)
         .where(ScaleResponse.template_id == template_id)
         .order_by(ScaleResponse.created_at.desc())
         .limit(limit)
         .offset(offset)
     )
-    responses = result.scalars().all()
 
     response_items = [
         {
             "id": str(resp.id),
             "user_id": str(resp.user_id),
+            "user_name": name,
+            "student_id": student_id,
             "answers_json": resp.answers_json,
             "scores_json": resp.scores_json,
             "created_at": resp.created_at.isoformat()
         }
-        for resp in responses
+        for resp, name, student_id in result.all()
     ]
 
     return SuccessResponse(data={

@@ -51,6 +51,9 @@ async def init_db():
 
         logger.info("✅ Database tables created successfully")
 
+        # 迁移：添加 student_id 列（幂等，安全重复执行）
+        await _migrate_student_id()
+
         # 打印已创建的表
         async with engine.begin() as conn:
             def get_table_names(sync_conn):
@@ -63,6 +66,89 @@ async def init_db():
     except Exception as e:
         logger.error(f"❌ Database initialization failed: {e}")
         raise
+
+
+async def _migrate_student_id():
+    """
+    幂等迁移：为 users 表添加 student_id 列，email 改为可空。
+    每条 DDL 独立事务执行，避免单步失败导致整体回滚。
+    """
+    from sqlalchemy import text
+
+    async def run_sql(sql: str, label: str):
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(text(sql))
+            logger.info(f"  ✅ {label}")
+        except Exception as e:
+            logger.warning(f"  ⚠️ {label} (skipped): {e}")
+
+    # 1. 添加 student_id 列
+    await run_sql(
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS student_id VARCHAR(50);",
+        "ADD COLUMN student_id"
+    )
+
+    # 2. 用 email 前缀填充（已有用户）
+    await run_sql(
+        "UPDATE users SET student_id = split_part(email, '@', 1) WHERE student_id IS NULL AND email IS NOT NULL;",
+        "Fill student_id from email prefix"
+    )
+
+    # 3. 剩余用 UUID 填充（保证唯一，无截断冲突）
+    await run_sql(
+        "UPDATE users SET student_id = replace(id::text, '-', '') WHERE student_id IS NULL;",
+        "Fill student_id from UUID"
+    )
+
+    # 4. 消除邮箱前缀重复（同前缀的后续行追加 UUID 后缀）
+    await run_sql(
+        """
+        DO $$
+        DECLARE r RECORD; cnt INT := 1;
+        BEGIN
+            FOR r IN (
+                SELECT id FROM users u
+                WHERE (SELECT COUNT(*) FROM users u2 WHERE u2.student_id = u.student_id AND u2.id < u.id) > 0
+            ) LOOP
+                UPDATE users SET student_id = replace(id::text, '-', '') WHERE id = r.id;
+            END LOOP;
+        END $$;
+        """,
+        "Deduplicate student_ids"
+    )
+
+    # 5. 创建唯一索引
+    await run_sql(
+        "CREATE UNIQUE INDEX IF NOT EXISTS ix_users_student_id ON users (student_id);",
+        "CREATE UNIQUE INDEX student_id"
+    )
+
+    # 6. email 唯一索引（允许多个 NULL）
+    await run_sql(
+        "CREATE UNIQUE INDEX IF NOT EXISTS ix_users_email_unique ON users (email) WHERE email IS NOT NULL;",
+        "CREATE UNIQUE INDEX email"
+    )
+
+    # 7. name 空值补全
+    await run_sql(
+        "UPDATE users SET name = student_id WHERE name IS NULL;",
+        "Fill name from student_id"
+    )
+
+    # 8. email 改为可空
+    await run_sql(
+        "ALTER TABLE users ALTER COLUMN email DROP NOT NULL;",
+        "ALTER email DROP NOT NULL"
+    )
+
+    # 9. name 设为非空
+    await run_sql(
+        "ALTER TABLE users ALTER COLUMN name SET NOT NULL;",
+        "ALTER name SET NOT NULL"
+    )
+
+    logger.info("✅ student_id migration completed")
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:

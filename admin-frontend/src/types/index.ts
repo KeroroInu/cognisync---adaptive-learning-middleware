@@ -20,7 +20,8 @@ export interface OverviewStats {
 
 export interface User {
   id: string;
-  email: string;
+  student_id: string;
+  email: string | null;
   name: string;
   role: string;
   is_active: boolean;
@@ -37,7 +38,8 @@ export interface UsersListResponse {
 
 export interface UserDetail {
   id: string;
-  email: string;
+  student_id: string;
+  email: string | null;
   name: string;
   role: string;
   is_active: boolean;
@@ -92,6 +94,8 @@ export interface ScalesListResponse {
 export interface ScaleResponse {
   id: string;
   user_id: string;
+  user_name?: string;
+  student_id?: string;
   template_id: string;
   template_name?: string;
   answers_json: Record<string, unknown>;

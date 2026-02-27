@@ -29,10 +29,14 @@ async def list_users(
     base_stmt = select(User)
     count_stmt = select(func.count(User.id))
 
-    # 支持按 email 或 name 搜索
+    # 支持按 student_id、name、email 搜索
     if query:
         like = f"%{query}%"
-        condition = or_(User.email.ilike(like), User.name.ilike(like))
+        condition = or_(
+            User.student_id.ilike(like),
+            User.name.ilike(like),
+            User.email.ilike(like)
+        )
         base_stmt = base_stmt.where(condition)
         count_stmt = count_stmt.where(condition)
 
@@ -61,6 +65,7 @@ async def list_users(
 
         user_summaries.append(UserSummary(
             id=str(user.id),
+            student_id=user.student_id,
             email=user.email,
             name=user.name or "",
             role=getattr(user, "role", "user") or "user",
@@ -110,6 +115,7 @@ async def update_user(
 
     return SuccessResponse(data={
         "id": str(user.id),
+        "student_id": user.student_id,
         "email": user.email,
         "name": user.name or "",
         "is_active": getattr(user, "is_active", True),

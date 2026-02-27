@@ -57,7 +57,7 @@ export const ConversationDetail = () => {
           className="inline-flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
         >
           <ArrowLeft size={20} />
-          Back to Conversations
+          返回对话列表
         </button>
         <div className="glass-card p-6 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
           <p className="text-red-700 dark:text-red-300">{error}</p>
@@ -74,10 +74,10 @@ export const ConversationDetail = () => {
           className="inline-flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
         >
           <ArrowLeft size={20} />
-          Back to Conversations
+          返回对话列表
         </button>
         <div className="glass-card p-6 rounded-xl">
-          <p className="text-gray-500">Session not found</p>
+          <p className="text-gray-500">会话不存在</p>
         </div>
       </div>
     );
@@ -91,18 +91,18 @@ export const ConversationDetail = () => {
         className="inline-flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
       >
         <ArrowLeft size={20} />
-        Back to Conversations
+        返回对话列表
       </button>
 
       {/* Header */}
       <div className="glass-card p-6 rounded-2xl stagger-1">
         <div className="flex items-start justify-between mb-4">
           <div>
-            <h1 className="text-3xl font-bold mb-2">Conversation Detail</h1>
-            <p className="text-gray-600 dark:text-gray-400">Session ID: {session.id}</p>
+            <h1 className="text-3xl font-bold mb-2">对话详情</h1>
+            <p className="text-gray-700 dark:text-gray-300">会话 ID: {session.id}</p>
           </div>
           <div className="px-4 py-2 bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 rounded-lg font-medium">
-            {session.message_count} messages
+            {session.message_count} 条消息
           </div>
         </div>
 
@@ -111,23 +111,23 @@ export const ConversationDetail = () => {
           <div className="flex items-center gap-3 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
             <User size={20} className="text-indigo-500" />
             <div>
-              <p className="text-sm text-gray-600 dark:text-gray-400">User</p>
+              <p className="text-sm text-gray-700 dark:text-gray-300">用户</p>
               <p className="font-medium">{session.user_email}</p>
             </div>
           </div>
           <div className="flex items-center gap-3 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
             <Calendar size={20} className="text-green-500" />
             <div>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Created</p>
-              <p className="font-medium">{new Date(session.created_at).toLocaleDateString()}</p>
+              <p className="text-sm text-gray-700 dark:text-gray-300">创建时间</p>
+              <p className="font-medium">{new Date(session.created_at).toLocaleDateString('zh-CN')}</p>
             </div>
           </div>
           <div className="flex items-center gap-3 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
             <Clock size={20} className="text-blue-500" />
             <div>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Last Updated</p>
+              <p className="text-sm text-gray-700 dark:text-gray-300">最后更新</p>
               <p className="font-medium">
-                {session.updated_at ? new Date(session.updated_at).toLocaleDateString() : 'N/A'}
+                {session.updated_at ? new Date(session.updated_at).toLocaleDateString('zh-CN') : '—'}
               </p>
             </div>
           </div>
@@ -138,12 +138,12 @@ export const ConversationDetail = () => {
       <div className="glass-card p-6 rounded-2xl stagger-2">
         <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
           <MessageSquare size={24} className="text-indigo-500" />
-          Messages
+          消息记录
         </h2>
 
         {messages.length === 0 ? (
           <div className="text-center py-12 text-gray-500">
-            No messages in this conversation
+            该对话暂无消息
           </div>
         ) : (
           <div className="space-y-4">
@@ -164,7 +164,7 @@ export const ConversationDetail = () => {
                         : 'bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-100'
                     }`}
                   >
-                    {message.role === 'user' ? 'User' : 'Assistant'}
+                    {message.role === 'user' ? '用户' : '助手'}
                   </span>
                   <span className="text-sm text-gray-600 dark:text-gray-300">
                     {new Date(message.timestamp).toLocaleString()}
@@ -174,7 +174,7 @@ export const ConversationDetail = () => {
                 {message.analysis && (
                   <details className="mt-3">
                     <summary className="text-sm text-gray-500 cursor-pointer hover:text-gray-700 dark:hover:text-gray-300">
-                      View Analysis
+                      查看分析数据
                     </summary>
                     <pre className="mt-2 p-3 bg-gray-100 dark:bg-gray-900 rounded text-xs overflow-x-auto">
                       {JSON.stringify(message.analysis, null, 2)}

@@ -89,7 +89,7 @@ async def get_current_user(
         logger.warning(f"[AUTH] User not found in database: {user_id}")
         raise HTTPException(status_code=401, detail="User not found")
 
-    logger.info(f"[AUTH] ✅ Authentication successful for user: {user.email}")
+    logger.info(f"[AUTH] ✅ Authentication successful for user: {user.student_id}")
     return user
 
 
@@ -98,26 +98,26 @@ async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
     """
     用户登录
 
-    验证邮箱和密码,返回访问令牌和用户信息。
+    验证学号和密码，返回访问令牌和用户信息。
     """
     import logging
     logger = logging.getLogger(__name__)
 
-    logger.info(f"[LOGIN] Attempting login for email: {data.email}")
+    logger.info(f"[LOGIN] Attempting login for student_id: {data.student_id}")
 
-    # 从数据库查找用户
-    stmt = select(User).where(User.email == data.email)
+    # 从数据库查找用户（用学号）
+    stmt = select(User).where(User.student_id == data.student_id)
     result = await db.execute(stmt)
     user = result.scalar_one_or_none()
 
     if not user:
-        logger.warning(f"[LOGIN] User not found: {data.email}")
-        raise HTTPException(status_code=401, detail="Invalid email or password")
+        logger.warning(f"[LOGIN] User not found: {data.student_id}")
+        raise HTTPException(status_code=401, detail="Invalid student ID or password")
 
     # 验证密码
     if not user.password_hash or not verify_password(data.password, user.password_hash):
-        logger.warning(f"[LOGIN] Invalid password for: {data.email}")
-        raise HTTPException(status_code=401, detail="Invalid email or password")
+        logger.warning(f"[LOGIN] Invalid password for: {data.student_id}")
+        raise HTTPException(status_code=401, detail="Invalid student ID or password")
 
     logger.info(f"[LOGIN] Password verified for user: {user.id}")
 
@@ -136,10 +136,11 @@ async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
     # 构造用户信息
     user_info = UserInfo(
         id=str(user.id),
+        student_id=user.student_id,
         email=user.email,
-        name=user.name or user.email.split("@")[0],
+        name=user.name,
         createdAt=user.created_at.isoformat(),
-        hasCompletedOnboarding=has_profile or user.has_completed_onboarding,
+        hasCompletedOnboarding=user.has_completed_onboarding,
         onboardingMode=user.onboarding_mode
     )
 
@@ -152,7 +153,7 @@ async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
             behavior=float(latest_profile.behavior)
         )
 
-    logger.info(f"[LOGIN] ✅ Login successful: {user.email}")
+    logger.info(f"[LOGIN] ✅ Login successful: {user.student_id}")
     return AuthResponse(token=token, user=user_info, initialProfile=profile_data)
 
 
@@ -161,28 +162,38 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
     """
     用户注册
 
-    创建新用户账户，返回访问令牌和用户信息。
+    创建新用户账户（学号+姓名+密码，邮箱可选），返回访问令牌和用户信息。
     """
     import logging
     logger = logging.getLogger(__name__)
 
-    logger.info(f"[REGISTER] Attempting registration for email: {data.email}, mode: {data.mode}")
+    logger.info(f"[REGISTER] Attempting registration for student_id: {data.student_id}, mode: {data.mode}")
 
-    # 检查邮箱是否已存在
-    stmt = select(User).where(User.email == data.email)
+    # 检查学号是否已存在
+    stmt = select(User).where(User.student_id == data.student_id)
     result = await db.execute(stmt)
     existing_user = result.scalar_one_or_none()
 
     if existing_user:
-        logger.warning(f"[REGISTER] Email already registered: {data.email}")
-        raise HTTPException(status_code=400, detail="Email already registered")
+        logger.warning(f"[REGISTER] Student ID already registered: {data.student_id}")
+        raise HTTPException(status_code=400, detail="Student ID already registered")
+
+    # 如果提供了邮箱，检查邮箱唯一性
+    if data.email:
+        email_stmt = select(User).where(User.email == data.email)
+        email_result = await db.execute(email_stmt)
+        existing_email = email_result.scalar_one_or_none()
+        if existing_email:
+            logger.warning(f"[REGISTER] Email already registered: {data.email}")
+            raise HTTPException(status_code=400, detail="Email already registered")
 
     # 创建新用户
     try:
         new_user = User(
             id=uuid.uuid4(),
-            email=data.email,
-            name=data.name or data.email.split("@")[0],
+            student_id=data.student_id,
+            name=data.name,
+            email=data.email,  # 可为 None
             password_hash=hash_password(data.password),
             role="learner",
             is_active=True,
@@ -195,17 +206,17 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
         await db.commit()
         logger.info(f"[REGISTER] User created in database: {new_user.id}")
 
-        # 刷新用户对象（这不会修改数据库，只会重新查询）
         await db.refresh(new_user)
         logger.info(f"[REGISTER] User object refreshed successfully")
 
-        # 生成token（这是内存操作，不会失败）
+        # 生成token
         token = create_access_token(str(new_user.id))
         logger.info(f"[REGISTER] Access token generated for user: {new_user.id}")
 
-        # 构造用户信息（这是内存操作，不会失败）
+        # 构造用户信息
         user_info = UserInfo(
             id=str(new_user.id),
+            student_id=new_user.student_id,
             email=new_user.email,
             name=new_user.name,
             createdAt=new_user.created_at.isoformat(),
@@ -241,14 +252,12 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
 
                 personalization_service = PersonalizationService()
 
-                # 构造初始画像数据（用于返回）
                 initial_profile = ProfileData(
                     cognition=50.0,
                     affect=50.0,
                     behavior=50.0
                 )
 
-                # 生成初始知识图谱
                 initial_graph = await personalization_service.generate_initial_graph(
                     cognition=50.0,
                     affect=50.0,
@@ -262,24 +271,20 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
                 logger.warning(f"[REGISTER] Failed to generate initial graph: {e}, continuing without it")
                 initial_graph = []
 
-        logger.info(f"[REGISTER] ✅ Registration successful: {new_user.email}")
+        logger.info(f"[REGISTER] ✅ Registration successful: {new_user.student_id}")
         return AuthResponse(token=token, user=user_info, initialProfile=initial_profile, initialGraph=initial_graph)
 
     except HTTPException:
-        # HTTPException 已经是格式化的错误，直接重新抛出
         raise
     except Exception as e:
         logger.error(f"[REGISTER] Unexpected error during registration: {str(e)}", exc_info=True)
 
-        # 如果用户已创建但后续步骤失败，尝试回滚
-        # 注意：如果 commit 已经成功，回滚可能无效，但我们仍然尝试
         try:
             await db.rollback()
-            logger.info(f"[REGISTER] Attempted database rollback (may be no-op if already committed)")
+            logger.info(f"[REGISTER] Attempted database rollback")
         except Exception as rollback_error:
             logger.error(f"[REGISTER] Failed to rollback: {str(rollback_error)}")
 
-        # 抛出友好的错误消息
         raise HTTPException(
             status_code=500,
             detail=f"Registration failed due to server error"
@@ -299,7 +304,7 @@ async def get_current_user_info(
     import logging
     logger = logging.getLogger(__name__)
 
-    logger.info(f"[ME] Fetching user info for: {current_user.email}")
+    logger.info(f"[ME] Fetching user info for: {current_user.student_id}")
 
     # 获取最新的画像数据
     profile_stmt = select(ProfileSnapshot).where(
@@ -321,18 +326,18 @@ async def get_current_user_info(
 
     user_info = UserInfo(
         id=str(current_user.id),
+        student_id=current_user.student_id,
         email=current_user.email,
-        name=current_user.name or current_user.email.split("@")[0],
+        name=current_user.name,
         createdAt=current_user.created_at.isoformat(),
-        hasCompletedOnboarding=latest_profile is not None or current_user.has_completed_onboarding,
+        hasCompletedOnboarding=current_user.has_completed_onboarding,
         onboardingMode=current_user.onboarding_mode
     )
 
     response_data = CurrentUserResponse(user=user_info, profile=profile_data)
 
-    logger.info(f"[ME] ✅ User info retrieved: {current_user.email}")
+    logger.info(f"[ME] ✅ User info retrieved: {current_user.student_id}")
 
-    # 返回包装格式以保持一致性
     return {
         "success": True,
         "data": response_data.model_dump(by_alias=True)

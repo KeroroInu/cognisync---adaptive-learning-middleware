@@ -19,18 +19,26 @@ class User(Base, UUIDMixin):
     __tablename__ = "users"
     __table_args__ = {"comment": "用户表"}
 
-    email: Mapped[str] = mapped_column(
-        String(255),
+    student_id: Mapped[str] = mapped_column(
+        String(50),
         unique=True,
         nullable=False,
         index=True,
-        comment="用户邮箱（唯一）"
+        comment="学号（唯一，用于登录）"
     )
 
-    name: Mapped[Optional[str]] = mapped_column(
-        String(100),
+    email: Mapped[Optional[str]] = mapped_column(
+        String(255),
+        unique=True,
         nullable=True,
-        comment="用户姓名"
+        index=True,
+        comment="邮箱（可选）"
+    )
+
+    name: Mapped[str] = mapped_column(
+        String(100),
+        nullable=False,
+        comment="用户姓名（必填）"
     )
 
     role: Mapped[str] = mapped_column(
@@ -123,4 +131,4 @@ class User(Base, UUIDMixin):
     )
 
     def __repr__(self) -> str:
-        return f"<User(id={self.id}, email={self.email})>"
+        return f"<User(id={self.id}, student_id={self.student_id}, name={self.name})>"

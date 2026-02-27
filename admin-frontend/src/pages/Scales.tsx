@@ -4,10 +4,75 @@ import type { ScaleTemplate, ScaleResponse } from '../types';
 import { Upload, CheckCircle, Archive, Eye, Trash2, Download, X, Loader } from 'lucide-react';
 
 const ADMIN_KEY = (import.meta.env.VITE_ADMIN_KEY as string) || '';
-const BASE_URL = (import.meta.env.VITE_API_BASE_URL as string) || 'http://localhost:8000/api';
 
 // 状态规范化（兼容数据库存储的大小写）
 const normalizeStatus = (s: string) => s.toLowerCase();
+
+// 状态中文标签
+const STATUS_LABEL: Record<string, string> = {
+  active: '活跃',
+  draft: '草稿',
+  archived: '已归档',
+};
+
+// ── CSV 导出列定义 ──────────────────────────────────────────
+const FIXED_COLS = [
+  { key: 'index',       label: '序号',    group: '基本信息' },
+  { key: 'created_at', label: '提交时间', group: '基本信息' },
+  { key: 'student_id', label: '学号',    group: '基本信息' },
+  { key: 'user_name',  label: '姓名',    group: '基本信息' },
+  { key: 'cognition',  label: '认知分',  group: '分数信息' },
+  { key: 'affect',     label: '情感分',  group: '分数信息' },
+  { key: 'behavior',   label: '行为分',  group: '分数信息' },
+  { key: 'total_score',label: '总分',    group: '分数信息' },
+  { key: 'max_score',  label: '满分',    group: '分数信息' },
+] as const;
+
+type FixedColKey = typeof FIXED_COLS[number]['key'];
+
+const getCellValue = (col: string, resp: ScaleResponse, idx: number): string => {
+  const scores = resp.scores_json as Record<string, unknown>;
+  const answers = resp.answers_json as Record<string, unknown>;
+  switch (col as FixedColKey) {
+    case 'index':       return String(idx + 1);
+    case 'created_at':  return new Date(resp.created_at).toLocaleString('zh-CN');
+    case 'student_id':  return resp.student_id || '';
+    case 'user_name':   return resp.user_name || '';
+    case 'cognition':   return scores?.cognition != null ? String(scores.cognition) : '';
+    case 'affect':      return scores?.affect != null ? String(scores.affect) : '';
+    case 'behavior':    return scores?.behavior != null ? String(scores.behavior) : '';
+    case 'total_score': return scores?.total_score != null ? String(scores.total_score) : '';
+    case 'max_score':   return scores?.max_score != null ? String(scores.max_score) : '';
+    default:            return answers?.[col] != null ? String(answers[col]) : '';
+  }
+};
+
+const downloadCSV = (
+  responses: ScaleResponse[],
+  scaleName: string,
+  selected: Set<string>,
+  questionCols: Array<{ key: string; label: string }>
+) => {
+  const allCols = [
+    ...FIXED_COLS.map(c => ({ key: c.key, label: c.label })),
+    ...questionCols,
+  ].filter(c => selected.has(c.key));
+
+  const esc = (v: string) => `"${v.replace(/"/g, '""')}"`;
+  const header = allCols.map(c => esc(c.label)).join(',');
+  const rows = responses.map((r, i) =>
+    allCols.map(c => esc(getCellValue(c.key, r, i))).join(',')
+  );
+  const csv = '\uFEFF' + [header, ...rows].join('\r\n');
+
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${scaleName}_${new Date().toISOString().split('T')[0]}.csv`;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a); URL.revokeObjectURL(url);
+};
 
 export const Scales = () => {
   const [scales, setScales] = useState<ScaleTemplate[]>([]);
@@ -21,6 +86,14 @@ export const Scales = () => {
   // View Responses modal
   const [responsesModal, setResponsesModal] = useState<{ scale: ScaleTemplate; responses: ScaleResponse[]; loading: boolean } | null>(null);
   const [exportingScale, setExportingScale] = useState<string | null>(null);
+
+  // Export column-selection modal
+  const [exportModal, setExportModal] = useState<{
+    scale: ScaleTemplate;
+    responses: ScaleResponse[];
+    selected: Set<string>;
+    questionCols: Array<{ key: string; label: string }>;
+  } | null>(null);
 
   useEffect(() => {
     loadScales();
@@ -101,22 +174,32 @@ export const Scales = () => {
     }
   };
 
-  const handleExportScaleCSV = async (scaleId: string) => {
-    setExportingScale(scaleId);
+  // 打开列选择导出弹窗（从已加载的 responses 构建列表）
+  const openExportModal = (scale: ScaleTemplate, responses: ScaleResponse[]) => {
+    // 从第一条响应的 answers_json 提取题目列（按 key 排序）
+    const answerKeys = responses.length > 0
+      ? Object.keys(responses[0].answers_json as Record<string, unknown>).sort()
+      : [];
+    const schemaQuestions = ((scale.schema_json as any)?.questions ?? []) as Array<{ id: string; text?: string }>;
+    const questionCols = answerKeys.map((k, i) => {
+      const q = schemaQuestions.find(q => q.id === k);
+      return { key: k, label: q?.text ? `Q${i + 1} ${q.text.slice(0, 20)}` : `Q${i + 1}` };
+    });
+    // 默认全选
+    const allKeys = [
+      ...FIXED_COLS.map(c => c.key),
+      ...questionCols.map(c => c.key),
+    ];
+    setExportModal({ scale, responses, questionCols, selected: new Set(allKeys) });
+  };
+
+  const handleExportFromRow = async (scale: ScaleTemplate) => {
+    setExportingScale(scale.id);
     try {
-      const url = `${BASE_URL}/admin/export/csv/scale/${scaleId}/responses`;
-      const response = await fetch(url, { headers: { 'X-ADMIN-KEY': ADMIN_KEY } });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const blob = await response.blob();
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = `scale_${scaleId.slice(0, 8)}_responses_${new Date().toISOString().split('T')[0]}.csv`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(a.href);
+      const responses = await adminApi.getScaleResponses(scale.id);
+      openExportModal(scale, responses);
     } catch (err) {
-      alert('导出失败：' + (err instanceof Error ? err.message : String(err)));
+      alert('加载数据失败：' + (err instanceof Error ? err.message : String(err)));
     } finally {
       setExportingScale(null);
     }
@@ -149,11 +232,11 @@ export const Scales = () => {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold mb-2">量表管理</h1>
-          <p className="text-gray-600 dark:text-gray-400">管理和部署评估量表</p>
+          <p className="text-gray-700 dark:text-gray-300">管理和部署评估量表</p>
         </div>
         <button
           onClick={() => setShowUploadModal(true)}
-          className="flex items-center gap-2 px-6 py-3 rounded-xl font-medium bg-gradient-to-r from-indigo-600 to-purple-600 text-white hover:shadow-lg hover:scale-105 transition-all duration-300"
+          className="flex items-center gap-2 px-6 py-3 rounded-xl font-medium bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:shadow-lg hover:scale-105 transition-all duration-300"
         >
           <Upload size={20} />
           上传量表
@@ -230,13 +313,11 @@ export const Scales = () => {
               </div>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => handleExportScaleCSV(responsesModal.scale.id)}
-                  disabled={exportingScale === responsesModal.scale.id}
+                  onClick={() => !responsesModal.loading && openExportModal(responsesModal.scale, responsesModal.responses)}
+                  disabled={responsesModal.loading || responsesModal.responses.length === 0}
                   className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-200 dark:hover:bg-emerald-800 transition-colors text-sm font-semibold disabled:opacity-50"
                 >
-                  {exportingScale === responsesModal.scale.id
-                    ? <Loader size={15} className="animate-spin" />
-                    : <Download size={15} />}
+                  <Download size={15} />
                   导出 CSV
                 </button>
                 <button onClick={() => setResponsesModal(null)}
@@ -260,7 +341,7 @@ export const Scales = () => {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-white/10">
-                      <th className="text-left py-3 px-2 font-semibold text-gray-600 dark:text-gray-400">用户 ID</th>
+                      <th className="text-left py-3 px-2 font-semibold text-gray-600 dark:text-gray-400">学生</th>
                       <th className="text-right py-3 px-2 font-semibold text-gray-600 dark:text-gray-400">认知</th>
                       <th className="text-right py-3 px-2 font-semibold text-gray-600 dark:text-gray-400">情感</th>
                       <th className="text-right py-3 px-2 font-semibold text-gray-600 dark:text-gray-400">行为</th>
@@ -273,8 +354,13 @@ export const Scales = () => {
                       const scores = resp.scores_json as Record<string, number> | null;
                       return (
                         <tr key={resp.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                          <td className="py-3 px-2 font-mono text-xs text-gray-500">
-                            {resp.user_id.slice(0, 8)}…
+                          <td className="py-3 px-2">
+                            <div className="font-medium text-sm text-gray-800 dark:text-gray-200">
+                              {resp.user_name || '—'}
+                            </div>
+                            <div className="text-xs text-gray-500 font-mono">
+                              {resp.student_id || resp.user_id.slice(0, 8)}
+                            </div>
                           </td>
                           <td className="py-3 px-2 text-right">
                             <span className="px-2 py-0.5 rounded text-xs bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 font-mono">
@@ -282,7 +368,7 @@ export const Scales = () => {
                             </span>
                           </td>
                           <td className="py-3 px-2 text-right">
-                            <span className="px-2 py-0.5 rounded text-xs bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300 font-mono">
+                            <span className="px-2 py-0.5 rounded text-xs bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 font-mono">
                               {scores?.affect?.toFixed(0) ?? '—'}
                             </span>
                           </td>
@@ -346,18 +432,18 @@ export const Scales = () => {
                             : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300'
                         }`}>
                           {status === 'active' && <CheckCircle size={12} />}
-                          {status}
+                          {STATUS_LABEL[status] ?? status}
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">
+                      <td className="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">
                         {(scale as any).responses_count ?? 0} 份
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">
+                      <td className="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">
                         {new Date(scale.created_at).toLocaleDateString('zh-CN')}
                       </td>
                       <td className="px-6 py-4 text-sm">
                         <div className="flex gap-2">
-                          {status === 'draft' && (
+                          {(status === 'draft' || status === 'archived') && (
                             <button onClick={(e) => { e.stopPropagation(); handleActivate(scale.id); }}
                               className="px-3 py-1 rounded-lg bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 hover:bg-green-200 dark:hover:bg-green-800 transition-colors text-xs font-semibold">
                               激活
@@ -377,7 +463,7 @@ export const Scales = () => {
                             <Eye size={14} />
                           </button>
                           {/* Export CSV */}
-                          <button onClick={(e) => { e.stopPropagation(); handleExportScaleCSV(scale.id); }}
+                          <button onClick={(e) => { e.stopPropagation(); handleExportFromRow(scale); }}
                             disabled={exportingScale === scale.id}
                             className="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-200 dark:hover:bg-emerald-800 transition-colors disabled:opacity-50"
                             title="导出填写数据 CSV">
@@ -401,6 +487,131 @@ export const Scales = () => {
           </table>
         </div>
       </div>
+
+      {/* ── 列选择导出弹窗 ── */}
+      {exportModal && (() => {
+        const { scale, responses, questionCols, selected } = exportModal;
+        const allKeys = [...FIXED_COLS.map(c => c.key), ...questionCols.map(c => c.key)];
+        const isAllSelected = allKeys.every(k => selected.has(k));
+
+        const toggle = (key: string) => {
+          const next = new Set(selected);
+          next.has(key) ? next.delete(key) : next.add(key);
+          setExportModal({ ...exportModal, selected: next });
+        };
+
+        const toggleAll = () => {
+          setExportModal({
+            ...exportModal,
+            selected: isAllSelected ? new Set() : new Set(allKeys),
+          });
+        };
+
+        const toggleGroup = (keys: string[]) => {
+          const allOn = keys.every(k => selected.has(k));
+          const next = new Set(selected);
+          keys.forEach(k => allOn ? next.delete(k) : next.add(k));
+          setExportModal({ ...exportModal, selected: next });
+        };
+
+        const groups: Record<string, typeof FIXED_COLS[number][]> = {};
+        FIXED_COLS.forEach(c => { (groups[c.group] ??= []).push(c); });
+
+        return (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
+            <div className="glass-card rounded-2xl w-full max-w-lg flex flex-col max-h-[85vh]">
+              {/* Header */}
+              <div className="flex items-center justify-between p-5 border-b border-white/10">
+                <div>
+                  <h2 className="text-lg font-bold">选择导出字段</h2>
+                  <p className="text-xs text-gray-500 mt-0.5">{scale.name} · 共 {responses.length} 份</p>
+                </div>
+                <button onClick={() => setExportModal(null)} className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="overflow-y-auto flex-1 p-5 space-y-4">
+                {/* 全选 */}
+                <label className="flex items-center gap-2 cursor-pointer select-none font-semibold text-sm">
+                  <input type="checkbox" checked={isAllSelected} onChange={toggleAll}
+                    className="w-4 h-4 rounded accent-indigo-500" />
+                  全选 / 取消全选
+                </label>
+
+                <hr className="border-white/10" />
+
+                {/* 固定列分组 */}
+                {Object.entries(groups).map(([groupName, cols]) => (
+                  <div key={groupName}>
+                    <label className="flex items-center gap-2 cursor-pointer select-none text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                      <input type="checkbox"
+                        checked={cols.every(c => selected.has(c.key))}
+                        onChange={() => toggleGroup(cols.map(c => c.key))}
+                        className="w-3.5 h-3.5 rounded accent-indigo-500" />
+                      {groupName}
+                    </label>
+                    <div className="grid grid-cols-3 gap-1.5 pl-2">
+                      {cols.map(c => (
+                        <label key={c.key} className="flex items-center gap-1.5 cursor-pointer text-sm select-none">
+                          <input type="checkbox" checked={selected.has(c.key)} onChange={() => toggle(c.key)}
+                            className="w-3.5 h-3.5 rounded accent-indigo-500" />
+                          {c.label}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+
+                {/* 题目答案列 */}
+                {questionCols.length > 0 && (
+                  <div>
+                    <label className="flex items-center gap-2 cursor-pointer select-none text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                      <input type="checkbox"
+                        checked={questionCols.every(c => selected.has(c.key))}
+                        onChange={() => toggleGroup(questionCols.map(c => c.key))}
+                        className="w-3.5 h-3.5 rounded accent-indigo-500" />
+                      题目答案（{questionCols.length} 题）
+                    </label>
+                    <div className="grid grid-cols-3 gap-1.5 pl-2 max-h-40 overflow-y-auto">
+                      {questionCols.map(c => (
+                        <label key={c.key} className="flex items-center gap-1.5 cursor-pointer text-xs select-none truncate">
+                          <input type="checkbox" checked={selected.has(c.key)} onChange={() => toggle(c.key)}
+                            className="w-3.5 h-3.5 rounded accent-indigo-500 shrink-0" />
+                          <span className="truncate" title={c.label}>{c.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="flex items-center justify-between p-5 border-t border-white/10 gap-3">
+                <span className="text-xs text-gray-500">已选 {selected.size} / {allKeys.length} 列</span>
+                <div className="flex gap-2">
+                  <button onClick={() => setExportModal(null)}
+                    className="px-4 py-2 rounded-lg border text-sm font-medium transition-colors hover:bg-gray-100 dark:hover:bg-gray-800"
+                    style={{ borderColor: 'var(--glass-border)' }}>
+                    取消
+                  </button>
+                  <button
+                    disabled={selected.size === 0}
+                    onClick={() => {
+                      downloadCSV(responses, scale.name, selected, questionCols);
+                      setExportModal(null);
+                    }}
+                    className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold transition-colors disabled:opacity-50 flex items-center gap-1.5">
+                    <Download size={14} />
+                    导出 CSV
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };

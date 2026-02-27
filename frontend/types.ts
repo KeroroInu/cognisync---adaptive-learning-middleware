@@ -77,7 +77,8 @@ export interface AppState {
 
 export interface User {
   id: string;
-  email: string;
+  student_id: string;
+  email?: string;
   name: string;
   createdAt: string;
   hasCompletedOnboarding: boolean;
@@ -97,14 +98,15 @@ export interface AuthResponse {
 }
 
 export interface LoginRequest {
-  email: string;
+  student_id: string;
   password: string;
 }
 
 export interface RegisterRequest {
-  email: string;
-  password: string;
+  student_id: string;
   name: string;
+  password: string;
+  email?: string;
   mode: 'scale' | 'ai';
 }
 

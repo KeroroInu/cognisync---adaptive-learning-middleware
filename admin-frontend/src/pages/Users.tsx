@@ -73,7 +73,7 @@ export const Users = () => {
 
   const handleDelete = async (e: React.MouseEvent, user: User) => {
     e.stopPropagation();
-    if (window.confirm(`确定要删除用户 ${user.email} 吗？此操作不可撤销。`)) {
+    if (window.confirm(`确定要删除用户 ${user.name}（学号：${user.student_id}）吗？此操作不可撤销。`)) {
       try {
         await adminApi.deleteUser(user.id);
         await loadUsers();
@@ -93,7 +93,7 @@ export const Users = () => {
       const blob = await response.blob();
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      a.download = `user_${user.email}_${new Date().toISOString().split('T')[0]}.csv`;
+      a.download = `user_${user.student_id}_${new Date().toISOString().split('T')[0]}.csv`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -123,10 +123,25 @@ export const Users = () => {
 
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium mb-1">邮箱（只读）</label>
+                <label className="block text-sm font-medium mb-1">学号（只读）</label>
                 <input
                   type="text"
-                  value={editingUser.email}
+                  value={editingUser.student_id}
+                  disabled
+                  className="w-full px-3 py-2 rounded-lg opacity-50 cursor-not-allowed"
+                  style={{
+                    backgroundColor: 'var(--bg-secondary)',
+                    border: '1px solid var(--glass-border)',
+                    color: 'var(--text-primary)',
+                  }}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">邮箱（只读，可选）</label>
+                <input
+                  type="text"
+                  value={editingUser.email ?? '—'}
                   disabled
                   className="w-full px-3 py-2 rounded-lg opacity-50 cursor-not-allowed"
                   style={{
@@ -204,7 +219,7 @@ export const Users = () => {
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
           <input
             type="text"
-            placeholder="Search users by email or name..."
+            placeholder="搜索用户（姓名、学号或邮箱）"
             value={query}
             onChange={(e) => handleSearch(e.target.value)}
             className="w-full pl-10 pr-4 py-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
@@ -223,18 +238,19 @@ export const Users = () => {
           <table className="w-full">
             <thead style={{ backgroundColor: 'var(--bg-tertiary)' }}>
               <tr>
-                <th className="px-6 py-4 text-left text-sm font-semibold">Email</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold">Name</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold">Role</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold">Status</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold">Last Active</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold">Actions</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold">学号</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold">姓名</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold">邮箱</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold">角色</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold">状态</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold">最后活跃</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold">操作</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center">
+                  <td colSpan={7} className="px-6 py-12 text-center">
                     <div className="flex justify-center">
                       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500"></div>
                     </div>
@@ -242,8 +258,8 @@ export const Users = () => {
                 </tr>
               ) : users.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
-                    No users found
+                  <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
+                    暂无用户
                   </td>
                 </tr>
               ) : (
@@ -253,8 +269,9 @@ export const Users = () => {
                     className="border-t hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                     style={{ borderColor: 'var(--glass-border)' }}
                   >
-                    <td className="px-6 py-4 text-sm">{user.email}</td>
+                    <td className="px-6 py-4 text-sm font-mono">{user.student_id}</td>
                     <td className="px-6 py-4 text-sm">{user.name}</td>
+                    <td className="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">{user.email ?? '—'}</td>
                     <td className="px-6 py-4 text-sm">
                       <span className="px-2 py-1 rounded text-xs" style={{
                         backgroundColor: 'var(--bg-tertiary)',
@@ -265,39 +282,39 @@ export const Users = () => {
                     </td>
                     <td className="px-6 py-4 text-sm">
                       <span className={`px-2 py-1 rounded text-xs ${user.is_active ? 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'}`}>
-                        {user.is_active ? 'Active' : 'Inactive'}
+                        {user.is_active ? '已激活' : '已禁用'}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">
-                      {user.last_active_at ? new Date(user.last_active_at).toLocaleDateString() : 'Never'}
+                    <td className="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">
+                      {user.last_active_at ? new Date(user.last_active_at).toLocaleDateString('zh-CN') : '—'}
                     </td>
                     <td className="px-6 py-4 text-sm">
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => navigate(`/admin/users/${user.id}`)}
                           className="p-2 rounded-lg bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-200 dark:hover:bg-indigo-800 transition-colors"
-                          title="View Details"
+                          title="查看详情"
                         >
                           <Eye size={16} />
                         </button>
                         <button
                           onClick={(e) => handleEdit(e, user)}
                           className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors"
-                          title="Edit User"
+                          title="编辑用户"
                         >
                           <Edit2 size={16} />
                         </button>
                         <button
                           onClick={(e) => handleExportUser(e, user)}
                           className="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-200 dark:hover:bg-emerald-800 transition-colors"
-                          title="Export User Data (CSV)"
+                          title="导出用户数据 (CSV)"
                         >
                           <Download size={16} />
                         </button>
                         <button
                           onClick={(e) => handleDelete(e, user)}
                           className="p-2 rounded-lg bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-800 transition-colors"
-                          title="Delete User"
+                          title="删除用户"
                         >
                           <Trash2 size={16} />
                         </button>
@@ -313,8 +330,8 @@ export const Users = () => {
         {/* Pagination */}
         {total > pageSize && (
           <div className="flex items-center justify-between px-6 py-4 border-t" style={{ borderColor: 'var(--glass-border)' }}>
-            <div className="text-sm text-gray-600 dark:text-gray-400">
-              Showing {(page - 1) * pageSize + 1} to {Math.min(page * pageSize, total)} of {total} users
+            <div className="text-sm text-gray-700 dark:text-gray-300">
+              共 {total} 位，第 {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, total)} 位
             </div>
             <div className="flex space-x-2">
               <button
@@ -325,7 +342,7 @@ export const Users = () => {
                 <ChevronLeft size={20} />
               </button>
               <span className="px-4 py-2">
-                Page {page} of {totalPages}
+                第 {page} / {totalPages} 页
               </span>
               <button
                 onClick={() => setPage(p => Math.min(totalPages, p + 1))}
