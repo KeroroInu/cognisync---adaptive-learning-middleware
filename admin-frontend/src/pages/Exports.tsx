@@ -149,15 +149,15 @@ export const Exports = () => {
               className={`glass-card rounded-2xl border ${dataset.borderColor} overflow-hidden`}
             >
               {/* Card Header */}
-              <div className={`p-5 ${dataset.bgColor} border-b ${dataset.borderColor}`}>
+              <div className={`p-5 export-card-header ${dataset.bgColor} border-b ${dataset.borderColor}`}>
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex items-center gap-3">
                     <div className={`${dataset.color} shrink-0`}>
                       {dataset.icon}
                     </div>
                     <div>
-                      <h2 className="text-base font-bold">{dataset.title}</h2>
-                      <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">{dataset.titleEn}</p>
+                      <h2 className="text-base font-bold" style={{ color: 'var(--text-primary)' }}>{dataset.title}</h2>
+                      <p className="text-xs mt-0.5" style={{ color: 'var(--text-light)' }}>{dataset.titleEn}</p>
                     </div>
                   </div>
                   <button

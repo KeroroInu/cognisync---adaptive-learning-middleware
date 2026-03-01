@@ -13,6 +13,17 @@ const PROVIDERS: { value: Provider; label: string; needsKey: boolean; defaultUrl
   { value: 'mock', label: 'Mock（测试用）', needsKey: false, defaultUrl: '', defaultModel: '' },
 ];
 
+// 使用 CSS 变量而非 Tailwind dark: 前缀，兼容 data-theme 而非 prefers-color-scheme
+const fieldStyle: React.CSSProperties = {
+  background: 'var(--bg-tertiary)',
+  color: 'var(--text-primary)',
+  borderColor: 'var(--glass-border)',
+};
+
+const labelStyle: React.CSSProperties = {
+  color: 'var(--text-tertiary)',
+};
+
 interface RoleCardProps {
   role: 'analysis' | 'chat';
   title: string;
@@ -61,17 +72,18 @@ function RoleCard({ role, title, description, initial }: RoleCardProps) {
     <div className="glass-card rounded-2xl p-6 space-y-5">
       {/* Header */}
       <div>
-        <h2 className="text-lg font-semibold dark:text-white">{title}</h2>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{description}</p>
+        <h2 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>{title}</h2>
+        <p className="text-sm mt-0.5" style={{ color: 'var(--text-light)' }}>{description}</p>
       </div>
 
       {/* Provider selector */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">提供者</label>
+        <label className="block text-sm font-medium mb-1" style={labelStyle}>提供者</label>
         <select
           value={form.provider}
           onChange={e => handleProviderChange(e.target.value as Provider)}
-          className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          className="w-full px-3 py-2 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          style={fieldStyle}
         >
           {PROVIDERS.map(p => (
             <option key={p.value} value={p.value}>{p.label}</option>
@@ -84,38 +96,41 @@ function RoleCard({ role, title, description, initial }: RoleCardProps) {
           {/* API Key */}
           {currentProvider.needsKey && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">API Key</label>
+              <label className="block text-sm font-medium mb-1" style={labelStyle}>API Key</label>
               <input
                 type="password"
                 value={form.api_key}
                 onChange={e => setForm(prev => ({ ...prev, api_key: e.target.value }))}
                 placeholder="sk-..."
-                className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+                className="w-full px-3 py-2 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+                style={fieldStyle}
               />
             </div>
           )}
 
           {/* Base URL */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Base URL</label>
+            <label className="block text-sm font-medium mb-1" style={labelStyle}>Base URL</label>
             <input
               type="text"
               value={form.base_url}
               onChange={e => setForm(prev => ({ ...prev, base_url: e.target.value }))}
               placeholder={currentProvider.defaultUrl}
-              className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+              className="w-full px-3 py-2 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+              style={fieldStyle}
             />
           </div>
 
           {/* Model */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">模型名称</label>
+            <label className="block text-sm font-medium mb-1" style={labelStyle}>模型名称</label>
             <input
               type="text"
               value={form.model}
               onChange={e => setForm(prev => ({ ...prev, model: e.target.value }))}
               placeholder={currentProvider.defaultModel}
-              className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+              className="w-full px-3 py-2 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+              style={fieldStyle}
             />
           </div>
         </>
@@ -133,12 +148,12 @@ function RoleCard({ role, title, description, initial }: RoleCardProps) {
         </button>
 
         {status === 'success' && (
-          <span className="flex items-center gap-1 text-sm text-emerald-600 dark:text-emerald-400">
+          <span className="flex items-center gap-1 text-sm text-emerald-600">
             <CheckCircle size={16} /> 已保存，立即生效
           </span>
         )}
         {status === 'error' && (
-          <span className="flex items-center gap-1 text-sm text-red-500 dark:text-red-400">
+          <span className="flex items-center gap-1 text-sm text-red-500">
             <AlertCircle size={16} /> {errorMsg}
           </span>
         )}
@@ -180,14 +195,15 @@ export const ModelConfig = () => {
             <Settings2 size={20} />
           </div>
           <div>
-            <h1 className="text-2xl font-bold dark:text-white">模型配置</h1>
-            <p className="text-sm text-gray-500 dark:text-gray-400">独立配置语义分析和 AI 对话使用的 LLM 接口</p>
+            <h1 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>模型配置</h1>
+            <p className="text-sm" style={{ color: 'var(--text-light)' }}>独立配置语义分析和 AI 对话使用的 LLM 接口</p>
           </div>
         </div>
         <button
           onClick={load}
           disabled={loading}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-600 text-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors dark:text-gray-300"
+          className="flex items-center gap-2 px-4 py-2 rounded-xl border text-sm hover:opacity-80 transition-opacity"
+          style={{ borderColor: 'var(--glass-border)', color: 'var(--text-secondary)' }}
         >
           <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
           刷新
@@ -195,7 +211,8 @@ export const ModelConfig = () => {
       </div>
 
       {error && (
-        <div className="flex items-center gap-2 p-4 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm">
+        <div className="flex items-center gap-2 p-4 rounded-xl text-sm text-red-500"
+          style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)' }}>
           <AlertCircle size={16} />
           {error}
         </div>
@@ -223,7 +240,8 @@ export const ModelConfig = () => {
       )}
 
       {/* Info note */}
-      <div className="p-4 rounded-xl bg-blue-50 dark:bg-blue-900/20 text-sm text-blue-700 dark:text-blue-300">
+      <div className="p-4 rounded-xl text-sm"
+        style={{ background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.2)', color: 'var(--text-secondary)' }}>
         <strong>提示：</strong>配置保存后立即在后端生效，无需重启服务。如果未配置将回退到服务器环境变量中的默认 LLM 设置。
       </div>
     </div>

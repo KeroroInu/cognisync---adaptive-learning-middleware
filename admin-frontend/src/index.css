@@ -277,3 +277,26 @@ body {
   outline: 2px solid var(--brand-blue);
   outline-offset: 2px;
 }
+
+/* ============================================
+   表单元素深色模式
+   使用 data-theme 而非 Tailwind dark:（兼容 OS 浅色 + App 深色场景）
+   ============================================ */
+[data-theme="dark"] input,
+[data-theme="dark"] select,
+[data-theme="dark"] textarea {
+  background-color: #334155;
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.15);
+  color-scheme: dark;
+}
+
+[data-theme="dark"] input::placeholder,
+[data-theme="dark"] textarea::placeholder {
+  color: #94a3b8;
+}
+
+/* 数据导出卡片标题区在深色模式下用深色背景替换浅色品牌背景 */
+[data-theme="dark"] .export-card-header {
+  background: #334155 !important;
+}
