@@ -136,7 +136,7 @@ export const ResearchManagement = () => {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold mb-2">教学研究</h1>
-          <p className="text-gray-700 dark:text-gray-300">管理代码填空练习任务与学生提交记录</p>
+          <p style={{ color: 'var(--text-secondary)' }}>管理代码填空练习任务与学生提交记录</p>
         </div>
         <button
           onClick={() => setShowCreateModal(true)}
@@ -149,8 +149,8 @@ export const ResearchManagement = () => {
 
       {/* Error Message */}
       {error && (
-        <div className="glass-card p-4 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
-          <p className="text-red-700 dark:text-red-300">{error}</p>
+        <div className="glass-card p-4 rounded-xl border" style={{ background: 'rgba(239,68,68,0.1)', borderColor: 'rgba(239,68,68,0.3)' }}>
+          <p style={{ color: '#ef4444' }}>{error}</p>
         </div>
       )}
 
@@ -185,7 +185,7 @@ export const ResearchManagement = () => {
                     <td className="px-6 py-4 text-sm">
                       <p className="font-medium">{task.title}</p>
                       {task.description && (
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate max-w-xs">{task.description}</p>
+                        <p className="text-xs mt-0.5 truncate max-w-xs" style={{ color: 'var(--text-light)' }}>{task.description}</p>
                       )}
                     </td>
                     <td className="px-6 py-4 text-sm">
@@ -205,10 +205,10 @@ export const ResearchManagement = () => {
                         {STATUS_LABEL[task.status]}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">
+                    <td className="px-6 py-4 text-sm" style={{ color: 'var(--text-secondary)' }}>
                       {task.submissions_count ?? 0} 份
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">
+                    <td className="px-6 py-4 text-sm" style={{ color: 'var(--text-secondary)' }}>
                       {new Date(task.created_at).toLocaleDateString('zh-CN')}
                     </td>
                     <td className="px-6 py-4 text-sm">
@@ -346,7 +346,7 @@ export const ResearchManagement = () => {
                   style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)' }}
                   placeholder="# 在此粘贴代码，或点击「上传文件」&#10;&#10;def bubble_sort(arr):&#10;    # TODO: 实现冒泡排序&#10;    pass"
                 />
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                <p className="text-xs mt-1" style={{ color: 'var(--text-light)' }}>
                   支持直接粘贴代码，也可上传 .py / .js / .java / .cpp 等文件
                 </p>
               </div>
@@ -381,7 +381,7 @@ export const ResearchManagement = () => {
             <div className="flex items-center justify-between p-6 border-b border-white/10">
               <div>
                 <h2 className="text-xl font-bold">学生提交记录</h2>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{submissionsModal.task.title}</p>
+                <p className="text-sm mt-0.5" style={{ color: 'var(--text-light)' }}>{submissionsModal.task.title}</p>
               </div>
               <button
                 onClick={() => setSubmissionsModal(null)}
@@ -441,7 +441,7 @@ export const ResearchManagement = () => {
                         </div>
                       </div>
                       {expandedCode === sub.id && (
-                        <pre className="px-4 py-3 text-xs font-mono text-gray-700 dark:text-gray-300 bg-gray-900/5 dark:bg-gray-900/50 overflow-x-auto max-h-64 overflow-y-auto">
+                        <pre className="px-4 py-3 text-xs font-mono overflow-x-auto max-h-64 overflow-y-auto" style={{ color: 'var(--text-secondary)', background: 'var(--bg-tertiary)' }}>
                           {sub.code_submitted || '（空）'}
                         </pre>
                       )}

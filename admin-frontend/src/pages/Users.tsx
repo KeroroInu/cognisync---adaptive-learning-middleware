@@ -182,7 +182,7 @@ export const Users = () => {
                     }`}
                   />
                 </button>
-                <span className="text-sm text-gray-600 dark:text-gray-400">
+                <span className="text-sm" style={{ color: 'var(--text-light)' }}>
                   {editIsActive ? '已激活' : '已禁用'}
                 </span>
               </div>
@@ -271,7 +271,7 @@ export const Users = () => {
                   >
                     <td className="px-6 py-4 text-sm font-mono dark:text-white">{user.student_id}</td>
                     <td className="px-6 py-4 text-sm">{user.name}</td>
-                    <td className="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">{user.email ?? '—'}</td>
+                    <td className="px-6 py-4 text-sm" style={{ color: 'var(--text-light)' }}>{user.email ?? '—'}</td>
                     <td className="px-6 py-4 text-sm">
                       <span className="px-2 py-1 rounded text-xs" style={{
                         backgroundColor: 'var(--bg-tertiary)',
@@ -285,7 +285,7 @@ export const Users = () => {
                         {user.is_active ? '已激活' : '已禁用'}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">
+                    <td className="px-6 py-4 text-sm" style={{ color: 'var(--text-secondary)' }}>
                       {user.last_active_at ? new Date(user.last_active_at).toLocaleDateString('zh-CN') : '—'}
                     </td>
                     <td className="px-6 py-4 text-sm">
@@ -330,7 +330,7 @@ export const Users = () => {
         {/* Pagination */}
         {total > pageSize && (
           <div className="flex items-center justify-between px-6 py-4 border-t" style={{ borderColor: 'var(--glass-border)' }}>
-            <div className="text-sm text-gray-700 dark:text-gray-300">
+            <div className="text-sm" style={{ color: 'var(--text-secondary)' }}>
               共 {total} 位，第 {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, total)} 位
             </div>
             <div className="flex space-x-2">

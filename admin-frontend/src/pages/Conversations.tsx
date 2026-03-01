@@ -58,13 +58,13 @@ export const Conversations = () => {
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold mb-2">对话管理</h1>
-        <p className="text-gray-700 dark:text-gray-300">浏览和管理所有聊天会话</p>
+        <p style={{ color: 'var(--text-secondary)' }}>浏览和管理所有聊天会话</p>
       </div>
 
       {/* Error Message */}
       {error && (
-        <div className="glass-card p-4 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
-          <p className="text-red-700 dark:text-red-300">{error}</p>
+        <div className="glass-card p-4 rounded-xl border" style={{ background: 'rgba(239,68,68,0.1)', borderColor: 'rgba(239,68,68,0.3)' }}>
+          <p style={{ color: 'var(--text-primary)' }}>{error}</p>
         </div>
       )}
 
@@ -102,10 +102,10 @@ export const Conversations = () => {
                         {session.message_count} 条消息
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">
+                    <td className="px-6 py-4 text-sm" style={{ color: 'var(--text-secondary)' }}>
                       {new Date(session.created_at).toLocaleDateString('zh-CN')}
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">
+                    <td className="px-6 py-4 text-sm" style={{ color: 'var(--text-secondary)' }}>
                       {session.updated_at ? new Date(session.updated_at).toLocaleDateString('zh-CN') : '—'}
                     </td>
                     <td className="px-6 py-4 text-sm">
@@ -136,7 +136,7 @@ export const Conversations = () => {
         {/* Pagination */}
         {total > pageSize && (
           <div className="flex items-center justify-between px-6 py-4 border-t" style={{ borderColor: 'var(--glass-border)' }}>
-            <div className="text-sm text-gray-700 dark:text-gray-300">
+            <div className="text-sm" style={{ color: 'var(--text-secondary)' }}>
               共 {total} 条，第 {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, total)} 条
             </div>
             <div className="flex space-x-2">

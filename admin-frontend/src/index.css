@@ -300,3 +300,19 @@ body {
 [data-theme="dark"] .export-card-header {
   background: #334155 !important;
 }
+
+/* ============================================
+   深色模式 hover 状态修复
+   Tailwind dark: 前缀依赖 prefers-color-scheme，
+   与 data-theme 不兼容，需手动覆盖
+   ============================================ */
+[data-theme="dark"] .hover\:bg-gray-50:hover,
+[data-theme="dark"] .hover\:bg-gray-100:hover,
+[data-theme="dark"] .hover\:bg-gray-200:hover {
+  background-color: rgba(255, 255, 255, 0.06) !important;
+}
+
+[data-theme="dark"] .hover\:bg-gray-700:hover,
+[data-theme="dark"] .hover\:bg-gray-900:hover {
+  background-color: var(--bg-tertiary) !important;
+}

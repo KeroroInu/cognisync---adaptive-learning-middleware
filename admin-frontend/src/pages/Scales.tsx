@@ -232,7 +232,7 @@ export const Scales = () => {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold mb-2">量表管理</h1>
-          <p className="text-gray-700 dark:text-gray-300">管理和部署评估量表</p>
+          <p style={{ color: 'var(--text-secondary)' }}>管理和部署评估量表</p>
         </div>
         <button
           onClick={() => setShowUploadModal(true)}
@@ -245,8 +245,8 @@ export const Scales = () => {
 
       {/* Error Message */}
       {error && (
-        <div className="glass-card p-4 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
-          <p className="text-red-700 dark:text-red-300">{error}</p>
+        <div className="glass-card p-4 rounded-xl border" style={{ background: 'rgba(239,68,68,0.1)', borderColor: 'rgba(239,68,68,0.3)' }}>
+          <p style={{ color: '#ef4444' }}>{error}</p>
         </div>
       )}
 
@@ -262,7 +262,7 @@ export const Scales = () => {
                 >
                   <Upload size={40} className="mx-auto mb-2 text-indigo-500" />
                   <p className="font-semibold mb-1">点击选择 JSON 文件</p>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">或拖拽至此</p>
+                  <p className="text-sm" style={{ color: 'var(--text-light)' }}>或拖拽至此</p>
                   <input id="file-input" type="file" accept=".json" onChange={handleFileSelect} className="hidden" />
                 </div>
               ) : (
@@ -273,7 +273,7 @@ export const Scales = () => {
                   {previewData && (
                     <div>
                       <p className="font-semibold mb-2">预览：</p>
-                      <pre className="p-3 bg-gray-100 dark:bg-gray-900 rounded-lg text-xs overflow-auto max-h-48">
+                      <pre className="p-3 rounded-lg text-xs overflow-auto max-h-48" style={{ background: 'var(--bg-tertiary)', color: 'var(--text-secondary)' }}>
                         {JSON.stringify(previewData, null, 2)}
                       </pre>
                     </div>
@@ -292,7 +292,8 @@ export const Scales = () => {
               )}
             </div>
             <button onClick={() => { setShowUploadModal(false); setSelectedFile(null); setPreviewData(null); }}
-              className="mt-4 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-300">
+              className="mt-4 transition-colors"
+              style={{ color: 'var(--text-light)' }}>
               关闭
             </button>
           </div>
@@ -341,12 +342,12 @@ export const Scales = () => {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-white/10">
-                      <th className="text-left py-3 px-2 font-semibold text-gray-600 dark:text-gray-400">学生</th>
-                      <th className="text-right py-3 px-2 font-semibold text-gray-600 dark:text-gray-400">认知</th>
-                      <th className="text-right py-3 px-2 font-semibold text-gray-600 dark:text-gray-400">情感</th>
-                      <th className="text-right py-3 px-2 font-semibold text-gray-600 dark:text-gray-400">行为</th>
-                      <th className="text-right py-3 px-2 font-semibold text-gray-600 dark:text-gray-400">总分</th>
-                      <th className="text-right py-3 px-2 font-semibold text-gray-600 dark:text-gray-400">填写时间</th>
+                      <th className="text-left py-3 px-2 font-semibold" style={{ color: 'var(--text-light)' }}>学生</th>
+                      <th className="text-right py-3 px-2 font-semibold" style={{ color: 'var(--text-light)' }}>认知</th>
+                      <th className="text-right py-3 px-2 font-semibold" style={{ color: 'var(--text-light)' }}>情感</th>
+                      <th className="text-right py-3 px-2 font-semibold" style={{ color: 'var(--text-light)' }}>行为</th>
+                      <th className="text-right py-3 px-2 font-semibold" style={{ color: 'var(--text-light)' }}>总分</th>
+                      <th className="text-right py-3 px-2 font-semibold" style={{ color: 'var(--text-light)' }}>填写时间</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -355,7 +356,7 @@ export const Scales = () => {
                       return (
                         <tr key={resp.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
                           <td className="py-3 px-2">
-                            <div className="font-medium text-sm text-gray-800 dark:text-gray-200">
+                            <div className="font-medium text-sm" style={{ color: 'var(--text-primary)' }}>
                               {resp.user_name || '—'}
                             </div>
                             <div className="text-xs text-gray-500 font-mono">
@@ -377,7 +378,7 @@ export const Scales = () => {
                               {scores?.behavior?.toFixed(0) ?? '—'}
                             </span>
                           </td>
-                          <td className="py-3 px-2 text-right font-mono text-xs text-gray-700 dark:text-gray-300">
+                          <td className="py-3 px-2 text-right font-mono text-xs" style={{ color: 'var(--text-secondary)' }}>
                             {scores?.total_score ?? '—'} / {scores?.max_score ?? '—'}
                           </td>
                           <td className="py-3 px-2 text-right text-xs text-gray-500">

@@ -88,7 +88,7 @@ const Ring = ({ value, color, label, Icon }: { value: number; color: string; lab
           <span className="text-sm font-bold mt-0.5">{value}</span>
         </div>
       </div>
-      <span className="text-xs font-medium text-gray-500 dark:text-gray-400">{label}</span>
+      <span className="text-xs font-medium" style={{ color: 'var(--text-light)' }}>{label}</span>
     </div>
   );
 };
@@ -245,7 +245,7 @@ export const UserDetail = () => {
             </div>
             <div>
               <h1 className="text-2xl font-bold">{userDetail.name || '(未命名)'}</h1>
-              <p className="text-gray-500 dark:text-gray-400 text-sm mt-0.5">{userDetail.email}</p>
+              <p style={{ color: 'var(--text-light)' }} className="text-sm mt-0.5">{userDetail.email}</p>
               <div className="flex gap-2 mt-2 flex-wrap">
                 <span className="px-2 py-0.5 rounded text-xs font-medium"
                   style={{ backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--glass-border)' }}>
@@ -274,13 +274,13 @@ export const UserDetail = () => {
                   <Icon size={16} />
                   <span className="text-2xl font-bold">{value}</span>
                 </div>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{label}</p>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--text-light)' }}>{label}</p>
               </div>
             ))}
           </div>
 
           {/* Dates */}
-          <div className="text-sm text-gray-500 dark:text-gray-400 space-y-1 md:text-right flex-shrink-0">
+          <div className="text-sm space-y-1 md:text-right flex-shrink-0" style={{ color: 'var(--text-light)' }}>
             <p>注册：{new Date(userDetail.created_at).toLocaleDateString('zh-CN')}</p>
             {userDetail.last_active_at && (
               <p>活跃：{new Date(userDetail.last_active_at).toLocaleDateString('zh-CN')}</p>
@@ -292,8 +292,8 @@ export const UserDetail = () => {
         {currentProfile && (
           <div className="mt-6 pt-6 border-t" style={{ borderColor: 'var(--glass-border)' }}>
             <div className="flex items-center justify-between mb-4">
-              <p className="text-sm font-semibold text-gray-600 dark:text-gray-400">当前画像</p>
-              <span className="text-xs text-gray-500 dark:text-gray-500">
+              <p className="text-sm font-semibold" style={{ color: 'var(--text-light)' }}>当前画像</p>
+              <span className="text-xs" style={{ color: 'var(--text-light)' }}>
                 更新于 {new Date(currentProfile.created_at).toLocaleString('zh-CN')}
                 {currentProfile.source === 'user' && (
                   <span className="ml-2 px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-300">用户自评</span>
@@ -318,9 +318,10 @@ export const UserDetail = () => {
               onClick={() => setActiveTab(key)}
               className={`flex-shrink-0 px-4 py-4 text-sm font-medium transition-colors ${
                 activeTab === key
-                  ? 'border-b-2 border-indigo-500 text-indigo-600 dark:text-indigo-400'
-                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-300'
+                  ? 'border-b-2 border-indigo-500 text-indigo-600'
+                  : 'hover:bg-gray-50'
               }`}
+              style={activeTab !== key ? { color: 'var(--text-light)' } : {}}
             >
               <div className="flex items-center justify-center gap-2">
                 <Icon size={16} />
@@ -356,23 +357,24 @@ export const UserDetail = () => {
                 <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2">
                   {[...messages].reverse().map((msg) => (
                     <div key={msg.id}
-                      className={`p-4 rounded-xl ${
+                      className="p-4 rounded-xl border"
+                      style={
                         msg.role === 'user'
-                          ? 'bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800/50 ml-0 mr-8'
-                          : 'bg-gray-50 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-700/50 ml-8 mr-0'
-                      }`}
+                          ? { background: 'rgba(99,102,241,0.08)', borderColor: 'rgba(99,102,241,0.2)', marginRight: '2rem' }
+                          : { background: 'var(--bg-secondary)', borderColor: 'var(--glass-border)', marginLeft: '2rem' }
+                      }
                     >
                       <div className="flex items-center justify-between mb-1.5">
                         <span className={`text-xs font-semibold ${
-                          msg.role === 'user' ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-500 dark:text-gray-400'
-                        }`}>
+                          msg.role === 'user' ? 'text-indigo-600' : ''
+                        }`} style={msg.role !== 'user' ? { color: 'var(--text-light)' } : {}}>
                           {msg.role === 'user' ? '学生' : 'AI 教师'}
                         </span>
                         <span className="text-xs text-gray-400">
                           {new Date(msg.timestamp).toLocaleString('zh-CN')}
                         </span>
                       </div>
-                      <p className="text-sm text-gray-900 dark:text-white leading-relaxed">{msg.text}</p>
+                      <p className="text-sm leading-relaxed" style={{ color: 'var(--text-primary)' }}>{msg.text}</p>
                       {msg.analysis && Object.keys(msg.analysis).length > 0 && (
                         <details className="mt-2">
                           <summary className="text-xs text-indigo-500 cursor-pointer hover:text-indigo-600 select-none">
@@ -397,8 +399,8 @@ export const UserDetail = () => {
               {profiles.length >= 2 && (
                 <div>
                   <div className="flex items-center justify-between mb-2">
-                    <p className="text-xs font-semibold text-gray-500 dark:text-gray-400">变化趋势</p>
-                    <div className="flex items-center gap-3 text-xs text-gray-500">
+                    <p className="text-xs font-semibold" style={{ color: 'var(--text-light)' }}>变化趋势</p>
+                    <div className="flex items-center gap-3 text-xs" style={{ color: 'var(--text-light)' }}>
                       <span className="flex items-center gap-1"><span className="w-3 h-0.5 inline-block rounded" style={{ backgroundColor: 'rgb(99,102,241)' }} />认知</span>
                       <span className="flex items-center gap-1"><span className="w-3 h-0.5 inline-block rounded" style={{ backgroundColor: 'rgb(168,85,247)' }} />情感</span>
                       <span className="flex items-center gap-1"><span className="w-3 h-0.5 inline-block rounded" style={{ backgroundColor: 'rgb(236,72,153)' }} />行为</span>
@@ -421,9 +423,12 @@ export const UserDetail = () => {
                       className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                         profileFilter === key
                           ? 'bg-indigo-600 text-white'
-                          : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
+                          : 'hover:bg-gray-50'
                       }`}
-                      style={profileFilter !== key ? { border: '1px solid var(--glass-border)' } : {}}>
+                      style={{
+                        border: '1px solid var(--glass-border)',
+                        ...(profileFilter !== key ? { color: 'var(--text-light)' } : {}),
+                      }}>
                       {label}
                     </button>
                   ))}
@@ -439,11 +444,12 @@ export const UserDetail = () => {
                     const isUserModified = profile.source === 'user';
                     return (
                       <div key={profile.id}
-                        className={`p-4 rounded-xl border ${
+                        className="p-4 rounded-xl border"
+                        style={
                           isUserModified
-                            ? 'bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800/50'
-                            : 'bg-blue-50 dark:bg-blue-900/10 border-blue-100 dark:border-blue-800/30'
-                        }`}
+                            ? { background: 'rgba(168,85,247,0.08)', borderColor: 'rgba(168,85,247,0.25)' }
+                            : { background: 'rgba(99,102,241,0.06)', borderColor: 'rgba(99,102,241,0.15)' }
+                        }
                       >
                         <div className="flex items-center justify-between mb-3">
                           <div className="flex items-center gap-2">
@@ -474,7 +480,7 @@ export const UserDetail = () => {
                             const prevVal = prev?.[key as 'cognition' | 'affect' | 'behavior'];
                             return (
                               <div key={key}>
-                                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">{label}</p>
+                                <p className="text-xs mb-1" style={{ color: 'var(--text-light)' }}>{label}</p>
                                 <div className="flex items-center gap-2">
                                   <span className={`text-xl font-bold ${color}`}>{curr}</span>
                                   {prevVal !== undefined && <Delta curr={curr} prev={prevVal} />}
@@ -626,9 +632,9 @@ export const UserDetail = () => {
                           </div>
                         </div>
                         {log.user_comment && (
-                          <div className="p-2 rounded-lg text-xs text-gray-700 dark:text-gray-300"
-                            style={{ backgroundColor: 'var(--bg-tertiary)' }}>
-                            <span className="font-semibold text-gray-500 mr-1">备注：</span>
+                          <div className="p-2 rounded-lg text-xs"
+                            style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)' }}>
+                            <span className="font-semibold mr-1" style={{ color: 'var(--text-light)' }}>备注：</span>
                             {log.user_comment}
                           </div>
                         )}
@@ -668,7 +674,7 @@ export const UserDetail = () => {
                 </div>
               ) : (
                 <div>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                  <p className="text-xs mb-3" style={{ color: 'var(--text-light)' }}>
                     共 {graphNodes.length} 个概念节点，按掌握度排序
                   </p>
                   <div className="space-y-2 max-h-[600px] overflow-y-auto pr-2">
