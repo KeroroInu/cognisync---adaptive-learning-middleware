@@ -5,7 +5,8 @@
     "conversations": "对话管理",
     "scales": "量表管理",
     "research": "教学研究",
-    "exports": "数据导出"
+    "exports": "数据导出",
+    "modelConfig": "模型配置"
   },
   "common": {
     "adminPanel": "管理面板",

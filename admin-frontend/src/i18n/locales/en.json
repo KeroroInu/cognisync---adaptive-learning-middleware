@@ -5,7 +5,8 @@
     "conversations": "Conversations",
     "scales": "Scales",
     "research": "Research",
-    "exports": "Exports"
+    "exports": "Exports",
+    "modelConfig": "Model Config"
   },
   "common": {
     "adminPanel": "Admin Panel",

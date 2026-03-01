@@ -229,3 +229,15 @@ export interface ResearchSubmissionsResponse {
   total: number;
 }
 
+export interface LlmRoleConfig {
+  provider: string;
+  api_key: string;
+  base_url: string;
+  model: string;
+}
+
+export interface LlmConfig {
+  analysis: LlmRoleConfig;
+  chat: LlmRoleConfig;
+}
+

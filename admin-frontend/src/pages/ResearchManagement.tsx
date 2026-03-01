@@ -160,12 +160,12 @@ export const ResearchManagement = () => {
           <table className="w-full">
             <thead style={{ backgroundColor: 'var(--bg-tertiary)' }}>
               <tr>
-                <th className="px-6 py-4 text-left text-sm font-semibold">任务名称</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold">语言</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold">状态</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold">提交数</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold">创建时间</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold">操作</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold dark:text-white">任务名称</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold dark:text-white">语言</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold dark:text-white">状态</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold dark:text-white">提交数</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold dark:text-white">创建时间</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold dark:text-white">操作</th>
               </tr>
             </thead>
             <tbody>
@@ -185,7 +185,7 @@ export const ResearchManagement = () => {
                     <td className="px-6 py-4 text-sm">
                       <p className="font-medium">{task.title}</p>
                       {task.description && (
-                        <p className="text-xs text-gray-500 mt-0.5 truncate max-w-xs">{task.description}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate max-w-xs">{task.description}</p>
                       )}
                     </td>
                     <td className="px-6 py-4 text-sm">

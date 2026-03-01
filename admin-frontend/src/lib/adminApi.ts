@@ -20,6 +20,8 @@ import type {
   ResearchTasksResponse,
   ResearchTaskSubmission,
   ResearchSubmissionsResponse,
+  LlmConfig,
+  LlmRoleConfig,
 } from '../types';
 
 const BASE_URL = (import.meta.env.VITE_API_BASE_URL as string) || 'http://localhost:8000/api';
@@ -283,6 +285,17 @@ class AdminApiClient {
 
   async getResearchTaskSubmissions(taskId: string): Promise<ResearchSubmissionsResponse> {
     return this.request<ResearchSubmissionsResponse>(`/research/tasks/${taskId}/submissions`);
+  }
+
+  async getLlmConfig(): Promise<LlmConfig> {
+    return this.request<LlmConfig>('/config/llm');
+  }
+
+  async saveLlmConfig(role: 'analysis' | 'chat', config: LlmRoleConfig): Promise<{ role: string; provider: string; model: string }> {
+    return this.request('/config/llm', {
+      method: 'PUT',
+      body: JSON.stringify({ role, config }),
+    });
   }
 }
 

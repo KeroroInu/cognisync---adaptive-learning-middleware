@@ -8,6 +8,7 @@ import { ResearchManagement } from './pages/ResearchManagement';
 import { Conversations } from './pages/Conversations';
 import { ConversationDetail } from './pages/ConversationDetail';
 import { Exports } from './pages/Exports';
+import { ModelConfig } from './pages/ModelConfig';
 
 function App() {
   return (
@@ -21,6 +22,7 @@ function App() {
         <Route path="/admin/conversations" element={<AdminLayout><Conversations /></AdminLayout>} />
         <Route path="/admin/conversations/:sessionId" element={<AdminLayout><ConversationDetail /></AdminLayout>} />
         <Route path="/admin/exports" element={<AdminLayout><Exports /></AdminLayout>} />
+        <Route path="/admin/config" element={<AdminLayout><ModelConfig /></AdminLayout>} />
         <Route path="/" element={<Navigate to="/admin" replace />} />
       </Routes>
     </BrowserRouter>

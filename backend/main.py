@@ -11,10 +11,11 @@ from fastapi.responses import JSONResponse
 
 from app.core.config import settings
 from app.core.logging import setup_logging
-from app.db.postgres import init_db as init_postgres, engine as postgres_engine
+from app.db.postgres import init_db as init_postgres, engine as postgres_engine, async_session_factory
 from app.db.neo4j import init_db as init_neo4j, close_db as close_neo4j
 from app.api.router import api_router
 from app.api.admin_router import admin_router
+from app.services import llm_config
 
 # 设置日志
 setup_logging()
@@ -48,6 +49,11 @@ async def lifespan(app: FastAPI):
         await init_postgres()
         component_status["postgres"] = True
         logger.info("✅ PostgreSQL connected")
+
+        # 从数据库加载 LLM 配置到内存缓存
+        async with async_session_factory() as session:
+            await llm_config.load_from_db(session)
+        logger.info("✅ LLM config loaded from DB")
     except Exception as e:
         component_status["postgres"] = False
         logger.error(f"❌ PostgreSQL connection failed: {e}")

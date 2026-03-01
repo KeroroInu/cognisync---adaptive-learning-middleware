@@ -8,6 +8,7 @@ import {
   FileText,
   FlaskConical,
   Download,
+  Settings2,
   Sun,
   Moon,
   Menu,
@@ -34,6 +35,7 @@ export const AdminLayout = ({ children }: AdminLayoutProps) => {
     { path: '/admin/scales', icon: FileText, label: t('nav.scales') },
     { path: '/admin/explorer', icon: FlaskConical, label: t('nav.research') },
     { path: '/admin/exports', icon: Download, label: t('nav.exports') },
+    { path: '/admin/config', icon: Settings2, label: t('nav.modelConfig') },
   ];
 
   return (

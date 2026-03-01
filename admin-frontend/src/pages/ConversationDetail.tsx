@@ -136,13 +136,13 @@ export const ConversationDetail = () => {
 
       {/* Messages */}
       <div className="glass-card p-6 rounded-2xl stagger-2">
-        <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+        <h2 className="text-xl font-bold mb-4 flex items-center gap-2 dark:text-white">
           <MessageSquare size={24} className="text-indigo-500" />
           消息记录
         </h2>
 
         {messages.length === 0 ? (
-          <div className="text-center py-12 text-gray-500">
+          <div className="text-center py-12 text-gray-500 dark:text-gray-400">
             该对话暂无消息
           </div>
         ) : (
@@ -173,7 +173,7 @@ export const ConversationDetail = () => {
                 <p className="text-gray-900 dark:text-white whitespace-pre-wrap">{message.text}</p>
                 {message.analysis && (
                   <details className="mt-3">
-                    <summary className="text-sm text-gray-500 cursor-pointer hover:text-gray-700 dark:hover:text-gray-300">
+                    <summary className="text-sm text-gray-500 dark:text-gray-400 cursor-pointer hover:text-gray-700 dark:hover:text-gray-300">
                       查看分析数据
                     </summary>
                     <pre className="mt-2 p-3 bg-gray-100 dark:bg-gray-900 rounded text-xs overflow-x-auto">

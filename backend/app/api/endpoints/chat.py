@@ -14,7 +14,7 @@ from app.schemas.chat import ChatRequest, ChatResponse, ChatMessage as ChatMessa
 from app.services.profile_service import ProfileService
 from app.services.graph_service import GraphService
 from app.services.text_analyzer import TextAnalyzer
-from app.services.llm_provider import get_provider
+from app.services.llm_config import get_chat_provider
 from app.models.sql.message import ChatMessage, MessageRole
 from app.models.sql.chat_session import ChatSession
 from app.models.sql.user import User
@@ -580,7 +580,7 @@ async def chat(
 
         # 调用 LLM 生成回复（30 秒超时，失败自动重试一次）
         import asyncio
-        llm_provider = get_provider()
+        llm_provider = get_chat_provider()
         last_llm_error: Exception | None = None
         assistant_reply = ""
         for attempt in range(2):

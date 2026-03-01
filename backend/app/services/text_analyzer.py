@@ -8,7 +8,8 @@ import re
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, Field, ValidationError
 
-from app.services.llm_provider import BaseProvider, get_provider
+from app.services.llm_provider import BaseProvider
+from app.services.llm_config import get_analysis_provider
 from app.schemas.chat import ChatAnalysis
 from app.schemas.profile import ProfileDelta
 
@@ -124,7 +125,7 @@ class TextAnalyzer:
         Args:
             provider: LLM Provider（如不提供则使用默认配置）
         """
-        self.provider = provider or get_provider()
+        self.provider = provider or get_analysis_provider()
         logger.info(f"TextAnalyzer initialized with provider: {type(self.provider).__name__}")
 
     async def analyze(

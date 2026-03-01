@@ -238,13 +238,13 @@ export const Users = () => {
           <table className="w-full">
             <thead style={{ backgroundColor: 'var(--bg-tertiary)' }}>
               <tr>
-                <th className="px-6 py-4 text-left text-sm font-semibold">学号</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold">姓名</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold">邮箱</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold">角色</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold">状态</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold">最后活跃</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold">操作</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold dark:text-white">学号</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold dark:text-white">姓名</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold dark:text-white">邮箱</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold dark:text-white">角色</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold dark:text-white">状态</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold dark:text-white">最后活跃</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold dark:text-white">操作</th>
               </tr>
             </thead>
             <tbody>
@@ -269,7 +269,7 @@ export const Users = () => {
                     className="border-t hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                     style={{ borderColor: 'var(--glass-border)' }}
                   >
-                    <td className="px-6 py-4 text-sm font-mono">{user.student_id}</td>
+                    <td className="px-6 py-4 text-sm font-mono dark:text-white">{user.student_id}</td>
                     <td className="px-6 py-4 text-sm">{user.name}</td>
                     <td className="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">{user.email ?? '—'}</td>
                     <td className="px-6 py-4 text-sm">

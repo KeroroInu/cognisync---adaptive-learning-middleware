@@ -13,6 +13,7 @@ from app.api.endpoints.admin import (
     export as db_export,
     sessions,
     research as admin_research,
+    config as admin_config,
 )
 
 # 创建 admin 主路由
@@ -28,3 +29,4 @@ admin_router.include_router(analytics.router, tags=["Admin - Analytics"])
 admin_router.include_router(scales.router, tags=["Admin - Scale Management"])
 admin_router.include_router(db_export.router, tags=["Admin - Data Export"])
 admin_router.include_router(admin_research.router, tags=["Admin - Research Management"])
+admin_router.include_router(admin_config.router, tags=["Admin - Model Config"])

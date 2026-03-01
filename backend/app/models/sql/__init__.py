@@ -10,6 +10,7 @@ from app.models.sql.chat_session import ChatSession
 from app.models.sql.onboarding import OnboardingSession
 from app.models.sql.scale import ScaleTemplate, ScaleResponse, ScaleStatus
 from app.models.sql.research import ResearchTask, ResearchTaskSubmission, ResearchTaskStatus
+from app.models.sql.system_config import SystemConfig
 
 __all__ = [
     "Base",
@@ -30,4 +31,5 @@ __all__ = [
     "ResearchTask",
     "ResearchTaskSubmission",
     "ResearchTaskStatus",
+    "SystemConfig",
 ]

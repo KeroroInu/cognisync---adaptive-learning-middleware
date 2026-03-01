@@ -74,11 +74,11 @@ export const Conversations = () => {
           <table className="w-full">
             <thead style={{ backgroundColor: 'var(--bg-tertiary)' }}>
               <tr>
-                <th className="px-6 py-4 text-left text-sm font-semibold">用户邮箱</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold">消息数</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold">创建时间</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold">最后更新</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold">操作</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold dark:text-white">用户邮箱</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold dark:text-white">消息数</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold dark:text-white">创建时间</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold dark:text-white">最后更新</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold dark:text-white">操作</th>
               </tr>
             </thead>
             <tbody>
@@ -95,7 +95,7 @@ export const Conversations = () => {
                     className="border-t hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                     style={{ borderColor: 'var(--glass-border)' }}
                   >
-                    <td className="px-6 py-4 text-sm font-medium">{session.user_email}</td>
+                    <td className="px-6 py-4 text-sm font-medium dark:text-white">{session.user_email}</td>
                     <td className="px-6 py-4 text-sm">
                       <div className="flex items-center gap-2">
                         <MessageSquare size={16} className="text-indigo-500" />
