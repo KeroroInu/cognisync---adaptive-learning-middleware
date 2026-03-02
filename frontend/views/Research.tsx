@@ -10,6 +10,7 @@ import {
   getActiveResearchTask,
   saveResearchProgress,
   completeResearchTask,
+  reopenResearchTask,
 } from '../services/api';
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -57,6 +58,7 @@ export const Research: React.FC<Props> = ({
   const [completing, setCompleting] = useState(false);
   const [completed, setCompleted] = useState(false);
   const [completeError, setCompleteError] = useState<string | null>(null);
+  const [reopening, setReopening] = useState(false);
 
   // Terminal / Pyodide
   const [terminalLines, setTerminalLines] = useState<TerminalLine[]>([]);
@@ -204,6 +206,25 @@ export const Research: React.FC<Props> = ({
       setCompleteError(err instanceof Error ? err.message : isZh ? '提交失败' : 'Failed to submit');
     } finally {
       setCompleting(false);
+    }
+  };
+
+  // ── Reopen task ─────────────────────────────────────────────────────────
+
+  const handleReopen = async () => {
+    if (!task || reopening) return;
+    setReopening(true);
+    setCompleteError(null);
+    try {
+      await reopenResearchTask(task.id);
+      setCompleted(false);
+      // 重置计时器，从本次重新开始算
+      startTimeRef.current = Date.now();
+      setElapsedSeconds(0);
+    } catch (err) {
+      setCompleteError(err instanceof Error ? err.message : isZh ? '退回失败' : 'Failed to reopen');
+    } finally {
+      setReopening(false);
     }
   };
 
@@ -545,6 +566,26 @@ export const Research: React.FC<Props> = ({
                   : (isZh ? '完成任务' : 'Submit Task')}
               </span>
             </button>
+
+            {/* Reopen button — only shown after submitted */}
+            {completed && (
+              <button
+                onClick={handleReopen}
+                disabled={reopening}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg transition-all disabled:opacity-50"
+                style={{
+                  background: 'rgba(239,68,68,0.1)',
+                  color: '#ef4444',
+                  border: '1px solid rgba(239,68,68,0.3)',
+                }}
+                title={isZh ? '撤回提交，重新编辑' : 'Reopen to edit again'}
+              >
+                {reopening
+                  ? <Loader size={13} className="animate-spin" />
+                  : <span>↩</span>}
+                <span>{isZh ? '退回重做' : 'Reopen'}</span>
+              </button>
+            )}
           </div>
         </div>
 

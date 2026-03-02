@@ -195,3 +195,34 @@ async def complete_task(
 
     await db.commit()
     return SuccessResponse(data={"completed": True})
+
+
+@router.post("/tasks/{task_id}/reopen")
+async def reopen_task(
+    task_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> SuccessResponse[dict]:
+    """撤回完成状态，允许学生重新编辑并再次提交"""
+    try:
+        tid = uuid.UUID(task_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid task_id")
+
+    result = await db.execute(
+        select(ResearchTaskSubmission)
+        .where(
+            ResearchTaskSubmission.task_id == tid,
+            ResearchTaskSubmission.user_id == current_user.id,
+        )
+    )
+    submission = result.scalar_one_or_none()
+    if not submission:
+        raise HTTPException(status_code=404, detail="Submission not found")
+
+    submission.is_completed = False
+    submission.submitted_at = None
+    submission.started_at = None   # 重置计时，下次保存时重新记录
+    submission.updated_at = datetime.now(timezone.utc)
+    await db.commit()
+    return SuccessResponse(data={"reopened": True})

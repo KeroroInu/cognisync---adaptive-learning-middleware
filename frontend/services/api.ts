@@ -535,3 +535,12 @@ export async function completeResearchTask(taskId: string, code: string, started
   });
   if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 }
+
+export async function reopenResearchTask(taskId: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/research/tasks/${taskId}/reopen`, {
+    method: 'POST',
+    headers: getHeaders(true),
+    body: JSON.stringify({}),
+  });
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+}
