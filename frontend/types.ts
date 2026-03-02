@@ -134,6 +134,7 @@ export interface ScaleAnswer {
 
 export interface ScaleSubmitRequest {
   answers: Record<string, number>; // {"item_1": 5, "item_2": 3, ...}
+  started_at?: string;  // ISO 8601 字符串，开始填写时间
 }
 
 export interface ScaleSubmitResponse {

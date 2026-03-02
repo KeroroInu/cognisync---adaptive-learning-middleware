@@ -135,11 +135,17 @@ class ScaleResponse(Base, UUIDMixin):
         comment="计算得分（JSON）"
     )
 
+    started_at: Mapped[Optional[datetime]] = mapped_column(
+        TIMESTAMP(timezone=True),
+        nullable=True,
+        comment="开始填写时间"
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True),
         default=datetime.utcnow,
         nullable=False,
-        comment="填写时间"
+        comment="提交时间"
     )
 
     # 关系

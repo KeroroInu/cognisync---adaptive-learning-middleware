@@ -54,6 +54,9 @@ async def init_db():
         # 迁移：添加 student_id 列（幂等，安全重复执行）
         await _migrate_student_id()
 
+        # 迁移：为 scale_responses 添加 started_at 列
+        await _migrate_scale_started_at()
+
         # 打印已创建的表
         async with engine.begin() as conn:
             def get_table_names(sync_conn):
@@ -140,6 +143,24 @@ async def _migrate_student_id():
     await run_sql(
         "ALTER TABLE users ALTER COLUMN email DROP NOT NULL;",
         "ALTER email DROP NOT NULL"
+    )
+
+
+async def _migrate_scale_started_at():
+    """幂等迁移：为 scale_responses 添加 started_at 列"""
+    from sqlalchemy import text
+
+    async def run_sql(sql: str, label: str):
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(text(sql))
+            logger.info(f"  ✅ {label}")
+        except Exception as e:
+            logger.warning(f"  ⚠️ {label} (skipped): {e}")
+
+    await run_sql(
+        "ALTER TABLE scale_responses ADD COLUMN IF NOT EXISTS started_at TIMESTAMP WITH TIME ZONE;",
+        "ADD COLUMN started_at to scale_responses"
     )
 
     # 9. name 设为非空

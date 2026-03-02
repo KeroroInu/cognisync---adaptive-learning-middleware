@@ -286,6 +286,7 @@ async def get_scale_responses(
             "student_id": student_id,
             "answers_json": resp.answers_json,
             "scores_json": resp.scores_json,
+            "started_at": resp.started_at.isoformat() if resp.started_at else None,
             "created_at": resp.created_at.isoformat()
         }
         for resp, name, student_id in result.all()

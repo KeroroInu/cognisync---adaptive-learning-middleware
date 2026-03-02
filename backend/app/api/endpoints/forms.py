@@ -3,7 +3,7 @@ Forms API Endpoints - 量表相关接口
 """
 import uuid
 from datetime import datetime, UTC
-from typing import Dict, Any, Generic, TypeVar
+from typing import Dict, Any, Generic, TypeVar, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -29,6 +29,7 @@ class ApiResponse(BaseModel, Generic[T]):
 class ScaleSubmitRequest(BaseModel):
     """量表提交请求"""
     answers: Dict[str, int]
+    started_at: Optional[str] = None  # ISO 8601 字符串，前端记录的开始填写时间
 
 
 class InitialProfile(BaseModel):
@@ -201,6 +202,7 @@ async def submit_scale_answers(
             user_id=current_user.id,
             template_id=tid,
             answers_json=answers,
+            started_at=datetime.fromisoformat(data.started_at) if data.started_at else None,
             scores_json={
                 "dimensions": dim_scores,
                 "cognition": cognition,

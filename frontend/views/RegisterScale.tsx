@@ -97,7 +97,10 @@ export const RegisterScale: React.FC<RegisterScaleProps> = ({
       acc[a.questionId] = a.value;
       return acc;
     }, {} as Record<string, number>);
-    submitScaleAnswers(template.id, { answers: answersDict })
+    submitScaleAnswers(template.id, {
+      answers: answersDict,
+      started_at: startTimeRef.current ? new Date(startTimeRef.current).toISOString() : undefined,
+    })
       .then(response => {
         if (response.success && response.data) {
           setIsComplete(true);
@@ -214,7 +217,10 @@ export const RegisterScale: React.FC<RegisterScaleProps> = ({
         return acc;
       }, {} as Record<string, number>);
 
-      const response = await submitScaleAnswers(template.id, { answers: answersDict });
+      const response = await submitScaleAnswers(template.id, {
+        answers: answersDict,
+        started_at: startTimeRef.current ? new Date(startTimeRef.current).toISOString() : undefined,
+      });
 
       if (response.success && response.data) {
         setIsComplete(true);

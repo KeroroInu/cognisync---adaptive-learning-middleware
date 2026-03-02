@@ -17,25 +17,38 @@ const STATUS_LABEL: Record<string, string> = {
 
 // ── CSV 导出列定义 ──────────────────────────────────────────
 const FIXED_COLS = [
-  { key: 'index',       label: '序号',    group: '基本信息' },
-  { key: 'created_at', label: '提交时间', group: '基本信息' },
-  { key: 'student_id', label: '学号',    group: '基本信息' },
-  { key: 'user_name',  label: '姓名',    group: '基本信息' },
-  { key: 'cognition',  label: '认知分',  group: '分数信息' },
-  { key: 'affect',     label: '情感分',  group: '分数信息' },
-  { key: 'behavior',   label: '行为分',  group: '分数信息' },
-  { key: 'total_score',label: '总分',    group: '分数信息' },
-  { key: 'max_score',  label: '满分',    group: '分数信息' },
+  { key: 'index',         label: '序号',    group: '基本信息' },
+  { key: 'created_at',   label: '提交时间', group: '基本信息' },
+  { key: 'duration_sec', label: '所用时间(秒)', group: '基本信息' },
+  { key: 'student_id',   label: '学号',    group: '基本信息' },
+  { key: 'user_name',    label: '姓名',    group: '基本信息' },
+  { key: 'cognition',    label: '认知分',  group: '分数信息' },
+  { key: 'affect',       label: '情感分',  group: '分数信息' },
+  { key: 'behavior',     label: '行为分',  group: '分数信息' },
+  { key: 'total_score',  label: '总分',    group: '分数信息' },
+  { key: 'max_score',    label: '满分',    group: '分数信息' },
 ] as const;
 
 type FixedColKey = typeof FIXED_COLS[number]['key'];
+
+const formatDate = (iso: string): string => {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+};
 
 const getCellValue = (col: string, resp: ScaleResponse, idx: number): string => {
   const scores = resp.scores_json as Record<string, unknown>;
   const answers = resp.answers_json as Record<string, unknown>;
   switch (col as FixedColKey) {
     case 'index':       return String(idx + 1);
-    case 'created_at':  return new Date(resp.created_at).toLocaleString('zh-CN');
+    case 'created_at':  return resp.created_at ? formatDate(resp.created_at) : '';
+    case 'duration_sec': {
+      if (!resp.started_at || !resp.created_at) return '';
+      const diff = Math.round((new Date(resp.created_at).getTime() - new Date(resp.started_at).getTime()) / 1000);
+      return diff >= 0 ? String(diff) : '';
+    }
     case 'student_id':  return resp.student_id || '';
     case 'user_name':   return resp.user_name || '';
     case 'cognition':   return scores?.cognition != null ? String(scores.cognition) : '';
@@ -183,7 +196,7 @@ export const Scales = () => {
     const schemaQuestions = ((scale.schema_json as any)?.questions ?? []) as Array<{ id: string; text?: string }>;
     const questionCols = answerKeys.map((k, i) => {
       const q = schemaQuestions.find(q => q.id === k);
-      return { key: k, label: q?.text ? `Q${i + 1} ${q.text.slice(0, 20)}` : `Q${i + 1}` };
+      return { key: k, label: q?.text ? q.text : `Q${i + 1}` };
     });
     // 默认全选
     const allKeys = [

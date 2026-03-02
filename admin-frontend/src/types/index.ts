@@ -100,6 +100,7 @@ export interface ScaleResponse {
   template_name?: string;
   answers_json: Record<string, unknown>;
   scores_json: Record<string, unknown>;
+  started_at?: string | null;
   created_at: string;
 }
 

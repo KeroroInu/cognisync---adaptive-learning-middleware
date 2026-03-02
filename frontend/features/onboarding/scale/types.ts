@@ -74,6 +74,7 @@ export interface ScaleAnswers {
  */
 export interface ScaleSubmitRequest {
   answers: ScaleAnswers;
+  started_at?: string;  // ISO 8601 字符串，开始填写时间
 }
 
 /**
