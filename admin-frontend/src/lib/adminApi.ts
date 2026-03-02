@@ -118,6 +118,13 @@ class AdminApiClient {
     });
   }
 
+  async resetUserPassword(userId: string, newPassword: string): Promise<{ reset: boolean }> {
+    return this.request<{ reset: boolean }>(`/users/${userId}/reset-password`, {
+      method: 'POST',
+      body: JSON.stringify({ new_password: newPassword }),
+    });
+  }
+
   // Scales
   async getScales(): Promise<ScalesListResponse> {
     return this.request<ScalesListResponse>('/scales');

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { adminApi } from '../lib/adminApi';
 import type { User } from '../types';
-import { Search, ChevronLeft, ChevronRight, Edit2, Trash2, Eye, X, Save, Download } from 'lucide-react';
+import { Search, ChevronLeft, ChevronRight, Edit2, Trash2, Eye, X, Save, Download, KeyRound } from 'lucide-react';
 
 const ADMIN_KEY = (import.meta.env.VITE_ADMIN_KEY as string) || '';
 const BASE_URL = (import.meta.env.VITE_API_BASE_URL as string) || 'http://localhost:8000/api';
@@ -22,6 +22,14 @@ export const Users = () => {
   const [editIsActive, setEditIsActive] = useState(true);
   const [editLoading, setEditLoading] = useState(false);
   const [editError, setEditError] = useState('');
+
+  // Reset password modal state
+  const [resetUser, setResetUser] = useState<User | null>(null);
+  const [resetPassword, setResetPassword] = useState('');
+  const [resetConfirm, setResetConfirm] = useState('');
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetError, setResetError] = useState('');
+  const [resetSuccess, setResetSuccess] = useState(false);
 
   useEffect(() => {
     loadUsers();
@@ -71,6 +79,37 @@ export const Users = () => {
     }
   };
 
+  const handleOpenReset = (e: React.MouseEvent, user: User) => {
+    e.stopPropagation();
+    setResetUser(user);
+    setResetPassword('');
+    setResetConfirm('');
+    setResetError('');
+    setResetSuccess(false);
+  };
+
+  const handleResetSave = async () => {
+    if (!resetUser) return;
+    if (resetPassword.length < 6) {
+      setResetError('密码长度不能少于 6 位');
+      return;
+    }
+    if (resetPassword !== resetConfirm) {
+      setResetError('两次输入的密码不一致');
+      return;
+    }
+    try {
+      setResetLoading(true);
+      setResetError('');
+      await adminApi.resetUserPassword(resetUser.id, resetPassword);
+      setResetSuccess(true);
+    } catch (err) {
+      setResetError(err instanceof Error ? err.message : '重置失败');
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
   const handleDelete = async (e: React.MouseEvent, user: User) => {
     e.stopPropagation();
     if (window.confirm(`确定要删除用户 ${user.name}（学号：${user.student_id}）吗？此操作不可撤销。`)) {
@@ -105,6 +144,12 @@ export const Users = () => {
 
   const totalPages = Math.ceil(total / pageSize);
 
+  const inputStyle: React.CSSProperties = {
+    backgroundColor: 'var(--bg-secondary)',
+    border: '1px solid var(--glass-border)',
+    color: 'var(--text-primary)',
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Edit Modal */}
@@ -112,10 +157,11 @@ export const Users = () => {
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="glass-card rounded-2xl p-6 w-full max-w-md mx-4">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold">编辑用户</h2>
+              <h2 className="text-xl font-bold" style={{ color: 'var(--text-primary)' }}>编辑用户</h2>
               <button
                 onClick={() => setEditingUser(null)}
-                className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                className="p-1 rounded-lg transition-opacity hover:opacity-60"
+                style={{ color: 'var(--text-light)' }}
               >
                 <X size={20} />
               </button>
@@ -123,57 +169,45 @@ export const Users = () => {
 
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium mb-1">学号（只读）</label>
+                <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-tertiary)' }}>学号（只读）</label>
                 <input
                   type="text"
                   value={editingUser.student_id}
                   disabled
                   className="w-full px-3 py-2 rounded-lg opacity-50 cursor-not-allowed"
-                  style={{
-                    backgroundColor: 'var(--bg-secondary)',
-                    border: '1px solid var(--glass-border)',
-                    color: 'var(--text-primary)',
-                  }}
+                  style={inputStyle}
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1">邮箱（只读，可选）</label>
+                <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-tertiary)' }}>邮箱（只读，可选）</label>
                 <input
                   type="text"
                   value={editingUser.email ?? '—'}
                   disabled
                   className="w-full px-3 py-2 rounded-lg opacity-50 cursor-not-allowed"
-                  style={{
-                    backgroundColor: 'var(--bg-secondary)',
-                    border: '1px solid var(--glass-border)',
-                    color: 'var(--text-primary)',
-                  }}
+                  style={inputStyle}
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1">用户名称</label>
+                <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-tertiary)' }}>用户名称</label>
                 <input
                   type="text"
                   value={editName}
                   onChange={(e) => setEditName(e.target.value)}
                   placeholder="输入用户名称"
                   className="w-full px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-                  style={{
-                    backgroundColor: 'var(--bg-secondary)',
-                    border: '1px solid var(--glass-border)',
-                    color: 'var(--text-primary)',
-                  }}
+                  style={inputStyle}
                 />
               </div>
 
               <div className="flex items-center gap-3">
-                <label className="text-sm font-medium">账户状态</label>
+                <label className="text-sm font-medium" style={{ color: 'var(--text-tertiary)' }}>账户状态</label>
                 <button
                   onClick={() => setEditIsActive(!editIsActive)}
                   className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                    editIsActive ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'
+                    editIsActive ? 'bg-green-500' : 'bg-gray-400'
                   }`}
                 >
                   <span
@@ -194,21 +228,112 @@ export const Users = () => {
               <div className="flex gap-3 pt-2">
                 <button
                   onClick={() => setEditingUser(null)}
-                  className="flex-1 px-4 py-2 rounded-lg border transition-colors hover:bg-gray-50 dark:hover:bg-gray-900"
-                  style={{ borderColor: 'var(--glass-border)' }}
+                  className="flex-1 px-4 py-2 rounded-lg border transition-opacity hover:opacity-70"
+                  style={{ borderColor: 'var(--glass-border)', color: 'var(--text-secondary)' }}
                 >
                   取消
                 </button>
                 <button
                   onClick={handleEditSave}
                   disabled={editLoading}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 text-white hover:opacity-90 disabled:opacity-50 transition-opacity"
                 >
                   <Save size={16} />
                   {editLoading ? '保存中...' : '保存'}
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reset Password Modal */}
+      {resetUser && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="glass-card rounded-2xl p-6 w-full max-w-md mx-4">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <KeyRound size={20} style={{ color: '#f59e0b' }} />
+                <h2 className="text-xl font-bold" style={{ color: 'var(--text-primary)' }}>重置密码</h2>
+              </div>
+              <button
+                onClick={() => setResetUser(null)}
+                className="p-1 rounded-lg transition-opacity hover:opacity-60"
+                style={{ color: 'var(--text-light)' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Student info */}
+            <div className="mb-4 px-3 py-2 rounded-lg text-sm" style={{ background: 'var(--bg-secondary)', color: 'var(--text-secondary)' }}>
+              为 <span className="font-semibold" style={{ color: 'var(--text-primary)' }}>{resetUser.name}</span>
+              {' '}（学号：<span className="font-mono">{resetUser.student_id}</span>）重置密码
+            </div>
+
+            {resetSuccess ? (
+              <div className="space-y-4">
+                <div className="p-4 rounded-xl text-center" style={{ background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)' }}>
+                  <p className="text-emerald-600 font-medium">密码已重置成功！</p>
+                  <p className="text-sm mt-1" style={{ color: 'var(--text-light)' }}>学生下次登录时使用新密码即可</p>
+                </div>
+                <button
+                  onClick={() => setResetUser(null)}
+                  className="w-full px-4 py-2 rounded-lg bg-indigo-600 text-white hover:opacity-90 transition-opacity"
+                >
+                  关闭
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-tertiary)' }}>新密码</label>
+                  <input
+                    type="password"
+                    value={resetPassword}
+                    onChange={(e) => setResetPassword(e.target.value)}
+                    placeholder="至少 6 位"
+                    className="w-full px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+                    style={inputStyle}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-tertiary)' }}>确认新密码</label>
+                  <input
+                    type="password"
+                    value={resetConfirm}
+                    onChange={(e) => setResetConfirm(e.target.value)}
+                    placeholder="再次输入新密码"
+                    className="w-full px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+                    style={inputStyle}
+                  />
+                </div>
+
+                {resetError && (
+                  <p className="text-sm text-red-500">{resetError}</p>
+                )}
+
+                <div className="flex gap-3 pt-2">
+                  <button
+                    onClick={() => setResetUser(null)}
+                    className="flex-1 px-4 py-2 rounded-lg border transition-opacity hover:opacity-70"
+                    style={{ borderColor: 'var(--glass-border)', color: 'var(--text-secondary)' }}
+                  >
+                    取消
+                  </button>
+                  <button
+                    onClick={handleResetSave}
+                    disabled={resetLoading}
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-white hover:opacity-90 disabled:opacity-50 transition-opacity"
+                    style={{ background: 'linear-gradient(135deg, #f59e0b, #ef4444)' }}
+                  >
+                    <KeyRound size={16} />
+                    {resetLoading ? '重置中...' : '确认重置'}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -238,13 +363,13 @@ export const Users = () => {
           <table className="w-full">
             <thead style={{ backgroundColor: 'var(--bg-tertiary)' }}>
               <tr>
-                <th className="px-6 py-4 text-left text-sm font-semibold dark:text-white">学号</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold dark:text-white">姓名</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold dark:text-white">邮箱</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold dark:text-white">角色</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold dark:text-white">状态</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold dark:text-white">最后活跃</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold dark:text-white">操作</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>学号</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>姓名</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>邮箱</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>角色</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>状态</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>最后活跃</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>操作</th>
               </tr>
             </thead>
             <tbody>
@@ -258,7 +383,7 @@ export const Users = () => {
                 </tr>
               ) : users.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
+                  <td colSpan={7} className="px-6 py-12 text-center" style={{ color: 'var(--text-light)' }}>
                     暂无用户
                   </td>
                 </tr>
@@ -266,22 +391,25 @@ export const Users = () => {
                 users.map((user) => (
                   <tr
                     key={user.id}
-                    className="border-t hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                    className="border-t transition-colors"
                     style={{ borderColor: 'var(--glass-border)' }}
+                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--bg-secondary)')}
+                    onMouseLeave={e => (e.currentTarget.style.backgroundColor = '')}
                   >
-                    <td className="px-6 py-4 text-sm font-mono dark:text-white">{user.student_id}</td>
-                    <td className="px-6 py-4 text-sm">{user.name}</td>
+                    <td className="px-6 py-4 text-sm font-mono" style={{ color: 'var(--text-primary)' }}>{user.student_id}</td>
+                    <td className="px-6 py-4 text-sm" style={{ color: 'var(--text-primary)' }}>{user.name}</td>
                     <td className="px-6 py-4 text-sm" style={{ color: 'var(--text-light)' }}>{user.email ?? '—'}</td>
                     <td className="px-6 py-4 text-sm">
                       <span className="px-2 py-1 rounded text-xs" style={{
                         backgroundColor: 'var(--bg-tertiary)',
                         border: '1px solid var(--glass-border)',
+                        color: 'var(--text-secondary)',
                       }}>
                         {user.role}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-sm">
-                      <span className={`px-2 py-1 rounded text-xs ${user.is_active ? 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'}`}>
+                      <span className={`px-2 py-1 rounded text-xs ${user.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
                         {user.is_active ? '已激活' : '已禁用'}
                       </span>
                     </td>
@@ -292,28 +420,40 @@ export const Users = () => {
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => navigate(`/admin/users/${user.id}`)}
-                          className="p-2 rounded-lg bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-200 dark:hover:bg-indigo-800 transition-colors"
+                          className="p-2 rounded-lg transition-opacity hover:opacity-70"
+                          style={{ background: 'rgba(99,102,241,0.1)', color: '#6366f1' }}
                           title="查看详情"
                         >
                           <Eye size={16} />
                         </button>
                         <button
                           onClick={(e) => handleEdit(e, user)}
-                          className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors"
+                          className="p-2 rounded-lg transition-opacity hover:opacity-70"
+                          style={{ background: 'rgba(59,130,246,0.1)', color: '#3b82f6' }}
                           title="编辑用户"
                         >
                           <Edit2 size={16} />
                         </button>
                         <button
+                          onClick={(e) => handleOpenReset(e, user)}
+                          className="p-2 rounded-lg transition-opacity hover:opacity-70"
+                          style={{ background: 'rgba(245,158,11,0.1)', color: '#f59e0b' }}
+                          title="重置密码"
+                        >
+                          <KeyRound size={16} />
+                        </button>
+                        <button
                           onClick={(e) => handleExportUser(e, user)}
-                          className="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-200 dark:hover:bg-emerald-800 transition-colors"
+                          className="p-2 rounded-lg transition-opacity hover:opacity-70"
+                          style={{ background: 'rgba(16,185,129,0.1)', color: '#10b981' }}
                           title="导出用户数据 (CSV)"
                         >
                           <Download size={16} />
                         </button>
                         <button
                           onClick={(e) => handleDelete(e, user)}
-                          className="p-2 rounded-lg bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-800 transition-colors"
+                          className="p-2 rounded-lg transition-opacity hover:opacity-70"
+                          style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444' }}
                           title="删除用户"
                         >
                           <Trash2 size={16} />
@@ -337,17 +477,19 @@ export const Users = () => {
               <button
                 onClick={() => setPage(p => Math.max(1, p - 1))}
                 disabled={page === 1}
-                className="px-4 py-2 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                className="px-4 py-2 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-opacity hover:opacity-70"
+                style={{ color: 'var(--text-secondary)' }}
               >
                 <ChevronLeft size={20} />
               </button>
-              <span className="px-4 py-2">
+              <span className="px-4 py-2" style={{ color: 'var(--text-secondary)' }}>
                 第 {page} / {totalPages} 页
               </span>
               <button
                 onClick={() => setPage(p => Math.min(totalPages, p + 1))}
                 disabled={page === totalPages}
-                className="px-4 py-2 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                className="px-4 py-2 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-opacity hover:opacity-70"
+                style={{ color: 'var(--text-secondary)' }}
               >
                 <ChevronRight size={20} />
               </button>

@@ -122,6 +122,39 @@ async def update_user(
     })
 
 
+class ResetPasswordRequest(BaseModel):
+    new_password: str
+
+
+@router.post("/users/{user_id}/reset-password", dependencies=[Depends(verify_admin_key)])
+async def reset_user_password(
+    user_id: str,
+    body: ResetPasswordRequest,
+    db: AsyncSession = Depends(get_db)
+) -> SuccessResponse[dict]:
+    """管理员重置用户密码"""
+    if len(body.new_password) < 6:
+        raise HTTPException(status_code=400, detail="密码长度不能少于 6 位")
+
+    try:
+        uid = UUID(user_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid user_id")
+
+    result = await db.execute(select(User).where(User.id == uid))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    import bcrypt
+    user.password_hash = bcrypt.hashpw(
+        body.new_password.encode("utf-8"), bcrypt.gensalt()
+    ).decode("utf-8")
+
+    await db.commit()
+    return SuccessResponse(data={"reset": True, "user_id": user_id})
+
+
 @router.delete("/users/{user_id}", dependencies=[Depends(verify_admin_key)])
 async def delete_user(
     user_id: str,
