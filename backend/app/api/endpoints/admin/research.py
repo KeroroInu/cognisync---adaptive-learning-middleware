@@ -2,7 +2,7 @@
 Admin 研究任务管理 API 端点
 """
 from uuid import UUID
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -24,6 +24,7 @@ class ResearchTaskCreate(BaseModel):
     title: str
     description: Optional[str] = None
     instructions: Optional[str] = None
+    ai_prompt: Optional[str] = None
     code_content: str
     language: str = "python"
 
@@ -32,6 +33,7 @@ class ResearchTaskUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
     instructions: Optional[str] = None
+    ai_prompt: Optional[str] = None
     code_content: Optional[str] = None
     language: Optional[str] = None
 
@@ -41,6 +43,7 @@ class ResearchTaskItem(BaseModel):
     title: str
     description: Optional[str]
     instructions: Optional[str]
+    ai_prompt: Optional[str]
     code_content: str
     language: str
     status: str
@@ -53,9 +56,12 @@ class ResearchSubmissionItem(BaseModel):
     id: str
     task_id: str
     user_id: str
+    user_name: Optional[str]
+    student_id: Optional[str]
     user_email: Optional[str]
     code_submitted: str
     is_completed: bool
+    started_at: Optional[str]
     submitted_at: Optional[str]
     created_at: str
 
@@ -87,6 +93,7 @@ async def list_research_tasks(
             title=task.title,
             description=task.description,
             instructions=task.instructions,
+            ai_prompt=task.ai_prompt,
             code_content=task.code_content,
             language=task.language,
             status=task.status.value,
@@ -108,6 +115,7 @@ async def create_research_task(
         title=data.title,
         description=data.description,
         instructions=data.instructions,
+        ai_prompt=data.ai_prompt,
         code_content=data.code_content,
         language=data.language,
         status=ResearchTaskStatus.DRAFT,
@@ -121,6 +129,7 @@ async def create_research_task(
         title=task.title,
         description=task.description,
         instructions=task.instructions,
+        ai_prompt=task.ai_prompt,
         code_content=task.code_content,
         language=task.language,
         status=task.status.value,
@@ -148,11 +157,13 @@ async def update_research_task(
         task.description = data.description
     if data.instructions is not None:
         task.instructions = data.instructions
+    if data.ai_prompt is not None:
+        task.ai_prompt = data.ai_prompt
     if data.code_content is not None:
         task.code_content = data.code_content
     if data.language is not None:
         task.language = data.language
-    task.updated_at = datetime.utcnow()
+    task.updated_at = datetime.now(timezone.utc)
 
     await db.commit()
     await db.refresh(task)
@@ -168,6 +179,7 @@ async def update_research_task(
         title=task.title,
         description=task.description,
         instructions=task.instructions,
+        ai_prompt=task.ai_prompt,
         code_content=task.code_content,
         language=task.language,
         status=task.status.value,
@@ -205,13 +217,13 @@ async def activate_research_task(
         update(ResearchTask)
         .where(ResearchTask.status == ResearchTaskStatus.ACTIVE)
         .where(ResearchTask.id != task_id)
-        .values(status=ResearchTaskStatus.ARCHIVED, updated_at=datetime.utcnow())
+        .values(status=ResearchTaskStatus.ARCHIVED, updated_at=datetime.now(timezone.utc))
     )
 
     result = await db.execute(
         update(ResearchTask)
         .where(ResearchTask.id == task_id)
-        .values(status=ResearchTaskStatus.ACTIVE, updated_at=datetime.utcnow())
+        .values(status=ResearchTaskStatus.ACTIVE, updated_at=datetime.now(timezone.utc))
         .returning(ResearchTask.id)
     )
     if not result.scalar_one_or_none():
@@ -230,7 +242,7 @@ async def archive_research_task(
     result = await db.execute(
         update(ResearchTask)
         .where(ResearchTask.id == task_id)
-        .values(status=ResearchTaskStatus.ARCHIVED, updated_at=datetime.utcnow())
+        .values(status=ResearchTaskStatus.ARCHIVED, updated_at=datetime.now(timezone.utc))
         .returning(ResearchTask.id)
     )
     if not result.scalar_one_or_none():
@@ -260,7 +272,7 @@ async def get_task_submissions(
     ) or 0
 
     result = await db.execute(
-        select(ResearchTaskSubmission, User.email)
+        select(ResearchTaskSubmission, User.name, User.student_id, User.email)
         .join(User, ResearchTaskSubmission.user_id == User.id)
         .where(ResearchTaskSubmission.task_id == task_id)
         .order_by(ResearchTaskSubmission.updated_at.desc())
@@ -274,13 +286,16 @@ async def get_task_submissions(
             id=str(sub.id),
             task_id=str(sub.task_id),
             user_id=str(sub.user_id),
+            user_name=name,
+            student_id=sid,
             user_email=email,
             code_submitted=sub.code_submitted,
             is_completed=sub.is_completed,
+            started_at=sub.started_at.isoformat() if sub.started_at else None,
             submitted_at=sub.submitted_at.isoformat() if sub.submitted_at else None,
             created_at=sub.created_at.isoformat(),
         )
-        for sub, email in rows
+        for sub, name, sid, email in rows
     ]
 
     return SuccessResponse(data={

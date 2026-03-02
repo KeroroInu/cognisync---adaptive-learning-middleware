@@ -48,6 +48,7 @@ export interface ChatRequest {
   language: 'zh' | 'en';
   isResearchMode: boolean;
   currentCode?: string;
+  taskPrompt?: string;
 }
 
 export interface ChatAnalysis {
@@ -514,11 +515,11 @@ export async function getActiveResearchTask(): Promise<ResearchTask | null> {
 /**
  * 自动保存学生代码进度
  */
-export async function saveResearchProgress(taskId: string, code: string): Promise<void> {
+export async function saveResearchProgress(taskId: string, code: string, startedAt?: string): Promise<void> {
   const response = await fetch(`${API_BASE_URL}/api/research/tasks/${taskId}/save-progress`, {
     method: 'POST',
     headers: getHeaders(true),
-    body: JSON.stringify({ code_submitted: code }),
+    body: JSON.stringify({ code_submitted: code, started_at: startedAt }),
   });
   if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 }
@@ -526,11 +527,11 @@ export async function saveResearchProgress(taskId: string, code: string): Promis
 /**
  * 标记任务完成并保存最终代码
  */
-export async function completeResearchTask(taskId: string, code: string): Promise<void> {
+export async function completeResearchTask(taskId: string, code: string, startedAt?: string): Promise<void> {
   const response = await fetch(`${API_BASE_URL}/api/research/tasks/${taskId}/complete`, {
     method: 'POST',
     headers: getHeaders(true),
-    body: JSON.stringify({ code_submitted: code }),
+    body: JSON.stringify({ code_submitted: code, started_at: startedAt }),
   });
   if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 }

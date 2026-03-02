@@ -57,6 +57,12 @@ async def init_db():
         # 迁移：为 scale_responses 添加 started_at 列
         await _migrate_scale_started_at()
 
+        # 迁移：为 research_tasks 添加 ai_prompt 列
+        await _migrate_research_ai_prompt()
+
+        # 迁移：为 research_task_submissions 添加 started_at 列
+        await _migrate_research_started_at()
+
         # 打印已创建的表
         async with engine.begin() as conn:
             def get_table_names(sync_conn):
@@ -170,6 +176,42 @@ async def _migrate_scale_started_at():
     )
 
     logger.info("✅ student_id migration completed")
+
+
+async def _migrate_research_ai_prompt():
+    """幂等迁移：为 research_tasks 添加 ai_prompt 列"""
+    from sqlalchemy import text
+
+    async def run_sql(sql: str, label: str):
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(text(sql))
+            logger.info(f"  ✅ {label}")
+        except Exception as e:
+            logger.warning(f"  ⚠️ {label} (skipped): {e}")
+
+    await run_sql(
+        "ALTER TABLE research_tasks ADD COLUMN IF NOT EXISTS ai_prompt TEXT;",
+        "ADD COLUMN ai_prompt to research_tasks"
+    )
+
+
+async def _migrate_research_started_at():
+    """幂等迁移：为 research_task_submissions 添加 started_at 列"""
+    from sqlalchemy import text
+
+    async def run_sql(sql: str, label: str):
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(text(sql))
+            logger.info(f"  ✅ {label}")
+        except Exception as e:
+            logger.warning(f"  ⚠️ {label} (skipped): {e}")
+
+    await run_sql(
+        "ALTER TABLE research_task_submissions ADD COLUMN IF NOT EXISTS started_at TIMESTAMP WITH TIME ZONE;",
+        "ADD COLUMN started_at to research_task_submissions"
+    )
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:

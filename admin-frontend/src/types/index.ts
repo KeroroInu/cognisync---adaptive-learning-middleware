@@ -127,7 +127,9 @@ export interface TableRowsResponse {
 export interface SessionItem {
   id: string;
   user_id: string;
-  user_email: string;
+  user_name: string;
+  student_id: string | null;
+  user_email: string | null;
   message_count: number;
   created_at: string;
   updated_at: string | null;
@@ -143,7 +145,9 @@ export interface SessionsListResponse {
 export interface SessionDetail {
   id: string;
   user_id: string;
-  user_email: string;
+  user_name: string;
+  student_id: string | null;
+  user_email: string | null;
   message_count: number;
   created_at: string;
   updated_at: string | null;
@@ -201,6 +205,7 @@ export interface ResearchTask {
   title: string;
   description: string | null;
   instructions: string | null;
+  ai_prompt: string | null;
   code_content: string;
   language: string;
   status: 'draft' | 'active' | 'archived';
@@ -213,9 +218,12 @@ export interface ResearchTaskSubmission {
   id: string;
   task_id: string;
   user_id: string;
+  user_name?: string;
+  student_id?: string;
   user_email?: string;
   code_submitted: string;
   is_completed: boolean;
+  started_at?: string | null;
   submitted_at: string | null;
   created_at: string;
 }

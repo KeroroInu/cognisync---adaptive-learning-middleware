@@ -556,6 +556,15 @@ async def chat(
             }[lang]
             system_prompt += code_context
 
+        # 研究模式：注入教师教学提示（课程上下文与学习目标）
+        if request.isResearchMode and request.taskPrompt:
+            lang = request.language or "zh"
+            teacher_hint = {
+                "zh": f"\n\n**本节课教学目标（教师设定）：**\n{request.taskPrompt}\n在辅导过程中，请围绕以上学习目标给予引导，帮助学生达成教师期望的理解和能力。\n",
+                "en": f"\n\n**Lesson Learning Objectives (set by teacher):**\n{request.taskPrompt}\nGuide the student in alignment with these objectives to help them achieve the understanding and skills the teacher expects.\n",
+            }[lang]
+            system_prompt += teacher_hint
+
         # 构建 user prompt（包含历史对话）
         conversation_context = "\n".join([
             f"{'学生' if msg['role'] == 'user' else '老师'}: {msg['text']}"

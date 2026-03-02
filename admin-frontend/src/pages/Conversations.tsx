@@ -32,7 +32,8 @@ export const Conversations = () => {
 
   const handleDelete = async (e: React.MouseEvent, session: SessionItem) => {
     e.stopPropagation();
-    if (window.confirm(`确定要删除该会话吗？\n用户: ${session.user_email}\n消息数: ${session.message_count}\n此操作不可撤销。`)) {
+    const identity = session.user_name || session.student_id || session.user_email || session.user_id;
+    if (window.confirm(`确定要删除该会话吗？\n用户: ${identity}\n消息数: ${session.message_count}\n此操作不可撤销。`)) {
       try {
         await adminApi.deleteSession(session.id);
         await loadSessions();
@@ -74,7 +75,7 @@ export const Conversations = () => {
           <table className="w-full">
             <thead style={{ backgroundColor: 'var(--bg-tertiary)' }}>
               <tr>
-                <th className="px-6 py-4 text-left text-sm font-semibold dark:text-white">用户邮箱</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold dark:text-white">用户</th>
                 <th className="px-6 py-4 text-left text-sm font-semibold dark:text-white">消息数</th>
                 <th className="px-6 py-4 text-left text-sm font-semibold dark:text-white">创建时间</th>
                 <th className="px-6 py-4 text-left text-sm font-semibold dark:text-white">最后更新</th>
@@ -95,7 +96,12 @@ export const Conversations = () => {
                     className="border-t hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                     style={{ borderColor: 'var(--glass-border)' }}
                   >
-                    <td className="px-6 py-4 text-sm font-medium dark:text-white">{session.user_email}</td>
+                    <td className="px-6 py-4 text-sm font-medium dark:text-white">
+                      <div>{session.user_name || '—'}</div>
+                      <div className="text-xs font-mono" style={{ color: 'var(--text-light)' }}>
+                        {session.student_id || session.user_email || session.user_id.slice(0, 8)}
+                      </div>
+                    </td>
                     <td className="px-6 py-4 text-sm">
                       <div className="flex items-center gap-2">
                         <MessageSquare size={16} className="text-indigo-500" />

@@ -3,7 +3,7 @@ Research Task Models - 教学研究任务和学生提交记录
 """
 import uuid
 import enum
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from sqlalchemy import String, Text, Boolean, ForeignKey, Enum, Index
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -48,6 +48,12 @@ class ResearchTask(Base, UUIDMixin):
         comment="给学生的操作说明",
     )
 
+    ai_prompt: Mapped[Optional[str]] = mapped_column(
+        Text,
+        nullable=True,
+        comment="教师给 AI 的教学提示（本节课上下文、学习目标等）",
+    )
+
     code_content: Mapped[str] = mapped_column(
         Text,
         nullable=False,
@@ -70,15 +76,15 @@ class ResearchTask(Base, UUIDMixin):
 
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True),
-        default=datetime.utcnow,
+        default=lambda: datetime.now(timezone.utc),
         nullable=False,
         comment="创建时间",
     )
 
     updated_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True),
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
         nullable=False,
         comment="更新时间",
     )
@@ -135,6 +141,12 @@ class ResearchTaskSubmission(Base, UUIDMixin):
         comment="是否已完成任务",
     )
 
+    started_at: Mapped[Optional[datetime]] = mapped_column(
+        TIMESTAMP(timezone=True),
+        nullable=True,
+        comment="学生开始任务的时间（前端计时起点）",
+    )
+
     submitted_at: Mapped[Optional[datetime]] = mapped_column(
         TIMESTAMP(timezone=True),
         nullable=True,
@@ -143,15 +155,15 @@ class ResearchTaskSubmission(Base, UUIDMixin):
 
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True),
-        default=datetime.utcnow,
+        default=lambda: datetime.now(timezone.utc),
         nullable=False,
         comment="首次保存时间",
     )
 
     updated_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True),
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
         nullable=False,
         comment="最后更新时间",
     )

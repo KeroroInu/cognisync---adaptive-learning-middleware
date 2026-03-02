@@ -11,7 +11,9 @@ class SessionItem(BaseModel):
     """会话列表项"""
     id: UUID = Field(..., description="会话 ID")
     user_id: UUID = Field(..., description="用户 ID")
-    user_email: str = Field(..., description="用户邮箱")
+    user_name: str = Field("", description="用户姓名")
+    student_id: Optional[str] = Field(None, description="学号")
+    user_email: Optional[str] = Field(None, description="用户邮箱")
     message_count: int = Field(..., description="消息数量")
     created_at: datetime = Field(..., description="创建时间")
     updated_at: Optional[datetime] = Field(None, description="最后更新时间")
@@ -32,7 +34,9 @@ class SessionDetail(BaseModel):
     """会话详情"""
     id: UUID = Field(..., description="会话 ID")
     user_id: UUID = Field(..., description="用户 ID")
-    user_email: str = Field(..., description="用户邮箱")
+    user_name: str = Field("", description="用户姓名")
+    student_id: Optional[str] = Field(None, description="学号")
+    user_email: Optional[str] = Field(None, description="用户邮箱")
     message_count: int = Field(..., description="消息数量")
     created_at: datetime = Field(..., description="创建时间")
     updated_at: Optional[datetime] = Field(None, description="最后更新时间")

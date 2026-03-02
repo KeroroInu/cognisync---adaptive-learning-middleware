@@ -54,6 +54,10 @@ class ChatRequest(BaseModel):
         default=None,
         description="学生当前代码内容（研究模式下使用）"
     )
+    taskPrompt: Optional[str] = Field(
+        default=None,
+        description="教师给 AI 的教学提示（本节课上下文与学习目标）"
+    )
 
     class Config:
         json_schema_extra = {

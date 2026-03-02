@@ -1,7 +1,45 @@
 import { useState, useEffect, useRef } from 'react';
-import { FlaskConical, Plus, Play, Archive, Trash2, Users, ChevronDown, ChevronUp, Loader, Upload, X, CheckCircle } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { FlaskConical, Plus, Play, Archive, Trash2, Users, ChevronDown, ChevronUp, Loader, Upload, X, CheckCircle, Download } from 'lucide-react';
 import { adminApi } from '../lib/adminApi';
 import type { ResearchTask, ResearchTaskSubmission } from '../types';
+
+// ── CSV helpers ──────────────────────────────────────────────────────────────
+
+const formatDate = (iso: string): string => {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+};
+
+const downloadResearchCSV = (submissions: ResearchTaskSubmission[], taskTitle: string) => {
+  const esc = (v: string) => `"${v.replace(/"/g, '""')}"`;
+  const headers = ['序号', '姓名', '学号', '完成状态', '所用时间(秒)', '提交时间', '代码'];
+  const rows = submissions.map((sub, i) => {
+    const durationSec = sub.started_at && sub.submitted_at
+      ? String(Math.round((new Date(sub.submitted_at).getTime() - new Date(sub.started_at).getTime()) / 1000))
+      : '';
+    return [
+      String(i + 1),
+      sub.user_name || '',
+      sub.student_id || sub.user_id.slice(0, 8),
+      sub.is_completed ? '已完成' : '进行中',
+      durationSec,
+      sub.submitted_at ? formatDate(sub.submitted_at) : (sub.created_at ? formatDate(sub.created_at) : ''),
+      sub.code_submitted || '',
+    ].map(esc).join(',');
+  });
+
+  const csv = '\uFEFF' + [headers.map(esc).join(','), ...rows].join('\r\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${taskTitle}_提交记录_${new Date().toISOString().split('T')[0]}.csv`;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a); URL.revokeObjectURL(url);
+};
 
 const LANGUAGES = [
   { value: 'python', label: 'Python' },
@@ -31,10 +69,12 @@ export const ResearchManagement = () => {
     title: '',
     description: '',
     instructions: '',
+    ai_prompt: '',
     code_content: '',
     language: 'python',
   });
   const [creating, setCreating] = useState(false);
+  const [exportingRow, setExportingRow] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadTasks = async () => {
@@ -70,11 +110,12 @@ export const ResearchManagement = () => {
         title: form.title,
         description: form.description || undefined,
         instructions: form.instructions || undefined,
+        ai_prompt: form.ai_prompt || undefined,
         code_content: form.code_content,
         language: form.language,
       });
       setShowCreateModal(false);
-      setForm({ title: '', description: '', instructions: '', code_content: '', language: 'python' });
+      setForm({ title: '', description: '', instructions: '', ai_prompt: '', code_content: '', language: 'python' });
       await loadTasks();
     } catch (e) {
       setError(e instanceof Error ? e.message : '创建失败');
@@ -119,6 +160,18 @@ export const ResearchManagement = () => {
       setSubmissionsModal({ task, submissions: result.submissions, loading: false });
     } catch (e) {
       setSubmissionsModal({ task, submissions: [], loading: false });
+    }
+  };
+
+  const handleExportFromRow = async (task: ResearchTask) => {
+    setExportingRow(task.id);
+    try {
+      const result = await adminApi.getResearchTaskSubmissions(task.id);
+      downloadResearchCSV(result.submissions, task.title);
+    } catch (err) {
+      alert('加载数据失败：' + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setExportingRow(null);
     }
   };
 
@@ -238,6 +291,16 @@ export const ResearchManagement = () => {
                           <Users size={14} />
                         </button>
                         <button
+                          onClick={(e) => { e.stopPropagation(); handleExportFromRow(task); }}
+                          disabled={exportingRow === task.id}
+                          className="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-200 dark:hover:bg-emerald-800 transition-colors disabled:opacity-50"
+                          title="导出提交记录 CSV"
+                        >
+                          {exportingRow === task.id
+                            ? <Loader size={14} className="animate-spin" />
+                            : <Download size={14} />}
+                        </button>
+                        <button
                           onClick={(e) => handleDelete(e, task.id)}
                           className="p-2 rounded-lg bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-800 transition-colors"
                           title="删除任务"
@@ -254,14 +317,15 @@ export const ResearchManagement = () => {
         </div>
       </div>
 
-      {/* Create Task Modal */}
-      {showCreateModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="glass-card rounded-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto stagger-1">
+      {/* Create Task Modal — rendered via portal to escape layout overflow */}
+      {showCreateModal && createPortal(
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 overflow-y-auto">
+          <div className="flex min-h-full items-center justify-center p-4">
+          <div className="glass-card rounded-2xl p-6 w-full max-w-2xl">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-2xl font-bold">创建研究任务</h2>
               <button
-                onClick={() => { setShowCreateModal(false); setForm({ title: '', description: '', instructions: '', code_content: '', language: 'python' }); }}
+                onClick={() => { setShowCreateModal(false); setForm({ title: '', description: '', instructions: '', ai_prompt: '', code_content: '', language: 'python' }); }}
                 className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
               >
                 <X size={20} />
@@ -302,6 +366,23 @@ export const ResearchManagement = () => {
                   className="w-full px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 resize-none"
                   style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)' }}
                   placeholder="例：请填写所有标注 TODO 的空白处，完成后点击「完成任务」。"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">
+                  AI 教学提示
+                  <span className="ml-1.5 text-xs font-normal" style={{ color: 'var(--text-light)' }}>
+                    （告诉 AI 本节课的教学目标，让它更有针对性地引导学生）
+                  </span>
+                </label>
+                <textarea
+                  value={form.ai_prompt}
+                  onChange={e => setForm(f => ({ ...f, ai_prompt: e.target.value }))}
+                  rows={4}
+                  className="w-full px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 resize-none"
+                  style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)' }}
+                  placeholder="例：本节课讲解 Python 列表推导式。学生应理解列表推导式的语法，能将 for 循环改写为推导式，并知道何时使用条件过滤。请引导学生自己发现规律，不要直接给出答案。"
                 />
               </div>
 
@@ -354,7 +435,7 @@ export const ResearchManagement = () => {
 
             <div className="flex gap-3 mt-6">
               <button
-                onClick={() => { setShowCreateModal(false); setForm({ title: '', description: '', instructions: '', code_content: '', language: 'python' }); }}
+                onClick={() => { setShowCreateModal(false); setForm({ title: '', description: '', instructions: '', ai_prompt: '', code_content: '', language: 'python' }); }}
                 className="flex-1 px-4 py-2 rounded-lg border hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
                 style={{ borderColor: 'var(--glass-border)' }}
               >
@@ -370,12 +451,15 @@ export const ResearchManagement = () => {
               </button>
             </div>
           </div>
-        </div>
+          </div>
+        </div>,
+        document.body
       )}
 
-      {/* Submissions Modal */}
-      {submissionsModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      {/* Submissions Modal — rendered via portal to escape layout overflow */}
+      {submissionsModal && createPortal(
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 overflow-y-auto">
+          <div className="flex min-h-full items-center justify-center p-4">
           <div className="glass-card rounded-2xl w-full max-w-3xl max-h-[80vh] flex flex-col">
             {/* Modal Header */}
             <div className="flex items-center justify-between p-6 border-b border-white/10">
@@ -383,12 +467,22 @@ export const ResearchManagement = () => {
                 <h2 className="text-xl font-bold">学生提交记录</h2>
                 <p className="text-sm mt-0.5" style={{ color: 'var(--text-light)' }}>{submissionsModal.task.title}</p>
               </div>
-              <button
-                onClick={() => setSubmissionsModal(null)}
-                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-              >
-                <X size={20} />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => !submissionsModal.loading && downloadResearchCSV(submissionsModal.submissions, submissionsModal.task.title)}
+                  disabled={submissionsModal.loading || submissionsModal.submissions.length === 0}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-200 dark:hover:bg-emerald-800 transition-colors text-sm font-semibold disabled:opacity-50"
+                >
+                  <Download size={15} />
+                  导出 CSV
+                </button>
+                <button
+                  onClick={() => setSubmissionsModal(null)}
+                  className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
             </div>
 
             {/* Modal Body */}
@@ -412,11 +506,13 @@ export const ResearchManagement = () => {
                       >
                         <div className="flex items-center gap-3">
                           <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-white text-xs font-bold shrink-0">
-                            {(sub.user_name || sub.user_email || 'U')[0].toUpperCase()}
+                            {(sub.user_name || 'U')[0].toUpperCase()}
                           </div>
                           <div>
                             <p className="text-sm font-medium">{sub.user_name || '—'}</p>
-                            <p className="text-xs text-gray-500 font-mono">{sub.user_email || sub.user_id.slice(0, 8)}</p>
+                            <p className="text-xs font-mono" style={{ color: 'var(--text-light)' }}>
+                              {sub.student_id || sub.user_id.slice(0, 8)}
+                            </p>
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
@@ -427,6 +523,14 @@ export const ResearchManagement = () => {
                           }`}>
                             {sub.is_completed ? '已完成' : '进行中'}
                           </span>
+                          {sub.started_at && sub.submitted_at && (() => {
+                            const sec = Math.round((new Date(sub.submitted_at).getTime() - new Date(sub.started_at).getTime()) / 1000);
+                            const mm = Math.floor(sec / 60).toString().padStart(2, '0');
+                            const ss = (sec % 60).toString().padStart(2, '0');
+                            return (
+                              <span className="text-xs font-mono text-gray-400">⏱ {mm}:{ss}</span>
+                            );
+                          })()}
                           <span className="text-xs text-gray-400">
                             {sub.submitted_at
                               ? new Date(sub.submitted_at).toLocaleString('zh-CN')
@@ -451,7 +555,9 @@ export const ResearchManagement = () => {
               )}
             </div>
           </div>
-        </div>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );

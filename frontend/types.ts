@@ -226,6 +226,7 @@ export interface ResearchTask {
   title: string;
   description: string | null;
   instructions: string | null;
+  ai_prompt: string | null;
   code_content: string;
   language: string;
   status: 'draft' | 'active' | 'archived';

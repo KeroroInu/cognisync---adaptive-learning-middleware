@@ -2,7 +2,7 @@
 用户端研究任务 API 端点
 """
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -25,16 +25,19 @@ class ActiveTaskResponse(BaseModel):
     title: str
     description: Optional[str]
     instructions: Optional[str]
+    ai_prompt: Optional[str]
     code_content: str
     language: str
 
 
 class SaveProgressRequest(BaseModel):
     code_submitted: str
+    started_at: Optional[str] = None
 
 
 class CompleteTaskRequest(BaseModel):
     code_submitted: str
+    started_at: Optional[str] = None
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -61,6 +64,7 @@ async def get_active_task(
         title=task.title,
         description=task.description,
         instructions=task.instructions,
+        ai_prompt=task.ai_prompt,
         code_content=task.code_content,
         language=task.language,
     ))
@@ -96,13 +100,25 @@ async def save_progress(
 
     if submission:
         submission.code_submitted = data.code_submitted
-        submission.updated_at = datetime.utcnow()
+        if data.started_at and not submission.started_at:
+            try:
+                submission.started_at = datetime.fromisoformat(data.started_at.replace('Z', '+00:00'))
+            except ValueError:
+                pass
+        submission.updated_at = datetime.now(timezone.utc)
     else:
+        started = None
+        if data.started_at:
+            try:
+                started = datetime.fromisoformat(data.started_at.replace('Z', '+00:00'))
+            except ValueError:
+                pass
         submission = ResearchTaskSubmission(
             task_id=tid,
             user_id=current_user.id,
             code_submitted=data.code_submitted,
             is_completed=False,
+            started_at=started,
         )
         db.add(submission)
 
@@ -136,12 +152,21 @@ async def complete_task(
     )
     submission = result.scalar_one_or_none()
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
+    started = None
+    if data.started_at:
+        try:
+            started = datetime.fromisoformat(data.started_at.replace('Z', '+00:00'))
+        except ValueError:
+            pass
+
     if submission:
         submission.code_submitted = data.code_submitted
         submission.is_completed = True
         submission.submitted_at = now
         submission.updated_at = now
+        if started and not submission.started_at:
+            submission.started_at = started
     else:
         submission = ResearchTaskSubmission(
             task_id=tid,
@@ -149,6 +174,7 @@ async def complete_task(
             code_submitted=data.code_submitted,
             is_completed=True,
             submitted_at=now,
+            started_at=started,
         )
         db.add(submission)
 

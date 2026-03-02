@@ -84,6 +84,8 @@ async def get_sessions(
         sessions.append(SessionItem(
             id=session.id,
             user_id=session.user_id,
+            user_name=user.name,
+            student_id=user.student_id,
             user_email=user.email,
             message_count=message_count,
             created_at=session.created_at,
@@ -152,6 +154,8 @@ async def get_session_detail(
     session_detail = SessionDetail(
         id=session.id,
         user_id=session.user_id,
+        user_name=user.name,
+        student_id=user.student_id,
         user_email=user.email,
         message_count=message_count,
         created_at=session.created_at,

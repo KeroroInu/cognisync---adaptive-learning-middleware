@@ -202,7 +202,7 @@ async def submit_scale_answers(
             user_id=current_user.id,
             template_id=tid,
             answers_json=answers,
-            started_at=datetime.fromisoformat(data.started_at) if data.started_at else None,
+            started_at=datetime.fromisoformat(data.started_at.replace('Z', '+00:00')) if data.started_at else None,
             scores_json={
                 "dimensions": dim_scores,
                 "cognition": cognition,

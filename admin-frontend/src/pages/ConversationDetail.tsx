@@ -115,7 +115,12 @@ export const ConversationDetail = () => {
             <User size={20} className="text-indigo-500" />
             <div>
               <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>用户</p>
-              <p className="font-medium">{session.user_email}</p>
+              <p className="font-medium">{session.user_name || '—'}</p>
+              {(session.student_id || session.user_email) && (
+                <p className="text-xs font-mono" style={{ color: 'var(--text-light)' }}>
+                  {session.student_id || session.user_email}
+                </p>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-3 p-4 rounded-lg" style={{ background: 'var(--bg-secondary)' }}>
