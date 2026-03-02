@@ -1,9 +1,9 @@
 import React from 'react';
-import { LayoutDashboard, MessageSquareText, Network, Scale, FileText, FlaskConical, Languages, Sun, Moon, LogOut, User as UserIcon } from 'lucide-react';
+import { LayoutDashboard, MessageSquareText, Network, Scale, FileText, FlaskConical, ClipboardList, Languages, Sun, Moon, LogOut, User as UserIcon } from 'lucide-react';
 import { translations } from '../utils/translations';
 import type { Language, User } from '../types';
 
-type View = 'dashboard' | 'chat' | 'graph' | 'calibration' | 'evidence' | 'research';
+type View = 'dashboard' | 'chat' | 'graph' | 'calibration' | 'evidence' | 'research' | 'scales';
 type Theme = 'light' | 'dark';
 
 interface Props {
@@ -38,6 +38,7 @@ export const Layout: React.FC<Props> = ({
     { id: 'calibration', label: t.calibration, icon: <Scale size={20} /> },
     { id: 'evidence', label: t.evidence, icon: <FileText size={20} /> },
     { id: 'research', label: t.research, icon: <FlaskConical size={20} /> },
+    { id: 'scales', label: t.scales, icon: <ClipboardList size={20} /> },
   ];
 
   return (

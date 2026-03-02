@@ -218,6 +218,18 @@ export interface AIOnboardingFinishResponse {
 }
 
 // ============================================
+//  量表列表相关类型
+// ============================================
+
+export interface ScaleListItem {
+  id: string;
+  name: string;
+  description: string;
+  question_count: number;
+  is_completed: boolean;
+}
+
+// ============================================
 //  研究任务相关类型
 // ============================================
 

@@ -10,6 +10,7 @@ import type {
   LoginRequest,
   RegisterRequest,
   ScaleTemplate,
+  ScaleListItem,
   ScaleSubmitRequest,
   ScaleSubmitResponse,
   AIOnboardingStartResponse,
@@ -543,4 +544,32 @@ export async function reopenResearchTask(taskId: string): Promise<void> {
     body: JSON.stringify({}),
   });
   if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+}
+
+// ============================================
+//  量表列表 API（用户已登录后使用）
+// ============================================
+
+/**
+ * 获取所有激活的量表，包含当前用户的完成状态
+ */
+export async function getAllActiveScales(): Promise<ScaleListItem[]> {
+  const response = await fetch(`${API_BASE_URL}/api/forms/list`, {
+    headers: getHeaders(true),
+  });
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  const result = await response.json();
+  return (result.data?.templates ?? []) as ScaleListItem[];
+}
+
+/**
+ * 按 ID 获取量表模板（供用户端填写）
+ */
+export async function getScaleTemplateById(templateId: string): Promise<ScaleTemplate> {
+  const response = await fetch(`${API_BASE_URL}/api/forms/templates/${templateId}`, {
+    headers: getHeaders(false),
+  });
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  const result = await response.json();
+  return result.data.template as ScaleTemplate;
 }

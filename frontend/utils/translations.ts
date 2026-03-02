@@ -8,6 +8,7 @@ export const translations = {
     calibration: "校准与纠偏",
     evidence: "证据日志",
     research: "教学研究",
+    scales: "量表",
     researchMode: "研究模式",
     systemActive: "系统运行中",
     
@@ -164,6 +165,7 @@ export const translations = {
     calibration: "Calibration",
     evidence: "Evidence",
     research: "Research",
+    scales: "Scales",
     researchMode: "Research Mode",
     systemActive: "System Active",
     

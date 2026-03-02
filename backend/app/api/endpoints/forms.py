@@ -98,6 +98,85 @@ def _compute_cab(
     return _weighted("cognition"), _weighted("affect"), _weighted("behavior")
 
 
+@router.get("/list")
+async def list_active_templates(
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user),
+):
+    """
+    获取所有激活的量表，并标记当前用户是否已完成
+    需要认证
+    """
+    stmt = select(ScaleTemplateModel).where(
+        ScaleTemplateModel.status == ScaleStatus.ACTIVE
+    ).order_by(ScaleTemplateModel.created_at.desc())
+
+    result = await db.execute(stmt)
+    templates = result.scalars().all()
+
+    # 查询该用户已提交过的模板 ID 集合
+    resp_result = await db.execute(
+        select(ScaleResponseModel.template_id)
+        .where(ScaleResponseModel.user_id == current_user.id)
+    )
+    completed_ids = {row[0] for row in resp_result.all()}
+
+    items = [
+        {
+            "id": str(t.id),
+            "name": t.name,
+            "description": t.schema_json.get("description", ""),
+            "question_count": len(
+                t.schema_json.get("questions") or t.schema_json.get("items") or []
+            ),
+            "is_completed": t.id in completed_ids,
+        }
+        for t in templates
+    ]
+
+    return ApiResponse(success=True, data={"templates": items})
+
+
+@router.get("/templates/{template_id}")
+async def get_template_by_id(
+    template_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """按 ID 获取量表模板（格式同 /active，供用户端填写使用）"""
+    try:
+        tid = uuid.UUID(template_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid template_id")
+
+    result = await db.execute(
+        select(ScaleTemplateModel).where(ScaleTemplateModel.id == tid)
+    )
+    template_model = result.scalar_one_or_none()
+    if not template_model:
+        raise HTTPException(status_code=404, detail="Scale template not found")
+
+    raw_items = (
+        template_model.schema_json.get("questions")
+        or template_model.schema_json.get("items")
+        or []
+    )
+    questions = [
+        {
+            "id": item["id"],
+            "text": item["text"],
+            "dimension": item.get("dimension", "General"),
+        }
+        for item in raw_items
+    ]
+    template = {
+        "id": str(template_model.id),
+        "name": template_model.name,
+        "description": template_model.schema_json.get("description", ""),
+        "questions": questions,
+    }
+    return ApiResponse(success=True, data={"template": template})
+
+
 @router.get("/active")
 async def get_active_template(
     db: AsyncSession = Depends(get_db)

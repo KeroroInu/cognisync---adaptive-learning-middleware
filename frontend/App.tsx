@@ -6,6 +6,7 @@ import { KnowledgeGraph } from './views/KnowledgeGraph';
 import { Calibration } from './views/Calibration';
 import { Evidence } from './views/Evidence';
 import { Research } from './views/Research';
+import { Scales } from './views/Scales';
 import { Login } from './views/Login';
 import { Register } from './views/Register';
 import { RegisterScale } from './views/RegisterScale';
@@ -15,7 +16,7 @@ import { getActiveResearchTask } from './services/api';
 import type { UserProfile } from './types';
 
 // 视图类型定义
-type AppView = 'dashboard' | 'chat' | 'graph' | 'calibration' | 'evidence' | 'research';
+type AppView = 'dashboard' | 'chat' | 'graph' | 'calibration' | 'evidence' | 'research' | 'scales';
 type AuthView = 'login' | 'register' | 'register-scale' | 'register-ai';
 type View = AppView | AuthView;
 
@@ -101,7 +102,7 @@ function App() {
 
   // 路由守卫：检查是否需要认证
   const requiresAuth = (view: View): boolean => {
-    return ['dashboard', 'chat', 'graph', 'calibration', 'evidence', 'research'].includes(view);
+    return ['dashboard', 'chat', 'graph', 'calibration', 'evidence', 'research', 'scales'].includes(view);
   };
 
   // 渲染认证相关视图
@@ -222,6 +223,15 @@ function App() {
             language={state.language}
             theme={theme}
             userId={state.user?.id}
+          />
+        );
+
+      case 'scales':
+        return (
+          <Scales
+            language={state.language}
+            theme={theme}
+            onUpdateProfile={updateProfile}
           />
         );
 
