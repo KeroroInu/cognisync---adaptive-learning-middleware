@@ -70,8 +70,9 @@ async def get_user_detail(
 
     user_detail = UserDetail(
         id=user.id,
+        student_id=user.student_id,
         email=user.email,
-        name=user.name,
+        name=user.name or "",
         role=user.role,
         is_active=user.is_active,
         created_at=user.created_at,

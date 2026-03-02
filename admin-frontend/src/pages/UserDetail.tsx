@@ -216,7 +216,7 @@ export const UserDetail = () => {
     profileFilter === 'all' ? true : p.source === profileFilter
   );
   const userModifiedCount = profiles.filter(p => p.source === 'user').length;
-  const initials = (userDetail.name || userDetail.email).slice(0, 2).toUpperCase();
+  const initials = (userDetail.name || userDetail.student_id || '').slice(0, 2).toUpperCase();
 
   const TABS = [
     { key: 'messages', label: '对话记录', icon: MessageSquare, count: messages.length },
@@ -245,7 +245,9 @@ export const UserDetail = () => {
             </div>
             <div>
               <h1 className="text-2xl font-bold">{userDetail.name || '(未命名)'}</h1>
-              <p style={{ color: 'var(--text-light)' }} className="text-sm mt-0.5">{userDetail.email}</p>
+              <p style={{ color: 'var(--text-light)' }} className="text-sm mt-0.5">
+                {userDetail.student_id}{userDetail.email ? ` · ${userDetail.email}` : ''}
+              </p>
               <div className="flex gap-2 mt-2 flex-wrap">
                 <span className="px-2 py-0.5 rounded text-xs font-medium"
                   style={{ backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--glass-border)' }}>

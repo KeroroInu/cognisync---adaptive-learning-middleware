@@ -10,8 +10,9 @@ from pydantic import BaseModel, Field
 class UserDetail(BaseModel):
     """用户详情"""
     id: UUID
-    email: str
-    name: Optional[str] = None
+    student_id: str
+    email: Optional[str] = None
+    name: str = ""
     role: str
     is_active: bool
     created_at: datetime
