@@ -193,9 +193,10 @@ export const Scales = () => {
     const answerKeys = responses.length > 0
       ? Object.keys(responses[0].answers_json as Record<string, unknown>).sort()
       : [];
-    const schemaQuestions = ((scale.schema_json as any)?.questions ?? []) as Array<{ id: string; text?: string }>;
+    // schema_json 存储格式用 items 键（与 forms.py 一致），兼容 questions 键
+    const schemaItems = ((scale.schema_json as any)?.items ?? (scale.schema_json as any)?.questions ?? []) as Array<{ id: string; text?: string }>;
     const questionCols = answerKeys.map((k, i) => {
-      const q = schemaQuestions.find(q => q.id === k);
+      const q = schemaItems.find(q => q.id === k);
       return { key: k, label: q?.text ? q.text : `Q${i + 1}` };
     });
     // 默认全选

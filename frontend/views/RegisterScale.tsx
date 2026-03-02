@@ -42,6 +42,19 @@ export const RegisterScale: React.FC<RegisterScaleProps> = ({
   // 滚动窗口：记录最近 5 次选择的值和耗时
   const recentAnswersRef = useRef<Array<{ value: number; duration: number }>>([]);
   const lastAnswerTimeRef = useRef<number | null>(null);
+  // 已用时间显示
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+
+  // 计时器：每秒更新已用时间
+  useEffect(() => {
+    if (!startTimeRef.current || isComplete || isSubmitting) return;
+    const timer = setInterval(() => {
+      if (startTimeRef.current) {
+        setElapsedSeconds(Math.floor((Date.now() - startTimeRef.current) / 1000));
+      }
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [isComplete, isSubmitting, isLoading]);
 
   // 加载量表模板
   useEffect(() => {
@@ -402,9 +415,17 @@ export const RegisterScale: React.FC<RegisterScaleProps> = ({
                 .replace('{current}', String(currentQuestionIndex + 1))
                 .replace('{total}', String(template.questions.length))}
             </span>
-            <span className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
-              {Math.round(progress)}%
-            </span>
+            <div className="flex items-center gap-3">
+              {/* 已用时间 */}
+              {startTimeRef.current && (
+                <span className="text-xs px-2 py-0.5 rounded-full font-mono" style={{ background: 'var(--bg-tertiary)', color: 'var(--text-light)' }}>
+                  ⏱ {Math.floor(elapsedSeconds / 60).toString().padStart(2, '0')}:{(elapsedSeconds % 60).toString().padStart(2, '0')}
+                </span>
+              )}
+              <span className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
+                {Math.round(progress)}%
+              </span>
+            </div>
           </div>
           <div className="h-3 rounded-full overflow-hidden shadow-inner" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
             <div

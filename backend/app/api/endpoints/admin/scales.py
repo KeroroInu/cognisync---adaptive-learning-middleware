@@ -69,6 +69,7 @@ async def list_scale_templates(
             name=template.name,
             version=template.version,
             status=template.status.value,
+            schema_json=template.schema_json,
             created_at=template.created_at,
             updated_at=template.updated_at,
             responses_count=responses_count

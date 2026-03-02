@@ -13,6 +13,7 @@ class ScaleTemplateItem(BaseModel):
     name: str
     version: int
     status: str
+    schema_json: Optional[Dict[str, Any]] = None
     created_at: datetime
     updated_at: datetime
     responses_count: int = 0
