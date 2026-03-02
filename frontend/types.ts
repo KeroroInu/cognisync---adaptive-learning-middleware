@@ -232,4 +232,7 @@ export interface ResearchTask {
   status: 'draft' | 'active' | 'archived';
   created_at: string;
   updated_at: string;
+  // 当前用户的提交状态
+  is_completed?: boolean;
+  code_submitted?: string | null;
 }

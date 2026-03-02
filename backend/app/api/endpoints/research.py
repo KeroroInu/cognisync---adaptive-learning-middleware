@@ -28,6 +28,9 @@ class ActiveTaskResponse(BaseModel):
     ai_prompt: Optional[str]
     code_content: str
     language: str
+    # 当前用户的提交状态（若无提交记录则为默认值）
+    is_completed: bool = False
+    code_submitted: Optional[str] = None
 
 
 class SaveProgressRequest(BaseModel):
@@ -59,6 +62,16 @@ async def get_active_task(
     if not task:
         raise HTTPException(status_code=404, detail="No active research task")
 
+    # 查询该用户的提交记录
+    sub_result = await db.execute(
+        select(ResearchTaskSubmission)
+        .where(
+            ResearchTaskSubmission.task_id == task.id,
+            ResearchTaskSubmission.user_id == current_user.id,
+        )
+    )
+    submission = sub_result.scalar_one_or_none()
+
     return SuccessResponse(data=ActiveTaskResponse(
         id=str(task.id),
         title=task.title,
@@ -67,6 +80,8 @@ async def get_active_task(
         ai_prompt=task.ai_prompt,
         code_content=task.code_content,
         language=task.language,
+        is_completed=submission.is_completed if submission else False,
+        code_submitted=submission.code_submitted if submission else None,
     ))
 
 

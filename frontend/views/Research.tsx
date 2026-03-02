@@ -83,7 +83,14 @@ export const Research: React.FC<Props> = ({
     getActiveResearchTask()
       .then(t => {
         setTask(t);
-        if (t) setCode(t.code_content);
+        if (t) {
+          // 优先使用学生已保存的代码，否则用模板原始代码
+          setCode(t.code_submitted || t.code_content);
+          // 若已提交过，直接标记为完成（停止计时器）
+          if (t.is_completed) {
+            setCompleted(true);
+          }
+        }
       })
       .catch(() => setTask(null))
       .finally(() => setLoadingTask(false));
