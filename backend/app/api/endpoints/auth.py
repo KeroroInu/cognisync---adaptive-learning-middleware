@@ -175,8 +175,55 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
     existing_user = result.scalar_one_or_none()
 
     if existing_user:
-        logger.warning(f"[REGISTER] Student ID already registered: {data.student_id}")
-        raise HTTPException(status_code=400, detail="Student ID already registered")
+        # 已完成 onboarding → 正常冲突报错
+        if existing_user.has_completed_onboarding:
+            logger.warning(f"[REGISTER] Student ID already registered: {data.student_id}")
+            raise HTTPException(status_code=400, detail="Student ID already registered")
+
+        # 未完成 onboarding（注册中途退出）→ 允许续接，更新信息后返回新 token
+        logger.info(f"[REGISTER] Resuming incomplete registration for: {data.student_id}")
+        existing_user.onboarding_mode = data.mode
+        existing_user.password_hash = hash_password(data.password)
+        if data.name:
+            existing_user.name = data.name
+        # 邮箱变更时检查唯一性
+        if data.email and data.email != existing_user.email:
+            email_stmt = select(User).where(User.email == data.email)
+            email_result = await db.execute(email_stmt)
+            if email_result.scalar_one_or_none():
+                raise HTTPException(status_code=400, detail="Email already registered")
+            existing_user.email = data.email
+        await db.commit()
+        await db.refresh(existing_user)
+
+        token = create_access_token(str(existing_user.id))
+        user_info = UserInfo(
+            id=str(existing_user.id),
+            student_id=existing_user.student_id,
+            email=existing_user.email,
+            name=existing_user.name,
+            createdAt=existing_user.created_at.isoformat(),
+            hasCompletedOnboarding=False,
+            onboardingMode=existing_user.onboarding_mode
+        )
+
+        # AI 模式需要重新生成初始图谱
+        initial_profile = None
+        initial_graph = None
+        if data.mode == 'ai':
+            try:
+                from app.services.personalization_service import PersonalizationService
+                personalization_service = PersonalizationService()
+                initial_profile = ProfileData(cognition=50.0, affect=50.0, behavior=50.0)
+                initial_graph = await personalization_service.generate_initial_graph(
+                    cognition=50.0, affect=50.0, behavior=50.0, num_concepts=10
+                )
+            except Exception as e:
+                logger.warning(f"[REGISTER] Failed to generate initial graph on resume: {e}")
+                initial_graph = []
+
+        logger.info(f"[REGISTER] ✅ Resumed registration: {existing_user.student_id}")
+        return AuthResponse(token=token, user=user_info, initialProfile=initial_profile, initialGraph=initial_graph)
 
     # 如果提供了邮箱，检查邮箱唯一性
     if data.email:
@@ -290,6 +337,146 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
             detail=f"Registration failed due to server error"
         )
 
+
+class RegisterWithScaleRequest(RegisterRequest):
+    """量表模式注册：同时携带量表答案，原子性完成注册+量表提交"""
+    template_id: str
+    answers: Dict[str, int]
+    started_at: Optional[str] = None
+
+
+@router.post("/register-with-scale", response_model=AuthResponse)
+async def register_with_scale(data: RegisterWithScaleRequest, db: AsyncSession = Depends(get_db)):
+    """
+    量表模式专用组合注册接口
+
+    原子性地完成：创建用户账号 + 量表计分 + 画像初始化 + has_completed_onboarding=True
+    用户只有在成功提交量表后才真正入库，避免注册中途退出产生孤儿账号。
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"[REGISTER-WITH-SCALE] Attempting for student_id: {data.student_id}")
+
+    # ── 学号唯一性检查 ────────────────────────────────────────────────────────
+    stmt = select(User).where(User.student_id == data.student_id)
+    result = await db.execute(stmt)
+    existing_user = result.scalar_one_or_none()
+
+    if existing_user and existing_user.has_completed_onboarding:
+        raise HTTPException(status_code=400, detail="Student ID already registered")
+
+    # ── 邮箱唯一性检查 ────────────────────────────────────────────────────────
+    if data.email:
+        email_stmt = select(User).where(User.email == data.email)
+        email_result = await db.execute(email_stmt)
+        if email_result.scalar_one_or_none():
+            raise HTTPException(status_code=400, detail="Email already registered")
+
+    # ── 加载量表模板 ─────────────────────────────────────────────────────────
+    from app.models.sql.scale import ScaleTemplate as ScaleTemplateModel, ScaleResponse as ScaleResponseModel
+    from app.api.endpoints.forms import _compute_dim_scores, _compute_cab
+    try:
+        tid = uuid.UUID(data.template_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid template_id")
+
+    template_result = await db.execute(
+        select(ScaleTemplateModel).where(ScaleTemplateModel.id == tid)
+    )
+    template_model = template_result.scalar_one_or_none()
+    if not template_model:
+        raise HTTPException(status_code=404, detail="Scale template not found")
+
+    # ── 计算 CAB 分数 ─────────────────────────────────────────────────────────
+    scoring_json = template_model.scoring_json or {}
+    mapping_json = template_model.mapping_json or {}
+    schema_json  = template_model.schema_json  or {}
+    dim_scores = _compute_dim_scores(data.answers, scoring_json, schema_json)
+    cognition, affect, behavior = _compute_cab(dim_scores, mapping_json)
+    logger.info(f"[REGISTER-WITH-SCALE] CAB=({cognition},{affect},{behavior})")
+
+    try:
+        # ── 创建或复用账号（续接未完成的注册） ───────────────────────────────
+        if existing_user:
+            new_user = existing_user
+            new_user.onboarding_mode = data.mode
+            new_user.password_hash   = hash_password(data.password)
+            if data.name:
+                new_user.name = data.name
+        else:
+            new_user = User(
+                id=uuid.uuid4(),
+                student_id=data.student_id,
+                name=data.name,
+                email=data.email,
+                password_hash=hash_password(data.password),
+                role="learner",
+                is_active=True,
+                created_at=datetime.utcnow(),
+                onboarding_mode='scale',
+                has_completed_onboarding=False,
+            )
+            db.add(new_user)
+            await db.flush()  # 获取 new_user.id，但还未 commit
+
+        # ── 画像快照 ─────────────────────────────────────────────────────────
+        from app.models.sql.profile import ProfileSnapshot, ProfileSource
+        initial_snapshot = ProfileSnapshot(
+            user_id=new_user.id,
+            cognition=cognition,
+            affect=affect,
+            behavior=behavior,
+            source=ProfileSource.SYSTEM,
+            created_at=datetime.utcnow()
+        )
+        db.add(initial_snapshot)
+
+        # ── 量表响应记录 ──────────────────────────────────────────────────────
+        total_score = sum(data.answers.values())
+        max_score   = len(data.answers) * int(schema_json.get("likert_scale", {}).get("max", 5))
+        scale_resp  = ScaleResponseModel(
+            user_id=new_user.id,
+            template_id=tid,
+            answers_json=data.answers,
+            started_at=datetime.fromisoformat(data.started_at.replace('Z', '+00:00')) if data.started_at else None,
+            scores_json={
+                "dimensions":  dim_scores,
+                "cognition":   cognition,
+                "affect":      affect,
+                "behavior":    behavior,
+                "total_score": total_score,
+                "max_score":   max_score,
+            }
+        )
+        db.add(scale_resp)
+
+        # ── 标记 onboarding 完成，一次性 commit ──────────────────────────────
+        new_user.has_completed_onboarding = True
+        await db.commit()
+        await db.refresh(new_user)
+        logger.info(f"[REGISTER-WITH-SCALE] ✅ Success: {new_user.student_id}")
+
+        token     = create_access_token(str(new_user.id))
+        user_info = UserInfo(
+            id=str(new_user.id),
+            student_id=new_user.student_id,
+            email=new_user.email,
+            name=new_user.name,
+            createdAt=new_user.created_at.isoformat(),
+            hasCompletedOnboarding=True,
+            onboardingMode='scale',
+        )
+        current_time = datetime.utcnow().isoformat()
+        profile_data = ProfileData(cognition=cognition, affect=affect, behavior=behavior)
+
+        return AuthResponse(token=token, user=user_info, initialProfile=profile_data)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"[REGISTER-WITH-SCALE] Failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Registration failed due to server error")
 
 @router.get("/me")
 async def get_current_user_info(

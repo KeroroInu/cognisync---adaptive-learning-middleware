@@ -9,6 +9,7 @@ import { Research } from './views/Research';
 import { Scales } from './views/Scales';
 import { Login } from './views/Login';
 import { Register } from './views/Register';
+import type { PendingScaleRegistration } from './views/Register';
 import { RegisterScale } from './views/RegisterScale';
 import { RegisterAI } from './views/RegisterAI';
 import { useAppStore } from './services/store';
@@ -38,6 +39,9 @@ function App() {
   const [currentView, setCurrentView] = useState<View>(
     state.user ? 'dashboard' : 'login'
   );
+
+  // Scale 模式注册暂存数据（选择模式后，量表提交前）
+  const [pendingScaleReg, setPendingScaleReg] = useState<PendingScaleRegistration | null>(null);
 
   // Track chat key to remount Chat when starting a new conversation
   const [chatKey, setChatKey] = useState(0);
@@ -84,12 +88,19 @@ function App() {
     setCurrentView(mode === 'scale' ? 'register-scale' : 'register-ai');
   };
 
+  // Scale 模式：暂存注册数据，直接跳转到量表（不建账号）
+  const handlePendingScale = (data: PendingScaleRegistration) => {
+    setPendingScaleReg(data);
+    setCurrentView('register-scale');
+  };
+
   // 注册完成处理
   const handleRegistrationComplete = (
     initialProfile: UserProfile,
     attributes?: string[],
     conceptSeeds?: string[]
   ) => {
+    setPendingScaleReg(null);
     updateProfile(initialProfile);
     setCurrentView('dashboard');
   };
@@ -122,6 +133,7 @@ function App() {
           <Register
             language={state.language}
             onRegisterSuccess={handleRegisterSuccess}
+            onPendingScale={handlePendingScale}
             onNavigateToLogin={() => setCurrentView('login')}
           />
         );
@@ -131,7 +143,8 @@ function App() {
           <RegisterScale
             language={state.language}
             onComplete={handleRegistrationComplete}
-            onBack={() => setCurrentView('register')}
+            onBack={() => { setPendingScaleReg(null); setCurrentView('register'); }}
+            pendingRegistration={pendingScaleReg ?? undefined}
           />
         );
 
@@ -254,7 +267,7 @@ function App() {
   }
 
   // 已登录但未完成 onboarding：显示 onboarding 视图（无 Layout）
-  if (['register-scale', 'register-ai'].includes(currentView)) {
+  if (['register', 'register-scale', 'register-ai'].includes(currentView)) {
     return <>{renderAuthView()}</>;
   }
 

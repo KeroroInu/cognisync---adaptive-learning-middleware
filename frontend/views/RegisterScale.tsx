@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, CheckCircle, Loader } from 'lucide-react';
-import { getActiveScaleTemplate, submitScaleAnswers } from '../services/api';
+import { getActiveScaleTemplate, submitScaleAnswers, registerWithScale } from '../services/api';
 import { translations } from '../utils/translations';
 import type {
   Language,
@@ -9,17 +9,21 @@ import type {
   ScaleAnswer,
   Dimension
 } from '../types';
+import type { PendingScaleRegistration } from './Register';
 
 export interface RegisterScaleProps {
   language: Language;
   onComplete: (initialProfile: UserProfile) => void;
   onBack: () => void;
+  /** 量表模式新注册时传入，有值则提交时同时建账号 */
+  pendingRegistration?: PendingScaleRegistration;
 }
 
 export const RegisterScale: React.FC<RegisterScaleProps> = ({
   language,
   onComplete,
-  onBack
+  onBack,
+  pendingRegistration,
 }) => {
   const t = translations[language];
 
@@ -110,15 +114,35 @@ export const RegisterScale: React.FC<RegisterScaleProps> = ({
       acc[a.questionId] = a.value;
       return acc;
     }, {} as Record<string, number>);
-    submitScaleAnswers(template.id, {
-      answers: answersDict,
-      started_at: startTimeRef.current ? new Date(startTimeRef.current).toISOString() : undefined,
-    })
-      .then(response => {
-        if (response.success && response.data) {
-          setIsComplete(true);
-          setTimeout(() => onComplete(response.data!.initialProfile), 2000);
-        }
+    const started_at = startTimeRef.current ? new Date(startTimeRef.current).toISOString() : undefined;
+
+    // 新注册：原子性建账号+量表；已登录用户：仅提交量表
+    const submitPromise = pendingRegistration
+      ? registerWithScale({
+          ...pendingRegistration,
+          template_id: template.id,
+          answers: answersDict,
+          started_at,
+        }).then(response => {
+          if (response.success && response.data) {
+            // 把 token 写入 localStorage 供后续请求使用
+            const token = (response.data as any).token;
+            const user  = (response.data as any).user;
+            if (token) localStorage.setItem('token', token);
+            return { initialProfile: (response.data as any).initialProfile };
+          }
+          throw new Error('Invalid response');
+        })
+      : submitScaleAnswers(template.id, { answers: answersDict, started_at })
+          .then(response => {
+            if (response.success && response.data) return response.data;
+            throw new Error('Invalid response');
+          });
+
+    submitPromise
+      .then(data => {
+        setIsComplete(true);
+        setTimeout(() => onComplete(data.initialProfile), 2000);
       })
       .catch(err => {
         setError(err instanceof Error ? err.message : 'Failed to submit scale');

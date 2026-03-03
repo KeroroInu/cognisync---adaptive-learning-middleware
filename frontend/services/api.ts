@@ -185,6 +185,36 @@ export async function register(data: RegisterRequest): Promise<AuthResponse> {
 }
 
 /**
+ * 量表模式专用组合注册：原子性完成账号创建 + 量表提交
+ * 只有量表答案成功提交后账号才真正入库
+ */
+export async function registerWithScale(data: {
+  student_id: string;
+  name: string;
+  email?: string;
+  password: string;
+  template_id: string;
+  answers: Record<string, number>;
+  started_at?: string;
+}): Promise<AuthResponse> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/auth/register-with-scale`, {
+      method: 'POST',
+      headers: getHeaders(false),
+      body: JSON.stringify({ ...data, mode: 'scale' }),
+    });
+    const result = await response.json();
+    if (!response.ok) {
+      throw new Error(result.detail || result.error?.message || `HTTP error! status: ${response.status}`);
+    }
+    return { success: true, data: result } as AuthResponse;
+  } catch (error) {
+    console.error('Register with scale failed:', error);
+    throw error;
+  }
+}
+
+/**
  * 获取当前用户信息
  */
 export async function getCurrentUser(): Promise<{ user: User; profile: UserProfile }> {

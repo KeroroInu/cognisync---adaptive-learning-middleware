@@ -5,15 +5,25 @@ import { register as registerAPI } from '../services/api';
 import { translations } from '../utils/translations';
 import type { Language } from '../types';
 
+export interface PendingScaleRegistration {
+  student_id: string;
+  name: string;
+  email?: string;
+  password: string;
+}
+
 export interface RegisterProps {
   language: Language;
   onRegisterSuccess: (token: string, user: any, mode: 'scale' | 'ai') => void;
+  /** scale 模式：不创建账号，把表单数据传给量表页面 */
+  onPendingScale: (data: PendingScaleRegistration) => void;
   onNavigateToLogin: () => void;
 }
 
 export const Register: React.FC<RegisterProps> = ({
   language,
   onRegisterSuccess,
+  onPendingScale,
   onNavigateToLogin
 }) => {
   const t = translations[language];
@@ -72,6 +82,19 @@ export const Register: React.FC<RegisterProps> = ({
 
   // Handle mode selection and registration
   const handleModeSelect = async (mode: 'scale' | 'ai') => {
+    // Scale 模式：不在此处创建账号，把表单数据传给量表页面
+    // 账号将在量表填写完成提交时原子性创建
+    if (mode === 'scale') {
+      onPendingScale({
+        student_id: studentId.trim(),
+        name: name.trim(),
+        email: email.trim() || undefined,
+        password,
+      });
+      return;
+    }
+
+    // AI 模式：需要先建账号（AI 对话需要后端 session）
     setIsLoading(true);
     setError(null);
 
