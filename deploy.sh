@@ -138,11 +138,11 @@ fi
 echo -e "  检测到服务器地址: ${GREEN}${SERVER_IP}${NC}"
 
 # 更新前端 .env
-echo "VITE_API_BASE_URL=http://${SERVER_IP}:8000" > frontend/.env
-echo "VITE_API_BASE_URL=http://${SERVER_IP}:8000/api" > admin-frontend/.env
+echo "VITE_API_BASE_URL=http://${SERVER_IP}:18090" > frontend/.env
+echo "VITE_API_BASE_URL=http://${SERVER_IP}:18090/api" > admin-frontend/.env
 
 # 更新后端 CORS
-sed -i "s|CORS_ORIGINS=.*|CORS_ORIGINS=http://${SERVER_IP}:3000,http://${SERVER_IP}:3001|" backend/.env
+sed -i "s|CORS_ORIGINS=.*|CORS_ORIGINS=http://${SERVER_IP}:18080,http://${SERVER_IP}:18081|" backend/.env
 
 echo -e "${GREEN}✅ 访问地址已设置${NC}"
 
@@ -171,7 +171,7 @@ sleep 15
 ADMIN_KEY_VAL=$(grep "^ADMIN_KEY=" backend/.env | cut -d'=' -f2-)
 
 echo -e "${BLUE}初始化管理员账号...${NC}"
-RESULT=$(curl -s -X POST "http://localhost:8000/api/admin/auth/create-admin" \
+RESULT=$(curl -s -X POST "http://localhost:18090/api/admin/auth/create-admin" \
     -H "X-ADMIN-KEY: ${ADMIN_KEY_VAL}" \
     -H "Content-Type: application/json" \
     -d '{"student_id":"admin","password":"Admin@2024!","name":"管理员"}' 2>/dev/null || echo "{}")
@@ -191,11 +191,11 @@ echo -e "${GREEN}║   🎉 部署完成！                              ║${NC
 echo -e "${GREEN}╚══════════════════════════════════════════════╝${NC}"
 echo ""
 echo -e "${BLUE}外网访问地址：${NC}"
-echo -e "  用户前端:  ${GREEN}http://${SERVER_IP}:3000${NC}"
-echo -e "  管理后台:  ${GREEN}http://${SERVER_IP}:3001${NC}"
-echo -e "  后端 API:  ${GREEN}http://${SERVER_IP}:8000${NC}"
+echo -e "  用户前端:  ${GREEN}http://${SERVER_IP}:18080${NC}"
+echo -e "  管理后台:  ${GREEN}http://${SERVER_IP}:18081${NC}"
+echo -e "  后端 API:  ${GREEN}http://${SERVER_IP}:18090${NC}"
 echo ""
-echo -e "${YELLOW}⚠️  服务器防火墙需放开端口：3000、3001、8000${NC}"
+echo -e "${YELLOW}⚠️  服务器防火墙需放开端口：18080、18081、18090${NC}"
 echo -e "${YELLOW}⚠️  请立即登录管理后台修改默认密码！${NC}"
 echo ""
 echo -e "${BLUE}常用命令：${NC}"

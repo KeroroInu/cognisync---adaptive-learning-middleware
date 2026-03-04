@@ -9,7 +9,7 @@ services:
     container_name: cognisync-backend
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "18090:8000"
     env_file:
       - ./backend/.env
     environment:
@@ -33,7 +33,7 @@ services:
     container_name: cognisync-frontend
     restart: unless-stopped
     ports:
-      - "3000:80"
+      - "18080:80"
     depends_on:
       - backend
     networks:
@@ -47,7 +47,7 @@ services:
     container_name: cognisync-admin
     restart: unless-stopped
     ports:
-      - "3001:80"
+      - "18081:80"
     depends_on:
       - backend
     networks:
