@@ -1,53 +1,67 @@
 version: '3.8'
 
 services:
-  # Backend API
+  # ── 后端 API ───────────────────────────────────────────────
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: cognisync-backend
+    restart: unless-stopped
     ports:
       - "8000:8000"
-    environment:
-      - APP_ENV=development
-      - DEBUG=true
-      # PostgreSQL 连接（容器内使用服务名作为 host）
-      - POSTGRES_HOST=postgres
-      - POSTGRES_PORT=5432
-      - POSTGRES_USER=cognisync
-      - POSTGRES_PASSWORD=cognisync_dev_password_2024
-      - POSTGRES_DB=cognisync_db
-      - DATABASE_URL=postgresql+asyncpg://cognisync:cognisync_dev_password_2024@postgres:5432/cognisync_db
-      # Neo4j 连接（容器内）
-      - NEO4J_URI=bolt://neo4j:7687
-      - NEO4J_USER=neo4j
-      - NEO4J_PASSWORD=cognisync_neo4j_2024
-      # Redis 连接
-      - REDIS_URL=redis://redis:6379/0
     env_file:
       - ./backend/.env
+    environment:
+      - POSTGRES_HOST=postgres
+      - NEO4J_URI=bolt://neo4j:7687
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
-        condition: service_healthy
       neo4j:
         condition: service_started
-    volumes:
-      - ./backend:/app
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+      redis:
+        condition: service_healthy
     networks:
       - cognisync-network
 
-  # PostgreSQL Database
+  # ── 用户前端 ───────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: cognisync-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - cognisync-network
+
+  # ── 管理后台 ───────────────────────────────────────────────
+  admin-frontend:
+    build:
+      context: ./admin-frontend
+      dockerfile: Dockerfile
+    container_name: cognisync-admin
+    restart: unless-stopped
+    ports:
+      - "3001:80"
+    depends_on:
+      - backend
+    networks:
+      - cognisync-network
+
+  # ── PostgreSQL ─────────────────────────────────────────────
   postgres:
     image: postgres:15-alpine
     container_name: cognisync-postgres
+    restart: unless-stopped
     environment:
-      - POSTGRES_USER=cognisync
-      - POSTGRES_PASSWORD=cognisync_dev_password_2024
-      - POSTGRES_DB=cognisync_db
+      - POSTGRES_USER=${POSTGRES_USER:-cognisync}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-changeme}
+      - POSTGRES_DB=${POSTGRES_DB:-cognisync_db}
     ports:
       - "5432:5432"
     volumes:
@@ -55,15 +69,16 @@ services:
     networks:
       - cognisync-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U cognisync -d cognisync_db"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cognisync}"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  # Redis Cache
+  # ── Redis ──────────────────────────────────────────────────
   redis:
     image: redis:7-alpine
     container_name: cognisync-redis
+    restart: unless-stopped
     ports:
       - "6379:6379"
     volumes:
@@ -76,18 +91,19 @@ services:
       timeout: 5s
       retries: 5
 
-  # Neo4j Knowledge Graph
+  # ── Neo4j ──────────────────────────────────────────────────
   neo4j:
     image: neo4j:5.15-community
     container_name: cognisync-neo4j
+    restart: unless-stopped
     environment:
-      - NEO4J_AUTH=neo4j/cognisync_neo4j_2024
+      - NEO4J_AUTH=neo4j/${NEO4J_PASSWORD:-changeme}
       - NEO4J_PLUGINS=["apoc"]
       - NEO4J_dbms_memory_heap_initial__size=512m
       - NEO4J_dbms_memory_heap_max__size=1G
     ports:
-      - "7474:7474"  # HTTP
-      - "7687:7687"  # Bolt
+      - "7474:7474"
+      - "7687:7687"
     volumes:
       - neo4j-data:/data
       - neo4j-logs:/logs
