@@ -16,6 +16,7 @@ class ScaleTemplateItem(BaseModel):
     schema_json: Optional[Dict[str, Any]] = None
     created_at: datetime
     updated_at: datetime
+    activated_at: Optional[datetime] = None
     responses_count: int = 0
 
 

@@ -1,7 +1,9 @@
 export interface User {
   id: string;
-  email: string;
+  student_id: string;
+  email?: string | null;
   name: string;
+  role?: string;
   createdAt: string;
   hasCompletedOnboarding: boolean;
 }
@@ -14,7 +16,7 @@ export interface UserProfile {
 }
 
 export interface LoginRequest {
-  email: string;
+  student_id: string;
   password: string;
 }
 

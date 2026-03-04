@@ -114,12 +114,17 @@ async def list_active_templates(
     result = await db.execute(stmt)
     templates = result.scalars().all()
 
-    # 查询该用户已提交过的模板 ID 集合
+    # 查询该用户已提交过的记录（template_id → 最新提交时间）
     resp_result = await db.execute(
-        select(ScaleResponseModel.template_id)
+        select(ScaleResponseModel.template_id, ScaleResponseModel.created_at)
         .where(ScaleResponseModel.user_id == current_user.id)
     )
-    completed_ids = {row[0] for row in resp_result.all()}
+    # 每个模板只保留最新一次提交的时间
+    last_submit: dict = {}
+    for row in resp_result.all():
+        tid, created_at = row[0], row[1]
+        if tid not in last_submit or created_at > last_submit[tid]:
+            last_submit[tid] = created_at
 
     items = [
         {
@@ -129,7 +134,11 @@ async def list_active_templates(
             "question_count": len(
                 t.schema_json.get("questions") or t.schema_json.get("items") or []
             ),
-            "is_completed": t.id in completed_ids,
+            # 只有在本次激活之后提交过才算完成
+            "is_completed": (
+                t.id in last_submit
+                and (t.activated_at is None or last_submit[t.id] >= t.activated_at)
+            ),
         }
         for t in templates
     ]

@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { adminApi } from '../lib/adminApi';
 import type { ScaleTemplate, ScaleResponse } from '../types';
-import { Upload, CheckCircle, Archive, Eye, Trash2, Download, X, Loader } from 'lucide-react';
+import { Upload, CheckCircle, Archive, Eye, Trash2, Download, X, Loader, ChevronDown, ChevronRight } from 'lucide-react';
 
 const ADMIN_KEY = (import.meta.env.VITE_ADMIN_KEY as string) || '';
 
@@ -98,6 +99,7 @@ export const Scales = () => {
 
   // View Responses modal
   const [responsesModal, setResponsesModal] = useState<{ scale: ScaleTemplate; responses: ScaleResponse[]; loading: boolean } | null>(null);
+  const [prevRoundExpanded, setPrevRoundExpanded] = useState(false);
   const [exportingScale, setExportingScale] = useState<string | null>(null);
 
   // Export column-selection modal
@@ -199,12 +201,14 @@ export const Scales = () => {
       const q = schemaItems.find(q => q.id === k);
       return { key: k, label: q?.text ? q.text : `Q${i + 1}` };
     });
-    // 默认全选
+    // 默认全选；但若无任何 started_at 数据则自动取消"所用时间"列
     const allKeys = [
       ...FIXED_COLS.map(c => c.key),
       ...questionCols.map(c => c.key),
     ];
-    setExportModal({ scale, responses, questionCols, selected: new Set(allKeys) });
+    const hasTimingData = responses.some(r => r.started_at != null);
+    const defaultSelected = new Set(hasTimingData ? allKeys : allKeys.filter(k => k !== 'duration_sec'));
+    setExportModal({ scale, responses, questionCols, selected: defaultSelected });
   };
 
   const handleExportFromRow = async (scale: ScaleTemplate) => {
@@ -265,7 +269,7 @@ export const Scales = () => {
       )}
 
       {/* Upload Modal */}
-      {showUploadModal && (
+      {showUploadModal && createPortal(
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="glass-card rounded-2xl p-6 max-w-2xl w-full mx-4 max-h-96 overflow-y-auto stagger-1">
             <h2 className="text-2xl font-bold mb-4">上传量表模板</h2>
@@ -312,12 +316,12 @@ export const Scales = () => {
             </button>
           </div>
         </div>
-      )}
+      , document.body)}
 
       {/* View Responses Modal */}
-      {responsesModal && (
+      {responsesModal && createPortal(
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="glass-card rounded-2xl w-full max-w-3xl max-h-[80vh] flex flex-col">
+          <div className="glass-card rounded-2xl w-full max-w-3xl max-h-[85vh] flex flex-col">
             {/* Modal Header */}
             <div className="flex items-center justify-between p-6 border-b border-white/10">
               <div>
@@ -326,20 +330,10 @@ export const Scales = () => {
                   共 {responsesModal.responses.length} 份填写记录
                 </p>
               </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => !responsesModal.loading && openExportModal(responsesModal.scale, responsesModal.responses)}
-                  disabled={responsesModal.loading || responsesModal.responses.length === 0}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-200 dark:hover:bg-emerald-800 transition-colors text-sm font-semibold disabled:opacity-50"
-                >
-                  <Download size={15} />
-                  导出 CSV
-                </button>
-                <button onClick={() => setResponsesModal(null)}
-                  className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
-                  <X size={20} />
-                </button>
-              </div>
+              <button onClick={() => { setResponsesModal(null); setPrevRoundExpanded(false); }}
+                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
+                <X size={20} />
+              </button>
             </div>
 
             {/* Modal Body */}
@@ -352,62 +346,133 @@ export const Scales = () => {
                 <div className="text-center py-12 text-gray-500">
                   <p>暂无用户填写记录</p>
                 </div>
-              ) : (
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-white/10">
-                      <th className="text-left py-3 px-2 font-semibold" style={{ color: 'var(--text-light)' }}>学生</th>
-                      <th className="text-right py-3 px-2 font-semibold" style={{ color: 'var(--text-light)' }}>认知</th>
-                      <th className="text-right py-3 px-2 font-semibold" style={{ color: 'var(--text-light)' }}>情感</th>
-                      <th className="text-right py-3 px-2 font-semibold" style={{ color: 'var(--text-light)' }}>行为</th>
-                      <th className="text-right py-3 px-2 font-semibold" style={{ color: 'var(--text-light)' }}>总分</th>
-                      <th className="text-right py-3 px-2 font-semibold" style={{ color: 'var(--text-light)' }}>填写时间</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {responsesModal.responses.map((resp) => {
-                      const scores = resp.scores_json as Record<string, number> | null;
-                      return (
-                        <tr key={resp.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                          <td className="py-3 px-2">
-                            <div className="font-medium text-sm" style={{ color: 'var(--text-primary)' }}>
-                              {resp.user_name || '—'}
-                            </div>
-                            <div className="text-xs text-gray-500 font-mono">
-                              {resp.student_id || resp.user_id.slice(0, 8)}
-                            </div>
-                          </td>
-                          <td className="py-3 px-2 text-right">
-                            <span className="px-2 py-0.5 rounded text-xs bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 font-mono">
-                              {scores?.cognition?.toFixed(0) ?? '—'}
+              ) : (() => {
+                const activatedAt = responsesModal.scale.activated_at
+                  ? new Date(responsesModal.scale.activated_at)
+                  : null;
+                const currentRound = activatedAt
+                  ? responsesModal.responses.filter(r => new Date(r.created_at) >= activatedAt)
+                  : responsesModal.responses;
+                const prevRounds = activatedAt
+                  ? responsesModal.responses.filter(r => new Date(r.created_at) < activatedAt)
+                  : [];
+
+                const ResponseTable = ({ rows }: { rows: ScaleResponse[] }) => (
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-white/10">
+                        <th className="text-left py-3 px-2 font-semibold" style={{ color: 'var(--text-light)' }}>学生</th>
+                        <th className="text-center py-3 px-2 font-semibold" style={{ color: 'var(--text-light)' }}>认知</th>
+                        <th className="text-center py-3 px-2 font-semibold" style={{ color: 'var(--text-light)' }}>情感</th>
+                        <th className="text-center py-3 px-2 font-semibold" style={{ color: 'var(--text-light)' }}>行为</th>
+                        <th className="text-center py-3 px-2 font-semibold" style={{ color: 'var(--text-light)' }}>总分</th>
+                        <th className="text-center py-3 px-2 font-semibold" style={{ color: 'var(--text-light)' }}>填写时间</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.map((resp) => {
+                        const scores = resp.scores_json as Record<string, number> | null;
+                        return (
+                          <tr key={resp.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
+                            <td className="py-3 px-2">
+                              <div className="font-medium text-sm" style={{ color: 'var(--text-primary)' }}>
+                                {resp.user_name || '—'}
+                              </div>
+                              <div className="text-xs text-gray-500 font-mono">
+                                {resp.student_id || resp.user_id.slice(0, 8)}
+                              </div>
+                            </td>
+                            <td className="py-3 px-2 text-center">
+                              <span className="px-2 py-0.5 rounded text-xs bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 font-mono">
+                                {scores?.cognition?.toFixed(0) ?? '—'}
+                              </span>
+                            </td>
+                            <td className="py-3 px-2 text-center">
+                              <span className="px-2 py-0.5 rounded text-xs bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 font-mono">
+                                {scores?.affect?.toFixed(0) ?? '—'}
+                              </span>
+                            </td>
+                            <td className="py-3 px-2 text-center">
+                              <span className="px-2 py-0.5 rounded text-xs bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300 font-mono">
+                                {scores?.behavior?.toFixed(0) ?? '—'}
+                              </span>
+                            </td>
+                            <td className="py-3 px-2 text-center font-mono text-xs" style={{ color: 'var(--text-secondary)' }}>
+                              {scores?.total_score ?? '—'} / {scores?.max_score ?? '—'}
+                            </td>
+                            <td className="py-3 px-2 text-center text-xs text-gray-500">
+                              {new Date(resp.created_at).toLocaleString('zh-CN')}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                );
+
+                return (
+                  <div className="space-y-4">
+                    {/* 本轮数据 */}
+                    <div>
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                            {prevRounds.length > 0 ? '本轮（后测）' : '当前轮次'}
+                          </span>
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900 text-indigo-600 dark:text-indigo-300">
+                            {currentRound.length} 份
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => openExportModal(responsesModal.scale, currentRound)}
+                          disabled={currentRound.length === 0}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-200 dark:hover:bg-emerald-800 transition-colors text-xs font-semibold disabled:opacity-40"
+                        >
+                          <Download size={13} />
+                          导出
+                        </button>
+                      </div>
+                      {currentRound.length === 0 ? (
+                        <p className="text-sm text-gray-400 text-center py-4">本轮暂无填写记录</p>
+                      ) : (
+                        <ResponseTable rows={currentRound} />
+                      )}
+                    </div>
+
+                    {/* 历史轮次（折叠） */}
+                    {prevRounds.length > 0 && (
+                      <div className="border-t border-white/10 pt-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <button
+                            onClick={() => setPrevRoundExpanded(v => !v)}
+                            className="flex items-center gap-2 text-sm font-semibold text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+                          >
+                            {prevRoundExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                            历史数据（前测）
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-500">
+                              {prevRounds.length} 份
                             </span>
-                          </td>
-                          <td className="py-3 px-2 text-right">
-                            <span className="px-2 py-0.5 rounded text-xs bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 font-mono">
-                              {scores?.affect?.toFixed(0) ?? '—'}
-                            </span>
-                          </td>
-                          <td className="py-3 px-2 text-right">
-                            <span className="px-2 py-0.5 rounded text-xs bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300 font-mono">
-                              {scores?.behavior?.toFixed(0) ?? '—'}
-                            </span>
-                          </td>
-                          <td className="py-3 px-2 text-right font-mono text-xs" style={{ color: 'var(--text-secondary)' }}>
-                            {scores?.total_score ?? '—'} / {scores?.max_score ?? '—'}
-                          </td>
-                          <td className="py-3 px-2 text-right text-xs text-gray-500">
-                            {new Date(resp.created_at).toLocaleString('zh-CN')}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              )}
+                          </button>
+                          {prevRoundExpanded && (
+                            <button
+                              onClick={() => openExportModal(responsesModal.scale, prevRounds)}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-xs font-semibold"
+                            >
+                              <Download size={13} />
+                              导出
+                            </button>
+                          )}
+                        </div>
+                        {prevRoundExpanded && <ResponseTable rows={prevRounds} />}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </div>
-      )}
+      , document.body)}
 
       {/* Scales Table */}
       <div className="glass-card rounded-2xl overflow-hidden stagger-2">
@@ -532,7 +597,7 @@ export const Scales = () => {
         const groups: Record<string, typeof FIXED_COLS[number][]> = {};
         FIXED_COLS.forEach(c => { (groups[c.group] ??= []).push(c); });
 
-        return (
+        return createPortal(
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
             <div className="glass-card rounded-2xl w-full max-w-lg flex flex-col max-h-[85vh]">
               {/* Header */}
@@ -625,7 +690,7 @@ export const Scales = () => {
               </div>
             </div>
           </div>
-        );
+        , document.body);
       })()}
     </div>
   );

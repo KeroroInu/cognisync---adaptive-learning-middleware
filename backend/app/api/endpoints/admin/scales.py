@@ -200,7 +200,7 @@ async def activate_scale_template(
     result = await db.execute(
         update(ScaleTemplate)
         .where(ScaleTemplate.id == template_id)
-        .values(status=ScaleStatus.ACTIVE, updated_at=datetime.utcnow())
+        .values(status=ScaleStatus.ACTIVE, updated_at=datetime.utcnow(), activated_at=datetime.utcnow())
         .returning(ScaleTemplate.id)
     )
 

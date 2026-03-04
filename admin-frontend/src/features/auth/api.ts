@@ -11,7 +11,7 @@ import {
  * 用户登录
  */
 export async function login(data: LoginRequest): Promise<AuthResponse> {
-  return apiClient.post<AuthResponse>('/api/auth/login', data);
+  return apiClient.post<AuthResponse>('/api/admin/auth/login', data);
 }
 
 /**
@@ -24,8 +24,8 @@ export async function register(data: RegisterRequest): Promise<AuthResponse> {
 /**
  * 获取当前用户信息
  */
-export async function getCurrentUser(): Promise<{ user: User; profile: UserProfile }> {
-  return apiClient.get<{ user: User; profile: UserProfile }>('/api/auth/me');
+export async function getCurrentUser(): Promise<{ user: User; profile: UserProfile | null }> {
+  return apiClient.get<{ user: User; profile: UserProfile | null }>('/api/admin/auth/me');
 }
 
 /**

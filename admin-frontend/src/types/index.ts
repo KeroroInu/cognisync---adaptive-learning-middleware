@@ -83,6 +83,7 @@ export interface ScaleTemplate {
   mapping_json: Record<string, unknown>;
   created_at: string;
   updated_at: string;
+  activated_at?: string | null;
   responses_count?: number;
 }
 

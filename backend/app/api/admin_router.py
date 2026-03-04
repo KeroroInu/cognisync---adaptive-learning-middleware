@@ -14,10 +14,14 @@ from app.api.endpoints.admin import (
     sessions,
     research as admin_research,
     config as admin_config,
+    auth as admin_auth,
 )
 
 # 创建 admin 主路由
 admin_router = APIRouter(prefix="/admin")
+
+# 认证端点（PUBLIC，无需 admin key，用于登录）
+admin_router.include_router(admin_auth.router, prefix="/auth", tags=["Admin - Auth"])
 
 # 注册子路由
 admin_router.include_router(overview.router, tags=["Admin - Overview"])

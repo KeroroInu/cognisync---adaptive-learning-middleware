@@ -84,6 +84,12 @@ class ScaleTemplate(Base, UUIDMixin):
         comment="更新时间"
     )
 
+    activated_at: Mapped[Optional[datetime]] = mapped_column(
+        TIMESTAMP(timezone=True),
+        nullable=True,
+        comment="最近一次激活时间（用于区分前测/后测轮次）"
+    )
+
     # 关系
     responses: Mapped[list["ScaleResponse"]] = relationship(
         "ScaleResponse",

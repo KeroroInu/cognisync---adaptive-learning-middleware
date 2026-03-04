@@ -25,17 +25,23 @@ import type {
 } from '../types';
 
 const BASE_URL = (import.meta.env.VITE_API_BASE_URL as string) || 'http://localhost:8000/api';
-const ADMIN_KEY = (import.meta.env.VITE_ADMIN_KEY as string) || '';
 
 class AdminApiClient {
+  private getAuthHeaders(): Record<string, string> {
+    const token = localStorage.getItem('auth_token') || '';
+    return {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    };
+  }
+
   private async request<T>(
     endpoint: string,
     options: RequestInit = {}
   ): Promise<T> {
     const url = `${BASE_URL}/admin${endpoint}`;
     const headers = {
-      'Content-Type': 'application/json',
-      'X-ADMIN-KEY': ADMIN_KEY,
+      ...this.getAuthHeaders(),
       ...options.headers,
     };
 
@@ -135,7 +141,7 @@ class AdminApiClient {
     const response = await fetch(url, {
       method: 'POST',
       headers: {
-        'X-ADMIN-KEY': ADMIN_KEY,
+        'Authorization': `Bearer ${localStorage.getItem('auth_token') || ''}`,
       },
       body: data,
     });
@@ -239,7 +245,7 @@ class AdminApiClient {
   async exportCsv(endpoint: string): Promise<Blob> {
     const url = `${BASE_URL}/admin${endpoint}`;
     const response = await fetch(url, {
-      headers: { 'X-ADMIN-KEY': ADMIN_KEY },
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('auth_token') || ''}` },
     });
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`);

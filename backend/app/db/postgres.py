@@ -63,6 +63,9 @@ async def init_db():
         # 迁移：为 research_task_submissions 添加 started_at 列
         await _migrate_research_started_at()
 
+        # 迁移：为 scale_templates 添加 activated_at 列
+        await _migrate_scale_activated_at()
+
         # 打印已创建的表
         async with engine.begin() as conn:
             def get_table_names(sync_conn):
@@ -211,6 +214,24 @@ async def _migrate_research_started_at():
     await run_sql(
         "ALTER TABLE research_task_submissions ADD COLUMN IF NOT EXISTS started_at TIMESTAMP WITH TIME ZONE;",
         "ADD COLUMN started_at to research_task_submissions"
+    )
+
+
+async def _migrate_scale_activated_at():
+    """幂等迁移：为 scale_templates 添加 activated_at 列（支持前测/后测轮次判断）"""
+    from sqlalchemy import text
+
+    async def run_sql(sql: str, label: str):
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(text(sql))
+            logger.info(f"  ✅ {label}")
+        except Exception as e:
+            logger.warning(f"  ⚠️ {label} (skipped): {e}")
+
+    await run_sql(
+        "ALTER TABLE scale_templates ADD COLUMN IF NOT EXISTS activated_at TIMESTAMP WITH TIME ZONE;",
+        "ADD COLUMN activated_at to scale_templates"
     )
 
 
