@@ -62,8 +62,6 @@ services:
       - POSTGRES_USER=${POSTGRES_USER:-cognisync}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-changeme}
       - POSTGRES_DB=${POSTGRES_DB:-cognisync_db}
-    ports:
-      - "5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     networks:
@@ -79,8 +77,6 @@ services:
     image: redis:7-alpine
     container_name: cognisync-redis
     restart: unless-stopped
-    ports:
-      - "6379:6379"
     volumes:
       - redis-data:/data
     networks:
@@ -101,9 +97,6 @@ services:
       - NEO4J_PLUGINS=["apoc"]
       - NEO4J_dbms_memory_heap_initial__size=512m
       - NEO4J_dbms_memory_heap_max__size=1G
-    ports:
-      - "7474:7474"
-      - "7687:7687"
     volumes:
       - neo4j-data:/data
       - neo4j-logs:/logs
