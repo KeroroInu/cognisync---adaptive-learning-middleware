@@ -48,3 +48,15 @@ venv/
 ENV/
 env/
 .venv
+
+# Environment variables (contain secrets)
+.env
+.env.local
+.env.*.local
+backend/.env
+frontend/.env
+admin-frontend/.env
+
+# Compiled frontend assets
+admin-frontend/dist/
+frontend/dist/
