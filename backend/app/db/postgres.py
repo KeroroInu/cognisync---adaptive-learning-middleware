@@ -75,6 +75,9 @@ async def init_db():
             tables = await conn.run_sync(get_table_names)
             logger.info(f"📊 Created tables: {', '.join(tables)}")
 
+        # 种子：首次启动自动创建默认管理员（幂等，已存在则跳过）
+        await _seed_default_admin()
+
     except Exception as e:
         logger.error(f"❌ Database initialization failed: {e}")
         raise
@@ -252,3 +255,54 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             raise
         finally:
             await session.close()
+
+
+async def _seed_default_admin():
+    """
+    幂等种子：若不存在任何管理员账号，则按配置创建默认管理员。
+    每次启动时执行，已存在则静默跳过。
+    """
+    from app.core.config import settings
+    from app.models.sql.user import User
+    from sqlalchemy import select
+    import uuid as _uuid
+    import bcrypt
+
+    if not settings.ADMIN_DEFAULT_STUDENT_ID or not settings.ADMIN_DEFAULT_PASSWORD:
+        return
+
+    async with async_session_factory() as session:
+        result = await session.execute(
+            select(User).where(User.student_id == settings.ADMIN_DEFAULT_STUDENT_ID)
+        )
+        existing = result.scalar_one_or_none()
+
+        if existing:
+            if existing.role != "admin":
+                existing.role = "admin"
+                await session.commit()
+                logger.info(f"✅ Promoted existing user '{settings.ADMIN_DEFAULT_STUDENT_ID}' to admin")
+            else:
+                logger.info(f"✅ Default admin '{settings.ADMIN_DEFAULT_STUDENT_ID}' already exists, skipping")
+            return
+
+        pw_hash = bcrypt.hashpw(
+            settings.ADMIN_DEFAULT_PASSWORD.encode("utf-8"),
+            bcrypt.gensalt()
+        ).decode("utf-8")
+
+        admin_user = User(
+            id=_uuid.uuid4(),
+            student_id=settings.ADMIN_DEFAULT_STUDENT_ID,
+            name=settings.ADMIN_DEFAULT_NAME,
+            role="admin",
+            is_active=True,
+            has_completed_onboarding=True,
+            password_hash=pw_hash,
+        )
+        session.add(admin_user)
+        await session.commit()
+        logger.info(
+            f"✅ Default admin created: student_id='{settings.ADMIN_DEFAULT_STUDENT_ID}' "
+            f"password='{settings.ADMIN_DEFAULT_PASSWORD}'"
+        )

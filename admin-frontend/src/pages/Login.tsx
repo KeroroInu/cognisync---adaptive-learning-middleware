@@ -19,7 +19,7 @@ export const Login = () => {
   useEffect(() => {
     if (isAuthed) {
       const params = new URLSearchParams(location.search);
-      const redirect = params.get('redirect') || '/admin';
+      const redirect = params.get('redirect') || '/';
       navigate(redirect, { replace: true });
     }
   }, [isAuthed, navigate, location.search]);
@@ -36,7 +36,7 @@ export const Login = () => {
     try {
       await login({ student_id: studentId.trim(), password });
       const params = new URLSearchParams(location.search);
-      const redirect = params.get('redirect') || '/admin';
+      const redirect = params.get('redirect') || '/';
       navigate(redirect, { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : '登录失败，请检查账号和密码');

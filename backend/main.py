@@ -91,10 +91,17 @@ app = FastAPI(
 )
 
 # CORS 配置（允许前端访问）
+# 当 CORS_ORIGINS=* 时，关闭 credentials（* + credentials=True 不兼容）
+# 系统使用 JWT Bearer Token 认证，不依赖 cookie，无影响
+_cors_origins = settings.cors_origins_list
+_allow_credentials = "*" not in _cors_origins
+if not _allow_credentials:
+    _cors_origins = ["*"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins_list,
-    allow_credentials=True,
+    allow_origins=_cors_origins,
+    allow_credentials=_allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )

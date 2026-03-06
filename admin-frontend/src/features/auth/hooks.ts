@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuthContext } from './authStore';
 import { AuthStatus, User, UserProfile, LoginRequest } from './types';
 
@@ -47,6 +47,7 @@ export function useAuth(): UseAuthReturn {
 export function useRequireAuth(redirectTo?: string): UseAuthReturn {
   const auth = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     // 如果状态未知，等待 bootstrap 完成
@@ -55,11 +56,13 @@ export function useRequireAuth(redirectTo?: string): UseAuthReturn {
     }
 
     // 如果是访客（未登录），跳转到登录页
+    // 使用 location.pathname 而非 window.location.pathname，
+    // 确保 basename(/admin) 已被 React Router 自动去掉
     if (auth.status === 'guest') {
-      const currentPath = redirectTo || window.location.pathname;
+      const currentPath = redirectTo || location.pathname;
       navigate(`/login?redirect=${encodeURIComponent(currentPath)}`, { replace: true });
     }
-  }, [auth.status, navigate, redirectTo]);
+  }, [auth.status, navigate, redirectTo, location.pathname]);
 
   return auth;
 }

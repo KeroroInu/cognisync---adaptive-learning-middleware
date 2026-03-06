@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './features/auth/authStore';
 import { useRequireAuth } from './features/auth/hooks';
 import { AdminLayout } from './components/AdminLayout';
@@ -57,11 +57,10 @@ function AdminApp() {
 function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
+      <BrowserRouter basename="/admin">
         <Routes>
           <Route path="/login" element={<Login />} />
-          <Route path="/admin/*" element={<AdminApp />} />
-          <Route path="/" element={<Navigate to="/admin" replace />} />
+          <Route path="/*" element={<AdminApp />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

@@ -1,6 +1,22 @@
 version: '3.8'
 
 services:
+  # ── 统一入口 Nginx 反向代理（单端口 8002）──────────────────
+  nginx-proxy:
+    image: nginx:alpine
+    container_name: cognisync-proxy
+    restart: unless-stopped
+    ports:
+      - "8002:8002"
+    volumes:
+      - ./nginx-proxy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - backend
+      - frontend
+      - admin-frontend
+    networks:
+      - cognisync-network
+
   # ── 后端 API ───────────────────────────────────────────────
   backend:
     build:
@@ -8,8 +24,6 @@ services:
       dockerfile: Dockerfile
     container_name: cognisync-backend
     restart: unless-stopped
-    ports:
-      - "18090:8000"
     env_file:
       - ./backend/.env
     environment:
@@ -32,8 +46,6 @@ services:
       dockerfile: Dockerfile
     container_name: cognisync-frontend
     restart: unless-stopped
-    ports:
-      - "18080:80"
     depends_on:
       - backend
     networks:
@@ -46,8 +58,6 @@ services:
       dockerfile: Dockerfile
     container_name: cognisync-admin
     restart: unless-stopped
-    ports:
-      - "18081:80"
     depends_on:
       - backend
     networks:
