@@ -136,26 +136,12 @@ class AdminApiClient {
     return this.request<ScalesListResponse>('/scales');
   }
 
-  async uploadScale(data: FormData): Promise<ScaleTemplate> {
-    const url = `${BASE_URL}/admin/scales/upload`;
-    const response = await fetch(url, {
+  async uploadScale(data: Record<string, unknown>): Promise<ScaleTemplate> {
+    return this.request<ScaleTemplate>('/scales/upload', {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('auth_token') || ''}`,
-      },
-      body: data,
+      body: JSON.stringify(data),
     });
-
-    if (!response.ok) {
-      throw new Error(`Upload failed: ${response.statusText}`);
-    }
-
-    const result: ApiResponse<ScaleTemplate> = await response.json();
-    if (!result.success) {
-      throw new Error(result.error?.message || 'Upload failed');
-    }
-
-    return result.data as ScaleTemplate;
+  }
   }
 
   async activateScale(scaleId: string): Promise<{ message: string }> {
