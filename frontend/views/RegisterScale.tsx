@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, CheckCircle, Loader } from 'lucide-react';
-import { getActiveScaleTemplate, submitScaleAnswers, registerWithScale } from '../services/api';
+import { ArrowLeft, CheckCircle, Loader, ClipboardList } from 'lucide-react';
+import { getAllActiveScales, getScaleTemplateById, submitScaleAnswers, registerWithScale } from '../services/api';
 import { translations } from '../utils/translations';
 import type {
   Language,
   UserProfile,
   ScaleTemplate,
   ScaleAnswer,
-  Dimension
+  Dimension,
+  ScaleListItem,
 } from '../types';
 import type { PendingScaleRegistration } from './Register';
 
@@ -26,6 +27,11 @@ export const RegisterScale: React.FC<RegisterScaleProps> = ({
   pendingRegistration,
 }) => {
   const t = translations[language];
+
+  // ── 量表选择阶段 ────────────────────────────────────────────────────────────
+  const [scaleList, setScaleList] = useState<ScaleListItem[]>([]);
+  const [selectedScaleId, setSelectedScaleId] = useState<string | null>(null);
+  const [pickingScale, setPickingScale] = useState(true); // true = 还在选择阶段
 
   // 状态管理
   const [template, setTemplate] = useState<ScaleTemplate | null>(null);
@@ -60,13 +66,31 @@ export const RegisterScale: React.FC<RegisterScaleProps> = ({
     return () => clearInterval(timer);
   }, [isComplete, isSubmitting, isLoading]);
 
+  // 加载活跃量表列表（选择阶段用）
+  useEffect(() => {
+    getAllActiveScales()
+      .then(list => {
+        setScaleList(list);
+        if (list.length === 1) {
+          // 只有一个量表，直接跳过选择
+          setSelectedScaleId(list[0].id);
+          setPickingScale(false);
+        }
+      })
+      .catch(err => {
+        setError(err instanceof Error ? err.message : 'Failed to load scales');
+        setPickingScale(false);
+      });
+  }, []);
+
   // 加载量表模板
   useEffect(() => {
     const loadTemplate = async () => {
+      if (!selectedScaleId) return;
       try {
         setIsLoading(true);
         setError(null);
-        const data = await getActiveScaleTemplate();
+        const data = await getScaleTemplateById(selectedScaleId);
         setTemplate(data);
         // 初始化空答案数组
         setAnswers(data.questions.map(q => ({ questionId: q.id, value: 0 })));
@@ -81,7 +105,7 @@ export const RegisterScale: React.FC<RegisterScaleProps> = ({
     };
 
     loadTemplate();
-  }, []);
+  }, [selectedScaleId]);
 
   // 检测最终提交时的可疑行为（用于硬拦截）
   const checkSuspiciousAnswers = (finalAnswers: ScaleAnswer[]): string | null => {
@@ -304,6 +328,79 @@ export const RegisterScale: React.FC<RegisterScaleProps> = ({
   const currentAnswer = answers[currentQuestionIndex]?.value || 0;
   const isLastQuestion = template ? currentQuestionIndex === template.questions.length - 1 : false;
   const canProceed = currentAnswer > 0;
+
+  // ── 量表选择界面 ────────────────────────────────────────────────────────────
+  if (pickingScale) {
+    const isListLoading = scaleList.length === 0 && !error;
+    return (
+      <div className="min-h-screen flex items-center justify-center gradient-mesh p-4">
+        <div className="w-full max-w-lg">
+          <div className="text-center mb-8">
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-600 text-white mb-4 shadow-lg animate-float">
+              <ClipboardList className="w-8 h-8" />
+            </div>
+            <h1 className="text-3xl font-bold text-gradient mb-2">选择评估量表</h1>
+            <p className="text-sm" style={{ color: 'var(--text-light)' }}>请选择本次需要填写的量表</p>
+          </div>
+
+          {isListLoading ? (
+            <div className="glass-card p-8 flex flex-col items-center gap-4">
+              <Loader className="w-10 h-10 text-blue-500 animate-spin" />
+              <p style={{ color: 'var(--text-secondary)' }}>{t.loading}</p>
+            </div>
+          ) : error ? (
+            <div className="glass-card p-8 text-center">
+              <p className="text-red-500 mb-4">{error}</p>
+              <button onClick={onBack} className="px-6 py-3 bg-gradient-to-r from-blue-500 to-cyan-600 text-white font-medium rounded-xl shadow-lg hover:shadow-xl transition-all duration-300">
+                {t.back}
+              </button>
+            </div>
+          ) : scaleList.length === 0 ? (
+            <div className="glass-card p-8 text-center">
+              <p className="mb-4" style={{ color: 'var(--text-secondary)' }}>暂无可填写的量表，请联系老师激活量表后再试。</p>
+              <button onClick={onBack} className="px-6 py-3 bg-gradient-to-r from-blue-500 to-cyan-600 text-white font-medium rounded-xl shadow-lg hover:shadow-xl transition-all duration-300">
+                {t.back}
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {scaleList.map(scale => (
+                <button
+                  key={scale.id}
+                  onClick={() => { setSelectedScaleId(scale.id); setPickingScale(false); }}
+                  className="w-full glass-card p-5 text-left rounded-2xl hover:scale-[1.02] transition-all duration-200 border-2 hover:border-blue-400/60 group"
+                  style={{ borderColor: 'var(--glass-border)' }}
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-semibold text-lg" style={{ color: 'var(--text-primary)' }}>{scale.name}</p>
+                      {scale.description && (
+                        <p className="text-sm mt-0.5" style={{ color: 'var(--text-light)' }}>{scale.description}</p>
+                      )}
+                      <p className="text-xs mt-1.5" style={{ color: 'var(--text-light)' }}>共 {scale.question_count} 题</p>
+                    </div>
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-cyan-600 flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity shrink-0 ml-4 shadow-lg">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </div>
+                  </div>
+                </button>
+              ))}
+              <button
+                onClick={onBack}
+                className="w-full mt-2 px-4 py-3 font-medium rounded-xl border-2 flex items-center justify-center gap-2 hover:scale-105 transition-all duration-200"
+                style={{ backgroundColor: 'var(--glass-bg)', color: 'var(--text-secondary)', borderColor: 'var(--glass-border)' }}
+              >
+                <ArrowLeft className="w-4 h-4" />
+                {t.back}
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   // 加载中
   if (isLoading) {
