@@ -142,7 +142,6 @@ class AdminApiClient {
       body: JSON.stringify(data),
     });
   }
-  }
 
   async activateScale(scaleId: string): Promise<{ message: string }> {
     return this.request<{ message: string }>(`/scales/${scaleId}/activate`, {
