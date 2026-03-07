@@ -301,6 +301,56 @@ body {
   background: #334155 !important;
 }
 
+/* 导出卡片深色模式下的图标和边框颜色修复 */
+[data-theme="dark"] .text-indigo-600 { color: #818cf8 !important; }
+[data-theme="dark"] .text-emerald-600 { color: #34d399 !important; }
+[data-theme="dark"] .text-violet-600 { color: #a78bfa !important; }
+[data-theme="dark"] .text-amber-600 { color: #fbbf24 !important; }
+
+[data-theme="dark"] .border-indigo-200 { border-color: rgba(99, 102, 241, 0.3) !important; }
+[data-theme="dark"] .border-emerald-200 { border-color: rgba(16, 185, 129, 0.3) !important; }
+[data-theme="dark"] .border-violet-200 { border-color: rgba(139, 92, 246, 0.3) !important; }
+[data-theme="dark"] .border-amber-200 { border-color: rgba(245, 158, 11, 0.3) !important; }
+
+/* 深色模式下表头文字颜色修复 */
+[data-theme="dark"] th {
+  color: var(--text-tertiary) !important;
+}
+
+/* 深色模式下状态徽章背景修复 */
+[data-theme="dark"] .bg-green-100 { background: rgba(16, 185, 129, 0.2) !important; }
+[data-theme="dark"] .text-green-700 { color: #6ee7b7 !important; }
+
+[data-theme="dark"] .bg-yellow-100 { background: rgba(245, 158, 11, 0.2) !important; }
+[data-theme="dark"] .text-yellow-700 { color: #fcd34d !important; }
+
+[data-theme="dark"] .bg-gray-100 { background: rgba(148, 163, 184, 0.2) !important; }
+[data-theme="dark"] .text-gray-700 { color: #cbd5e1 !important; }
+
+/* 操作按钮深色模式优化 */
+[data-theme="dark"] .bg-blue-100 { background: rgba(59, 130, 246, 0.2) !important; }
+[data-theme="dark"] .text-blue-700 { color: #60a5fa !important; }
+
+[data-theme="dark"] .bg-indigo-100 { background: rgba(99, 102, 241, 0.2) !important; }
+[data-theme="dark"] .text-indigo-700 { color: #818cf8 !important; }
+
+[data-theme="dark"] .bg-emerald-100 { background: rgba(16, 185, 129, 0.2) !important; }
+[data-theme="dark"] .text-emerald-700 { color: #34d399 !important; }
+
+[data-theme="dark"] .bg-red-100 { background: rgba(239, 68, 68, 0.2) !important; }
+[data-theme="dark"] .text-red-700 { color: #f87171 !important; }
+
+[data-theme="dark"] .hover\:bg-blue-200:hover { background: rgba(59, 130, 246, 0.3) !important; }
+[data-theme="dark"] .hover\:bg-indigo-200:hover { background: rgba(99, 102, 241, 0.3) !important; }
+[data-theme="dark"] .hover\:bg-emerald-200:hover { background: rgba(16, 185, 129, 0.3) !important; }
+[data-theme="dark"] .hover\:bg-red-200:hover { background: rgba(239, 68, 68, 0.3) !important; }
+[data-theme="dark"] .hover\:bg-yellow-200:hover { background: rgba(245, 158, 11, 0.3) !important; }
+
+/* 表格行 hover 效果优化 */
+[data-theme="dark"] .hover\:bg-gray-800:hover {
+  background: rgba(51, 65, 85, 0.5) !important;
+}
+
 /* ============================================
    深色模式 hover 状态修复
    Tailwind dark: 前缀依赖 prefers-color-scheme，
