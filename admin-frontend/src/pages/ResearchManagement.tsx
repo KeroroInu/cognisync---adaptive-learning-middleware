@@ -6,8 +6,11 @@ import type { ResearchTask, ResearchTaskSubmission } from '../types';
 
 // ── CSV helpers ──────────────────────────────────────────────────────────────
 
+const normalizeIso = (iso: string): string =>
+  /Z$|[+-]\d{2}:?\d{2}$/.test(iso) ? iso : iso + 'Z';
+
 const formatDate = (iso: string): string => {
-  const d = new Date(iso);
+  const d = new Date(normalizeIso(iso));
   if (isNaN(d.getTime())) return '';
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
@@ -63,6 +66,8 @@ export const ResearchManagement = () => {
     loading: boolean;
   } | null>(null);
   const [expandedCode, setExpandedCode] = useState<string | null>(null);
+  const [selectedSubmissionIds, setSelectedSubmissionIds] = useState<Set<string>>(new Set());
+  const [deletingSubmissions, setDeletingSubmissions] = useState(false);
 
   // Create form state
   const [form, setForm] = useState({
@@ -154,12 +159,30 @@ export const ResearchManagement = () => {
   };
 
   const handleViewSubmissions = async (task: ResearchTask) => {
+    setSelectedSubmissionIds(new Set());
     setSubmissionsModal({ task, submissions: [], loading: true });
     try {
       const result = await adminApi.getResearchTaskSubmissions(task.id);
       setSubmissionsModal({ task, submissions: result.submissions, loading: false });
     } catch (e) {
       setSubmissionsModal({ task, submissions: [], loading: false });
+    }
+  };
+
+  const handleDeleteSelectedSubmissions = async () => {
+    if (selectedSubmissionIds.size === 0 || !submissionsModal) return;
+    if (!window.confirm(`确定要删除选中的 ${selectedSubmissionIds.size} 条提交记录？此操作不可撤销。`)) return;
+    setDeletingSubmissions(true);
+    try {
+      await adminApi.deleteResearchSubmissions(Array.from(selectedSubmissionIds));
+      const remaining = submissionsModal.submissions.filter(s => !selectedSubmissionIds.has(s.id));
+      setSubmissionsModal({ ...submissionsModal, submissions: remaining });
+      setSelectedSubmissionIds(new Set());
+      await loadTasks();
+    } catch (e) {
+      alert('删除失败：' + (e instanceof Error ? e.message : String(e)));
+    } finally {
+      setDeletingSubmissions(false);
     }
   };
 
@@ -477,13 +500,41 @@ export const ResearchManagement = () => {
                   导出 CSV
                 </button>
                 <button
-                  onClick={() => setSubmissionsModal(null)}
+                  onClick={() => { setSubmissionsModal(null); setSelectedSubmissionIds(new Set()); }}
                   className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
                 >
                   <X size={20} />
                 </button>
               </div>
             </div>
+
+            {/* Bulk Action Bar */}
+            {selectedSubmissionIds.size > 0 && (
+              <div className="px-6 py-2.5 flex items-center justify-between gap-3 border-b border-white/10"
+                style={{ background: 'rgba(239,68,68,0.06)' }}>
+                <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                  已选 {selectedSubmissionIds.size} 条记录
+                </span>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleDeleteSelectedSubmissions}
+                    disabled={deletingSubmissions}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
+                    style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444' }}
+                  >
+                    <Trash2 size={13} />
+                    {deletingSubmissions ? '删除中...' : '删除所选'}
+                  </button>
+                  <button
+                    onClick={() => setSelectedSubmissionIds(new Set())}
+                    className="px-3 py-1.5 rounded-lg text-xs transition-colors"
+                    style={{ color: 'var(--text-light)' }}
+                  >
+                    取消
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Modal Body */}
             <div className="flex-1 overflow-y-auto p-6">
@@ -498,13 +549,32 @@ export const ResearchManagement = () => {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {submissionsModal.submissions.map((sub) => (
-                    <div key={sub.id} className="border rounded-xl overflow-hidden" style={{ borderColor: 'var(--glass-border)' }}>
+                  {submissionsModal.submissions.map((sub) => {
+                    const isSelected = selectedSubmissionIds.has(sub.id);
+                    return (
+                    <div key={sub.id} className="border rounded-xl overflow-hidden transition-colors"
+                      style={{ borderColor: isSelected ? 'rgba(99,102,241,0.5)' : 'var(--glass-border)', background: isSelected ? 'rgba(99,102,241,0.05)' : undefined }}>
                       <div
                         className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
-                        style={{ backgroundColor: 'var(--bg-tertiary)' }}
+                        style={{ backgroundColor: isSelected ? 'transparent' : 'var(--bg-tertiary)' }}
+                        onClick={() => setSelectedSubmissionIds(prev => {
+                          const next = new Set(prev);
+                          isSelected ? next.delete(sub.id) : next.add(sub.id);
+                          return next;
+                        })}
                       >
                         <div className="flex items-center gap-3">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => setSelectedSubmissionIds(prev => {
+                              const next = new Set(prev);
+                              isSelected ? next.delete(sub.id) : next.add(sub.id);
+                              return next;
+                            })}
+                            onClick={e => e.stopPropagation()}
+                            className="w-3.5 h-3.5 rounded accent-indigo-500 cursor-pointer shrink-0"
+                          />
                           <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-white text-xs font-bold shrink-0">
                             {(sub.user_name || 'U')[0].toUpperCase()}
                           </div>
@@ -524,7 +594,7 @@ export const ResearchManagement = () => {
                             {sub.is_completed ? '已完成' : '进行中'}
                           </span>
                           {sub.started_at && sub.submitted_at && (() => {
-                            const sec = Math.round((new Date(sub.submitted_at).getTime() - new Date(sub.started_at).getTime()) / 1000);
+                            const sec = Math.round((new Date(normalizeIso(sub.submitted_at)).getTime() - new Date(normalizeIso(sub.started_at)).getTime()) / 1000);
                             const mm = Math.floor(sec / 60).toString().padStart(2, '0');
                             const ss = (sec % 60).toString().padStart(2, '0');
                             return (
@@ -533,11 +603,11 @@ export const ResearchManagement = () => {
                           })()}
                           <span className="text-xs text-gray-400">
                             {sub.submitted_at
-                              ? new Date(sub.submitted_at).toLocaleString('zh-CN')
-                              : new Date(sub.created_at).toLocaleString('zh-CN')}
+                              ? new Date(normalizeIso(sub.submitted_at)).toLocaleString('zh-CN')
+                              : new Date(normalizeIso(sub.created_at)).toLocaleString('zh-CN')}
                           </span>
                           <button
-                            onClick={() => setExpandedCode(expandedCode === sub.id ? null : sub.id)}
+                            onClick={e => { e.stopPropagation(); setExpandedCode(expandedCode === sub.id ? null : sub.id); }}
                             className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors"
                           >
                             {expandedCode === sub.id ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
@@ -550,7 +620,8 @@ export const ResearchManagement = () => {
                         </pre>
                       )}
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

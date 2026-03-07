@@ -16,6 +16,10 @@ export const Users = () => {
   const [total, setTotal] = useState(0);
   const pageSize = 10;
 
+  // Multi-select state
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkLoading, setBulkLoading] = useState(false);
+
   // Edit modal state
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [editName, setEditName] = useState('');
@@ -139,6 +143,70 @@ export const Users = () => {
       URL.revokeObjectURL(a.href);
     } catch (err) {
       alert('导出失败：' + (err instanceof Error ? err.message : String(err)));
+    }
+  };
+
+  const toggleSelect = (userId: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      next.has(userId) ? next.delete(userId) : next.add(userId);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (users.every(u => selectedIds.has(u.id))) {
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        users.forEach(u => next.delete(u.id));
+        return next;
+      });
+    } else {
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        users.forEach(u => next.add(u.id));
+        return next;
+      });
+    }
+  };
+
+  const handleExportSelected = async () => {
+    if (selectedIds.size === 0) return;
+    setBulkLoading(true);
+    try {
+      const ids = Array.from(selectedIds).join(',');
+      const url = `${BASE_URL}/admin/export/csv/scale-responses?user_ids=${encodeURIComponent(ids)}`;
+      const response = await fetch(url, { headers: { 'X-ADMIN-KEY': ADMIN_KEY } });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const blob = await response.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `scale_responses_selected_${new Date().toISOString().split('T')[0]}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(a.href);
+    } catch (err) {
+      alert('导出失败：' + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setBulkLoading(false);
+    }
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedIds.size === 0) return;
+    if (!window.confirm(`确定要删除选中的 ${selectedIds.size} 位用户及其全部数据？此操作不可撤销。`)) return;
+    setBulkLoading(true);
+    try {
+      for (const userId of selectedIds) {
+        await adminApi.deleteUser(userId);
+      }
+      setSelectedIds(new Set());
+      await loadUsers();
+    } catch (err) {
+      alert('删除失败：' + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setBulkLoading(false);
     }
   };
 
@@ -357,12 +425,57 @@ export const Users = () => {
         </div>
       </div>
 
+      {/* Bulk Action Bar */}
+      {selectedIds.size > 0 && (
+        <div className="glass-card p-3 rounded-xl flex items-center justify-between gap-4"
+          style={{ border: '1px solid rgba(99,102,241,0.4)', background: 'rgba(99,102,241,0.08)' }}>
+          <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+            已选 {selectedIds.size} 位用户
+          </span>
+          <div className="flex gap-2">
+            <button
+              onClick={handleExportSelected}
+              disabled={bulkLoading}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
+              style={{ background: 'rgba(16,185,129,0.15)', color: '#10b981' }}
+            >
+              <Download size={14} />
+              导出量表数据
+            </button>
+            <button
+              onClick={handleDeleteSelected}
+              disabled={bulkLoading}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
+              style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444' }}
+            >
+              <Trash2 size={14} />
+              删除所选
+            </button>
+            <button
+              onClick={() => setSelectedIds(new Set())}
+              className="px-3 py-1.5 rounded-lg text-sm transition-colors"
+              style={{ color: 'var(--text-light)' }}
+            >
+              取消
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Users Table */}
       <div className="glass-card rounded-2xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead style={{ backgroundColor: 'var(--bg-tertiary)' }}>
               <tr>
+                <th className="px-4 py-4 text-left">
+                  <input
+                    type="checkbox"
+                    checked={users.length > 0 && users.every(u => selectedIds.has(u.id))}
+                    onChange={toggleSelectAll}
+                    className="w-4 h-4 rounded accent-indigo-500 cursor-pointer"
+                  />
+                </th>
                 <th className="px-6 py-4 text-left text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>学号</th>
                 <th className="px-6 py-4 text-left text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>姓名</th>
                 <th className="px-6 py-4 text-left text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>邮箱</th>
@@ -375,7 +488,7 @@ export const Users = () => {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center">
+                  <td colSpan={8} className="px-6 py-12 text-center">
                     <div className="flex justify-center">
                       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500"></div>
                     </div>
@@ -383,7 +496,7 @@ export const Users = () => {
                 </tr>
               ) : users.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center" style={{ color: 'var(--text-light)' }}>
+                  <td colSpan={8} className="px-6 py-12 text-center" style={{ color: 'var(--text-light)' }}>
                     暂无用户
                   </td>
                 </tr>
@@ -396,6 +509,15 @@ export const Users = () => {
                     onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--bg-secondary)')}
                     onMouseLeave={e => (e.currentTarget.style.backgroundColor = '')}
                   >
+                    <td className="px-4 py-4">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(user.id)}
+                        onChange={() => toggleSelect(user.id)}
+                        onClick={e => e.stopPropagation()}
+                        className="w-4 h-4 rounded accent-indigo-500 cursor-pointer"
+                      />
+                    </td>
                     <td className="px-6 py-4 text-sm font-mono" style={{ color: 'var(--text-primary)' }}>{user.student_id}</td>
                     <td className="px-6 py-4 text-sm" style={{ color: 'var(--text-primary)' }}>{user.name}</td>
                     <td className="px-6 py-4 text-sm" style={{ color: 'var(--text-light)' }}>{user.email ?? '—'}</td>
@@ -419,7 +541,7 @@ export const Users = () => {
                     <td className="px-6 py-4 text-sm">
                       <div className="flex items-center gap-2">
                         <button
-                          onClick={() => navigate(`/admin/users/${user.id}`)}
+                          onClick={() => navigate(`/users/${user.id}`)}
                           className="p-2 rounded-lg transition-opacity hover:opacity-70"
                           style={{ background: 'rgba(99,102,241,0.1)', color: '#6366f1' }}
                           title="查看详情"

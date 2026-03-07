@@ -179,6 +179,13 @@ class AdminApiClient {
     return this.request<{ deleted: boolean }>(`/scales/${scaleId}`, { method: 'DELETE' });
   }
 
+  async deleteScaleResponses(responseIds: string[]): Promise<{ deleted: boolean; count: number }> {
+    return this.request<{ deleted: boolean; count: number }>('/scales/responses/batch', {
+      method: 'DELETE',
+      body: JSON.stringify(responseIds),
+    });
+  }
+
   // Sessions
   async getSessions(page: number = 1, pageSize: number = 10): Promise<SessionsListResponse> {
     const params = new URLSearchParams({
@@ -299,6 +306,13 @@ class AdminApiClient {
 
   async getResearchTaskSubmissions(taskId: string): Promise<ResearchSubmissionsResponse> {
     return this.request<ResearchSubmissionsResponse>(`/research/tasks/${taskId}/submissions`);
+  }
+
+  async deleteResearchSubmissions(submissionIds: string[]): Promise<{ deleted: boolean; count: number }> {
+    return this.request<{ deleted: boolean; count: number }>('/research/submissions/batch', {
+      method: 'DELETE',
+      body: JSON.stringify(submissionIds),
+    });
   }
 
   async getLlmConfig(): Promise<LlmConfig> {

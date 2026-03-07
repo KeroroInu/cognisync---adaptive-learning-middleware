@@ -38,13 +38,13 @@ export const AdminLayout = ({ children }: AdminLayoutProps) => {
   };
 
   const navItems = [
-    { path: '/admin', icon: LayoutDashboard, label: t('nav.dashboard') },
-    { path: '/admin/users', icon: Users, label: t('nav.users') },
-    { path: '/admin/conversations', icon: MessageSquare, label: t('nav.conversations') },
-    { path: '/admin/scales', icon: FileText, label: t('nav.scales') },
-    { path: '/admin/explorer', icon: FlaskConical, label: t('nav.research') },
-    { path: '/admin/exports', icon: Download, label: t('nav.exports') },
-    { path: '/admin/config', icon: Settings2, label: t('nav.modelConfig') },
+    { path: '/', icon: LayoutDashboard, label: t('nav.dashboard') },
+    { path: '/users', icon: Users, label: t('nav.users') },
+    { path: '/conversations', icon: MessageSquare, label: t('nav.conversations') },
+    { path: '/scales', icon: FileText, label: t('nav.scales') },
+    { path: '/explorer', icon: FlaskConical, label: t('nav.research') },
+    { path: '/exports', icon: Download, label: t('nav.exports') },
+    { path: '/config', icon: Settings2, label: t('nav.modelConfig') },
   ];
 
   return (

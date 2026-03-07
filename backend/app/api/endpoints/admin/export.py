@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.core.security import verify_admin_key
 from app.db.postgres import get_db
@@ -177,7 +177,7 @@ async def export_table_data(
         "order": order,
         "rowCount": len(rows_filtered),
         "data": rows_filtered,
-        "exported_at": datetime.utcnow().isoformat()
+        "exported_at": datetime.now(timezone.utc).isoformat()
     })
 
 
@@ -205,7 +205,10 @@ def _make_csv_response(rows: list[dict], filename: str) -> StreamingResponse:
 
 
 @router.get("/export/csv/learner-profiles", dependencies=[Depends(verify_admin_key)])
-async def export_learner_profiles(db: AsyncSession = Depends(get_db)):
+async def export_learner_profiles(
+    db: AsyncSession = Depends(get_db),
+    user_ids: Optional[str] = Query(None, description="逗号分隔的用户 UUID，不传则导出全部"),
+):
     """
     导出学习者画像综合数据集（CSV）
 
@@ -215,7 +218,9 @@ async def export_learner_profiles(db: AsyncSession = Depends(get_db)):
     - 最新画像得分及变化次数
     - 对话参与行为指标（会话数、消息数）
     """
-    sql = text("""
+    uid_list = [u.strip() for u in user_ids.split(",") if u.strip()] if user_ids else None
+    where_clause = "WHERE u.id = ANY(:user_ids::uuid[])" if uid_list else ""
+    sql = text(f"""
         SELECT
             u.id                                                AS user_id,
             u.student_id                                        AS student_id,
@@ -223,61 +228,35 @@ async def export_learner_profiles(db: AsyncSession = Depends(get_db)):
             u.email                                             AS email,
             u.created_at                                        AS registered_at,
             u.is_active                                         AS is_active,
-            -- 最初画像（第一条 profile_snapshot）
             first_ps.cognition                                  AS initial_cognition,
             first_ps.affect                                     AS initial_affect,
             first_ps.behavior                                   AS initial_behavior,
             first_ps.created_at                                 AS initial_profile_at,
-            -- 最新画像（最后一条 profile_snapshot）
             last_ps.cognition                                   AS current_cognition,
             last_ps.affect                                      AS current_affect,
             last_ps.behavior                                    AS current_behavior,
             last_ps.created_at                                  AS last_profile_update,
-            -- 画像更新次数
             COALESCE(ps_count.total, 0)                         AS profile_update_count,
-            -- 对话行为
             COALESCE(sess_count.total, 0)                       AS total_sessions,
             COALESCE(msg_count.total, 0)                        AS total_messages,
-            -- 量表填写次数
             COALESCE(sr_count.total, 0)                         AS scale_completions
         FROM users u
-        -- 最初画像
         LEFT JOIN LATERAL (
             SELECT cognition, affect, behavior, created_at
-            FROM profile_snapshots
-            WHERE user_id = u.id
-            ORDER BY created_at ASC LIMIT 1
+            FROM profile_snapshots WHERE user_id = u.id ORDER BY created_at ASC LIMIT 1
         ) first_ps ON TRUE
-        -- 最新画像
         LEFT JOIN LATERAL (
             SELECT cognition, affect, behavior, created_at
-            FROM profile_snapshots
-            WHERE user_id = u.id
-            ORDER BY created_at DESC LIMIT 1
+            FROM profile_snapshots WHERE user_id = u.id ORDER BY created_at DESC LIMIT 1
         ) last_ps ON TRUE
-        -- 画像更新次数
-        LEFT JOIN (
-            SELECT user_id, COUNT(*) AS total
-            FROM profile_snapshots GROUP BY user_id
-        ) ps_count ON ps_count.user_id = u.id
-        -- 会话数
-        LEFT JOIN (
-            SELECT user_id, COUNT(*) AS total
-            FROM chat_sessions GROUP BY user_id
-        ) sess_count ON sess_count.user_id = u.id
-        -- 消息数
-        LEFT JOIN (
-            SELECT user_id, COUNT(*) AS total
-            FROM chat_messages GROUP BY user_id
-        ) msg_count ON msg_count.user_id = u.id
-        -- 量表完成次数
-        LEFT JOIN (
-            SELECT user_id, COUNT(*) AS total
-            FROM scale_responses GROUP BY user_id
-        ) sr_count ON sr_count.user_id = u.id
+        LEFT JOIN (SELECT user_id, COUNT(*) AS total FROM profile_snapshots GROUP BY user_id) ps_count ON ps_count.user_id = u.id
+        LEFT JOIN (SELECT user_id, COUNT(*) AS total FROM chat_sessions GROUP BY user_id) sess_count ON sess_count.user_id = u.id
+        LEFT JOIN (SELECT user_id, COUNT(*) AS total FROM chat_messages GROUP BY user_id) msg_count ON msg_count.user_id = u.id
+        LEFT JOIN (SELECT user_id, COUNT(*) AS total FROM scale_responses GROUP BY user_id) sr_count ON sr_count.user_id = u.id
+        {where_clause}
         ORDER BY u.created_at DESC
     """)
-    result = await db.execute(sql)
+    result = await db.execute(sql, {"user_ids": uid_list} if uid_list else {})
     rows = [dict(r._mapping) for r in result]
     # 序列化
     for row in rows:
@@ -286,12 +265,15 @@ async def export_learner_profiles(db: AsyncSession = Depends(get_db)):
                 row[k] = v.isoformat()
             elif v is None:
                 row[k] = ""
-    date_str = datetime.utcnow().strftime("%Y-%m-%d")
+    date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     return _make_csv_response(rows, f"learner_profiles_{date_str}.csv")
 
 
 @router.get("/export/csv/scale-responses", dependencies=[Depends(verify_admin_key)])
-async def export_scale_responses(db: AsyncSession = Depends(get_db)):
+async def export_scale_responses(
+    db: AsyncSession = Depends(get_db),
+    user_ids: Optional[str] = Query(None, description="逗号分隔的用户 UUID，不传则导出全部"),
+):
     """
     导出量表响应数据集（CSV）
 
@@ -301,7 +283,9 @@ async def export_scale_responses(db: AsyncSession = Depends(get_db)):
     - 三维度汇总得分（认知/情感/行为）
     - 填写时间（可用于分析量表完成时机）
     """
-    sql = text("""
+    uid_list = [u.strip() for u in user_ids.split(",") if u.strip()] if user_ids else None
+    where_clause = "WHERE u.id = ANY(:user_ids::uuid[])" if uid_list else ""
+    sql = text(f"""
         SELECT
             sr.id                               AS response_id,
             u.id                                AS user_id,
@@ -310,6 +294,7 @@ async def export_scale_responses(db: AsyncSession = Depends(get_db)):
             u.email                             AS user_email,
             st.name                             AS scale_name,
             st.id                               AS template_id,
+            sr.started_at                       AS started_at,
             sr.created_at                       AS responded_at,
             sr.answers_json                     AS raw_answers,
             (sr.scores_json->>'cognition')::float   AS cognition_score,
@@ -320,9 +305,10 @@ async def export_scale_responses(db: AsyncSession = Depends(get_db)):
         FROM scale_responses sr
         JOIN users u ON u.id = sr.user_id
         JOIN scale_templates st ON st.id = sr.template_id
+        {where_clause}
         ORDER BY sr.created_at DESC
     """)
-    result = await db.execute(sql)
+    result = await db.execute(sql, {"user_ids": uid_list} if uid_list else {})
     rows = []
     for r in result:
         row = dict(r._mapping)
@@ -335,13 +321,21 @@ async def export_scale_responses(db: AsyncSession = Depends(get_db)):
                 raw = {}
         for item_key, item_val in sorted(raw.items()):
             row[item_key] = item_val
+        # 计算所用时间（秒）
+        started = row.get("started_at")
+        responded = row.get("responded_at")
+        if isinstance(started, datetime) and isinstance(responded, datetime):
+            diff = (responded - started).total_seconds()
+            row["time_spent_seconds"] = int(diff) if diff >= 0 else ""
+        else:
+            row["time_spent_seconds"] = ""
         for k, v in row.items():
             if isinstance(v, datetime):
                 row[k] = v.isoformat()
             elif v is None:
                 row[k] = ""
         rows.append(row)
-    date_str = datetime.utcnow().strftime("%Y-%m-%d")
+    date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     return _make_csv_response(rows, f"scale_responses_{date_str}.csv")
 
 
@@ -385,7 +379,7 @@ async def export_conversations(db: AsyncSession = Depends(get_db)):
             elif v is None:
                 row[k] = ""
         rows.append(row)
-    date_str = datetime.utcnow().strftime("%Y-%m-%d")
+    date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     return _make_csv_response(rows, f"conversation_data_{date_str}.csv")
 
 
@@ -426,7 +420,7 @@ async def export_knowledge_graph(db: AsyncSession = Depends(get_db)):
             elif v is None:
                 row[k] = ""
         rows.append(row)
-    date_str = datetime.utcnow().strftime("%Y-%m-%d")
+    date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     return _make_csv_response(rows, f"learning_trajectory_{date_str}.csv")
 
 
@@ -488,7 +482,7 @@ async def export_single_user(user_id: str, db: AsyncSession = Depends(get_db)):
         writer = csv.DictWriter(output, fieldnames=fieldnames)
         writer.writeheader()
         output.seek(0)
-        date_str = datetime.utcnow().strftime("%Y-%m-%d")
+        date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         return StreamingResponse(
             iter([output.getvalue()]),
             media_type="text/csv; charset=utf-8-sig",
@@ -505,7 +499,7 @@ async def export_single_user(user_id: str, db: AsyncSession = Depends(get_db)):
     # 过滤 rows 只保留已知列
     rows_clean = [{k: row.get(k, "") for k in ordered_fieldnames} for row in rows]
 
-    date_str = datetime.utcnow().strftime("%Y-%m-%d")
+    date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     return _make_csv_response(rows_clean, f"user_{user_id[:8]}_conversations_{date_str}.csv")
 
 
@@ -592,7 +586,7 @@ async def export_user_trajectory(user_id: str, db: AsyncSession = Depends(get_db
         "conflict_level", "user_comment", "likert_trust",
     ]
     rows_clean = [{k: row.get(k, "") for k in ordered} for row in rows]
-    date_str = datetime.utcnow().strftime("%Y-%m-%d")
+    date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     return _make_csv_response(rows_clean, f"user_{user_id[:8]}_trajectory_{date_str}.csv")
 async def export_single_scale_responses(scale_id: str, db: AsyncSession = Depends(get_db)):
     """单个量表的所有用户填写数据（含 user_email + 各题得分展开）"""
@@ -633,5 +627,5 @@ async def export_single_scale_responses(scale_id: str, db: AsyncSession = Depend
             elif v is None:
                 row[k] = ""
         rows.append(row)
-    date_str = datetime.utcnow().strftime("%Y-%m-%d")
+    date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     return _make_csv_response(rows, f"scale_{scale_id[:8]}_responses_{date_str}.csv")

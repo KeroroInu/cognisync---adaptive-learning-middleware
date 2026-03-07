@@ -51,7 +51,7 @@ class ChatMessage(Base, UUIDMixin):
 
     timestamp: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True),
-        default=datetime.utcnow,
+        default=lambda: datetime.now(timezone.utc),
         nullable=False,
         index=True,
         comment="消息时间戳"

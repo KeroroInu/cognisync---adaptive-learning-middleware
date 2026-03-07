@@ -304,3 +304,26 @@ async def get_task_submissions(
         "limit": limit,
         "offset": offset,
     })
+
+
+@router.delete("/research/submissions/batch", dependencies=[Depends(verify_admin_key)])
+async def delete_research_submissions_batch(
+    submission_ids: list[str],
+    db: AsyncSession = Depends(get_db),
+) -> SuccessResponse[dict]:
+    """批量删除研究任务提交记录"""
+    from sqlalchemy import delete as sql_delete
+    try:
+        uuids = [UUID(sid) for sid in submission_ids]
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid submission_id in list")
+
+    result = await db.execute(
+        sql_delete(ResearchTaskSubmission)
+        .where(ResearchTaskSubmission.id.in_(uuids))
+        .returning(ResearchTaskSubmission.id)
+    )
+    deleted_ids = [str(row[0]) for row in result.all()]
+    await db.commit()
+
+    return SuccessResponse(data={"deleted": True, "count": len(deleted_ids)})

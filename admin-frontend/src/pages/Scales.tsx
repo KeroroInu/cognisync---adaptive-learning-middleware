@@ -32,8 +32,12 @@ const FIXED_COLS = [
 
 type FixedColKey = typeof FIXED_COLS[number]['key'];
 
+// 补充 'Z' 使无时区信息的 UTC 字符串被正确解析为 UTC，再转本地时间显示
+const normalizeIso = (iso: string): string =>
+  /Z$|[+-]\d{2}:?\d{2}$/.test(iso) ? iso : iso + 'Z';
+
 const formatDate = (iso: string): string => {
-  const d = new Date(iso);
+  const d = new Date(normalizeIso(iso));
   if (isNaN(d.getTime())) return '';
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
@@ -101,6 +105,8 @@ export const Scales = () => {
   const [responsesModal, setResponsesModal] = useState<{ scale: ScaleTemplate; responses: ScaleResponse[]; loading: boolean } | null>(null);
   const [prevRoundExpanded, setPrevRoundExpanded] = useState(false);
   const [exportingScale, setExportingScale] = useState<string | null>(null);
+  const [selectedResponseIds, setSelectedResponseIds] = useState<Set<string>>(new Set());
+  const [deletingResponses, setDeletingResponses] = useState(false);
 
   // Export column-selection modal
   const [exportModal, setExportModal] = useState<{
@@ -179,6 +185,7 @@ export const Scales = () => {
   };
 
   const handleViewResponses = async (scale: ScaleTemplate) => {
+    setSelectedResponseIds(new Set());
     setResponsesModal({ scale, responses: [], loading: true });
     try {
       const responses = await adminApi.getScaleResponses(scale.id);
@@ -186,6 +193,24 @@ export const Scales = () => {
     } catch (err) {
       setResponsesModal({ scale, responses: [], loading: false });
       console.error(err);
+    }
+  };
+
+  const handleDeleteSelectedResponses = async () => {
+    if (selectedResponseIds.size === 0 || !responsesModal) return;
+    if (!window.confirm(`确定要删除选中的 ${selectedResponseIds.size} 条填写记录？此操作不可撤销。`)) return;
+    setDeletingResponses(true);
+    try {
+      await adminApi.deleteScaleResponses(Array.from(selectedResponseIds));
+      const remaining = responsesModal.responses.filter(r => !selectedResponseIds.has(r.id));
+      setResponsesModal({ ...responsesModal, responses: remaining });
+      setSelectedResponseIds(new Set());
+      // 刷新量表列表（更新回答数）
+      await loadScales();
+    } catch (err) {
+      alert('删除失败：' + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setDeletingResponses(false);
     }
   };
 
@@ -330,11 +355,39 @@ export const Scales = () => {
                   共 {responsesModal.responses.length} 份填写记录
                 </p>
               </div>
-              <button onClick={() => { setResponsesModal(null); setPrevRoundExpanded(false); }}
+              <button onClick={() => { setResponsesModal(null); setPrevRoundExpanded(false); setSelectedResponseIds(new Set()); }}
                 className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
                 <X size={20} />
               </button>
             </div>
+
+            {/* Bulk Action Bar */}
+            {selectedResponseIds.size > 0 && (
+              <div className="px-6 py-2.5 flex items-center justify-between gap-3 border-b"
+                style={{ borderColor: 'var(--glass-border)', background: 'rgba(239,68,68,0.06)' }}>
+                <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                  已选 {selectedResponseIds.size} 条记录
+                </span>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleDeleteSelectedResponses}
+                    disabled={deletingResponses}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
+                    style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444' }}
+                  >
+                    <Trash2 size={13} />
+                    {deletingResponses ? '删除中...' : '删除所选'}
+                  </button>
+                  <button
+                    onClick={() => setSelectedResponseIds(new Set())}
+                    className="px-3 py-1.5 rounded-lg text-xs transition-colors"
+                    style={{ color: 'var(--text-light)' }}
+                  >
+                    取消
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Modal Body */}
             <div className="flex-1 overflow-y-auto p-6">
@@ -357,10 +410,28 @@ export const Scales = () => {
                   ? responsesModal.responses.filter(r => new Date(r.created_at) < activatedAt)
                   : [];
 
-                const ResponseTable = ({ rows }: { rows: ScaleResponse[] }) => (
+                const ResponseTable = ({ rows }: { rows: ScaleResponse[] }) => {
+                  const allSelected = rows.length > 0 && rows.every(r => selectedResponseIds.has(r.id));
+                  const toggleAll = () => {
+                    setSelectedResponseIds(prev => {
+                      const next = new Set(prev);
+                      if (allSelected) rows.forEach(r => next.delete(r.id));
+                      else rows.forEach(r => next.add(r.id));
+                      return next;
+                    });
+                  };
+                  return (
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-white/10">
+                        <th className="py-3 px-2 w-8">
+                          <input
+                            type="checkbox"
+                            checked={allSelected}
+                            onChange={toggleAll}
+                            className="w-3.5 h-3.5 rounded accent-indigo-500 cursor-pointer"
+                          />
+                        </th>
                         <th className="text-left py-3 px-2 font-semibold" style={{ color: 'var(--text-light)' }}>学生</th>
                         <th className="text-center py-3 px-2 font-semibold" style={{ color: 'var(--text-light)' }}>认知</th>
                         <th className="text-center py-3 px-2 font-semibold" style={{ color: 'var(--text-light)' }}>情感</th>
@@ -372,8 +443,29 @@ export const Scales = () => {
                     <tbody>
                       {rows.map((resp) => {
                         const scores = resp.scores_json as Record<string, number> | null;
+                        const isSelected = selectedResponseIds.has(resp.id);
                         return (
-                          <tr key={resp.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
+                          <tr key={resp.id}
+                            className="border-b border-white/5 hover:bg-white/5 transition-colors cursor-pointer"
+                            onClick={() => setSelectedResponseIds(prev => {
+                              const next = new Set(prev);
+                              isSelected ? next.delete(resp.id) : next.add(resp.id);
+                              return next;
+                            })}
+                            style={isSelected ? { background: 'rgba(99,102,241,0.08)' } : undefined}
+                          >
+                            <td className="py-3 px-2" onClick={e => e.stopPropagation()}>
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => setSelectedResponseIds(prev => {
+                                  const next = new Set(prev);
+                                  isSelected ? next.delete(resp.id) : next.add(resp.id);
+                                  return next;
+                                })}
+                                className="w-3.5 h-3.5 rounded accent-indigo-500 cursor-pointer"
+                              />
+                            </td>
                             <td className="py-3 px-2">
                               <div className="font-medium text-sm" style={{ color: 'var(--text-primary)' }}>
                                 {resp.user_name || '—'}
@@ -401,14 +493,15 @@ export const Scales = () => {
                               {scores?.total_score ?? '—'} / {scores?.max_score ?? '—'}
                             </td>
                             <td className="py-3 px-2 text-center text-xs text-gray-500">
-                              {new Date(resp.created_at).toLocaleString('zh-CN')}
+                              {new Date(normalizeIso(resp.created_at)).toLocaleString('zh-CN')}
                             </td>
                           </tr>
                         );
                       })}
                     </tbody>
                   </table>
-                );
+                  );
+                };
 
                 return (
                   <div className="space-y-4">

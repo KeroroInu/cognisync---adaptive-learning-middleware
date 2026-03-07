@@ -3,7 +3,7 @@ Scale Models - 量表模板和响应
 """
 import uuid
 import enum
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 from sqlalchemy import String, Text, Integer, ForeignKey, Enum, Index
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -71,15 +71,15 @@ class ScaleTemplate(Base, UUIDMixin):
 
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True),
-        default=datetime.utcnow,
+        default=lambda: datetime.now(timezone.utc),
         nullable=False,
         comment="创建时间"
     )
 
     updated_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True),
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
         nullable=False,
         comment="更新时间"
     )
@@ -149,7 +149,7 @@ class ScaleResponse(Base, UUIDMixin):
 
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True),
-        default=datetime.utcnow,
+        default=lambda: datetime.now(timezone.utc),
         nullable=False,
         comment="提交时间"
     )

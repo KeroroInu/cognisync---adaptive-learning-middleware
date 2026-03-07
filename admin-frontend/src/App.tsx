@@ -57,7 +57,7 @@ function AdminApp() {
 function App() {
   return (
     <AuthProvider>
-      <BrowserRouter basename="/admin">
+      <BrowserRouter basename={import.meta.env.PROD ? '/admin' : '/'}>
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/*" element={<AdminApp />} />

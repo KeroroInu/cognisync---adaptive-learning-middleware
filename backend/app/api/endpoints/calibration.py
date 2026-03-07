@@ -4,7 +4,7 @@ Calibration Endpoint - 校准日志接口
 import uuid
 import logging
 from typing import List
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -40,7 +40,7 @@ async def record_calibration(
     calibration_log = CalibrationLog(
         id=uuid.uuid4(),
         user_id=current_user.id,
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(timezone.utc),
         dimension=Dimension(data.dimension),
         system_value=data.system_value,
         user_value=data.user_value,

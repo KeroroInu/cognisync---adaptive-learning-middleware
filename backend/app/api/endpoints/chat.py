@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 async def get_or_create_active_session(db: AsyncSession, user_id: UUID) -> ChatSession:
     """获取最近 30 分钟内的活跃会话，不存在则创建新会话"""
     from sqlalchemy import select
-    cutoff = datetime.utcnow() - timedelta(minutes=30)
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=30)
     result = await db.execute(
         select(ChatSession)
         .where(ChatSession.user_id == user_id, ChatSession.created_at >= cutoff)
@@ -461,7 +461,7 @@ async def chat(
             user_id=user_id,
             role=MessageRole.USER,
             text=request.message,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             analysis=None  # 用户消息没有分析结果
         )
         db.add(user_message)
@@ -619,7 +619,7 @@ async def chat(
             user_id=user_id,
             role=MessageRole.ASSISTANT,
             text=assistant_reply,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             analysis=analysis.model_dump()  # 保存分析结果
         )
         db.add(assistant_message)

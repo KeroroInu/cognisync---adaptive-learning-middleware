@@ -2,7 +2,7 @@
 Forms API Endpoints - 量表相关接口
 """
 import uuid
-from datetime import datetime, UTC
+from datetime import datetime, timezone, UTC
 from typing import Dict, Any, Generic, TypeVar, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -307,7 +307,7 @@ async def submit_scale_answers(
         await db.rollback()
         logger.error(f"Failed to save scale response: {e}", exc_info=True)
 
-    current_time = datetime.utcnow().isoformat()
+    current_time = datetime.now(timezone.utc).isoformat()
 
     response_data = {
         "scores": {

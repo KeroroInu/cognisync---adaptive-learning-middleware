@@ -2,7 +2,7 @@
 Admin 量表管理 API 端点
 """
 from uuid import UUID
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, func, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -162,7 +162,7 @@ async def update_scale_template(
     if data.mapping_json is not None:
         template.mapping_json = data.mapping_json
 
-    template.updated_at = datetime.utcnow()
+    template.updated_at = datetime.now(timezone.utc)
 
     await db.commit()
     await db.refresh(template)
@@ -200,7 +200,7 @@ async def activate_scale_template(
     result = await db.execute(
         update(ScaleTemplate)
         .where(ScaleTemplate.id == template_id)
-        .values(status=ScaleStatus.ACTIVE, updated_at=datetime.utcnow(), activated_at=datetime.utcnow())
+        .values(status=ScaleStatus.ACTIVE, updated_at=datetime.now(timezone.utc), activated_at=datetime.now(timezone.utc))
         .returning(ScaleTemplate.id)
     )
 
@@ -230,7 +230,7 @@ async def archive_scale_template(
     result = await db.execute(
         update(ScaleTemplate)
         .where(ScaleTemplate.id == template_id)
-        .values(status=ScaleStatus.ARCHIVED, updated_at=datetime.utcnow())
+        .values(status=ScaleStatus.ARCHIVED, updated_at=datetime.now(timezone.utc))
         .returning(ScaleTemplate.id)
     )
 
@@ -324,3 +324,26 @@ async def delete_scale(
     await db.commit()
 
     return SuccessResponse(data={"deleted": True, "template_id": template_id})
+
+
+@router.delete("/scales/responses/batch", dependencies=[Depends(verify_admin_key)])
+async def delete_scale_responses_batch(
+    response_ids: list[str],
+    db: AsyncSession = Depends(get_db)
+) -> SuccessResponse[dict]:
+    """批量删除量表响应记录"""
+    from sqlalchemy import delete as sql_delete
+    try:
+        uuids = [UUID(rid) for rid in response_ids]
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid response_id in list")
+
+    result = await db.execute(
+        sql_delete(ScaleResponse)
+        .where(ScaleResponse.id.in_(uuids))
+        .returning(ScaleResponse.id)
+    )
+    deleted_ids = [str(row[0]) for row in result.all()]
+    await db.commit()
+
+    return SuccessResponse(data={"deleted": True, "count": len(deleted_ids)})
