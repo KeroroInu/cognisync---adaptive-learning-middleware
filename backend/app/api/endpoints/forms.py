@@ -4,7 +4,7 @@ Forms API Endpoints - 量表相关接口
 import uuid
 from datetime import datetime, timezone, UTC
 from typing import Dict, Any, Generic, TypeVar, Optional
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -98,15 +98,20 @@ def _compute_cab(
     return _weighted("cognition"), _weighted("affect"), _weighted("behavior")
 
 
+
+
 @router.get("/list")
 async def list_active_templates(
+    request: Request,
     db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_user),
 ):
     """
-    获取所有激活的量表，并标记当前用户是否已完成
-    需要认证
+    获取所有激活的量表，并标记当前用户是否已完成。
+    无需登录即可访问（未登录时 is_completed 均为 False）。
     """
+    import jwt
+    import uuid as _uuid
+
     stmt = select(ScaleTemplateModel).where(
         ScaleTemplateModel.status == ScaleStatus.ACTIVE
     ).order_by(ScaleTemplateModel.created_at.desc())
@@ -114,17 +119,28 @@ async def list_active_templates(
     result = await db.execute(stmt)
     templates = result.scalars().all()
 
-    # 查询该用户已提交过的记录（template_id → 最新提交时间）
-    resp_result = await db.execute(
-        select(ScaleResponseModel.template_id, ScaleResponseModel.created_at)
-        .where(ScaleResponseModel.user_id == current_user.id)
-    )
-    # 每个模板只保留最新一次提交的时间
     last_submit: dict = {}
-    for row in resp_result.all():
-        tid, created_at = row[0], row[1]
-        if tid not in last_submit or created_at > last_submit[tid]:
-            last_submit[tid] = created_at
+
+    # 尝试解析 token，有则查已完成记录
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:]
+        try:
+            from app.api.endpoints.auth import SECRET_KEY, ALGORITHM
+            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+            user_id = payload.get("sub")
+            if user_id:
+                uid = _uuid.UUID(user_id)
+                resp_result = await db.execute(
+                    select(ScaleResponseModel.template_id, ScaleResponseModel.created_at)
+                    .where(ScaleResponseModel.user_id == uid)
+                )
+                for row in resp_result.all():
+                    tid, created_at = row[0], row[1]
+                    if tid not in last_submit or created_at > last_submit[tid]:
+                        last_submit[tid] = created_at
+        except Exception:
+            pass  # token 无效则忽略
 
     items = [
         {
@@ -134,7 +150,6 @@ async def list_active_templates(
             "question_count": len(
                 t.schema_json.get("questions") or t.schema_json.get("items") or []
             ),
-            # 只有在本次激活之后提交过才算完成
             "is_completed": (
                 t.id in last_submit
                 and (t.activated_at is None or last_submit[t.id] >= t.activated_at)
