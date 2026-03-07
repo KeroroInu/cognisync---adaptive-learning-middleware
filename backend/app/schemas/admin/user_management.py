@@ -9,10 +9,14 @@ from datetime import datetime
 class UserSummary(BaseModel):
     """用户概要信息"""
     id: str = Field(..., description="用户 ID")
-    email: str = Field(..., description="用户邮箱")
+    student_id: str = Field(..., description="学号")
+    email: Optional[str] = Field(None, description="用户邮箱（可选）")
+    name: str = Field("", description="用户名称")
+    role: str = Field("user", description="用户角色")
+    is_active: bool = Field(True, description="是否激活")
     created_at: datetime = Field(..., description="创建时间")
-    message_count: int = Field(..., description="消息数量")
-    last_active: Optional[datetime] = Field(None, description="最后活跃时间")
+    message_count: int = Field(0, description="消息数量")
+    last_active_at: Optional[datetime] = Field(None, description="最后活跃时间")
 
 
 class UserListResponse(BaseModel):
@@ -26,7 +30,8 @@ class UserListResponse(BaseModel):
 class UserDetailResponse(BaseModel):
     """用户详情响应"""
     id: str
-    email: str
+    student_id: str
+    email: Optional[str] = None
     created_at: datetime
     profile: dict = Field(..., description="用户画像")
     stats: dict = Field(..., description="用户统计数据")

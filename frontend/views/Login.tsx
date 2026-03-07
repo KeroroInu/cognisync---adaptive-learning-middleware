@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { LogIn, Mail, Lock, AlertCircle } from 'lucide-react';
+import { LogIn, Hash, Lock, AlertCircle } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Input } from '../components/Input';
 import { login } from '../services/api';
@@ -18,7 +18,7 @@ export const Login: React.FC<LoginProps> = ({
   onNavigateToRegister
 }) => {
   const t = translations[language];
-  const [email, setEmail] = useState('');
+  const [studentId, setStudentId] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -27,15 +27,15 @@ export const Login: React.FC<LoginProps> = ({
     e.preventDefault();
     setError(null);
 
-    if (!email || !password) {
-      setError(language === 'zh' ? '请填写所有字段' : 'Please fill in all fields');
+    if (!studentId || !password) {
+      setError(language === 'zh' ? '请填写学号和密码' : 'Please enter your student ID and password');
       return;
     }
 
     setIsLoading(true);
 
     try {
-      const response = await login({ email, password });
+      const response = await login({ student_id: studentId, password });
 
       if (response.success && response.data) {
         onLoginSuccess(
@@ -62,7 +62,7 @@ export const Login: React.FC<LoginProps> = ({
           <h1 className="text-3xl font-bold text-gradient mb-2">
             {t.loginTitle}
           </h1>
-          <p className="text-gray-600 dark:text-gray-400">
+          <p style={{ color: 'var(--text-light)' }}>
             {t.loginDesc}
           </p>
         </div>
@@ -70,21 +70,21 @@ export const Login: React.FC<LoginProps> = ({
         {/* Login Form */}
         <form onSubmit={handleSubmit} className="glass-card p-8 space-y-6">
           {error && (
-            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 flex items-start gap-3 animate-fade-in">
-              <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
-              <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+            <div className="border border-red-200 rounded-lg p-4 flex items-start gap-3 animate-fade-in" style={{ backgroundColor: 'rgba(239,68,68,0.08)' }}>
+              <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-red-500">{error}</p>
             </div>
           )}
 
           <div>
             <Input
-              type="email"
-              label={t.email}
-              placeholder={t.emailPlaceholder}
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              type="text"
+              label={t.studentId}
+              placeholder={t.studentIdPlaceholder}
+              value={studentId}
+              onChange={(e) => setStudentId(e.target.value)}
               disabled={isLoading}
-              autoComplete="email"
+              autoComplete="username"
               required
             />
           </div>
@@ -109,16 +109,16 @@ export const Login: React.FC<LoginProps> = ({
             isLoading={isLoading}
             className="w-full"
           >
-            <Mail className="w-5 h-5 mr-2" />
+            <Hash className="w-5 h-5 mr-2" />
             {isLoading ? t.loggingIn : t.loginButton}
           </Button>
 
-          <div className="text-center text-sm text-gray-600 dark:text-gray-400">
+          <div className="text-center text-sm" style={{ color: 'var(--text-light)' }}>
             {t.noAccount}{' '}
             <button
               type="button"
               onClick={onNavigateToRegister}
-              className="text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 font-medium transition-colors"
+              className="text-blue-500 hover:text-blue-600 font-medium transition-colors"
             >
               {t.signUp}
             </button>

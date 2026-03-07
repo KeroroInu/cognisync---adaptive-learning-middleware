@@ -75,6 +75,20 @@ class Settings(BaseSettings):
         description="Admin API 认证密钥（⚠️ 生产环境必须设置！）"
     )
 
+    # 默认管理员账号（首次启动自动创建，已存在则跳过）
+    ADMIN_DEFAULT_STUDENT_ID: str = Field(
+        default="admin",
+        description="默认管理员学号"
+    )
+    ADMIN_DEFAULT_PASSWORD: str = Field(
+        default="Admin@2024",
+        description="默认管理员密码（首次部署后请及时修改）"
+    )
+    ADMIN_DEFAULT_NAME: str = Field(
+        default="系统管理员",
+        description="默认管理员姓名"
+    )
+
     # JWT 认证配置
     JWT_SECRET: str = Field(
         default="",

@@ -13,6 +13,7 @@ class Node(BaseModel):
     mastery: float = Field(..., ge=0, le=100, description="掌握度 [0-100]")
     frequency: int = Field(..., ge=1, le=10, description="出现频率 [1-10]（影响节点大小）")
     description: str = Field(default="", description="概念描述")
+    category: Optional[str] = Field("通用", description="概念所属领域类别")
     x: Optional[float] = Field(None, description="节点 X 坐标（可选）")
     y: Optional[float] = Field(None, description="节点 Y 坐标（可选）")
     isFlagged: Optional[bool] = Field(False, description="用户是否标记/质疑")
@@ -22,6 +23,8 @@ class Edge(BaseModel):
     """知识图谱边（前端契约）"""
     source: str = Field(..., description="源节点 ID")
     target: str = Field(..., description="目标节点 ID")
+    relType: Optional[str] = Field(None, description="关系类型：co_occurred | related")
+    weight: Optional[int] = Field(None, description="关系权重（共现次数）")
 
 
 class GraphData(BaseModel):

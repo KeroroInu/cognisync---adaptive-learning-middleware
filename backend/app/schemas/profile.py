@@ -48,3 +48,17 @@ class ProfileUpdateRequest(BaseModel):
     behavior: Optional[int] = Field(None, ge=0, le=100, description="行为维度")
     user_comment: Optional[str] = Field(None, description="用户备注")
     likert_trust: Optional[int] = Field(None, ge=1, le=5, description="信任度评分 [1-5]")
+
+
+class ProfileChange(BaseModel):
+    """画像变化记录"""
+    dimension: str = Field(description="维度名称: cognition | affect | behavior")
+    change: int = Field(description="变化值")
+    timestamp: str = Field(description="时间戳 (ISO 8601)")
+    trend: str = Field(description="趋势: up | down | stable")
+
+
+class ProfileChangesResponse(BaseModel):
+    """画像变化列表响应"""
+    changes: list[ProfileChange] = Field(default_factory=list, description="最近的变化记录")
+

@@ -76,7 +76,7 @@ async def export_user_data(userId: str, db: AsyncSession = Depends(get_db)):
             ChatMessageSchema(
                 id=str(msg.id),
                 role=msg.role.value,
-                text=msg.content,
+                text=msg.text,
                 timestamp=msg.timestamp.isoformat() + "Z",
                 analysis=msg.analysis
             )

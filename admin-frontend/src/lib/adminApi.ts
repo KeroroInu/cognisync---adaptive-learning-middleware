@@ -14,20 +14,34 @@ import type {
   SessionsListResponse,
   SessionDetail,
   SessionMessagesResponse,
+  CalibrationLog,
+  UserGraph,
+  ResearchTask,
+  ResearchTasksResponse,
+  ResearchTaskSubmission,
+  ResearchSubmissionsResponse,
+  LlmConfig,
+  LlmRoleConfig,
 } from '../types';
 
 const BASE_URL = (import.meta.env.VITE_API_BASE_URL as string) || 'http://localhost:8000/api';
-const ADMIN_KEY = (import.meta.env.VITE_ADMIN_KEY as string) || '';
 
 class AdminApiClient {
+  private getAuthHeaders(): Record<string, string> {
+    const token = localStorage.getItem('auth_token') || '';
+    return {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    };
+  }
+
   private async request<T>(
     endpoint: string,
     options: RequestInit = {}
   ): Promise<T> {
     const url = `${BASE_URL}/admin${endpoint}`;
     const headers = {
-      'Content-Type': 'application/json',
-      'X-ADMIN-KEY': ADMIN_KEY,
+      ...this.getAuthHeaders(),
       ...options.headers,
     };
 
@@ -81,11 +95,40 @@ class AdminApiClient {
   }
 
   async getUserProfiles(userId: string): Promise<ProfileSnapshot[]> {
-    return this.request<ProfileSnapshot[]>(`/users/${userId}/profiles`);
+    const result = await this.request<{ profiles: ProfileSnapshot[]; total: number }>(`/users/${userId}/profiles`);
+    return result.profiles;
   }
 
   async getUserScaleResponses(userId: string): Promise<ScaleResponse[]> {
-    return this.request<ScaleResponse[]>(`/users/${userId}/scale-responses`);
+    const result = await this.request<{ responses: ScaleResponse[]; total: number }>(`/users/${userId}/scale-responses`);
+    return result.responses;
+  }
+
+  async getUserCalibrationLogs(userId: string): Promise<CalibrationLog[]> {
+    const result = await this.request<{ logs: CalibrationLog[]; total: number }>(`/users/${userId}/calibration-logs`);
+    return result.logs;
+  }
+
+  async getUserGraph(userId: string): Promise<UserGraph> {
+    return this.request<UserGraph>(`/users/${userId}/graph`);
+  }
+
+  async deleteUser(userId: string): Promise<{ deleted: boolean }> {
+    return this.request<{ deleted: boolean }>(`/users/${userId}`, { method: 'DELETE' });
+  }
+
+  async updateUser(userId: string, data: { name?: string; is_active?: boolean }): Promise<{ id: string; email: string; name: string; is_active: boolean }> {
+    return this.request(`/users/${userId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async resetUserPassword(userId: string, newPassword: string): Promise<{ reset: boolean }> {
+    return this.request<{ reset: boolean }>(`/users/${userId}/reset-password`, {
+      method: 'POST',
+      body: JSON.stringify({ new_password: newPassword }),
+    });
   }
 
   // Scales
@@ -98,7 +141,7 @@ class AdminApiClient {
     const response = await fetch(url, {
       method: 'POST',
       headers: {
-        'X-ADMIN-KEY': ADMIN_KEY,
+        'Authorization': `Bearer ${localStorage.getItem('auth_token') || ''}`,
       },
       body: data,
     });
@@ -128,7 +171,12 @@ class AdminApiClient {
   }
 
   async getScaleResponses(scaleId: string): Promise<ScaleResponse[]> {
-    return this.request<ScaleResponse[]>(`/scales/${scaleId}/responses`);
+    const result = await this.request<{ responses: ScaleResponse[]; total: number } | ScaleResponse[]>(`/scales/${scaleId}/responses`);
+    return Array.isArray(result) ? result : ((result as { responses: ScaleResponse[] }).responses ?? []);
+  }
+
+  async deleteScale(scaleId: string): Promise<{ deleted: boolean }> {
+    return this.request<{ deleted: boolean }>(`/scales/${scaleId}`, { method: 'DELETE' });
   }
 
   // Sessions
@@ -150,6 +198,10 @@ class AdminApiClient {
       offset: offset.toString(),
     });
     return this.request<SessionMessagesResponse>(`/sessions/${sessionId}/messages?${params}`);
+  }
+
+  async deleteSession(sessionId: string): Promise<{ deleted: boolean }> {
+    return this.request<{ deleted: boolean }>(`/sessions/${sessionId}`, { method: 'DELETE' });
   }
 
   // Data Explorer
@@ -188,6 +240,76 @@ class AdminApiClient {
     if (filters) params.append('filters', JSON.stringify(filters));
 
     return this.request<unknown[]>(`/db/export?${params}`);
+  }
+
+  async exportCsv(endpoint: string): Promise<Blob> {
+    const url = `${BASE_URL}/admin${endpoint}`;
+    const response = await fetch(url, {
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('auth_token') || ''}` },
+    });
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+    return response.blob();
+  }
+
+  // Research Tasks
+  async getResearchTasks(): Promise<ResearchTasksResponse> {
+    return this.request<ResearchTasksResponse>('/research/tasks');
+  }
+
+  async createResearchTask(data: {
+    title: string;
+    description?: string;
+    instructions?: string;
+    ai_prompt?: string;
+    code_content: string;
+    language: string;
+  }): Promise<ResearchTask> {
+    return this.request<ResearchTask>('/research/tasks', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateResearchTask(taskId: string, data: {
+    title?: string;
+    description?: string;
+    instructions?: string;
+    code_content?: string;
+    language?: string;
+  }): Promise<ResearchTask> {
+    return this.request<ResearchTask>(`/research/tasks/${taskId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteResearchTask(taskId: string): Promise<{ deleted: boolean }> {
+    return this.request<{ deleted: boolean }>(`/research/tasks/${taskId}`, { method: 'DELETE' });
+  }
+
+  async activateResearchTask(taskId: string): Promise<{ message: string }> {
+    return this.request<{ message: string }>(`/research/tasks/${taskId}/activate`, { method: 'POST' });
+  }
+
+  async archiveResearchTask(taskId: string): Promise<{ message: string }> {
+    return this.request<{ message: string }>(`/research/tasks/${taskId}/archive`, { method: 'POST' });
+  }
+
+  async getResearchTaskSubmissions(taskId: string): Promise<ResearchSubmissionsResponse> {
+    return this.request<ResearchSubmissionsResponse>(`/research/tasks/${taskId}/submissions`);
+  }
+
+  async getLlmConfig(): Promise<LlmConfig> {
+    return this.request<LlmConfig>('/config/llm');
+  }
+
+  async saveLlmConfig(role: 'analysis' | 'chat', config: LlmRoleConfig): Promise<{ role: string; provider: string; model: string }> {
+    return this.request('/config/llm', {
+      method: 'PUT',
+      body: JSON.stringify({ role, config }),
+    });
   }
 }
 

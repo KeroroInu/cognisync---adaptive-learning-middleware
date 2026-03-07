@@ -17,12 +17,22 @@ export const useAppStore = () => {
     return initialTheme;
   });
 
-  // 从 localStorage 读取 token，初始化认证状态
+  // 从 localStorage 读取 token 和缓存的画像，初始化认证状态
   const [state, setState] = useState<AppState>(() => {
     const token = localStorage.getItem('cognisync-token');
+    const profileStr = localStorage.getItem('cognisync-profile');
+    let cachedProfile = INITIAL_STATE.profile;
+    if (profileStr) {
+      try {
+        cachedProfile = JSON.parse(profileStr);
+      } catch {
+        // ignore parse errors
+      }
+    }
     return {
       ...INITIAL_STATE,
       token,
+      profile: cachedProfile,
       user: null,
     };
   });
@@ -34,6 +44,9 @@ export const useAppStore = () => {
       if (token && !state.user) {
         try {
           const { user, profile } = await getCurrentUser();
+          if (profile) {
+            localStorage.setItem('cognisync-profile', JSON.stringify(profile));
+          }
           setState(prev => ({
             ...prev,
             user,
@@ -45,6 +58,7 @@ export const useAppStore = () => {
           console.error('Failed to get user info:', error);
           // Token 无效，清除
           localStorage.removeItem('cognisync-token');
+          localStorage.removeItem('cognisync-profile');
           setState(prev => ({
             ...prev,
             token: null,
@@ -85,34 +99,34 @@ export const useAppStore = () => {
     };
 
     setState(prev => {
-      let newProfile = { ...prev.profile };
       let newNodes = [...prev.nodes];
 
-      // Simulate Real-time Updates if analysis exists
-      if (analysis) {
-        // Update Profile
-        if (analysis.delta.cognition) newProfile.cognition = Math.min(100, Math.max(0, newProfile.cognition + analysis.delta.cognition));
-        if (analysis.delta.affect) newProfile.affect = Math.min(100, Math.max(0, newProfile.affect + analysis.delta.affect));
-        if (analysis.delta.behavior) newProfile.behavior = Math.min(100, Math.max(0, newProfile.behavior + analysis.delta.behavior));
-        newProfile.lastUpdate = new Date().toISOString();
-
-        // Update Knowledge Graph Concepts
+      // Update local knowledge graph nodes from detected concepts
+      // (serves as fallback when Neo4j is unavailable)
+      if (analysis?.detectedConcepts) {
         analysis.detectedConcepts.forEach(conceptName => {
           const nodeIndex = newNodes.findIndex(n => n.name === conceptName);
           if (nodeIndex >= 0) {
             newNodes[nodeIndex] = {
               ...newNodes[nodeIndex],
               frequency: Math.min(10, newNodes[nodeIndex].frequency + 1),
-              // Randomly fluctuate mastery for simulation
-              mastery: Math.min(100, Math.max(0, newNodes[nodeIndex].mastery + (role === 'assistant' ? 2 : -1)))
             };
+          } else {
+            // Add newly detected concept as a local node
+            newNodes.push({
+              id: `local-${conceptName.replace(/[^a-zA-Z0-9\u4e00-\u9fff]/g, '-')}`,
+              name: conceptName,
+              mastery: 50,
+              frequency: 1,
+              description: '',
+              category: '通用',
+            });
           }
         });
       }
 
       return {
         ...prev,
-        profile: newProfile,
         nodes: newNodes,
         messages: [...prev.messages, newMessage]
       };
@@ -140,10 +154,15 @@ export const useAppStore = () => {
   };
 
   const updateProfile = (profile: UserProfile) => {
+    localStorage.setItem('cognisync-profile', JSON.stringify(profile));
     setState(prev => ({
       ...prev,
       profile
     }));
+  };
+
+  const clearMessages = () => {
+    setState(prev => ({ ...prev, messages: [] }));
   };
 
   // 认证相关方法
@@ -168,6 +187,9 @@ export const useAppStore = () => {
 
   const setAuth = (user: User, token: string, profile?: UserProfile) => {
     localStorage.setItem('cognisync-token', token);
+    if (profile) {
+      localStorage.setItem('cognisync-profile', JSON.stringify(profile));
+    }
     setState(prev => ({
       ...prev,
       user,
@@ -178,6 +200,10 @@ export const useAppStore = () => {
 
   const clearAuth = () => {
     localStorage.removeItem('cognisync-token');
+    localStorage.removeItem('cognisync-profile');
+    // 清除 onboarding 相关的 localStorage 数据
+    localStorage.removeItem('userAttributes');
+    localStorage.removeItem('conceptSeeds');
     setState(prev => ({
       ...prev,
       user: null,
@@ -195,6 +221,7 @@ export const useAppStore = () => {
     addCalibrationLog,
     updateNode,
     updateProfile,
+    clearMessages,
     // 认证方法
     setUser,
     setToken,

@@ -1,4 +1,4 @@
-export type Dimension = 'Cognition' | 'Affect' | 'Behavior';
+export type Dimension = 'Cognition' | 'Affect' | 'Behavior' | 'CT' | 'SE' | 'LM' | 'CPS' | 'PA' | 'AIL' | string;
 export type Language = 'zh' | 'en';
 
 export interface UserProfile {
@@ -8,12 +8,20 @@ export interface UserProfile {
   lastUpdate: string;
 }
 
+export interface ProfileChange {
+  dimension: string;
+  change: number;
+  timestamp: string;
+  trend: 'up' | 'down' | 'stable';
+}
+
 export interface Node {
   id: string;
   name: string;
   mastery: number; // 0-100
   frequency: number; // 1-10 (size)
   description: string;
+  category?: string; // domain/subject area
   x?: number;
   y?: number;
   isFlagged?: boolean; // If user has disputed it
@@ -22,6 +30,8 @@ export interface Node {
 export interface Edge {
   source: string;
   target: string;
+  relType?: string; // "co_occurred" | "prerequisite" | "related"
+  weight?: number;
 }
 
 export interface ChatMessage {
@@ -67,7 +77,8 @@ export interface AppState {
 
 export interface User {
   id: string;
-  email: string;
+  student_id: string;
+  email?: string;
   name: string;
   createdAt: string;
   hasCompletedOnboarding: boolean;
@@ -87,14 +98,15 @@ export interface AuthResponse {
 }
 
 export interface LoginRequest {
-  email: string;
+  student_id: string;
   password: string;
 }
 
 export interface RegisterRequest {
-  email: string;
-  password: string;
+  student_id: string;
   name: string;
+  password: string;
+  email?: string;
   mode: 'scale' | 'ai';
 }
 
@@ -122,6 +134,7 @@ export interface ScaleAnswer {
 
 export interface ScaleSubmitRequest {
   answers: Record<string, number>; // {"item_1": 5, "item_2": 3, ...}
+  started_at?: string;  // ISO 8601 字符串，开始填写时间
 }
 
 export interface ScaleSubmitResponse {
@@ -202,4 +215,36 @@ export interface AIOnboardingFinishResponse {
     code: string;
     message: string;
   };
+}
+
+// ============================================
+//  量表列表相关类型
+// ============================================
+
+export interface ScaleListItem {
+  id: string;
+  name: string;
+  description: string;
+  question_count: number;
+  is_completed: boolean;
+}
+
+// ============================================
+//  研究任务相关类型
+// ============================================
+
+export interface ResearchTask {
+  id: string;
+  title: string;
+  description: string | null;
+  instructions: string | null;
+  ai_prompt: string | null;
+  code_content: string;
+  language: string;
+  status: 'draft' | 'active' | 'archived';
+  created_at: string;
+  updated_at: string;
+  // 当前用户的提交状态
+  is_completed?: boolean;
+  code_submitted?: string | null;
 }

@@ -43,6 +43,7 @@ export const ScaleOnboardingPage: React.FC<ScaleOnboardingPageProps> = ({
   const [errors, setErrors] = useState<ValidationError[]>([]);
   const [apiError, setApiError] = useState<string | null>(null);
   const [initialProfile, setInitialProfile] = useState<InitialProfile | null>(null);
+  const [startedAt, setStartedAt] = useState<string | null>(null);
 
   /**
    * 加载激活的量表模板
@@ -53,6 +54,7 @@ export const ScaleOnboardingPage: React.FC<ScaleOnboardingPageProps> = ({
       try {
         const data = await getActiveTemplate();
         setTemplate(data);
+        setStartedAt(new Date().toISOString());  // 记录开始填写时间
         setStatus('filling');
       } catch (error: any) {
         setApiError(error.message || '获取量表失败');
@@ -128,7 +130,7 @@ export const ScaleOnboardingPage: React.FC<ScaleOnboardingPageProps> = ({
     setApiError(null);
 
     try {
-      const response = await submitScaleAnswers(template.id, { answers });
+      const response = await submitScaleAnswers(template.id, { answers, started_at: startedAt ?? undefined });
 
       // 保存初始画像
       setInitialProfile(response.initialProfile);

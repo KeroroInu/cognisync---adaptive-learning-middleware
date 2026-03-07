@@ -3,7 +3,7 @@
  * 用于用户认证和业务 API 调用
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
 interface ApiResponse<T> {
   success: boolean;

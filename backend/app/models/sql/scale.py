@@ -84,6 +84,12 @@ class ScaleTemplate(Base, UUIDMixin):
         comment="更新时间"
     )
 
+    activated_at: Mapped[Optional[datetime]] = mapped_column(
+        TIMESTAMP(timezone=True),
+        nullable=True,
+        comment="最近一次激活时间（用于区分前测/后测轮次）"
+    )
+
     # 关系
     responses: Mapped[list["ScaleResponse"]] = relationship(
         "ScaleResponse",
@@ -135,11 +141,17 @@ class ScaleResponse(Base, UUIDMixin):
         comment="计算得分（JSON）"
     )
 
+    started_at: Mapped[Optional[datetime]] = mapped_column(
+        TIMESTAMP(timezone=True),
+        nullable=True,
+        comment="开始填写时间"
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True),
         default=datetime.utcnow,
         nullable=False,
-        comment="填写时间"
+        comment="提交时间"
     )
 
     # 关系

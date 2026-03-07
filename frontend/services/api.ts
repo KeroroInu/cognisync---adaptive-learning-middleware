@@ -5,19 +5,22 @@
 import type {
   User,
   UserProfile,
+  ProfileChange,
   AuthResponse,
   LoginRequest,
   RegisterRequest,
   ScaleTemplate,
+  ScaleListItem,
   ScaleSubmitRequest,
   ScaleSubmitResponse,
   AIOnboardingStartResponse,
   AIOnboardingStepRequest,
   AIOnboardingStepResponse,
   AIOnboardingFinishResponse,
+  ResearchTask,
 } from '@/types';
 
-const API_BASE_URL = 'http://localhost:8000';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
 
 // 获取存储的 token
 function getAuthToken(): string | null {
@@ -45,6 +48,8 @@ export interface ChatRequest {
   message: string;
   language: 'zh' | 'en';
   isResearchMode: boolean;
+  currentCode?: string;
+  taskPrompt?: string;
 }
 
 export interface ChatAnalysis {
@@ -58,13 +63,6 @@ export interface ChatAnalysis {
   };
 }
 
-export interface UserProfile {
-  cognition: number;
-  affect: number;
-  behavior: number;
-  lastUpdate: string;
-}
-
 export interface ChatResponse {
   message: string;
   analysis: ChatAnalysis;
@@ -76,6 +74,10 @@ export interface ApiResponse<T> {
   data: T;
 }
 
+export interface ProfileChangesResponse {
+  changes: ProfileChange[];
+}
+
 /**
  * 调用聊天接口
  */
@@ -83,9 +85,7 @@ export async function sendChatMessage(request: ChatRequest): Promise<ChatRespons
   try {
     const response = await fetch(`${API_BASE_URL}/api/chat`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: getHeaders(true),
       body: JSON.stringify(request),
     });
 
@@ -141,11 +141,7 @@ export async function login(credentials: LoginRequest): Promise<AuthResponse> {
       throw new Error(result.detail || result.error?.message || `HTTP error! status: ${response.status}`);
     }
 
-    // 后端直接返回 {token, user} 格式
-    // 存储 token
-    if (result.token) {
-      localStorage.setItem('cognisync-token', result.token);
-    }
+    // 注意：token 的存储由调用方通过 setAuth() 统一处理，这里不存储
 
     // 兼容旧格式，包装成 {success, data}
     return {
@@ -175,11 +171,7 @@ export async function register(data: RegisterRequest): Promise<AuthResponse> {
       throw new Error(result.detail || result.error?.message || `HTTP error! status: ${response.status}`);
     }
 
-    // 后端直接返回 {token, user} 格式
-    // 存储 token
-    if (result.token) {
-      localStorage.setItem('cognisync-token', result.token);
-    }
+    // 注意：token 的存储由调用方通过 setAuth() 统一处理，这里不存储
 
     // 兼容旧格式，包装成 {success, data}
     return {
@@ -188,6 +180,36 @@ export async function register(data: RegisterRequest): Promise<AuthResponse> {
     } as AuthResponse;
   } catch (error) {
     console.error('Registration failed:', error);
+    throw error;
+  }
+}
+
+/**
+ * 量表模式专用组合注册：原子性完成账号创建 + 量表提交
+ * 只有量表答案成功提交后账号才真正入库
+ */
+export async function registerWithScale(data: {
+  student_id: string;
+  name: string;
+  email?: string;
+  password: string;
+  template_id: string;
+  answers: Record<string, number>;
+  started_at?: string;
+}): Promise<AuthResponse> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/auth/register-with-scale`, {
+      method: 'POST',
+      headers: getHeaders(false),
+      body: JSON.stringify({ ...data, mode: 'scale' }),
+    });
+    const result = await response.json();
+    if (!response.ok) {
+      throw new Error(result.detail || result.error?.message || `HTTP error! status: ${response.status}`);
+    }
+    return { success: true, data: result } as AuthResponse;
+  } catch (error) {
+    console.error('Register with scale failed:', error);
     throw error;
   }
 }
@@ -225,6 +247,149 @@ export async function getCurrentUser(): Promise<{ user: User; profile: UserProfi
 export function logout(): void {
   localStorage.removeItem('cognisync-token');
 }
+
+/**
+ * 获取用户画像的最近变化
+ */
+export async function getRecentChanges(userId: string, limit: number = 5): Promise<ApiResponse<ProfileChangesResponse>> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/profile/${userId}/recent-changes?limit=${limit}`, {
+      method: 'GET',
+      headers: getHeaders(true),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const result: ApiResponse<ProfileChangesResponse> = await response.json();
+
+    if (!result.success) {
+      throw new Error(result.error?.message || 'Failed to fetch recent changes');
+    }
+
+    return result;
+  } catch (error) {
+    console.error('Failed to get recent changes:', error);
+    throw error;
+  }
+}
+
+
+// ============================================
+//  知识图谱 & 问候 API
+// ============================================
+
+/**
+ * 获取用户知识图谱
+ */
+export async function getKnowledgeGraph(userId: string): Promise<{ nodes: any[]; edges: any[] }> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/knowledge-graph/${userId}`, {
+      method: 'GET',
+      headers: getHeaders(true),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const result = await response.json();
+    if (!result.success) {
+      throw new Error(result.error?.message || 'Failed to fetch knowledge graph');
+    }
+
+    const data = result.data || {};
+    return { nodes: data.nodes || [], edges: data.edges || [] };
+  } catch (error) {
+    console.error('Failed to get knowledge graph:', error);
+    return { nodes: [], edges: [] };
+  }
+}
+
+/**
+ * 获取个性化开场问候语
+ */
+export async function getChatGreeting(
+  language: 'zh' | 'en' = 'zh'
+): Promise<{ message: string; hasContext: boolean }> {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/api/chat/greeting?language=${language}`,
+      { method: 'GET', headers: getHeaders(true) }
+    );
+
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+
+    const result = await response.json();
+    return result.data || { message: '你好！我是你的学习伙伴。', hasContext: false };
+  } catch (error) {
+    console.error('Failed to get chat greeting:', error);
+    return {
+      message: language === 'zh' ? '你好！我是你的学习伙伴，有什么可以帮你的吗？' : 'Hello! How can I help you today?',
+      hasContext: false,
+    };
+  }
+}
+
+export interface ChatSession {
+  sessionStart: string;
+  sessionEnd: string;
+  title: string;
+  preview: string;
+  messageCount: number;
+}
+
+export interface SessionMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  text: string;
+  timestamp: string;
+}
+
+/**
+ * 获取用户历史对话会话列表
+ */
+export async function getChatSessions(): Promise<ChatSession[]> {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/api/chat/sessions`,
+      { method: 'GET', headers: getHeaders(true) }
+    );
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+    const result = await response.json();
+    return result.data?.sessions || [];
+  } catch (error) {
+    console.error('Failed to get chat sessions:', error);
+    return [];
+  }
+}
+
+/**
+ * 获取特定会话的消息记录
+ */
+export async function getSessionMessages(
+  sessionStart: string,
+  sessionEnd: string
+): Promise<SessionMessage[]> {
+  try {
+    const params = new URLSearchParams({
+      sessionStart,
+      sessionEnd,
+    });
+    const response = await fetch(
+      `${API_BASE_URL}/api/chat/sessions/messages?${params.toString()}`,
+      { method: 'GET', headers: getHeaders(true) }
+    );
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+    const result = await response.json();
+    return result.data?.messages || [];
+  } catch (error) {
+    console.error('Failed to get session messages:', error);
+    return [];
+  }
+}
+
 
 // ============================================
 //  量表注册 API
@@ -359,4 +524,82 @@ export async function finishAIOnboarding(sessionId: string): Promise<AIOnboardin
     console.error('Failed to finish AI onboarding:', error);
     throw error;
   }
+}
+
+// ============================================
+//  研究任务 API
+// ============================================
+
+/**
+ * 获取当前激活的研究任务（无任务返回 null）
+ */
+export async function getActiveResearchTask(): Promise<ResearchTask | null> {
+  const response = await fetch(`${API_BASE_URL}/api/research/active-task`, {
+    headers: getHeaders(true),
+  });
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  const result = await response.json();
+  return (result.data ?? result) as ResearchTask;
+}
+
+/**
+ * 自动保存学生代码进度
+ */
+export async function saveResearchProgress(taskId: string, code: string, startedAt?: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/research/tasks/${taskId}/save-progress`, {
+    method: 'POST',
+    headers: getHeaders(true),
+    body: JSON.stringify({ code_submitted: code, started_at: startedAt }),
+  });
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+}
+
+/**
+ * 标记任务完成并保存最终代码
+ */
+export async function completeResearchTask(taskId: string, code: string, startedAt?: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/research/tasks/${taskId}/complete`, {
+    method: 'POST',
+    headers: getHeaders(true),
+    body: JSON.stringify({ code_submitted: code, started_at: startedAt }),
+  });
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+}
+
+export async function reopenResearchTask(taskId: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/research/tasks/${taskId}/reopen`, {
+    method: 'POST',
+    headers: getHeaders(true),
+    body: JSON.stringify({}),
+  });
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+}
+
+// ============================================
+//  量表列表 API（用户已登录后使用）
+// ============================================
+
+/**
+ * 获取所有激活的量表，包含当前用户的完成状态
+ */
+export async function getAllActiveScales(): Promise<ScaleListItem[]> {
+  const response = await fetch(`${API_BASE_URL}/api/forms/list`, {
+    headers: getHeaders(true),
+  });
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  const result = await response.json();
+  return (result.data?.templates ?? []) as ScaleListItem[];
+}
+
+/**
+ * 按 ID 获取量表模板（供用户端填写）
+ */
+export async function getScaleTemplateById(templateId: string): Promise<ScaleTemplate> {
+  const response = await fetch(`${API_BASE_URL}/api/forms/templates/${templateId}`, {
+    headers: getHeaders(false),
+  });
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  const result = await response.json();
+  return result.data.template as ScaleTemplate;
 }

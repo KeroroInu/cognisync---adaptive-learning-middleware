@@ -1,19 +1,29 @@
 import React, { useState } from 'react';
-import { ClipboardList, MessageSquare, Check, ArrowLeft, Mail, Lock, User, Loader } from 'lucide-react';
+import { ClipboardList, MessageSquare, Check, ArrowLeft, Hash, Lock, User, Mail, Loader } from 'lucide-react';
 import { Input } from '../components/Input';
 import { register as registerAPI } from '../services/api';
 import { translations } from '../utils/translations';
 import type { Language } from '../types';
 
+export interface PendingScaleRegistration {
+  student_id: string;
+  name: string;
+  email?: string;
+  password: string;
+}
+
 export interface RegisterProps {
   language: Language;
   onRegisterSuccess: (token: string, user: any, mode: 'scale' | 'ai') => void;
+  /** scale 模式：不创建账号，把表单数据传给量表页面 */
+  onPendingScale: (data: PendingScaleRegistration) => void;
   onNavigateToLogin: () => void;
 }
 
 export const Register: React.FC<RegisterProps> = ({
   language,
   onRegisterSuccess,
+  onPendingScale,
   onNavigateToLogin
 }) => {
   const t = translations[language];
@@ -21,6 +31,7 @@ export const Register: React.FC<RegisterProps> = ({
   // Form state
   const [step, setStep] = useState<'info' | 'mode'>('info');
   const [name, setName] = useState('');
+  const [studentId, setStudentId] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -32,9 +43,18 @@ export const Register: React.FC<RegisterProps> = ({
     e.preventDefault();
     setError(null);
 
-    // Validation
-    if (!email || !password) {
-      setError(language === 'zh' ? '请填写邮箱和密码' : 'Please fill in email and password');
+    if (!name.trim()) {
+      setError(language === 'zh' ? '请填写姓名' : 'Please enter your name');
+      return;
+    }
+
+    if (!studentId.trim()) {
+      setError(language === 'zh' ? '请填写学号' : 'Please enter your student ID');
+      return;
+    }
+
+    if (!password) {
+      setError(language === 'zh' ? '请填写密码' : 'Please enter a password');
       return;
     }
 
@@ -48,26 +68,45 @@ export const Register: React.FC<RegisterProps> = ({
       return;
     }
 
-    // Proceed to mode selection
+    // 如果填了邮箱，验证格式
+    if (email.trim()) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email.trim())) {
+        setError(language === 'zh' ? '邮箱格式不正确' : 'Invalid email format');
+        return;
+      }
+    }
+
     setStep('mode');
   };
 
   // Handle mode selection and registration
   const handleModeSelect = async (mode: 'scale' | 'ai') => {
+    // Scale 模式：不在此处创建账号，把表单数据传给量表页面
+    // 账号将在量表填写完成提交时原子性创建
+    if (mode === 'scale') {
+      onPendingScale({
+        student_id: studentId.trim(),
+        name: name.trim(),
+        email: email.trim() || undefined,
+        password,
+      });
+      return;
+    }
+
+    // AI 模式：需要先建账号（AI 对话需要后端 session）
     setIsLoading(true);
     setError(null);
 
     try {
-      // Call registration API
       const response = await registerAPI({
-        name: name.trim() || undefined,
-        email: email.trim(),
+        student_id: studentId.trim(),
+        name: name.trim(),
+        email: email.trim() || undefined,
         password,
         mode
       });
 
-      // Registration successful, token is saved automatically in registerAPI()
-      // Extract token and user from response
       const token = response.success && response.data ? response.data.token : '';
       const user = response.success && response.data ? response.data.user : null;
 
@@ -95,44 +134,48 @@ export const Register: React.FC<RegisterProps> = ({
             <h1 className="text-3xl font-bold text-gradient mb-2">
               {t.signUp}
             </h1>
-            <p className="text-gray-600 dark:text-gray-400">
+            <p style={{ color: 'var(--text-light)' }}>
               {language === 'zh' ? '创建您的账号以开始使用' : 'Create your account to get started'}
             </p>
           </div>
 
           {/* Registration Form */}
-          <form onSubmit={handleNext} className="glass-card p-8 space-y-6">
+          <form onSubmit={handleNext} className="glass-card p-8 space-y-5">
             {error && (
-              <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
-                <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+              <div className="border border-red-200 rounded-lg p-4 animate-fade-in" style={{ backgroundColor: 'rgba(239,68,68,0.08)' }}>
+                <p className="text-sm text-red-500">{error}</p>
               </div>
             )}
 
+            {/* 姓名（必填） */}
             <div>
               <Input
                 type="text"
-                label={language === 'zh' ? '姓名（可选）' : 'Name (Optional)'}
+                label={language === 'zh' ? '姓名' : 'Name'}
                 placeholder={language === 'zh' ? '请输入您的姓名' : 'Enter your name'}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 disabled={isLoading}
                 autoComplete="name"
-              />
-            </div>
-
-            <div>
-              <Input
-                type="email"
-                label={t.email}
-                placeholder={t.emailPlaceholder}
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                disabled={isLoading}
-                autoComplete="email"
                 required
               />
             </div>
 
+            {/* 学号（必填） */}
+            <div>
+              <Input
+                type="text"
+                label={t.studentId}
+                placeholder={t.studentIdPlaceholder}
+                value={studentId}
+                onChange={(e) => setStudentId(e.target.value)}
+                disabled={isLoading}
+                autoComplete="username"
+                required
+              />
+            </div>
+
+            {/* 密码（必填） */}
             <div>
               <Input
                 type="password"
@@ -146,6 +189,7 @@ export const Register: React.FC<RegisterProps> = ({
               />
             </div>
 
+            {/* 确认密码（必填） */}
             <div>
               <Input
                 type="password"
@@ -159,6 +203,19 @@ export const Register: React.FC<RegisterProps> = ({
               />
             </div>
 
+            {/* 邮箱（选填） */}
+            <div>
+              <Input
+                type="email"
+                label={t.email}
+                placeholder={t.emailPlaceholder}
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                disabled={isLoading}
+                autoComplete="email"
+              />
+            </div>
+
             <button
               type="submit"
               disabled={isLoading}
@@ -167,12 +224,12 @@ export const Register: React.FC<RegisterProps> = ({
               {language === 'zh' ? '下一步' : 'Next'}
             </button>
 
-            <div className="text-center text-sm text-gray-600 dark:text-gray-400">
+            <div className="text-center text-sm" style={{ color: 'var(--text-light)' }}>
               {t.hasAccount}{' '}
               <button
                 type="button"
                 onClick={onNavigateToLogin}
-                className="text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 font-medium transition-colors"
+                className="text-blue-500 hover:text-blue-600 font-medium transition-colors"
               >
                 {t.login}
               </button>
@@ -190,32 +247,22 @@ export const Register: React.FC<RegisterProps> = ({
         {/* Header */}
         <div className="text-center mb-12">
           <div className="inline-flex items-center justify-center w-20 h-20 rounded-3xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 text-white mb-6 shadow-xl animate-float">
-            <svg
-              className="w-10 h-10"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
-              />
+            <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
             </svg>
           </div>
           <h1 className="text-4xl md:text-5xl font-bold text-gradient mb-4">
             {t.chooseOnboardingMode}
           </h1>
-          <p className="text-lg text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">
+          <p className="text-lg max-w-2xl mx-auto" style={{ color: 'var(--text-light)' }}>
             {t.chooseOnboardingDesc}
           </p>
         </div>
 
         {/* Error Message */}
         {error && (
-          <div className="max-w-2xl mx-auto mb-8 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
-            <p className="text-sm text-red-600 dark:text-red-400 text-center">{error}</p>
+          <div className="max-w-2xl mx-auto mb-8 border border-red-200 rounded-lg p-4" style={{ backgroundColor: 'rgba(239,68,68,0.08)' }}>
+            <p className="text-sm text-red-500 text-center">{error}</p>
           </div>
         )}
 
@@ -223,55 +270,36 @@ export const Register: React.FC<RegisterProps> = ({
         <div className="grid md:grid-cols-2 gap-8 mb-8">
           {/* Scale Mode Card */}
           <div className="glass-card p-8 group hover:shadow-2xl transition-all duration-300 hover:scale-[1.02] relative overflow-hidden">
-            {/* Background Gradient Effect */}
             <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-cyan-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-
             <div className="relative z-10">
-              {/* Icon */}
               <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-600 text-white mb-6 shadow-lg group-hover:scale-110 transition-transform duration-300">
                 <ClipboardList className="w-8 h-8" />
               </div>
-
-              {/* Title & Description */}
-              <h2 className="text-2xl font-bold mb-3 bg-gradient-to-r from-blue-600 to-cyan-600 dark:from-blue-400 dark:to-cyan-400 bg-clip-text text-transparent">
+              <h2 className="text-2xl font-bold mb-3 bg-gradient-to-r from-blue-600 to-cyan-600 bg-clip-text text-transparent">
                 {t.scaleMode}
               </h2>
-              <p className="text-gray-600 dark:text-gray-400 mb-6">
+              <p className="mb-6" style={{ color: 'var(--text-light)' }}>
                 {t.scaleModeDesc}
               </p>
-
-              {/* Features List */}
               <ul className="space-y-3 mb-8">
                 {t.scaleModeFeatures.map((feature: string, index: number) => (
-                  <li
-                    key={index}
-                    className="flex items-start gap-3 text-gray-700 dark:text-gray-300 animate-fade-in"
-                    style={{ animationDelay: `${index * 100}ms` }}
-                  >
-                    <div className="flex-shrink-0 w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center mt-0.5">
-                      <Check className="w-3 h-3 text-blue-600 dark:text-blue-400" />
+                  <li key={index} className="flex items-start gap-3 animate-fade-in" style={{ animationDelay: `${index * 100}ms`, color: 'var(--text-secondary)' }}>
+                    <div className="flex-shrink-0 w-5 h-5 rounded-full bg-blue-100 flex items-center justify-center mt-0.5">
+                      <Check className="w-3 h-3 text-blue-600" />
                     </div>
                     <span>{feature}</span>
                   </li>
                 ))}
               </ul>
-
-              {/* Select Button */}
               <button
                 onClick={() => handleModeSelect('scale')}
                 disabled={isLoading}
                 className="w-full px-6 py-4 bg-gradient-to-r from-blue-500 to-cyan-600 hover:from-blue-600 hover:to-cyan-700 text-white font-medium rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 flex items-center justify-center gap-2 group-hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isLoading ? (
-                  <>
-                    <Loader className="w-5 h-5 animate-spin" />
-                    {language === 'zh' ? '注册中...' : 'Registering...'}
-                  </>
+                  <><Loader className="w-5 h-5 animate-spin" />{language === 'zh' ? '注册中...' : 'Registering...'}</>
                 ) : (
-                  <>
-                    <ClipboardList className="w-5 h-5" />
-                    {t.selectMode}
-                  </>
+                  <><ClipboardList className="w-5 h-5" />{t.selectMode}</>
                 )}
               </button>
             </div>
@@ -279,55 +307,36 @@ export const Register: React.FC<RegisterProps> = ({
 
           {/* AI Mode Card */}
           <div className="glass-card p-8 group hover:shadow-2xl transition-all duration-300 hover:scale-[1.02] relative overflow-hidden">
-            {/* Background Gradient Effect */}
             <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 to-pink-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-
             <div className="relative z-10">
-              {/* Icon */}
               <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-purple-500 to-pink-600 text-white mb-6 shadow-lg group-hover:scale-110 transition-transform duration-300">
                 <MessageSquare className="w-8 h-8" />
               </div>
-
-              {/* Title & Description */}
-              <h2 className="text-2xl font-bold mb-3 bg-gradient-to-r from-purple-600 to-pink-600 dark:from-purple-400 dark:to-pink-400 bg-clip-text text-transparent">
+              <h2 className="text-2xl font-bold mb-3 bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
                 {t.aiMode}
               </h2>
-              <p className="text-gray-600 dark:text-gray-400 mb-6">
+              <p className="mb-6" style={{ color: 'var(--text-light)' }}>
                 {t.aiModeDesc}
               </p>
-
-              {/* Features List */}
               <ul className="space-y-3 mb-8">
                 {t.aiModeFeatures.map((feature: string, index: number) => (
-                  <li
-                    key={index}
-                    className="flex items-start gap-3 text-gray-700 dark:text-gray-300 animate-fade-in"
-                    style={{ animationDelay: `${index * 100}ms` }}
-                  >
-                    <div className="flex-shrink-0 w-5 h-5 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center mt-0.5">
-                      <Check className="w-3 h-3 text-purple-600 dark:text-purple-400" />
+                  <li key={index} className="flex items-start gap-3 animate-fade-in" style={{ animationDelay: `${index * 100}ms`, color: 'var(--text-secondary)' }}>
+                    <div className="flex-shrink-0 w-5 h-5 rounded-full bg-purple-100 flex items-center justify-center mt-0.5">
+                      <Check className="w-3 h-3 text-purple-600" />
                     </div>
                     <span>{feature}</span>
                   </li>
                 ))}
               </ul>
-
-              {/* Select Button */}
               <button
                 onClick={() => handleModeSelect('ai')}
                 disabled={isLoading}
                 className="w-full px-6 py-4 bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white font-medium rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 flex items-center justify-center gap-2 group-hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isLoading ? (
-                  <>
-                    <Loader className="w-5 h-5 animate-spin" />
-                    {language === 'zh' ? '注册中...' : 'Registering...'}
-                  </>
+                  <><Loader className="w-5 h-5 animate-spin" />{language === 'zh' ? '注册中...' : 'Registering...'}</>
                 ) : (
-                  <>
-                    <MessageSquare className="w-5 h-5" />
-                    {t.selectMode}
-                  </>
+                  <><MessageSquare className="w-5 h-5" />{t.selectMode}</>
                 )}
               </button>
             </div>
@@ -339,7 +348,8 @@ export const Register: React.FC<RegisterProps> = ({
           <button
             onClick={() => setStep('info')}
             disabled={isLoading}
-            className="inline-flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 font-medium transition-colors group disabled:opacity-50"
+            className="inline-flex items-center gap-2 font-medium transition-colors group disabled:opacity-50 hover:text-blue-500"
+            style={{ color: 'var(--text-light)' }}
           >
             <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform duration-300" />
             <span>{language === 'zh' ? '返回上一步' : 'Back'}</span>

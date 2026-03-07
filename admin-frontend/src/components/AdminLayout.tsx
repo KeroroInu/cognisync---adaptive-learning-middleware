@@ -1,21 +1,24 @@
 import { ReactNode } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   LayoutDashboard,
   Users,
   MessageSquare,
   FileText,
-  Database,
+  FlaskConical,
   Download,
+  Settings2,
   Sun,
   Moon,
   Menu,
-  X
+  X,
+  LogOut,
 } from 'lucide-react';
 import { useTheme } from '../lib/useTheme';
 import { LanguageSwitcher } from './LanguageSwitcher';
 import { useState } from 'react';
+import { useAuth } from '../features/auth/hooks';
 
 interface AdminLayoutProps {
   children: ReactNode;
@@ -23,17 +26,25 @@ interface AdminLayoutProps {
 
 export const AdminLayout = ({ children }: AdminLayoutProps) => {
   const location = useLocation();
+  const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
   const { t } = useTranslation();
+  const { logout, user } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(true);
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login', { replace: true });
+  };
 
   const navItems = [
     { path: '/admin', icon: LayoutDashboard, label: t('nav.dashboard') },
     { path: '/admin/users', icon: Users, label: t('nav.users') },
     { path: '/admin/conversations', icon: MessageSquare, label: t('nav.conversations') },
     { path: '/admin/scales', icon: FileText, label: t('nav.scales') },
-    { path: '/admin/explorer', icon: Database, label: t('nav.dataExplorer') },
+    { path: '/admin/explorer', icon: FlaskConical, label: t('nav.research') },
     { path: '/admin/exports', icon: Download, label: t('nav.exports') },
+    { path: '/admin/config', icon: Settings2, label: t('nav.modelConfig') },
   ];
 
   return (
@@ -81,7 +92,7 @@ export const AdminLayout = ({ children }: AdminLayoutProps) => {
           })}
         </nav>
 
-        {/* Theme Toggle & Language Switcher */}
+        {/* Theme Toggle, Language Switcher & Logout */}
         <div className="p-4 border-t space-y-1.5" style={{ borderColor: theme === 'light' ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.1)' }}>
           <button
             onClick={toggleTheme}
@@ -91,6 +102,19 @@ export const AdminLayout = ({ children }: AdminLayoutProps) => {
             {sidebarOpen && <span>{theme === 'light' ? t('common.darkMode') : t('common.lightMode')}</span>}
           </button>
           <LanguageSwitcher compact={!sidebarOpen} />
+          {/* 退出登录 */}
+          <button
+            onClick={handleLogout}
+            title={sidebarOpen ? undefined : '退出登录'}
+            className={`w-full flex items-center ${sidebarOpen ? 'space-x-3' : 'justify-center'} px-4 py-3 rounded-xl transition-all duration-300 hover:bg-red-50 dark:hover:bg-red-900/20 text-red-500 dark:text-red-400`}
+          >
+            <LogOut size={20} />
+            {sidebarOpen && (
+              <span className="text-sm">
+                {user?.name ? `退出 (${user.name})` : '退出登录'}
+              </span>
+            )}
+          </button>
         </div>
       </aside>
 

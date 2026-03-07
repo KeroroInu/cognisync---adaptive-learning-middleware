@@ -129,15 +129,15 @@ body {
 [data-theme="light"] .gradient-mesh {
   background:
     radial-gradient(at 20% 30%, rgba(59, 130, 246, 0.08) 0px, transparent 50%),
-    radial-gradient(at 80% 70%, rgba(139, 92, 246, 0.08) 0px, transparent 50%),
-    radial-gradient(at 50% 50%, rgba(16, 185, 129, 0.06) 0px, transparent 50%);
+    radial-gradient(at 80% 70%, rgba(99, 102, 241, 0.07) 0px, transparent 50%),
+    radial-gradient(at 50% 50%, rgba(20, 184, 166, 0.05) 0px, transparent 50%);
   background-color: #fafafa;
 }
 
 [data-theme="dark"] .gradient-mesh {
   background:
-    radial-gradient(at 20% 30%, rgba(99, 102, 241, 0.1) 0px, transparent 50%),
-    radial-gradient(at 80% 70%, rgba(168, 85, 247, 0.1) 0px, transparent 50%);
+    radial-gradient(at 20% 30%, rgba(59, 130, 246, 0.08) 0px, transparent 50%),
+    radial-gradient(at 80% 70%, rgba(99, 102, 241, 0.08) 0px, transparent 50%);
   background-color: #0f172a;
 }
 
@@ -145,7 +145,7 @@ body {
    渐变文字
    ============================================ */
 .text-gradient {
-  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+  background: linear-gradient(135deg, #2563eb, #4f46e5);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -277,3 +277,273 @@ body {
   outline: 2px solid var(--brand-blue);
   outline-offset: 2px;
 }
+
+/* ============================================
+   表单元素深色模式
+   使用 data-theme 而非 Tailwind dark:（兼容 OS 浅色 + App 深色场景）
+   ============================================ */
+[data-theme="dark"] input,
+[data-theme="dark"] select,
+[data-theme="dark"] textarea {
+  background-color: #334155;
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.15);
+  color-scheme: dark;
+}
+
+[data-theme="dark"] input::placeholder,
+[data-theme="dark"] textarea::placeholder {
+  color: #94a3b8;
+}
+
+/* 数据导出卡片标题区在深色模式下用深色背景替换浅色品牌背景 */
+[data-theme="dark"] .export-card-header {
+  background: #334155 !important;
+}
+
+/* 导出卡片深色模式下的图标和边框颜色修复 */
+[data-theme="dark"] .text-indigo-600 { color: #818cf8 !important; }
+[data-theme="dark"] .text-emerald-600 { color: #34d399 !important; }
+[data-theme="dark"] .text-violet-600 { color: #a78bfa !important; }
+[data-theme="dark"] .text-amber-600 { color: #fbbf24 !important; }
+
+[data-theme="dark"] .border-indigo-200 { border-color: rgba(99, 102, 241, 0.3) !important; }
+[data-theme="dark"] .border-emerald-200 { border-color: rgba(16, 185, 129, 0.3) !important; }
+[data-theme="dark"] .border-violet-200 { border-color: rgba(139, 92, 246, 0.3) !important; }
+[data-theme="dark"] .border-amber-200 { border-color: rgba(245, 158, 11, 0.3) !important; }
+
+/* 深色模式下表头文字颜色修复 */
+[data-theme="dark"] th {
+  color: var(--text-tertiary) !important;
+}
+
+/* 深色模式下状态徽章背景修复 */
+[data-theme="dark"] .bg-green-100 { background: rgba(16, 185, 129, 0.2) !important; }
+[data-theme="dark"] .text-green-700 { color: #6ee7b7 !important; }
+
+[data-theme="dark"] .bg-yellow-100 { background: rgba(245, 158, 11, 0.2) !important; }
+[data-theme="dark"] .text-yellow-700 { color: #fcd34d !important; }
+
+[data-theme="dark"] .bg-gray-100 { background: rgba(148, 163, 184, 0.2) !important; }
+[data-theme="dark"] .text-gray-700 { color: #cbd5e1 !important; }
+
+/* 操作按钮深色模式优化 */
+[data-theme="dark"] .bg-blue-100 { background: rgba(59, 130, 246, 0.2) !important; }
+[data-theme="dark"] .text-blue-700 { color: #60a5fa !important; }
+
+[data-theme="dark"] .bg-indigo-100 { background: rgba(99, 102, 241, 0.2) !important; }
+[data-theme="dark"] .text-indigo-700 { color: #818cf8 !important; }
+
+[data-theme="dark"] .bg-emerald-100 { background: rgba(16, 185, 129, 0.2) !important; }
+[data-theme="dark"] .text-emerald-700 { color: #34d399 !important; }
+
+[data-theme="dark"] .bg-red-100 { background: rgba(239, 68, 68, 0.2) !important; }
+[data-theme="dark"] .text-red-700 { color: #f87171 !important; }
+
+[data-theme="dark"] .hover\:bg-blue-200:hover { background: rgba(59, 130, 246, 0.3) !important; }
+[data-theme="dark"] .hover\:bg-indigo-200:hover { background: rgba(99, 102, 241, 0.3) !important; }
+[data-theme="dark"] .hover\:bg-emerald-200:hover { background: rgba(16, 185, 129, 0.3) !important; }
+[data-theme="dark"] .hover\:bg-red-200:hover { background: rgba(239, 68, 68, 0.3) !important; }
+[data-theme="dark"] .hover\:bg-yellow-200:hover { background: rgba(245, 158, 11, 0.3) !important; }
+
+/* 表格行 hover 效果优化 */
+[data-theme="dark"] .hover\:bg-gray-800:hover {
+  background: rgba(51, 65, 85, 0.5) !important;
+}
+
+/* ============================================
+   深色模式 hover 状态修复
+   Tailwind dark: 前缀依赖 prefers-color-scheme，
+   与 data-theme 不兼容，需手动覆盖
+   ============================================ */
+[data-theme="dark"] .hover\:bg-gray-50:hover,
+[data-theme="dark"] .hover\:bg-gray-100:hover,
+[data-theme="dark"] .hover\:bg-gray-200:hover {
+  background-color: rgba(255, 255, 255, 0.06) !important;
+}
+
+[data-theme="dark"] .hover\:bg-gray-700:hover,
+[data-theme="dark"] .hover\:bg-gray-900:hover {
+  background-color: var(--bg-tertiary) !important;
+}
+
+/* ============================================
+   浅色主题兼容修复：重置 Tailwind dark: 类
+   问题：OS 深色 + 应用手动切换浅色时，Tailwind dark: 类
+   通过 prefers-color-scheme 媒体查询激活，导致深色元素
+   出现在浅色页面中（如：表头文字变白、按钮变深色）
+   解决：在 [data-theme="light"] 上 revert 还原到对应浅色值
+   ============================================ */
+
+/* 文字颜色还原 */
+[data-theme="light"] .dark\:text-white,
+[data-theme="light"] .dark\:text-gray-100,
+[data-theme="light"] .dark\:text-gray-200,
+[data-theme="light"] .dark\:text-gray-300,
+[data-theme="light"] .dark\:text-gray-400,
+[data-theme="light"] .dark\:text-indigo-100,
+[data-theme="light"] .dark\:text-indigo-300,
+[data-theme="light"] .dark\:text-indigo-400,
+[data-theme="light"] .dark\:text-green-300,
+[data-theme="light"] .dark\:text-red-300,
+[data-theme="light"] .dark\:text-red-400,
+[data-theme="light"] .dark\:text-yellow-300,
+[data-theme="light"] .dark\:text-blue-300,
+[data-theme="light"] .dark\:text-blue-400,
+[data-theme="light"] .dark\:text-emerald-300,
+[data-theme="light"] .dark\:text-amber-300,
+[data-theme="light"] .dark\:text-purple-300,
+[data-theme="light"] .dark\:text-purple-400,
+[data-theme="light"] .dark\:text-pink-400 {
+  color: revert !important;
+}
+
+/* 背景颜色还原 */
+[data-theme="light"] .dark\:bg-gray-600,
+[data-theme="light"] .dark\:bg-gray-700,
+[data-theme="light"] .dark\:bg-gray-800,
+[data-theme="light"] .dark\:bg-gray-900,
+[data-theme="light"] .dark\:bg-indigo-800,
+[data-theme="light"] .dark\:bg-indigo-900,
+[data-theme="light"] .dark\:bg-green-800,
+[data-theme="light"] .dark\:bg-green-900,
+[data-theme="light"] .dark\:bg-red-800,
+[data-theme="light"] .dark\:bg-red-900,
+[data-theme="light"] .dark\:bg-yellow-800,
+[data-theme="light"] .dark\:bg-yellow-900,
+[data-theme="light"] .dark\:bg-blue-800,
+[data-theme="light"] .dark\:bg-blue-900,
+[data-theme="light"] .dark\:bg-emerald-800,
+[data-theme="light"] .dark\:bg-emerald-900,
+[data-theme="light"] .dark\:bg-amber-800,
+[data-theme="light"] .dark\:bg-amber-900,
+[data-theme="light"] .dark\:bg-purple-900,
+[data-theme="light"] .dark\:bg-red-900\/20,
+[data-theme="light"] .dark\:bg-green-900\/20,
+[data-theme="light"] .dark\:bg-green-900\/40,
+[data-theme="light"] .dark\:bg-indigo-900\/20,
+[data-theme="light"] .dark\:bg-indigo-900\/40,
+[data-theme="light"] .dark\:bg-purple-900\/40,
+[data-theme="light"] .dark\:bg-purple-900\/60,
+[data-theme="light"] .dark\:bg-blue-900\/60,
+[data-theme="light"] .dark\:bg-gray-800\/40,
+[data-theme="light"] .dark\:bg-gray-800\/50,
+[data-theme="light"] .dark\:bg-gray-900\/50 {
+  background-color: revert !important;
+}
+
+/* 边框颜色还原 */
+[data-theme="light"] .dark\:border-gray-700,
+[data-theme="light"] .dark\:border-gray-700\/50,
+[data-theme="light"] .dark\:border-gray-800,
+[data-theme="light"] .dark\:border-indigo-700,
+[data-theme="light"] .dark\:border-indigo-800,
+[data-theme="light"] .dark\:border-indigo-800\/50,
+[data-theme="light"] .dark\:border-red-800,
+[data-theme="light"] .dark\:border-green-800,
+[data-theme="light"] .dark\:border-blue-800\/30,
+[data-theme="light"] .dark\:border-purple-800\/50 {
+  border-color: revert !important;
+}
+
+/* hover 状态还原 */
+[data-theme="light"] .dark\:hover\:bg-indigo-800:hover,
+[data-theme="light"] .dark\:hover\:bg-green-800:hover,
+[data-theme="light"] .dark\:hover\:bg-red-800:hover,
+[data-theme="light"] .dark\:hover\:bg-yellow-800:hover,
+[data-theme="light"] .dark\:hover\:bg-blue-800:hover,
+[data-theme="light"] .dark\:hover\:bg-emerald-800:hover,
+[data-theme="light"] .dark\:hover\:bg-amber-800:hover,
+[data-theme="light"] .dark\:hover\:bg-gray-700:hover,
+[data-theme="light"] .dark\:hover\:bg-gray-800:hover,
+[data-theme="light"] .dark\:hover\:bg-gray-900:hover {
+  background-color: revert !important;
+}
+
+/* ============================================
+   深色主题强制覆盖：OS 浅色 + 应用深色场景
+   问题：OS 浅色时 Tailwind dark: 类不激活（依赖 prefers-color-scheme），
+   导致彩色徽章、按钮等显示浅色变体（浅底色+中等色文字），
+   与深色页面背景不协调。
+   解决：在 [data-theme="dark"] 上强制应用对应深色变体值。
+   ============================================ */
+
+/* 文字颜色 */
+[data-theme="dark"] .dark\:text-white { color: #ffffff !important; }
+[data-theme="dark"] .dark\:text-gray-100 { color: #f3f4f6 !important; }
+[data-theme="dark"] .dark\:text-gray-200 { color: #e5e7eb !important; }
+[data-theme="dark"] .dark\:text-gray-300 { color: #d1d5db !important; }
+[data-theme="dark"] .dark\:text-gray-400 { color: #9ca3af !important; }
+[data-theme="dark"] .dark\:text-blue-300 { color: #93c5fd !important; }
+[data-theme="dark"] .dark\:text-blue-400 { color: #60a5fa !important; }
+[data-theme="dark"] .dark\:text-indigo-100 { color: #e0e7ff !important; }
+[data-theme="dark"] .dark\:text-indigo-300 { color: #a5b4fc !important; }
+[data-theme="dark"] .dark\:text-indigo-400 { color: #818cf8 !important; }
+[data-theme="dark"] .dark\:text-green-300 { color: #86efac !important; }
+[data-theme="dark"] .dark\:text-emerald-300 { color: #6ee7b7 !important; }
+[data-theme="dark"] .dark\:text-yellow-300 { color: #fde047 !important; }
+[data-theme="dark"] .dark\:text-red-300 { color: #fca5a5 !important; }
+[data-theme="dark"] .dark\:text-red-400 { color: #f87171 !important; }
+[data-theme="dark"] .dark\:text-purple-300 { color: #d8b4fe !important; }
+[data-theme="dark"] .dark\:text-purple-400 { color: #c084fc !important; }
+[data-theme="dark"] .dark\:text-pink-400 { color: #f472b6 !important; }
+[data-theme="dark"] .dark\:text-amber-300 { color: #fcd34d !important; }
+
+/* 背景颜色 */
+[data-theme="dark"] .dark\:bg-gray-600 { background-color: #4b5563 !important; }
+[data-theme="dark"] .dark\:bg-gray-700 { background-color: #374151 !important; }
+[data-theme="dark"] .dark\:bg-gray-800 { background-color: #1f2937 !important; }
+[data-theme="dark"] .dark\:bg-gray-800\/40 { background-color: rgba(31,41,55,0.4) !important; }
+[data-theme="dark"] .dark\:bg-gray-800\/50 { background-color: rgba(31,41,55,0.5) !important; }
+[data-theme="dark"] .dark\:bg-gray-900 { background-color: #111827 !important; }
+[data-theme="dark"] .dark\:bg-gray-900\/50 { background-color: rgba(17,24,39,0.5) !important; }
+[data-theme="dark"] .dark\:bg-blue-900 { background-color: #1e3a8a !important; }
+[data-theme="dark"] .dark\:bg-blue-900\/60 { background-color: rgba(30,58,138,0.6) !important; }
+[data-theme="dark"] .dark\:bg-indigo-800 { background-color: #3730a3 !important; }
+[data-theme="dark"] .dark\:bg-indigo-900 { background-color: #312e81 !important; }
+[data-theme="dark"] .dark\:bg-indigo-900\/20 { background-color: rgba(49,46,129,0.2) !important; }
+[data-theme="dark"] .dark\:bg-indigo-900\/40 { background-color: rgba(49,46,129,0.4) !important; }
+[data-theme="dark"] .dark\:bg-green-800 { background-color: #166534 !important; }
+[data-theme="dark"] .dark\:bg-green-900 { background-color: #14532d !important; }
+[data-theme="dark"] .dark\:bg-green-900\/20 { background-color: rgba(20,83,45,0.2) !important; }
+[data-theme="dark"] .dark\:bg-green-900\/40 { background-color: rgba(20,83,45,0.4) !important; }
+[data-theme="dark"] .dark\:bg-emerald-800 { background-color: #065f46 !important; }
+[data-theme="dark"] .dark\:bg-emerald-900 { background-color: #064e3b !important; }
+[data-theme="dark"] .dark\:bg-yellow-800 { background-color: #854d0e !important; }
+[data-theme="dark"] .dark\:bg-yellow-900 { background-color: #713f12 !important; }
+[data-theme="dark"] .dark\:bg-yellow-900\/40 { background-color: rgba(113,63,18,0.4) !important; }
+[data-theme="dark"] .dark\:bg-red-800 { background-color: #991b1b !important; }
+[data-theme="dark"] .dark\:bg-red-900 { background-color: #7f1d1d !important; }
+[data-theme="dark"] .dark\:bg-red-900\/20 { background-color: rgba(127,29,29,0.2) !important; }
+[data-theme="dark"] .dark\:bg-red-900\/40 { background-color: rgba(127,29,29,0.4) !important; }
+[data-theme="dark"] .dark\:bg-purple-900 { background-color: #4c1d95 !important; }
+[data-theme="dark"] .dark\:bg-purple-900\/40 { background-color: rgba(76,29,149,0.4) !important; }
+[data-theme="dark"] .dark\:bg-purple-900\/60 { background-color: rgba(76,29,149,0.6) !important; }
+[data-theme="dark"] .dark\:bg-amber-800 { background-color: #92400e !important; }
+[data-theme="dark"] .dark\:bg-amber-900 { background-color: #78350f !important; }
+
+/* 边框颜色 */
+[data-theme="dark"] .dark\:border-gray-700 { border-color: #374151 !important; }
+[data-theme="dark"] .dark\:border-gray-700\/50 { border-color: rgba(55,65,81,0.5) !important; }
+[data-theme="dark"] .dark\:border-gray-800 { border-color: #1f2937 !important; }
+[data-theme="dark"] .dark\:border-indigo-700 { border-color: #4338ca !important; }
+[data-theme="dark"] .dark\:border-indigo-800 { border-color: #3730a3 !important; }
+[data-theme="dark"] .dark\:border-indigo-800\/50 { border-color: rgba(55,48,163,0.5) !important; }
+[data-theme="dark"] .dark\:border-green-800 { border-color: #166534 !important; }
+[data-theme="dark"] .dark\:border-red-800 { border-color: #991b1b !important; }
+[data-theme="dark"] .dark\:border-blue-800\/30 { border-color: rgba(30,64,175,0.3) !important; }
+[data-theme="dark"] .dark\:border-purple-800\/50 { border-color: rgba(91,33,182,0.5) !important; }
+
+/* hover 状态 */
+[data-theme="dark"] .dark\:hover\:bg-gray-700:hover { background-color: #374151 !important; }
+[data-theme="dark"] .dark\:hover\:bg-gray-800:hover { background-color: #1f2937 !important; }
+[data-theme="dark"] .dark\:hover\:bg-gray-800\/50:hover { background-color: rgba(31,41,55,0.5) !important; }
+[data-theme="dark"] .dark\:hover\:bg-gray-900:hover { background-color: #111827 !important; }
+[data-theme="dark"] .dark\:hover\:bg-indigo-800:hover { background-color: #3730a3 !important; }
+[data-theme="dark"] .dark\:hover\:bg-green-800:hover { background-color: #166534 !important; }
+[data-theme="dark"] .dark\:hover\:bg-emerald-800:hover { background-color: #065f46 !important; }
+[data-theme="dark"] .dark\:hover\:bg-yellow-800:hover { background-color: #854d0e !important; }
+[data-theme="dark"] .dark\:hover\:bg-red-800:hover { background-color: #991b1b !important; }
+[data-theme="dark"] .dark\:hover\:bg-amber-800:hover { background-color: #92400e !important; }
+[data-theme="dark"] .dark\:hover\:bg-blue-800:hover { background-color: #1e40af !important; }
+[data-theme="dark"] .dark\:hover\:text-indigo-300:hover { color: #a5b4fc !important; }

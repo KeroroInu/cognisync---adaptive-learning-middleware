@@ -11,11 +11,17 @@ from app.api.endpoints.admin import (
     user_detail,
     scales,
     export as db_export,
-    sessions
+    sessions,
+    research as admin_research,
+    config as admin_config,
+    auth as admin_auth,
 )
 
 # 创建 admin 主路由
 admin_router = APIRouter(prefix="/admin")
+
+# 认证端点（PUBLIC，无需 admin key，用于登录）
+admin_router.include_router(admin_auth.router, prefix="/auth", tags=["Admin - Auth"])
 
 # 注册子路由
 admin_router.include_router(overview.router, tags=["Admin - Overview"])
@@ -26,3 +32,5 @@ admin_router.include_router(sessions.router, tags=["Admin - Sessions"])
 admin_router.include_router(analytics.router, tags=["Admin - Analytics"])
 admin_router.include_router(scales.router, tags=["Admin - Scale Management"])
 admin_router.include_router(db_export.router, tags=["Admin - Data Export"])
+admin_router.include_router(admin_research.router, tags=["Admin - Research Management"])
+admin_router.include_router(admin_config.router, tags=["Admin - Model Config"])

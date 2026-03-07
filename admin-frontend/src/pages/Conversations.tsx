@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MessageSquare, ChevronRight, Eye, Edit2, Trash2 } from 'lucide-react';
+import { MessageSquare, ChevronRight, Eye, Trash2 } from 'lucide-react';
 import { adminApi } from '../lib/adminApi';
 import type { SessionItem } from '../types';
 
@@ -30,23 +30,16 @@ export const Conversations = () => {
     }
   };
 
-  const handleEdit = (e: React.MouseEvent, session: SessionItem) => {
-    e.stopPropagation();
-    // TODO: Implement edit modal
-    alert(`Edit session: ${session.id}\n(Edit functionality will be implemented)`);
-  };
-
   const handleDelete = async (e: React.MouseEvent, session: SessionItem) => {
     e.stopPropagation();
-    if (window.confirm(`Are you sure you want to delete this conversation?\nUser: ${session.user_email}\nMessages: ${session.message_count}`)) {
+    const identity = session.user_name || session.student_id || session.user_email || session.user_id;
+    if (window.confirm(`确定要删除该会话吗？\n用户: ${identity}\n消息数: ${session.message_count}\n此操作不可撤销。`)) {
       try {
-        // TODO: Implement delete API endpoint
-        alert(`Delete session: ${session.id}\n(Delete API endpoint needs to be implemented)`);
-        // await adminApi.deleteSession(session.id);
-        // loadSessions();
+        await adminApi.deleteSession(session.id);
+        await loadSessions();
       } catch (err) {
         console.error('Failed to delete session:', err);
-        alert('Failed to delete session');
+        alert('删除失败：' + (err instanceof Error ? err.message : String(err)));
       }
     }
   };
@@ -65,14 +58,14 @@ export const Conversations = () => {
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold mb-2">Conversations</h1>
-        <p className="text-gray-600 dark:text-gray-400">Browse and manage all chat sessions</p>
+        <h1 className="text-3xl font-bold mb-2">对话管理</h1>
+        <p style={{ color: 'var(--text-secondary)' }}>浏览和管理所有聊天会话</p>
       </div>
 
       {/* Error Message */}
       {error && (
-        <div className="glass-card p-4 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
-          <p className="text-red-700 dark:text-red-300">{error}</p>
+        <div className="glass-card p-4 rounded-xl border" style={{ background: 'rgba(239,68,68,0.1)', borderColor: 'rgba(239,68,68,0.3)' }}>
+          <p style={{ color: 'var(--text-primary)' }}>{error}</p>
         </div>
       )}
 
@@ -82,18 +75,18 @@ export const Conversations = () => {
           <table className="w-full">
             <thead style={{ backgroundColor: 'var(--bg-tertiary)' }}>
               <tr>
-                <th className="px-6 py-4 text-left text-sm font-semibold">User Email</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold">Messages</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold">Created</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold">Last Updated</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold">Actions</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold dark:text-white">用户</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold dark:text-white">消息数</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold dark:text-white">创建时间</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold dark:text-white">最后更新</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold dark:text-white">操作</th>
               </tr>
             </thead>
             <tbody>
               {sessions.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="px-6 py-12 text-center text-gray-500">
-                    No conversations found
+                    暂无对话记录
                   </td>
                 </tr>
               ) : (
@@ -103,39 +96,37 @@ export const Conversations = () => {
                     className="border-t hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                     style={{ borderColor: 'var(--glass-border)' }}
                   >
-                    <td className="px-6 py-4 text-sm font-medium">{session.user_email}</td>
+                    <td className="px-6 py-4 text-sm font-medium dark:text-white">
+                      <div>{session.user_name || '—'}</div>
+                      <div className="text-xs font-mono" style={{ color: 'var(--text-light)' }}>
+                        {session.student_id || session.user_email || session.user_id.slice(0, 8)}
+                      </div>
+                    </td>
                     <td className="px-6 py-4 text-sm">
                       <div className="flex items-center gap-2">
                         <MessageSquare size={16} className="text-indigo-500" />
-                        {session.message_count} messages
+                        {session.message_count} 条消息
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">
-                      {new Date(session.created_at).toLocaleDateString()}
+                    <td className="px-6 py-4 text-sm" style={{ color: 'var(--text-secondary)' }}>
+                      {new Date(session.created_at).toLocaleDateString('zh-CN')}
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">
-                      {session.updated_at ? new Date(session.updated_at).toLocaleDateString() : 'N/A'}
+                    <td className="px-6 py-4 text-sm" style={{ color: 'var(--text-secondary)' }}>
+                      {session.updated_at ? new Date(session.updated_at).toLocaleDateString('zh-CN') : '—'}
                     </td>
                     <td className="px-6 py-4 text-sm">
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => navigate(`/admin/conversations/${session.id}`)}
                           className="p-2 rounded-lg bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-200 dark:hover:bg-indigo-800 transition-colors"
-                          title="View Conversation"
+                          title="查看对话"
                         >
                           <Eye size={16} />
                         </button>
                         <button
-                          onClick={(e) => handleEdit(e, session)}
-                          className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors"
-                          title="Edit Session"
-                        >
-                          <Edit2 size={16} />
-                        </button>
-                        <button
                           onClick={(e) => handleDelete(e, session)}
                           className="p-2 rounded-lg bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-800 transition-colors"
-                          title="Delete Session"
+                          title="删除会话"
                         >
                           <Trash2 size={16} />
                         </button>
@@ -151,8 +142,8 @@ export const Conversations = () => {
         {/* Pagination */}
         {total > pageSize && (
           <div className="flex items-center justify-between px-6 py-4 border-t" style={{ borderColor: 'var(--glass-border)' }}>
-            <div className="text-sm text-gray-600 dark:text-gray-400">
-              Showing {(page - 1) * pageSize + 1} to {Math.min(page * pageSize, total)} of {total} conversations
+            <div className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+              共 {total} 条，第 {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, total)} 条
             </div>
             <div className="flex space-x-2">
               <button
@@ -160,17 +151,17 @@ export const Conversations = () => {
                 disabled={page === 1}
                 className="px-4 py-2 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
               >
-                Previous
+                上一页
               </button>
               <span className="px-4 py-2">
-                Page {page} of {totalPages}
+                第 {page} / {totalPages} 页
               </span>
               <button
                 onClick={() => setPage(p => Math.min(totalPages, p + 1))}
                 disabled={page === totalPages}
                 className="px-4 py-2 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
               >
-                Next
+                下一页
               </button>
             </div>
           </div>

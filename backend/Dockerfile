@@ -1,56 +1,34 @@
 # ===================================
-# Stage 1: Build
+# CogniSync Backend - Python/FastAPI
 # ===================================
-FROM node:20-alpine AS builder
+FROM python:3.13-slim
 
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
-COPY tsconfig.json ./
+# 安装系统依赖
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    libpq-dev \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install dependencies
-RUN npm ci --only=production=false
+# 安装 Python 依赖
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy source code
-COPY src ./src
+# 复制项目代码
+COPY . .
 
-# Build TypeScript
-RUN npm run build
+# 创建非 root 用户
+RUN addgroup --gid 1001 appgroup && \
+    adduser --uid 1001 --ingroup appgroup --disabled-password --gecos "" appuser && \
+    chown -R appuser:appgroup /app
 
-# ===================================
-# Stage 2: Production
-# ===================================
-FROM node:20-alpine
+USER appuser
 
-# Set environment to production
-ENV NODE_ENV=production
-
-WORKDIR /app
-
-# Copy package files and install production dependencies only
-COPY package*.json ./
-RUN npm ci --only=production && npm cache clean --force
-
-# Copy built files from builder stage
-COPY --from=builder /app/dist ./dist
-
-# Create non-root user
-RUN addgroup -g 1001 -S nodejs && \
-    adduser -S nodejs -u 1001
-
-# Change ownership
-RUN chown -R nodejs:nodejs /app
-
-# Switch to non-root user
-USER nodejs
-
-# Expose port
 EXPOSE 8000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
-    CMD node -e "require('http').get('http://localhost:8000/health', (r) => { process.exit(r.statusCode === 200 ? 0 : 1) })"
+HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
 
-# Start application
-CMD ["node", "dist/app/server.js"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

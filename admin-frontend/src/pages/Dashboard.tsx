@@ -58,8 +58,8 @@ export const Dashboard = () => {
             <div key={card.label} className={`glass-card p-6 rounded-2xl hover:shadow-xl transition-all duration-300 stagger-${idx + 1}`}>
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">{card.label}</p>
-                  <p className="text-3xl font-bold mt-2">{card.value.toLocaleString()}</p>
+                  <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>{card.label}</p>
+                  <p className="text-3xl font-bold mt-2" style={{ color: 'var(--text-primary)' }}>{card.value.toLocaleString()}</p>
                 </div>
                 <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${card.color} flex items-center justify-center shadow-lg`}>
                   <Icon size={28} className="text-white" />
@@ -71,15 +71,15 @@ export const Dashboard = () => {
       </div>
 
       <div className="glass-card p-6 rounded-2xl">
-        <h2 className="text-lg font-semibold mb-4">{t('dashboard.overview')}</h2>
+        <h2 className="text-lg font-semibold mb-4" style={{ color: 'var(--text-primary)' }}>{t('dashboard.overview')}</h2>
         <div className="space-y-3">
           <div className="flex justify-between items-center py-2">
-            <span className="text-gray-600 dark:text-gray-400">{t('dashboard.scaleResponses')}</span>
-            <span className="font-semibold">{stats?.responses_count || 0}</span>
+            <span style={{ color: 'var(--text-secondary)' }}>{t('dashboard.scaleResponses')}</span>
+            <span className="font-semibold" style={{ color: 'var(--text-primary)' }}>{stats?.responses_count || 0}</span>
           </div>
           <div className="flex justify-between items-center py-2">
-            <span className="text-gray-600 dark:text-gray-400">Avg Messages per Session</span>
-            <span className="font-semibold">
+            <span style={{ color: 'var(--text-secondary)' }}>平均每会话消息数</span>
+            <span className="font-semibold" style={{ color: 'var(--text-primary)' }}>
               {stats && stats.sessions_count > 0
                 ? (stats.messages_count / stats.sessions_count).toFixed(1)
                 : '0'}

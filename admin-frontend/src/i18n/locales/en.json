@@ -4,8 +4,9 @@
     "users": "Users",
     "conversations": "Conversations",
     "scales": "Scales",
-    "dataExplorer": "Data Explorer",
-    "exports": "Exports"
+    "research": "Research",
+    "exports": "Exports",
+    "modelConfig": "Model Config"
   },
   "common": {
     "adminPanel": "Admin Panel",

@@ -5,15 +5,19 @@ import { Chat } from './views/Chat';
 import { KnowledgeGraph } from './views/KnowledgeGraph';
 import { Calibration } from './views/Calibration';
 import { Evidence } from './views/Evidence';
+import { Research } from './views/Research';
+import { Scales } from './views/Scales';
 import { Login } from './views/Login';
 import { Register } from './views/Register';
+import type { PendingScaleRegistration } from './views/Register';
 import { RegisterScale } from './views/RegisterScale';
 import { RegisterAI } from './views/RegisterAI';
 import { useAppStore } from './services/store';
+import { getActiveResearchTask } from './services/api';
 import type { UserProfile } from './types';
 
 // 视图类型定义
-type AppView = 'dashboard' | 'chat' | 'graph' | 'calibration' | 'evidence';
+type AppView = 'dashboard' | 'chat' | 'graph' | 'calibration' | 'evidence' | 'research' | 'scales';
 type AuthView = 'login' | 'register' | 'register-scale' | 'register-ai';
 type View = AppView | AuthView;
 
@@ -22,12 +26,12 @@ function App() {
     state,
     theme,
     toggleTheme,
-    toggleResearchMode,
     setLanguage,
     addMessage,
     addCalibrationLog,
     updateNode,
     updateProfile,
+    clearMessages,
     setAuth,
     clearAuth
   } = useAppStore();
@@ -35,6 +39,17 @@ function App() {
   const [currentView, setCurrentView] = useState<View>(
     state.user ? 'dashboard' : 'login'
   );
+
+  // Scale 模式注册暂存数据（选择模式后，量表提交前）
+  const [pendingScaleReg, setPendingScaleReg] = useState<PendingScaleRegistration | null>(null);
+
+  // Track chat key to remount Chat when starting a new conversation
+  const [chatKey, setChatKey] = useState(0);
+
+  const handleNewConversation = () => {
+    clearMessages();
+    setChatKey(k => k + 1);
+  };
 
   // 监听认证状态变化
   useEffect(() => {
@@ -44,11 +59,21 @@ function App() {
   }, [state.user, currentView]);
 
   // 登录成功处理
-  const handleLoginSuccess = (token: string, user: any, profile?: UserProfile) => {
+  const handleLoginSuccess = async (token: string, user: any, profile?: UserProfile) => {
     setAuth(user, token, profile);
 
     // 检查是否完成了onboarding
     if (user.hasCompletedOnboarding) {
+      // 检查是否有激活的研究任务
+      try {
+        const task = await getActiveResearchTask();
+        if (task) {
+          setCurrentView('research');
+          return;
+        }
+      } catch {
+        // 无研究任务，正常进入 dashboard
+      }
       setCurrentView('dashboard');
     } else {
       // 根据 onboarding 模式跳转
@@ -63,12 +88,19 @@ function App() {
     setCurrentView(mode === 'scale' ? 'register-scale' : 'register-ai');
   };
 
+  // Scale 模式：暂存注册数据，直接跳转到量表（不建账号）
+  const handlePendingScale = (data: PendingScaleRegistration) => {
+    setPendingScaleReg(data);
+    setCurrentView('register-scale');
+  };
+
   // 注册完成处理
   const handleRegistrationComplete = (
     initialProfile: UserProfile,
     attributes?: string[],
     conceptSeeds?: string[]
   ) => {
+    setPendingScaleReg(null);
     updateProfile(initialProfile);
     setCurrentView('dashboard');
   };
@@ -81,7 +113,7 @@ function App() {
 
   // 路由守卫：检查是否需要认证
   const requiresAuth = (view: View): boolean => {
-    return ['dashboard', 'chat', 'graph', 'calibration', 'evidence'].includes(view);
+    return ['dashboard', 'chat', 'graph', 'calibration', 'evidence', 'research', 'scales'].includes(view);
   };
 
   // 渲染认证相关视图
@@ -101,6 +133,7 @@ function App() {
           <Register
             language={state.language}
             onRegisterSuccess={handleRegisterSuccess}
+            onPendingScale={handlePendingScale}
             onNavigateToLogin={() => setCurrentView('login')}
           />
         );
@@ -110,7 +143,8 @@ function App() {
           <RegisterScale
             language={state.language}
             onComplete={handleRegistrationComplete}
-            onBack={() => setCurrentView('register')}
+            onBack={() => { setPendingScaleReg(null); setCurrentView('register'); }}
+            pendingRegistration={pendingScaleReg ?? undefined}
           />
         );
 
@@ -143,18 +177,22 @@ function App() {
             onNavigate={setCurrentView as (view: AppView) => void}
             language={state.language}
             theme={theme}
+            userId={state.user?.id}
           />
         );
 
       case 'chat':
         return (
           <Chat
+            key={chatKey}
             messages={state.messages}
             onSendMessage={addMessage}
             onUpdateProfile={updateProfile}
             language={state.language}
             isResearchMode={state.isResearchMode}
             theme={theme}
+            userId={state.user?.id}
+            onNewConversation={handleNewConversation}
           />
         );
 
@@ -167,6 +205,7 @@ function App() {
             onLogCalibration={addCalibrationLog}
             language={state.language}
             theme={theme}
+            userId={state.user?.id}
           />
         );
 
@@ -190,6 +229,25 @@ function App() {
           />
         );
 
+      case 'research':
+        return (
+          <Research
+            onUpdateProfile={updateProfile}
+            language={state.language}
+            theme={theme}
+            userId={state.user?.id}
+          />
+        );
+
+      case 'scales':
+        return (
+          <Scales
+            language={state.language}
+            theme={theme}
+            onUpdateProfile={updateProfile}
+          />
+        );
+
       default:
         return (
           <Dashboard
@@ -209,7 +267,7 @@ function App() {
   }
 
   // 已登录但未完成 onboarding：显示 onboarding 视图（无 Layout）
-  if (['register-scale', 'register-ai'].includes(currentView)) {
+  if (['register', 'register-scale', 'register-ai'].includes(currentView)) {
     return <>{renderAuthView()}</>;
   }
 
@@ -218,8 +276,6 @@ function App() {
     <Layout
       currentView={currentView as AppView}
       onViewChange={setCurrentView as (view: AppView) => void}
-      isResearchMode={state.isResearchMode}
-      onToggleResearch={toggleResearchMode}
       language={state.language}
       onSetLanguage={setLanguage}
       theme={theme}

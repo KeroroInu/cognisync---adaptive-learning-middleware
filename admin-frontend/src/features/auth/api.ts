@@ -11,21 +11,21 @@ import {
  * 用户登录
  */
 export async function login(data: LoginRequest): Promise<AuthResponse> {
-  return apiClient.post<AuthResponse>('/api/auth/login', data);
+  return apiClient.post<AuthResponse>('/admin/auth/login', data);
 }
 
 /**
  * 用户注册
  */
 export async function register(data: RegisterRequest): Promise<AuthResponse> {
-  return apiClient.post<AuthResponse>('/api/auth/register', data);
+  return apiClient.post<AuthResponse>('/auth/register', data);
 }
 
 /**
  * 获取当前用户信息
  */
-export async function getCurrentUser(): Promise<{ user: User; profile: UserProfile }> {
-  return apiClient.get<{ user: User; profile: UserProfile }>('/api/auth/me');
+export async function getCurrentUser(): Promise<{ user: User; profile: UserProfile | null }> {
+  return apiClient.get<{ user: User; profile: UserProfile | null }>('/admin/auth/me');
 }
 
 /**

@@ -7,6 +7,8 @@ export const translations = {
     graph: "知识图谱",
     calibration: "校准与纠偏",
     evidence: "证据日志",
+    research: "教学研究",
+    scales: "量表",
     researchMode: "研究模式",
     systemActive: "系统运行中",
     
@@ -30,7 +32,14 @@ export const translations = {
     profileImpact: "画像影响",
     systemStatus: "系统状态",
     trackingConcepts: "概念追踪中",
-    
+    chatHistory: "历史对话",
+    analysisPanel: "实时分析",
+    newConversation: "开启新对话",
+    noHistory: "暂无历史对话",
+    messagesCount: "条消息",
+    viewSession: "查看会话",
+    currentSession: "当前会话",
+
     // Graph
     searchConcept: "搜索知识点...",
     masteryLevel: "掌握程度",
@@ -72,9 +81,11 @@ export const translations = {
     // 认证 - 登录
     login: "登录",
     loginTitle: "登录 CogniSync",
-    loginDesc: "欢迎回来！请登录您的账户",
-    email: "邮箱地址",
-    emailPlaceholder: "your@email.com",
+    loginDesc: "欢迎回来！请使用学号登录",
+    studentId: "学号",
+    studentIdPlaceholder: "请输入学号",
+    email: "邮箱地址（可选）",
+    emailPlaceholder: "your@email.com（选填）",
     password: "密码",
     passwordPlaceholder: "输入密码",
     loginButton: "登录",
@@ -153,6 +164,8 @@ export const translations = {
     graph: "Knowledge Graph",
     calibration: "Calibration",
     evidence: "Evidence",
+    research: "Research",
+    scales: "Scales",
     researchMode: "Research Mode",
     systemActive: "System Active",
     
@@ -176,6 +189,13 @@ export const translations = {
     profileImpact: "Profile Impact",
     systemStatus: "System Status",
     trackingConcepts: "Tracking Concepts",
+    chatHistory: "Chat History",
+    analysisPanel: "Live Analysis",
+    newConversation: "New Conversation",
+    noHistory: "No previous conversations",
+    messagesCount: "messages",
+    viewSession: "View Session",
+    currentSession: "Current Session",
 
     // Graph
     searchConcept: "Search concept...",
@@ -218,9 +238,11 @@ export const translations = {
     // Auth - Login
     login: "Login",
     loginTitle: "Login to CogniSync",
-    loginDesc: "Welcome back! Please login to your account",
-    email: "Email Address",
-    emailPlaceholder: "your@email.com",
+    loginDesc: "Welcome back! Sign in with your student ID",
+    studentId: "Student ID",
+    studentIdPlaceholder: "Enter your student ID",
+    email: "Email Address (optional)",
+    emailPlaceholder: "your@email.com (optional)",
     password: "Password",
     passwordPlaceholder: "Enter password",
     loginButton: "Login",

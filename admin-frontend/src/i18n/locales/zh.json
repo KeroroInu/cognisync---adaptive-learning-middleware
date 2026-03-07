@@ -4,8 +4,9 @@
     "users": "用户管理",
     "conversations": "对话管理",
     "scales": "量表管理",
-    "dataExplorer": "数据浏览器",
-    "exports": "数据导出"
+    "research": "教学研究",
+    "exports": "数据导出",
+    "modelConfig": "模型配置"
   },
   "common": {
     "adminPanel": "管理面板",

@@ -69,6 +69,7 @@ async def list_scale_templates(
             name=template.name,
             version=template.version,
             status=template.status.value,
+            schema_json=template.schema_json,
             created_at=template.created_at,
             updated_at=template.updated_at,
             responses_count=responses_count
@@ -199,7 +200,7 @@ async def activate_scale_template(
     result = await db.execute(
         update(ScaleTemplate)
         .where(ScaleTemplate.id == template_id)
-        .values(status=ScaleStatus.ACTIVE, updated_at=datetime.utcnow())
+        .values(status=ScaleStatus.ACTIVE, updated_at=datetime.utcnow(), activated_at=datetime.utcnow())
         .returning(ScaleTemplate.id)
     )
 
@@ -257,8 +258,10 @@ async def get_scale_responses(
         offset: 偏移量
 
     Returns:
-        响应列表
+        响应列表（含学生姓名和学号）
     """
+    from app.models.sql.user import User
+
     # 查询总数
     total = await db.scalar(
         select(func.count())
@@ -266,25 +269,28 @@ async def get_scale_responses(
         .where(ScaleResponse.template_id == template_id)
     ) or 0
 
-    # 查询响应
+    # 查询响应（JOIN 用户表获取姓名和学号）
     result = await db.execute(
-        select(ScaleResponse)
+        select(ScaleResponse, User.name, User.student_id)
+        .join(User, ScaleResponse.user_id == User.id)
         .where(ScaleResponse.template_id == template_id)
         .order_by(ScaleResponse.created_at.desc())
         .limit(limit)
         .offset(offset)
     )
-    responses = result.scalars().all()
 
     response_items = [
         {
             "id": str(resp.id),
             "user_id": str(resp.user_id),
+            "user_name": name,
+            "student_id": student_id,
             "answers_json": resp.answers_json,
             "scores_json": resp.scores_json,
+            "started_at": resp.started_at.isoformat() if resp.started_at else None,
             "created_at": resp.created_at.isoformat()
         }
-        for resp in responses
+        for resp, name, student_id in result.all()
     ]
 
     return SuccessResponse(data={
@@ -293,3 +299,28 @@ async def get_scale_responses(
         "limit": limit,
         "offset": offset
     })
+
+
+@router.delete("/scales/{template_id}", dependencies=[Depends(verify_admin_key)])
+async def delete_scale(
+    template_id: str,
+    db: AsyncSession = Depends(get_db)
+) -> SuccessResponse[dict]:
+    """删除量表模板（含所有响应记录）"""
+    try:
+        tid = UUID(template_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid template_id")
+
+    result = await db.execute(select(ScaleTemplate).where(ScaleTemplate.id == tid))
+    template = result.scalar_one_or_none()
+    if not template:
+        raise HTTPException(status_code=404, detail="Scale template not found")
+
+    # 删除关联响应
+    from sqlalchemy import delete as sql_delete
+    await db.execute(sql_delete(ScaleResponse).where(ScaleResponse.template_id == tid))
+    await db.delete(template)
+    await db.commit()
+
+    return SuccessResponse(data={"deleted": True, "template_id": template_id})

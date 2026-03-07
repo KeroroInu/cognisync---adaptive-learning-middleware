@@ -63,7 +63,7 @@ async def get_logs(userId: str, db: AsyncSession = Depends(get_db)):
             ChatMessageSchema(
                 id=str(msg.id),
                 role=msg.role.value,
-                text=msg.content,
+                text=msg.text,
                 timestamp=msg.timestamp.isoformat() + "Z",
                 analysis=msg.analysis  # JSONB 字段，直接返回
             )

@@ -20,7 +20,8 @@ export interface OverviewStats {
 
 export interface User {
   id: string;
-  email: string;
+  student_id: string;
+  email: string | null;
   name: string;
   role: string;
   is_active: boolean;
@@ -37,17 +38,16 @@ export interface UsersListResponse {
 
 export interface UserDetail {
   id: string;
-  email: string;
+  student_id: string;
+  email: string | null;
   name: string;
   role: string;
   is_active: boolean;
   created_at: string;
   last_active_at: string | null;
-  current_profile: {
-    cognition: number;
-    affect: number;
-    behavior: number;
-  };
+  messages_count: number;
+  sessions_count: number;
+  responses_count: number;
 }
 
 export interface ChatMessage {
@@ -83,6 +83,7 @@ export interface ScaleTemplate {
   mapping_json: Record<string, unknown>;
   created_at: string;
   updated_at: string;
+  activated_at?: string | null;
   responses_count?: number;
 }
 
@@ -94,9 +95,13 @@ export interface ScalesListResponse {
 export interface ScaleResponse {
   id: string;
   user_id: string;
+  user_name?: string;
+  student_id?: string;
   template_id: string;
+  template_name?: string;
   answers_json: Record<string, unknown>;
   scores_json: Record<string, unknown>;
+  started_at?: string | null;
   created_at: string;
 }
 
@@ -123,7 +128,9 @@ export interface TableRowsResponse {
 export interface SessionItem {
   id: string;
   user_id: string;
-  user_email: string;
+  user_name: string;
+  student_id: string | null;
+  user_email: string | null;
   message_count: number;
   created_at: string;
   updated_at: string | null;
@@ -139,7 +146,9 @@ export interface SessionsListResponse {
 export interface SessionDetail {
   id: string;
   user_id: string;
-  user_email: string;
+  user_name: string;
+  student_id: string | null;
+  user_email: string | null;
   message_count: number;
   created_at: string;
   updated_at: string | null;
@@ -158,5 +167,87 @@ export interface SessionMessagesResponse {
   total: number;
   limit: number;
   offset: number;
+}
+
+export interface CalibrationLog {
+  id: string;
+  timestamp: string;
+  dimension: 'cognition' | 'affect' | 'behavior';
+  system_value: number;
+  user_value: number;
+  conflict_level: 'low' | 'medium' | 'high';
+  user_comment: string | null;
+  likert_trust: number | null;
+}
+
+export interface GraphNode {
+  id: string;
+  name: string;
+  category: string;
+  mastery: number;
+  frequency: number;
+  is_flagged: boolean;
+}
+
+export interface GraphEdge {
+  source: string;
+  target: string;
+  rel_type: string;
+  weight: number;
+}
+
+export interface UserGraph {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+}
+
+export interface ResearchTask {
+  id: string;
+  title: string;
+  description: string | null;
+  instructions: string | null;
+  ai_prompt: string | null;
+  code_content: string;
+  language: string;
+  status: 'draft' | 'active' | 'archived';
+  submissions_count?: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ResearchTaskSubmission {
+  id: string;
+  task_id: string;
+  user_id: string;
+  user_name?: string;
+  student_id?: string;
+  user_email?: string;
+  code_submitted: string;
+  is_completed: boolean;
+  started_at?: string | null;
+  submitted_at: string | null;
+  created_at: string;
+}
+
+export interface ResearchTasksResponse {
+  tasks: ResearchTask[];
+  total: number;
+}
+
+export interface ResearchSubmissionsResponse {
+  submissions: ResearchTaskSubmission[];
+  total: number;
+}
+
+export interface LlmRoleConfig {
+  provider: string;
+  api_key: string;
+  base_url: string;
+  model: string;
+}
+
+export interface LlmConfig {
+  analysis: LlmRoleConfig;
+  chat: LlmRoleConfig;
 }
 

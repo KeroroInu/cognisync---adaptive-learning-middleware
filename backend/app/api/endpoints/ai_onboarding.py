@@ -283,13 +283,23 @@ async def analyze_all_answers_for_profile(session: Dict) -> Dict:
 
 @router.post("/start")
 async def start_ai_onboarding(
+    db: AsyncSession = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
     """
     开始AI引导对话
 
     创建新会话并返回第一个问题
+
+    如果用户已经完成了 onboarding，将返回错误
     """
+    # 检查用户是否已经完成 onboarding
+    if current_user.has_completed_onboarding:
+        raise HTTPException(
+            status_code=400,
+            detail="User has already completed onboarding. Please go to dashboard."
+        )
+
     session_id = str(uuid.uuid4())
 
     # 初始化会话

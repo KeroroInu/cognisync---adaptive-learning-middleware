@@ -1,16 +1,14 @@
 import React from 'react';
-import { LayoutDashboard, MessageSquareText, Network, Scale, FileText, FlaskConical, Languages, Sun, Moon, LogOut, User as UserIcon } from 'lucide-react';
+import { LayoutDashboard, MessageSquareText, Network, Scale, FileText, FlaskConical, ClipboardList, Languages, Sun, Moon, LogOut, User as UserIcon } from 'lucide-react';
 import { translations } from '../utils/translations';
 import type { Language, User } from '../types';
 
-type View = 'dashboard' | 'chat' | 'graph' | 'calibration' | 'evidence';
+type View = 'dashboard' | 'chat' | 'graph' | 'calibration' | 'evidence' | 'research' | 'scales';
 type Theme = 'light' | 'dark';
 
 interface Props {
   currentView: View;
   onViewChange: (view: View) => void;
-  isResearchMode: boolean;
-  onToggleResearch: () => void;
   language: Language;
   onSetLanguage: (lang: Language) => void;
   theme: Theme;
@@ -24,8 +22,6 @@ export const Layout: React.FC<Props> = ({
   currentView,
   onViewChange,
   children,
-  isResearchMode,
-  onToggleResearch,
   language,
   onSetLanguage,
   theme,
@@ -41,6 +37,8 @@ export const Layout: React.FC<Props> = ({
     { id: 'graph', label: t.graph, icon: <Network size={20} /> },
     { id: 'calibration', label: t.calibration, icon: <Scale size={20} /> },
     { id: 'evidence', label: t.evidence, icon: <FileText size={20} /> },
+    { id: 'research', label: t.research, icon: <FlaskConical size={20} /> },
+    { id: 'scales', label: t.scales, icon: <ClipboardList size={20} /> },
   ];
 
   return (
@@ -103,7 +101,7 @@ export const Layout: React.FC<Props> = ({
                 onClick={onToggleTheme}
                 className={`relative inline-flex h-6 w-11 items-center rounded-full transition-all duration-300 shadow-inner ${
                   theme === 'dark'
-                    ? 'bg-gradient-to-r from-indigo-500 to-purple-500'
+                    ? 'bg-gradient-to-r from-blue-500 to-indigo-600'
                     : 'bg-gradient-to-r from-amber-400 to-orange-400'
                 }`}
               >
@@ -135,30 +133,6 @@ export const Layout: React.FC<Props> = ({
                 }}
               >
                 {language === 'zh' ? '中文' : 'EN'}
-              </button>
-            </div>
-          </div>
-
-          {/* 研究模式 */}
-          <div className="glass-card p-3.5 rounded-xl border shadow-sm hover:shadow-md transition-all duration-300">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                <FlaskConical size={16} className={isResearchMode ? "text-green-500" : ""} style={!isResearchMode ? {
-                  color: theme === 'light' ? '#9ca3af' : '#94a3b8'
-                } : {}} />
-                <span className="text-xs font-semibold" style={{
-                  color: theme === 'light' ? '#000000' : '#ffffff'
-                }}>
-                  {t.researchMode}
-                </span>
-              </div>
-              <button
-                onClick={onToggleResearch}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-all duration-300 shadow-inner ${
-                  isResearchMode ? 'bg-gradient-to-r from-green-400 to-green-500' : theme === 'light' ? 'bg-gray-300' : 'bg-slate-600'
-                }`}
-              >
-                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-all duration-300 shadow-md ${isResearchMode ? 'translate-x-6' : 'translate-x-1'}`} />
               </button>
             </div>
           </div>
@@ -219,7 +193,7 @@ export const Layout: React.FC<Props> = ({
             </span>
           </div>
         </header>
-        <div className="flex-1 overflow-y-auto p-8 relative glass-card rounded-b-3xl border-t-0 shadow-xl animate-fade-in stagger-2">
+        <div className="flex-1 min-h-0 overflow-hidden flex flex-col p-8 relative glass-card rounded-b-3xl border-t-0 shadow-xl animate-fade-in stagger-2">
           {children}
         </div>
       </main>

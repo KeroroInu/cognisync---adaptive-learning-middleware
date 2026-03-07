@@ -3,7 +3,7 @@ Forms API Endpoints - 量表相关接口
 """
 import uuid
 from datetime import datetime, UTC
-from typing import Dict, Any, Generic, TypeVar
+from typing import Dict, Any, Generic, TypeVar, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.endpoints.auth import get_current_user, save_user_profile
 from app.db.postgres import get_db
-from app.models.sql.scale import ScaleTemplate as ScaleTemplateModel, ScaleStatus
+from app.models.sql.scale import ScaleTemplate as ScaleTemplateModel, ScaleStatus, ScaleResponse as ScaleResponseModel
 
 router = APIRouter()
 
@@ -26,45 +26,10 @@ class ApiResponse(BaseModel, Generic[T]):
     error: Dict[str, Any] | None = None
 
 
-class LikertOption(BaseModel):
-    """Likert选项"""
-    value: int
-    label: str
-
-
-class ScaleItem(BaseModel):
-    """量表题目"""
-    id: str
-    text: str
-    subscale: str | None = None
-    required: bool = True
-    reversed: bool = False
-
-
-class ScaleTemplateSchema(BaseModel):
-    """量表模板Schema"""
-    title: str
-    description: str | None = None
-    items: list[ScaleItem]
-    subscales: list[Dict] | None = None
-    likertOptions: list[LikertOption]
-
-
-class ScaleTemplate(BaseModel):
-    """量表模板"""
-    id: str
-    name: str
-    description: str
-    schema_json: ScaleTemplateSchema
-    version: str
-    is_active: bool
-    created_at: str
-    updated_at: str
-
-
 class ScaleSubmitRequest(BaseModel):
     """量表提交请求"""
     answers: Dict[str, int]
+    started_at: Optional[str] = None  # ISO 8601 字符串，前端记录的开始填写时间
 
 
 class InitialProfile(BaseModel):
@@ -74,14 +39,151 @@ class InitialProfile(BaseModel):
     behavior: float = Field(..., ge=0, le=100)
 
 
-class ScaleSubmitResponse(BaseModel):
-    """量表提交响应"""
-    success: bool
-    scores: list[Dict]
-    totalScore: int
-    maxScore: int
-    initialProfile: InitialProfile
-    responseId: str
+def _compute_dim_scores(
+    answers: Dict[str, int],
+    scoring_json: Dict[str, Any],
+    schema_json: Dict[str, Any],
+) -> Dict[str, float]:
+    """
+    根据 scoring_json 配置，把原始 Likert 答案转换为各维度 0-100 分。
+    支持反向计分题。缺失题目用维度内现有题目均值替代。
+    """
+    likert = schema_json.get("likert_scale", {})
+    MIN_SCALE = int(likert.get("min", 1))
+    MAX_SCALE = int(likert.get("max", 5))
+    reverse_items = set(scoring_json.get("reverse_items", []))
+    dim_mapping: Dict[str, list] = scoring_json.get("mapping", {})
+
+    dim_scores: Dict[str, float] = {}
+    for dim, item_ids in dim_mapping.items():
+        scores = []
+        for item_id in item_ids:
+            raw = answers.get(item_id)
+            if raw is None:
+                continue
+            raw = max(MIN_SCALE, min(MAX_SCALE, raw))  # 边界裁剪
+            score = (MAX_SCALE + MIN_SCALE - raw) if item_id in reverse_items else raw
+            scores.append(score)
+
+        if scores:
+            avg = sum(scores) / len(scores)
+            dim_scores[dim] = round((avg - MIN_SCALE) / (MAX_SCALE - MIN_SCALE) * 100, 1)
+        else:
+            dim_scores[dim] = 50.0  # 无有效数据时用中性值
+
+    return dim_scores
+
+
+def _compute_cab(
+    dim_scores: Dict[str, float],
+    mapping_json: Dict[str, Any],
+) -> tuple[float, float, float]:
+    """
+    根据 mapping_json 把 6 个维度分数加权合并为 CAB 三维画像。
+    """
+    def _weighted(cab_key: str) -> float:
+        config = mapping_json.get(cab_key, {})
+        sources = config.get("source_dimensions", [])
+        weights = config.get("weights", [])
+        if not sources:
+            return 50.0
+        if len(weights) != len(sources):
+            weights = [1.0 / len(sources)] * len(sources)
+        total_w = sum(weights)
+        if total_w == 0:
+            return 50.0
+        val = sum(dim_scores.get(src, 50.0) * w for src, w in zip(sources, weights))
+        return round(val / total_w, 1)
+
+    return _weighted("cognition"), _weighted("affect"), _weighted("behavior")
+
+
+@router.get("/list")
+async def list_active_templates(
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user),
+):
+    """
+    获取所有激活的量表，并标记当前用户是否已完成
+    需要认证
+    """
+    stmt = select(ScaleTemplateModel).where(
+        ScaleTemplateModel.status == ScaleStatus.ACTIVE
+    ).order_by(ScaleTemplateModel.created_at.desc())
+
+    result = await db.execute(stmt)
+    templates = result.scalars().all()
+
+    # 查询该用户已提交过的记录（template_id → 最新提交时间）
+    resp_result = await db.execute(
+        select(ScaleResponseModel.template_id, ScaleResponseModel.created_at)
+        .where(ScaleResponseModel.user_id == current_user.id)
+    )
+    # 每个模板只保留最新一次提交的时间
+    last_submit: dict = {}
+    for row in resp_result.all():
+        tid, created_at = row[0], row[1]
+        if tid not in last_submit or created_at > last_submit[tid]:
+            last_submit[tid] = created_at
+
+    items = [
+        {
+            "id": str(t.id),
+            "name": t.name,
+            "description": t.schema_json.get("description", ""),
+            "question_count": len(
+                t.schema_json.get("questions") or t.schema_json.get("items") or []
+            ),
+            # 只有在本次激活之后提交过才算完成
+            "is_completed": (
+                t.id in last_submit
+                and (t.activated_at is None or last_submit[t.id] >= t.activated_at)
+            ),
+        }
+        for t in templates
+    ]
+
+    return ApiResponse(success=True, data={"templates": items})
+
+
+@router.get("/templates/{template_id}")
+async def get_template_by_id(
+    template_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """按 ID 获取量表模板（格式同 /active，供用户端填写使用）"""
+    try:
+        tid = uuid.UUID(template_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid template_id")
+
+    result = await db.execute(
+        select(ScaleTemplateModel).where(ScaleTemplateModel.id == tid)
+    )
+    template_model = result.scalar_one_or_none()
+    if not template_model:
+        raise HTTPException(status_code=404, detail="Scale template not found")
+
+    raw_items = (
+        template_model.schema_json.get("questions")
+        or template_model.schema_json.get("items")
+        or []
+    )
+    questions = [
+        {
+            "id": item["id"],
+            "text": item["text"],
+            "dimension": item.get("dimension", "General"),
+        }
+        for item in raw_items
+    ]
+    template = {
+        "id": str(template_model.id),
+        "name": template_model.name,
+        "description": template_model.schema_json.get("description", ""),
+        "questions": questions,
+    }
+    return ApiResponse(success=True, data={"template": template})
 
 
 @router.get("/active")
@@ -91,9 +193,9 @@ async def get_active_template(
     """
     获取当前激活的量表模板
 
-    从数据库读取 ACTIVE 状态的量表模板（公开接口，无需认证）
+    从数据库读取 ACTIVE 状态的量表模板，返回前端期望的格式（含 questions 数组）。
+    公开接口，无需认证。
     """
-    # 查询数据库中ACTIVE状态的量表模板
     stmt = select(ScaleTemplateModel).where(
         ScaleTemplateModel.status == ScaleStatus.ACTIVE
     ).order_by(ScaleTemplateModel.created_at.desc())
@@ -104,15 +206,29 @@ async def get_active_template(
     if not template_model:
         raise HTTPException(status_code=404, detail="No active scale template found")
 
-    # 转换为前端期望的格式
+    # 支持 schema_json 用 "questions" 或旧版 "items" 两种 key
+    raw_items = (
+        template_model.schema_json.get("questions")
+        or template_model.schema_json.get("items")
+        or []
+    )
+
+    questions = [
+        {
+            "id": item["id"],
+            "text": item["text"],
+            "dimension": item.get("dimension", "General"),
+        }
+        for item in raw_items
+    ]
+
     template = {
         "id": str(template_model.id),
         "name": template_model.name,
         "description": template_model.schema_json.get("description", ""),
-        "questions": template_model.schema_json.get("items", [])
+        "questions": questions,
     }
 
-    # 返回包装格式
     return ApiResponse(success=True, data={"template": template})
 
 
@@ -126,30 +242,79 @@ async def submit_scale_answers(
     """
     提交量表答案
 
-    计算得分并生成初始画像（MVP版本：简单算法）
+    根据模板的 scoring_json 和 mapping_json 动态计算维度分数，
+    再映射为 CAB 三维画像并持久化。
     """
-    # MVP: 简单计算
+    import logging
+    logger = logging.getLogger(__name__)
+
     answers = data.answers
-    total_score = sum(answers.values())
-    max_score = len(answers) * 5
 
-    # 简单映射到三维画像（示例算法）
-    cognition = min(100, (answers.get("item_1", 3) + answers.get("item_6", 3)) / 2 * 20)
-    affect = min(100, (answers.get("item_2", 3) + answers.get("item_5", 3)) / 2 * 20)
-    behavior = min(100, (answers.get("item_3", 3) + answers.get("item_4", 3)) / 2 * 20)
+    # ── 加载模板配置 ──────────────────────────────────────────────────────────
+    try:
+        tid = uuid.UUID(template_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid template_id")
 
-    # 保存用户画像到数据库
+    template_result = await db.execute(
+        select(ScaleTemplateModel).where(ScaleTemplateModel.id == tid)
+    )
+    template_model = template_result.scalar_one_or_none()
+    if not template_model:
+        raise HTTPException(status_code=404, detail="Scale template not found")
+
+    scoring_json = template_model.scoring_json or {}
+    mapping_json = template_model.mapping_json or {}
+    schema_json = template_model.schema_json or {}
+
+    # ── 计算各维度分数 (0-100) ────────────────────────────────────────────────
+    dim_scores = _compute_dim_scores(answers, scoring_json, schema_json)
+
+    # ── 映射到 CAB ────────────────────────────────────────────────────────────
+    cognition, affect, behavior = _compute_cab(dim_scores, mapping_json)
+
+    logger.info(
+        f"Scale submission user={current_user.id} template={template_id} "
+        f"dim_scores={dim_scores} CAB=({cognition},{affect},{behavior})"
+    )
+
+    # ── 保存用户画像 ──────────────────────────────────────────────────────────
     await save_user_profile(db, current_user.id, cognition, affect, behavior)
 
-    response_id = str(uuid.uuid4())
+    # ── 保存量表响应记录 ──────────────────────────────────────────────────────
+    total_score = sum(answers.values())
+    max_score = len(answers) * int(schema_json.get("likert_scale", {}).get("max", 5))
+
+    try:
+        scale_resp = ScaleResponseModel(
+            user_id=current_user.id,
+            template_id=tid,
+            answers_json=answers,
+            started_at=datetime.fromisoformat(data.started_at.replace('Z', '+00:00')) if data.started_at else None,
+            scores_json={
+                "dimensions": dim_scores,
+                "cognition": cognition,
+                "affect": affect,
+                "behavior": behavior,
+                "total_score": total_score,
+                "max_score": max_score,
+            }
+        )
+        db.add(scale_resp)
+        await db.commit()
+        logger.info(f"Scale response saved for user {current_user.id}, template {template_id}")
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"Failed to save scale response: {e}", exc_info=True)
+
     current_time = datetime.utcnow().isoformat()
 
-    # 构造响应数据
     response_data = {
         "scores": {
+            "dimensions": dim_scores,
             "cognition": cognition,
             "affect": affect,
-            "behavior": behavior
+            "behavior": behavior,
         },
         "initialProfile": {
             "cognition": cognition,
@@ -159,5 +324,4 @@ async def submit_scale_answers(
         }
     }
 
-    # 返回包装格式以匹配前端期望的结构
     return ApiResponse(success=True, data=response_data)
