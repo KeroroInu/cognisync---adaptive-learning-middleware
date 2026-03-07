@@ -2,7 +2,7 @@
 SystemConfig Model - 系统配置表
 用于持久化存储可在运行时修改的系统配置（如 LLM 模型配置）
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.dialects.postgresql import TIMESTAMP

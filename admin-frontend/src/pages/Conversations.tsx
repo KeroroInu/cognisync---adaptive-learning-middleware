@@ -117,7 +117,7 @@ export const Conversations = () => {
                     <td className="px-6 py-4 text-sm">
                       <div className="flex items-center gap-2">
                         <button
-                          onClick={() => navigate(`/admin/conversations/${session.id}`)}
+                          onClick={() => navigate(`/conversations/${session.id}`)}
                           className="p-2 rounded-lg bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-200 dark:hover:bg-indigo-800 transition-colors"
                           title="查看对话"
                         >

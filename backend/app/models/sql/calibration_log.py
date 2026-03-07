@@ -4,7 +4,7 @@ CalibrationLog Model - 校准日志表
 """
 import uuid
 import enum
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from sqlalchemy import Integer, Text, ForeignKey, Enum
 from sqlalchemy.orm import Mapped, mapped_column, relationship

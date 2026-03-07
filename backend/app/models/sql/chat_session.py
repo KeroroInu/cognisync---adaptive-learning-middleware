@@ -2,7 +2,7 @@
 ChatSession Model - 会话表
 """
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import ForeignKey, Index
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID, TIMESTAMP
