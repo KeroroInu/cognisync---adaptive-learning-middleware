@@ -53,7 +53,7 @@ export const ConversationDetail = () => {
     return (
       <div className="space-y-6">
         <button
-          onClick={() => navigate('/admin/conversations')}
+          onClick={() => navigate('/conversations')}
           className="inline-flex items-center gap-2 transition-colors"
           style={{ color: 'var(--text-secondary)' }}
         >
@@ -71,7 +71,7 @@ export const ConversationDetail = () => {
     return (
       <div className="space-y-6">
         <button
-          onClick={() => navigate('/admin/conversations')}
+          onClick={() => navigate('/conversations')}
           className="inline-flex items-center gap-2 transition-colors"
           style={{ color: 'var(--text-secondary)' }}
         >
@@ -89,7 +89,7 @@ export const ConversationDetail = () => {
     <div className="space-y-6 animate-fade-in">
       {/* Back Button */}
       <button
-        onClick={() => navigate('/admin/conversations')}
+        onClick={() => navigate('/conversations')}
         className="inline-flex items-center gap-2 transition-colors"
         style={{ color: 'var(--text-secondary)' }}
       >

@@ -197,7 +197,7 @@ export const UserDetail = () => {
   if (error || !userDetail) {
     return (
       <div className="space-y-6 animate-fade-in">
-        <button onClick={() => navigate('/admin/users')}
+        <button onClick={() => navigate('/users')}
           className="flex items-center gap-2 text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 transition-colors">
           <ArrowLeft size={20} />返回用户列表
         </button>
@@ -229,7 +229,7 @@ export const UserDetail = () => {
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Back button */}
-      <button onClick={() => navigate('/admin/users')}
+      <button onClick={() => navigate('/users')}
         className="flex items-center gap-2 text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 transition-colors">
         <ArrowLeft size={20} />返回用户列表
       </button>

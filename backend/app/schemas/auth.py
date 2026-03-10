@@ -10,7 +10,7 @@ from pydantic import BaseModel, EmailStr, Field
 class LoginRequest(BaseModel):
     """登录请求（学号 + 密码）"""
     student_id: str = Field(..., description="学号")
-    password: str = Field(..., min_length=6, description="密码")
+    password: str = Field(..., description="密码")
 
 
 class RegisterRequest(BaseModel):
