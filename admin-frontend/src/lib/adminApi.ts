@@ -268,6 +268,7 @@ class AdminApiClient {
     title?: string;
     description?: string;
     instructions?: string;
+    ai_prompt?: string;
     code_content?: string;
     language?: string;
   }): Promise<ResearchTask> {
