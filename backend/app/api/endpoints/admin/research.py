@@ -255,7 +255,7 @@ async def archive_research_task(
 @router.get("/research/tasks/{task_id}/submissions", dependencies=[Depends(verify_admin_key)])
 async def get_task_submissions(
     task_id: UUID,
-    limit: int = Query(100, ge=1, le=500),
+    limit: int = Query(2000, ge=1, le=5000),
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
 ) -> SuccessResponse[dict]:

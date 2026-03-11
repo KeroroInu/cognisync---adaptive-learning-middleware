@@ -245,7 +245,7 @@ async def archive_scale_template(
 @router.get("/scales/{template_id}/responses", dependencies=[Depends(verify_admin_key)])
 async def get_scale_responses(
     template_id: UUID,
-    limit: int = Query(50, ge=1, le=500),
+    limit: int = Query(2000, ge=1, le=5000),
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db)
 ) -> SuccessResponse[dict]:

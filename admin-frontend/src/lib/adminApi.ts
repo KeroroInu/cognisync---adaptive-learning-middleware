@@ -155,8 +155,8 @@ class AdminApiClient {
     });
   }
 
-  async getScaleResponses(scaleId: string): Promise<ScaleResponse[]> {
-    const result = await this.request<{ responses: ScaleResponse[]; total: number } | ScaleResponse[]>(`/scales/${scaleId}/responses`);
+  async getScaleResponses(scaleId: string, limit: number = 2000): Promise<ScaleResponse[]> {
+    const result = await this.request<{ responses: ScaleResponse[]; total: number } | ScaleResponse[]>(`/scales/${scaleId}/responses?limit=${limit}`);
     return Array.isArray(result) ? result : ((result as { responses: ScaleResponse[] }).responses ?? []);
   }
 
@@ -290,8 +290,8 @@ class AdminApiClient {
     return this.request<{ message: string }>(`/research/tasks/${taskId}/archive`, { method: 'POST' });
   }
 
-  async getResearchTaskSubmissions(taskId: string): Promise<ResearchSubmissionsResponse> {
-    return this.request<ResearchSubmissionsResponse>(`/research/tasks/${taskId}/submissions`);
+  async getResearchTaskSubmissions(taskId: string, limit: number = 2000): Promise<ResearchSubmissionsResponse> {
+    return this.request<ResearchSubmissionsResponse>(`/research/tasks/${taskId}/submissions?limit=${limit}`);
   }
 
   async deleteResearchSubmissions(submissionIds: string[]): Promise<{ deleted: boolean; count: number }> {
