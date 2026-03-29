@@ -1,14 +1,24 @@
 """
 User Model - 用户表
 """
-import uuid
+from __future__ import annotations
+
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 from sqlalchemy import String, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy.dialects.postgresql import UUID, TIMESTAMP
+from sqlalchemy.dialects.postgresql import TIMESTAMP
 
 from app.models.sql.base import Base, UUIDMixin
+
+if TYPE_CHECKING:
+    from app.models.sql.calibration_log import CalibrationLog
+    from app.models.sql.chat_session import ChatSession
+    from app.models.sql.emotion_log import EmotionLog
+    from app.models.sql.message import ChatMessage
+    from app.models.sql.onboarding import OnboardingSession
+    from app.models.sql.profile import ProfileSnapshot
+    from app.models.sql.scale import ScaleResponse
 
 
 class User(Base, UUIDMixin):
@@ -88,42 +98,49 @@ class User(Base, UUIDMixin):
     )
 
     # 关系
-    messages: Mapped[list["ChatMessage"]] = relationship(
+    messages: Mapped[list[ChatMessage]] = relationship(
         "ChatMessage",
         back_populates="user",
         cascade="all, delete-orphan",
         lazy="selectin"
     )
 
-    profile_snapshots: Mapped[list["ProfileSnapshot"]] = relationship(
+    profile_snapshots: Mapped[list[ProfileSnapshot]] = relationship(
         "ProfileSnapshot",
         back_populates="user",
         cascade="all, delete-orphan",
         lazy="selectin"
     )
 
-    calibration_logs: Mapped[list["CalibrationLog"]] = relationship(
+    calibration_logs: Mapped[list[CalibrationLog]] = relationship(
         "CalibrationLog",
         back_populates="user",
         cascade="all, delete-orphan",
         lazy="selectin"
     )
 
-    sessions: Mapped[list["ChatSession"]] = relationship(
+    sessions: Mapped[list[ChatSession]] = relationship(
         "ChatSession",
         back_populates="user",
         cascade="all, delete-orphan",
         lazy="selectin"
     )
 
-    scale_responses: Mapped[list["ScaleResponse"]] = relationship(
+    emotion_logs: Mapped[list[EmotionLog]] = relationship(
+        "EmotionLog",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        lazy="selectin"
+    )
+
+    scale_responses: Mapped[list[ScaleResponse]] = relationship(
         "ScaleResponse",
         back_populates="user",
         cascade="all, delete-orphan",
         lazy="selectin"
     )
 
-    onboarding_sessions: Mapped[list["OnboardingSession"]] = relationship(
+    onboarding_sessions: Mapped[list[OnboardingSession]] = relationship(
         "OnboardingSession",
         back_populates="user",
         cascade="all, delete-orphan",

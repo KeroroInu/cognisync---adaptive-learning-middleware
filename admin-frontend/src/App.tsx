@@ -13,6 +13,8 @@ import { ConversationDetail } from './pages/ConversationDetail';
 import { Exports } from './pages/Exports';
 import { ModelConfig } from './pages/ModelConfig';
 import { Login } from './pages/Login';
+import { EmotionExperiment } from './pages/EmotionExperiment';
+import { EmotionAnalytics } from './pages/EmotionAnalytics';
 
 /**
  * 所有受保护的 /admin/* 路由容器。
@@ -21,14 +23,14 @@ import { Login } from './pages/Login';
  * - status='unknown'（校验中）时显示 loading
  */
 function AdminApp() {
-  const auth = useRequireAuth();
+  const { bootstrap, isLoading, isAuthed } = useRequireAuth();
 
   useEffect(() => {
-    auth.bootstrap();
-  }, [auth.bootstrap]);
+    void bootstrap();
+  }, [bootstrap]);
 
   // 正在校验 token，等待结果
-  if (auth.isLoading) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center h-screen gradient-mesh">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500" />
@@ -37,7 +39,7 @@ function AdminApp() {
   }
 
   // 未登录：useRequireAuth 已触发跳转，此处渲染 null 避免闪烁
-  if (!auth.isAuthed) return null;
+  if (!isAuthed) return null;
 
   return (
     <Routes>
@@ -48,6 +50,8 @@ function AdminApp() {
       <Route path="explorer" element={<AdminLayout><ResearchManagement /></AdminLayout>} />
       <Route path="conversations" element={<AdminLayout><Conversations /></AdminLayout>} />
       <Route path="conversations/:sessionId" element={<AdminLayout><ConversationDetail /></AdminLayout>} />
+      <Route path="analytics/emotion" element={<AdminLayout><EmotionAnalytics /></AdminLayout>} />
+      <Route path="emotion-experiments" element={<AdminLayout><EmotionExperiment /></AdminLayout>} />
       <Route path="exports" element={<AdminLayout><Exports /></AdminLayout>} />
       <Route path="config" element={<AdminLayout><ModelConfig /></AdminLayout>} />
     </Routes>

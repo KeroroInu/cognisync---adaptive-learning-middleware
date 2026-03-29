@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { adminApi } from '../lib/adminApi';
 import type { User } from '../types';
@@ -35,11 +35,7 @@ export const Users = () => {
   const [resetError, setResetError] = useState('');
   const [resetSuccess, setResetSuccess] = useState(false);
 
-  useEffect(() => {
-    loadUsers();
-  }, [page, query]);
-
-  const loadUsers = async () => {
+  const loadUsers = useCallback(async () => {
     try {
       setLoading(true);
       const data = await adminApi.getUsers(page, pageSize, query);
@@ -50,7 +46,11 @@ export const Users = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, query]);
+
+  useEffect(() => {
+    void loadUsers();
+  }, [loadUsers]);
 
   const handleSearch = (value: string) => {
     setQuery(value);

@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MessageSquare, ChevronRight, Eye, Trash2 } from 'lucide-react';
+import { MessageSquare, Eye, Trash2 } from 'lucide-react';
 import { adminApi } from '../lib/adminApi';
 import type { SessionItem } from '../types';
 
@@ -13,11 +13,7 @@ export const Conversations = () => {
   const [total, setTotal] = useState(0);
   const pageSize = 10;
 
-  useEffect(() => {
-    loadSessions();
-  }, [page]);
-
-  const loadSessions = async () => {
+  const loadSessions = useCallback(async () => {
     try {
       setLoading(true);
       const data = await adminApi.getSessions(page, pageSize);
@@ -28,7 +24,11 @@ export const Conversations = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [page]);
+
+  useEffect(() => {
+    void loadSessions();
+  }, [loadSessions]);
 
   const handleDelete = async (e: React.MouseEvent, session: SessionItem) => {
     e.stopPropagation();

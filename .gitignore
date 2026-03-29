@@ -60,3 +60,33 @@ admin-frontend/.env
 # Compiled frontend assets
 admin-frontend/dist/
 frontend/dist/
+
+# Local agent / IDE workspace files
+.trae/
+.claude/
+skills-lock.json
+
+# Local planning / development docs
+docs/plans/
+情感计算优化.md
+
+# Local packages / deployment bundles
+*.skill
+*.tar.gz
+*.tgz
+*.zip
+
+# Python test / cache artifacts
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage/
+
+# General temp / cache files
+.cache/
+tmp/
+temp/
+*.pid

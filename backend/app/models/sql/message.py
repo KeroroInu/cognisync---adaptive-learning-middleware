@@ -1,15 +1,22 @@
 """
 ChatMessage Model - 聊天消息表
 """
+from __future__ import annotations
+
 import uuid
 import enum
 from datetime import datetime, timezone
-from typing import Optional, Dict, Any
-from sqlalchemy import String, Text, ForeignKey, Enum, Index
+from typing import Optional, Dict, Any, TYPE_CHECKING
+from sqlalchemy import Text, ForeignKey, Enum, Index
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID, TIMESTAMP, JSONB
 
 from app.models.sql.base import Base, UUIDMixin
+
+if TYPE_CHECKING:
+    from app.models.sql.chat_session import ChatSession
+    from app.models.sql.emotion_log import EmotionLog
+    from app.models.sql.user import User
 
 
 class MessageRole(str, enum.Enum):
@@ -35,6 +42,14 @@ class ChatMessage(Base, UUIDMixin):
         nullable=False,
         index=True,
         comment="用户 ID（外键）"
+    )
+
+    session_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("chat_sessions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="会话 ID（外键）"
     )
 
     role: Mapped[MessageRole] = mapped_column(
@@ -64,11 +79,27 @@ class ChatMessage(Base, UUIDMixin):
     )
 
     # 关系
-    user: Mapped["User"] = relationship(
+    user: Mapped[User] = relationship(
         "User",
         back_populates="messages",
         lazy="selectin"
     )
 
+    session: Mapped[Optional[ChatSession]] = relationship(
+        "ChatSession",
+        back_populates="messages",
+        lazy="selectin"
+    )
+
+    emotion_logs: Mapped[list[EmotionLog]] = relationship(
+        "EmotionLog",
+        back_populates="message",
+        cascade="all, delete-orphan",
+        lazy="selectin"
+    )
+
     def __repr__(self) -> str:
-        return f"<ChatMessage(id={self.id}, role={self.role}, user_id={self.user_id})>"
+        return (
+            f"<ChatMessage(id={self.id}, role={self.role}, user_id={self.user_id}, "
+            f"session_id={self.session_id})>"
+        )

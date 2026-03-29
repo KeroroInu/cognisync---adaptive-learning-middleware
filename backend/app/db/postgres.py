@@ -66,6 +66,12 @@ async def init_db():
         # 迁移：为 scale_templates 添加 activated_at 列
         await _migrate_scale_activated_at()
 
+        # 迁移：为 chat_messages 添加 session_id 关联
+        await _migrate_chat_message_session_link()
+
+        # 迁移：为 emotion_logs.created_at 添加时间窗口统计索引
+        await _migrate_emotion_log_created_index()
+
         # 打印已创建的表
         async with engine.begin() as conn:
             def get_table_names(sync_conn):
@@ -239,6 +245,65 @@ async def _migrate_scale_activated_at():
     await run_sql(
         "ALTER TABLE scale_templates ADD COLUMN IF NOT EXISTS activated_at TIMESTAMP WITH TIME ZONE;",
         "ADD COLUMN activated_at to scale_templates"
+    )
+
+
+async def _migrate_chat_message_session_link():
+    """幂等迁移：为 chat_messages 添加 session_id 列与索引"""
+    from sqlalchemy import text
+
+    async def run_sql(sql: str, label: str):
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(text(sql))
+            logger.info(f"  ✅ {label}")
+        except Exception as e:
+            logger.warning(f"  ⚠️ {label} (skipped): {e}")
+
+    await run_sql(
+        "ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS session_id UUID;",
+        "ADD COLUMN session_id to chat_messages"
+    )
+
+    await run_sql(
+        """
+        DO $$
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1
+                FROM pg_constraint
+                WHERE conname = 'fk_chat_messages_session_id_chat_sessions'
+            ) THEN
+                ALTER TABLE chat_messages
+                ADD CONSTRAINT fk_chat_messages_session_id_chat_sessions
+                FOREIGN KEY (session_id) REFERENCES chat_sessions(id) ON DELETE SET NULL;
+            END IF;
+        END $$;
+        """,
+        "ADD FOREIGN KEY chat_messages.session_id -> chat_sessions.id"
+    )
+
+    await run_sql(
+        "CREATE INDEX IF NOT EXISTS ix_chat_messages_session_timestamp ON chat_messages (session_id, timestamp);",
+        "CREATE INDEX chat_messages(session_id, timestamp)"
+    )
+
+
+async def _migrate_emotion_log_created_index():
+    """幂等迁移：为 emotion_logs.created_at 添加索引"""
+    from sqlalchemy import text
+
+    async def run_sql(sql: str, label: str):
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(text(sql))
+            logger.info(f"  ✅ {label}")
+        except Exception as e:
+            logger.warning(f"  ⚠️ {label} (skipped): {e}")
+
+    await run_sql(
+        "CREATE INDEX IF NOT EXISTS ix_emotion_logs_created_at ON emotion_logs (created_at);",
+        "CREATE INDEX emotion_logs(created_at)"
     )
 
 

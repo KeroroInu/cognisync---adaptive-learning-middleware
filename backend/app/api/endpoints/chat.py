@@ -10,9 +10,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.postgres import get_db
 from app.schemas.base import SuccessResponse
-from app.schemas.chat import ChatRequest, ChatResponse, ChatMessage as ChatMessageSchema
+from app.schemas.chat import ChatRequest, ChatResponse
 from app.services.profile_service import ProfileService
 from app.services.graph_service import GraphService
+from app.services.emotion_log_service import record_emotion_log
 from app.services.text_analyzer import TextAnalyzer
 from app.services.llm_config import get_chat_provider
 from app.models.sql.message import ChatMessage, MessageRole
@@ -274,7 +275,7 @@ async def get_greeting(
             return {"success": True, "data": {"message": msg, "hasContext": False}}
 
         # 有跨会话上下文 - 让 LLM 生成个性化问候（带用户名）
-        llm = get_provider()
+        llm = get_chat_provider()
         system = (
             f"你是一个温暖的学习伙伴。根据上次会话的内容，用一句简短友好的话问候回来的用户{name_part}，自然地提及上次的话题。不超过50个字。"
             if language == "zh"
@@ -452,13 +453,20 @@ async def chat(
 
         logger.info(f"User identified: {user.email} (id={user_id})")
 
+        if request.userId and request.userId != str(user_id):
+            raise HTTPException(
+                status_code=403,
+                detail="Authenticated user does not match request.userId"
+            )
+
         # 创建/获取活跃会话（供管理后台 Conversations 页面使用）
         profile_service = ProfileService(db)
-        await get_or_create_active_session(db, user_id)
+        active_session = await get_or_create_active_session(db, user_id)
 
         # ========== 2. 保存用户消息 ==========
         user_message = ChatMessage(
             user_id=user_id,
+            session_id=active_session.id,
             role=MessageRole.USER,
             text=request.message,
             timestamp=datetime.now(timezone.utc),
@@ -475,10 +483,12 @@ async def chat(
 
         # 获取对话历史作为上下文
         recent_messages = await get_recent_messages(db, user_id, limit=5)
+        current_profile = await profile_service.get_profile(user_id)
 
         analysis = await analyzer.analyze(
             user_message=request.message,
-            recent_messages=recent_messages
+            recent_messages=recent_messages,
+            current_profile=current_profile,
         )
 
         logger.info(
@@ -497,6 +507,21 @@ async def chat(
         logger.info(
             f"Profile updated: C={updated_profile.cognition}, "
             f"A={updated_profile.affect}, B={updated_profile.behavior}"
+        )
+
+        emotion_log = await record_emotion_log(
+            db=db,
+            user_id=user_id,
+            session_id=active_session.id,
+            message_id=user_message.id,
+            analysis=analysis,
+            current_profile=current_profile,
+        )
+        await db.commit()
+        await db.refresh(emotion_log)
+
+        logger.info(
+            f"Emotion log saved: {emotion_log.id} (code={emotion_log.emotion_code}, session={active_session.id})"
         )
 
         # ========== 5. 更新知识图谱 ==========
@@ -590,7 +615,6 @@ async def chat(
         # 调用 LLM 生成回复（30 秒超时，失败自动重试一次）
         import asyncio
         llm_provider = get_chat_provider()
-        last_llm_error: Exception | None = None
         assistant_reply = ""
         for attempt in range(2):
             try:
@@ -605,7 +629,6 @@ async def chat(
                 )
                 break
             except (asyncio.TimeoutError, Exception) as llm_err:
-                last_llm_error = llm_err
                 logger.warning(f"LLM attempt {attempt + 1} failed: {llm_err}")
                 if attempt == 0:
                     await asyncio.sleep(1)
@@ -617,6 +640,7 @@ async def chat(
         # ========== 7. 保存 AI 回复 ==========
         assistant_message = ChatMessage(
             user_id=user_id,
+            session_id=active_session.id,
             role=MessageRole.ASSISTANT,
             text=assistant_reply,
             timestamp=datetime.now(timezone.utc),
@@ -648,6 +672,9 @@ async def chat(
 
         return SuccessResponse(data=response)
 
+    except HTTPException:
+        await db.rollback()
+        raise
     except Exception as e:
         logger.error(f"Chat endpoint failed: {e}", exc_info=True)
         await db.rollback()

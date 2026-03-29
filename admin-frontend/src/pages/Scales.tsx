@@ -4,10 +4,8 @@ import { adminApi } from '../lib/adminApi';
 import type { ScaleTemplate, ScaleResponse } from '../types';
 import {
   Upload, CheckCircle, Archive, Eye, Trash2, Download, X, Loader,
-  ChevronDown, ChevronRight, Plus, Pencil, GripVertical,
+  ChevronDown, ChevronRight, Plus, Pencil,
 } from 'lucide-react';
-
-const ADMIN_KEY = (import.meta.env.VITE_ADMIN_KEY as string) || '';
 
 const normalizeStatus = (s: string) => s.toLowerCase();
 
@@ -96,6 +94,22 @@ interface BuilderQ {
   reverse_scored: boolean;
 }
 
+interface SchemaQuestion {
+  id: string;
+  text?: string;
+}
+
+interface ScaleSchemaShape {
+  items?: SchemaQuestion[];
+  questions?: SchemaQuestion[];
+}
+
+interface UploadedScalePreview {
+  name?: string;
+  schema_json?: ScaleSchemaShape;
+  [key: string]: unknown;
+}
+
 const PRESET_DIMS = ['CT', 'SE', 'LM', 'CPS', 'PA', 'AIL'];
 const PORTRAIT_DIMS = ['cognition', 'affect', 'behavior'] as const;
 const PORTRAIT_LABELS: Record<string, string> = {
@@ -112,7 +126,7 @@ export const Scales = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
   const [uploading, setUploading] = useState(false);
-  const [previewData, setPreviewData] = useState<Record<string, unknown> | null>(null);
+  const [previewData, setPreviewData] = useState<UploadedScalePreview | null>(null);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadError, setUploadError] = useState('');
@@ -162,14 +176,19 @@ export const Scales = () => {
   };
 
   // ── Upload handlers ────────────────────────────────────────────────────────
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  const getSchemaQuestions = (schema: unknown): SchemaQuestion[] => {
+    if (!schema || typeof schema !== 'object') return [];
+    const { items, questions } = schema as ScaleSchemaShape;
+    return items ?? questions ?? [];
+  };
+
+  const handleSelectedFile = (file: File) => {
     if (!file) return;
     setUploadError('');
     file.text().then(content => {
       try {
-        const json = JSON.parse(content);
-        if (!json.name || !json.schema_json?.questions) {
+        const json = JSON.parse(content) as UploadedScalePreview;
+        if (!json.name || getSchemaQuestions(json.schema_json).length === 0) {
           setUploadError('JSON 格式错误：缺少 name 或 schema_json.questions 字段');
           return;
         }
@@ -179,6 +198,13 @@ export const Scales = () => {
         setUploadError('文件解析失败，请确认是合法的 JSON 文件');
       }
     });
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      handleSelectedFile(file);
+    }
     e.target.value = '';
   };
 
@@ -248,7 +274,7 @@ export const Scales = () => {
   const openExportModal = (scale: ScaleTemplate, responses: ScaleResponse[]) => {
     const answerKeys = responses.length > 0
       ? Object.keys(responses[0].answers_json as Record<string, unknown>).sort() : [];
-    const schemaItems = ((scale.schema_json as any)?.items ?? (scale.schema_json as any)?.questions ?? []) as Array<{ id: string; text?: string }>;
+    const schemaItems = getSchemaQuestions(scale.schema_json);
     const questionCols = answerKeys.map((k, i) => {
       const q = schemaItems.find(q => q.id === k);
       return { key: k, label: q?.text ? q.text : `Q${i + 1}` };
@@ -458,7 +484,7 @@ export const Scales = () => {
                   onDrop={e => {
                     e.preventDefault();
                     const file = e.dataTransfer.files[0];
-                    if (file) handleFileSelect({ target: { files: [file], value: '' } } as any);
+                    if (file) handleSelectedFile(file);
                   }}
                 >
                   <Upload size={40} className="mx-auto mb-3 text-indigo-500" />
@@ -482,7 +508,7 @@ export const Scales = () => {
                     <div>
                       <p className="text-sm font-semibold mb-1.5" style={{ color: 'var(--text-secondary)' }}>
                         量表名称：<span style={{ color: 'var(--text-primary)' }}>{previewData.name as string}</span>
-                        &nbsp;·&nbsp;共 {((previewData.schema_json as any)?.questions?.length ?? 0)} 题
+                        &nbsp;·&nbsp;共 {getSchemaQuestions(previewData.schema_json).length} 题
                       </p>
                       <pre className="p-3 rounded-xl text-xs overflow-auto max-h-52"
                         style={{ background: 'var(--bg-tertiary)', color: 'var(--text-secondary)' }}>
@@ -946,7 +972,7 @@ export const Scales = () => {
                         {STATUS_LABEL[status] ?? status}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">{(scale as any).responses_count ?? 0} 份</td>
+                    <td className="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">{scale.responses_count ?? 0} 份</td>
                     <td className="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">
                       {new Date(scale.created_at).toLocaleDateString('zh-CN')}
                     </td>

@@ -6,6 +6,20 @@ from pydantic import BaseModel, Field
 from app.schemas.profile import UserProfile, ProfileDelta
 
 
+class EmotionDetail(BaseModel):
+    """
+    详细情感结果（13 种情感 × 3 级强度）
+    """
+    code: str = Field(..., description="情感编码: E01-E13")
+    name: str = Field(..., description="情感名称")
+    intensity: Literal["low", "medium", "high"] = Field(..., description="强度等级")
+    legacyEmotion: str = Field(..., description="兼容旧前端的简化情感值")
+    confidence: float = Field(default=0.5, ge=0.0, le=1.0, description="情感识别置信度")
+    arousal: float = Field(default=0.0, ge=-1.0, le=1.0, description="唤醒度 [-1, 1]")
+    valence: float = Field(default=0.0, ge=-1.0, le=1.0, description="效价 [-1, 1]")
+    evidence: List[str] = Field(default_factory=list, description="支持情感判断的文本证据")
+
+
 class ChatAnalysis(BaseModel):
     """
     对话分析结果（与前端 ChatMessage.analysis 完全一致）
@@ -26,6 +40,10 @@ class ChatAnalysis(BaseModel):
         ...,
         description="对画像的增量影响"
     )
+    emotionDetail: Optional[EmotionDetail] = Field(
+        default=None,
+        description="详细情感结果（13 种情感 × 3 级强度）"
+    )
 
     class Config:
         json_schema_extra = {
@@ -33,14 +51,27 @@ class ChatAnalysis(BaseModel):
                 "intent": "help-seeking",
                 "emotion": "confused",
                 "detectedConcepts": ["反向传播", "梯度下降"],
-                "delta": {"cognition": -5, "affect": -10, "behavior": 5}
+                "delta": {"cognition": -5, "affect": -10, "behavior": 5},
+                "emotionDetail": {
+                    "code": "E01",
+                    "name": "confused",
+                    "intensity": "high",
+                    "legacyEmotion": "confused",
+                    "confidence": 0.86,
+                    "arousal": 0.35,
+                    "valence": -0.55,
+                    "evidence": ["还是不太理解", "能再解释一下吗"]
+                }
             }
         }
 
 
 class ChatRequest(BaseModel):
     """聊天请求"""
-    userId: str = Field(..., description="用户 ID")
+    userId: Optional[str] = Field(
+        default=None,
+        description="用户 ID（兼容旧请求体；服务端以 JWT 当前用户为准）"
+    )
     message: str = Field(..., min_length=1, description="用户消息内容")
     language: Optional[Literal["zh", "en"]] = Field(
         default="zh",
@@ -62,7 +93,6 @@ class ChatRequest(BaseModel):
     class Config:
         json_schema_extra = {
             "example": {
-                "userId": "user123",
                 "message": "我对反向传播还是不太理解",
                 "language": "zh",
                 "isResearchMode": False
@@ -88,7 +118,17 @@ class ChatResponse(BaseModel):
                     "intent": "help-seeking",
                     "emotion": "confused",
                     "detectedConcepts": ["反向传播"],
-                    "delta": {"cognition": -5, "affect": -10, "behavior": 5}
+                    "delta": {"cognition": -5, "affect": -10, "behavior": 5},
+                    "emotionDetail": {
+                        "code": "E01",
+                        "name": "confused",
+                        "intensity": "high",
+                        "legacyEmotion": "confused",
+                        "confidence": 0.86,
+                        "arousal": 0.35,
+                        "valence": -0.55,
+                        "evidence": ["还是不太理解"]
+                    }
                 },
                 "updatedProfile": {
                     "cognition": 60,

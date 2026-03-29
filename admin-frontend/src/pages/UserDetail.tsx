@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { adminApi } from '../lib/adminApi';
 import type {
@@ -122,9 +122,7 @@ export const UserDetail = () => {
   const [expandedScales, setExpandedScales] = useState<Set<string>>(new Set());
   const [exporting, setExporting] = useState<string | null>(null);
 
-  useEffect(() => { if (userId) loadData(); }, [userId]);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     if (!userId) return;
     try {
       setLoading(true);
@@ -148,7 +146,13 @@ export const UserDetail = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [userId]);
+
+  useEffect(() => {
+    if (userId) {
+      void loadData();
+    }
+  }, [userId, loadData]);
 
   const toggleScale = (id: string) => {
     setExpandedScales(prev => {

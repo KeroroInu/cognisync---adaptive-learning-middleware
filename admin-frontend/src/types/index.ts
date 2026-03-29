@@ -251,3 +251,141 @@ export interface LlmConfig {
   chat: LlmRoleConfig;
 }
 
+export interface EmotionExperimentRow {
+  rowIndex: number;
+  profileKey: string;
+  conversationId: string;
+  speaker: string | null;
+  text: string;
+  expectedLabel: string | null;
+  expectedLabels: string[];
+  expectedMatches: boolean | null;
+  intent: string;
+  emotion: string;
+  emotionCode: string;
+  emotionName: string;
+  intensity: 'low' | 'medium' | 'high';
+  confidence: number;
+  arousal: number;
+  valence: number;
+  deltaCognition: number;
+  deltaAffect: number;
+  deltaBehavior: number;
+  profileCognitionBefore: number;
+  profileAffectBefore: number;
+  profileBehaviorBefore: number;
+  profileCognitionAfter: number;
+  profileAffectAfter: number;
+  profileBehaviorAfter: number;
+}
+
+export interface EmotionExperimentSummary {
+  rowsProcessed: number;
+  rowsSkipped: number;
+  analyzedRows: number;
+  comparedRows: number;
+  matchedRows: number;
+  uniqueProfiles: number;
+  uniqueConversations: number;
+}
+
+export interface EmotionExperimentResult {
+  experimentId?: string | null;
+  fileName: string;
+  detectedColumns: string[];
+  labelMapping: Record<string, string[]>;
+  previewRows: EmotionExperimentRow[];
+  summary: EmotionExperimentSummary;
+  csvContent: string;
+}
+
+export interface EmotionExperimentRunItem {
+  id: string;
+  originalFilename: string;
+  outputFilename: string;
+  textColumn: string;
+  conversationIdColumn: string | null;
+  speakerColumn: string | null;
+  expectedLabelColumn: string | null;
+  profileKeyColumn: string | null;
+  labelMapping: Record<string, string[]>;
+  summary: EmotionExperimentSummary;
+  createdAt: string;
+}
+
+export interface EmotionExperimentRunsResponse {
+  runs: EmotionExperimentRunItem[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface EmotionDistributionItem {
+  legacyEmotion: string;
+  emotionCode: string;
+  emotionName: string;
+  intensity: 'low' | 'medium' | 'high';
+  count: number;
+  percentage: number;
+  avgConfidence: number;
+}
+
+export interface EmotionDistributionResponse {
+  totalLogs: number;
+  items: EmotionDistributionItem[];
+}
+
+export interface EmotionTrendPoint {
+  date: string;
+  totalCount: number;
+  averageConfidence: number;
+  averageValence: number;
+  averageArousal: number;
+  emotionCounts: Record<string, number>;
+}
+
+export interface EmotionTrendResponse {
+  days: number;
+  points: EmotionTrendPoint[];
+}
+
+export interface EmotionUserSummary {
+  userId: string;
+  studentId: string;
+  name: string;
+  totalLogs: number;
+  lastAnalyzedAt: string | null;
+  latestEmotionCode: string | null;
+  latestEmotionName: string | null;
+  currentCognition: number | null;
+  currentAffect: number | null;
+  currentBehavior: number | null;
+}
+
+export interface EmotionUserLogItem {
+  id: string;
+  createdAt: string;
+  sessionId: string | null;
+  messageId: string;
+  intent: string;
+  emotion: string;
+  emotionCode: string;
+  emotionName: string;
+  intensity: 'low' | 'medium' | 'high';
+  confidence: number;
+  arousal: number;
+  valence: number;
+  detectedConcepts: string[];
+  evidence: string[];
+  deltaCognition: number;
+  deltaAffect: number;
+  deltaBehavior: number;
+  profileCognition: number | null;
+  profileAffect: number | null;
+  profileBehavior: number | null;
+}
+
+export interface EmotionUserDetailResponse {
+  summary: EmotionUserSummary;
+  logs: EmotionUserLogItem[];
+}

@@ -18,21 +18,29 @@ import type {
   UserGraph,
   ResearchTask,
   ResearchTasksResponse,
-  ResearchTaskSubmission,
   ResearchSubmissionsResponse,
   LlmConfig,
   LlmRoleConfig,
+  EmotionExperimentResult,
+  EmotionExperimentRunsResponse,
+  EmotionDistributionResponse,
+  EmotionTrendResponse,
+  EmotionUserDetailResponse,
 } from '../types';
 
 const BASE_URL = (import.meta.env.VITE_API_BASE_URL as string) || 'http://localhost:8000/api';
 
 class AdminApiClient {
-  private getAuthHeaders(): Record<string, string> {
+  private getAuthHeaders(includeJsonContentType: boolean = true): Record<string, string> {
     const token = localStorage.getItem('auth_token') || '';
-    return {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    };
+    return includeJsonContentType
+      ? {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        }
+      : {
+          'Authorization': `Bearer ${token}`,
+        };
   }
 
   private async request<T>(
@@ -40,8 +48,9 @@ class AdminApiClient {
     options: RequestInit = {}
   ): Promise<T> {
     const url = `${BASE_URL}/admin${endpoint}`;
+    const isFormData = options.body instanceof FormData;
     const headers = {
-      ...this.getAuthHeaders(),
+      ...this.getAuthHeaders(!isFormData),
       ...options.headers,
     };
 
@@ -50,7 +59,11 @@ class AdminApiClient {
       
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || `HTTP ${response.status}: ${response.statusText}`);
+        throw new Error(
+          errorData.message ||
+          errorData.detail ||
+          `HTTP ${response.status}: ${response.statusText}`
+        );
       }
 
       const data: ApiResponse<T> = await response.json();
@@ -310,6 +323,70 @@ class AdminApiClient {
       method: 'PUT',
       body: JSON.stringify({ role, config }),
     });
+  }
+
+  async analyzeEmotionExperimentCsv(data: {
+    file: File;
+    textColumn: string;
+    conversationIdColumn?: string;
+    speakerColumn?: string;
+    expectedLabelColumn?: string;
+    expectedLabelColumnsJson?: string;
+    positiveLabelValue?: string;
+    profileKeyColumn?: string;
+    labelMappingJson?: string;
+    previewLimit?: number;
+  }): Promise<EmotionExperimentResult> {
+    const formData = new FormData();
+    formData.append('file', data.file);
+    formData.append('text_column', data.textColumn);
+    if (data.conversationIdColumn) formData.append('conversation_id_column', data.conversationIdColumn);
+    if (data.speakerColumn) formData.append('speaker_column', data.speakerColumn);
+    if (data.expectedLabelColumn) formData.append('expected_label_column', data.expectedLabelColumn);
+    if (data.expectedLabelColumnsJson) formData.append('expected_label_columns_json', data.expectedLabelColumnsJson);
+    if (data.positiveLabelValue) formData.append('positive_label_value', data.positiveLabelValue);
+    if (data.profileKeyColumn) formData.append('profile_key_column', data.profileKeyColumn);
+    if (data.labelMappingJson) formData.append('label_mapping_json', data.labelMappingJson);
+    if (typeof data.previewLimit === 'number') formData.append('preview_limit', String(data.previewLimit));
+
+    return this.request<EmotionExperimentResult>('/research/emotion-experiments/analyze-csv', {
+      method: 'POST',
+      body: formData,
+    });
+  }
+
+  async getEmotionExperimentRuns(limit: number = 20, offset: number = 0): Promise<EmotionExperimentRunsResponse> {
+    const params = new URLSearchParams({
+      limit: String(limit),
+      offset: String(offset),
+    });
+    return this.request<EmotionExperimentRunsResponse>(`/research/emotion-experiments/runs?${params}`);
+  }
+
+  async getEmotionExperimentRunDetail(runId: string): Promise<EmotionExperimentResult> {
+    return this.request<EmotionExperimentResult>(`/research/emotion-experiments/runs/${runId}`);
+  }
+
+  async getEmotionDistribution(days: number = 30, limit: number = 20): Promise<EmotionDistributionResponse> {
+    const params = new URLSearchParams({
+      days: String(days),
+      limit: String(limit),
+    });
+    return this.request<EmotionDistributionResponse>(`/analytics/emotion?${params}`);
+  }
+
+  async getEmotionTrends(days: number = 14): Promise<EmotionTrendResponse> {
+    const params = new URLSearchParams({
+      days: String(days),
+    });
+    return this.request<EmotionTrendResponse>(`/analytics/emotion/trends?${params}`);
+  }
+
+  async getEmotionUserDetail(userId: string, limit: number = 50): Promise<EmotionUserDetailResponse> {
+    const params = new URLSearchParams({
+      limit: String(limit),
+    });
+    return this.request<EmotionUserDetailResponse>(`/analytics/emotion/users/${userId}?${params}`);
   }
 }
 

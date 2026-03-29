@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, MessageSquare, User, Calendar, Clock } from 'lucide-react';
 import { adminApi } from '../lib/adminApi';
@@ -12,13 +12,7 @@ export const ConversationDetail = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
 
-  useEffect(() => {
-    if (sessionId) {
-      loadSessionData();
-    }
-  }, [sessionId]);
-
-  const loadSessionData = async () => {
+  const loadSessionData = useCallback(async () => {
     if (!sessionId) return;
 
     try {
@@ -39,7 +33,13 @@ export const ConversationDetail = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [sessionId]);
+
+  useEffect(() => {
+    if (sessionId) {
+      void loadSessionData();
+    }
+  }, [sessionId, loadSessionData]);
 
   if (loading) {
     return (

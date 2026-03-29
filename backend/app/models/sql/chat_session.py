@@ -1,13 +1,21 @@
 """
 ChatSession Model - 会话表
 """
+from __future__ import annotations
+
 import uuid
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING
 from sqlalchemy import ForeignKey, Index
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID, TIMESTAMP
 
 from app.models.sql.base import Base, UUIDMixin
+
+if TYPE_CHECKING:
+    from app.models.sql.emotion_log import EmotionLog
+    from app.models.sql.message import ChatMessage
+    from app.models.sql.user import User
 
 
 class ChatSession(Base, UUIDMixin):
@@ -37,9 +45,21 @@ class ChatSession(Base, UUIDMixin):
     )
 
     # 关系
-    user: Mapped["User"] = relationship(
+    user: Mapped[User] = relationship(
         "User",
         back_populates="sessions",
+        lazy="selectin"
+    )
+
+    messages: Mapped[list[ChatMessage]] = relationship(
+        "ChatMessage",
+        back_populates="session",
+        lazy="selectin"
+    )
+
+    emotion_logs: Mapped[list[EmotionLog]] = relationship(
+        "EmotionLog",
+        back_populates="session",
         lazy="selectin"
     )
 

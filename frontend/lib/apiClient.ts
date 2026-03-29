@@ -20,7 +20,7 @@ export interface ApiResponse<T = any> {
 }
 
 // 请求配置
-export interface RequestConfig extends Omit<RequestInit, 'body'> {
+export interface RequestConfig extends RequestInit {
   skipAuth?: boolean; // 是否跳过自动添加 Authorization 头
   skipErrorHandling?: boolean; // 是否跳过统一错误处理
 }
@@ -54,22 +54,27 @@ async function request<T = any>(
   const url = endpoint.startsWith('http') ? endpoint : `${BASE_URL}${endpoint}`;
 
   // 构建请求头
-  const headers: HeadersInit = {
-    'Content-Type': 'application/json',
-    ...(fetchConfig.headers || {}),
-  };
+  const headers = new Headers(fetchConfig.headers);
+  if (!headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
 
   // 自动添加 Authorization 头
   if (!skipAuth) {
     const token = tokenStorage.getToken();
     if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
+      headers.set('Authorization', `Bearer ${token}`);
     }
+  }
+
+  const sanitizedHeaders = Object.fromEntries(headers.entries());
+  if (sanitizedHeaders.authorization) {
+    sanitizedHeaders.authorization = '***';
   }
 
   // 调试日志
   console.log(`[API] ${fetchConfig.method || 'GET'} ${url}`, {
-    headers: { ...headers, Authorization: headers.Authorization ? '***' : undefined },
+    headers: sanitizedHeaders,
     body: fetchConfig.body ? '(hidden)' : undefined
   });
 

@@ -1,15 +1,15 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { FlaskConical, Plus, Play, Archive, Trash2, Users, ChevronDown, ChevronUp, Loader, Upload, X, CheckCircle, Download, Pencil } from 'lucide-react';
+import { Plus, Archive, Trash2, Users, ChevronDown, ChevronUp, Loader, Upload, X, CheckCircle, Download, Pencil } from 'lucide-react';
 import { adminApi } from '../lib/adminApi';
 import type { ResearchTask, ResearchTaskSubmission } from '../types';
 
 // ── CSV helpers ──────────────────────────────────────────────────────────────
 
-const normalizeIso = (iso: string): string =>
+export const normalizeIso = (iso: string): string =>
   /Z$|[+-]\d{2}:?\d{2}$/.test(iso) ? iso : iso + 'Z';
 
-const formatDate = (iso: string): string => {
+export const formatDate = (iso: string): string => {
   const d = new Date(normalizeIso(iso));
   if (isNaN(d.getTime())) return '';
   const pad = (n: number) => String(n).padStart(2, '0');

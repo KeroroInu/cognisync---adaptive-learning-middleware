@@ -2,379 +2,507 @@
 Text Analyzer - 文本分析服务
 使用 LLM 分析用户消息，提取意图、情感、概念和画像增量
 """
-import logging
 import json
+import logging
 import re
-from typing import Optional, List, Dict, Any
+from typing import Any, Dict, List, Optional
+
 from pydantic import BaseModel, Field, ValidationError
 
-from app.services.llm_provider import BaseProvider
+from app.schemas.chat import ChatAnalysis, EmotionDetail
+from app.schemas.profile import ProfileDelta, UserProfile
+from app.services.emotion_coding import (
+    VALID_LEGACY_EMOTIONS,
+    build_emotion_detail,
+    clamp_confidence,
+)
 from app.services.llm_config import get_analysis_provider
-from app.schemas.chat import ChatAnalysis
-from app.schemas.profile import ProfileDelta
+from app.services.llm_provider import BaseProvider
 
 logger = logging.getLogger(__name__)
 
-
-# 意图枚举（可扩展）
 VALID_INTENTS = {
-    "help-seeking",      # 寻求帮助
-    "goal-setting",      # 设定目标
-    "reflection",        # 反思总结
-    "chat",              # 闲聊
-    "exploration",       # 探索学习
-    "confirmation",      # 确认理解
-    "challenge",         # 质疑挑战
-    "application",       # 应用实践
-}
-
-# 情感枚举（基于 Plutchik 情感轮简化版）
-VALID_EMOTIONS = {
-    "confused",          # 困惑
-    "neutral",           # 中性
-    "frustrated",        # 沮丧
-    "curious",           # 好奇
-    "excited",           # 兴奋
-    "confident",         # 自信
-    "anxious",           # 焦虑
-    "satisfied",         # 满意
-    "motivated",         # 有动力
-    "thoughtful",        # 深思
+    "help-seeking",
+    "goal-setting",
+    "reflection",
+    "chat",
+    "exploration",
+    "confirmation",
+    "challenge",
+    "application",
 }
 
 
 class Evidence(BaseModel):
-    """证据结构（用于可解释性）"""
+    """证据结构"""
+
     spans: List[Dict[str, Any]] = Field(default_factory=list, description="文本片段标注")
     confidence: float = Field(ge=0.0, le=1.0, description="置信度 [0-1]")
 
 
+class EmotionDetailResult(BaseModel):
+    """模型返回的详细情感结构"""
+
+    code: Optional[str] = None
+    name: Optional[str] = None
+    intensity: Optional[str] = None
+    confidence: Optional[float] = None
+    arousal: Optional[float] = None
+    valence: Optional[float] = None
+    evidence: List[str] = Field(default_factory=list)
+
+
 class AnalysisResult(BaseModel):
-    """完整的分析结果（包含 evidence）"""
+    """完整分析结果"""
+
     intent: str
     emotion: str
     detectedConcepts: List[str]
     delta: ProfileDelta
     evidence: Evidence
+    emotionDetail: EmotionDetail
 
 
 class TextAnalyzer:
     """文本分析器"""
 
-    # System Prompt - 指导 LLM 返回结构化 JSON
-    SYSTEM_PROMPT = """你是一个教育心理学专家，负责分析学习者的对话消息。
+    SYSTEM_PROMPT = """你是一个教育心理学专家，负责分析学习者消息。
 
-请严格按照以下 JSON 格式输出分析结果（不要添加任何额外的文字说明）：
+你需要结合以下信息综合判断：
+1. 当前消息文本
+2. 最近对话上下文
+3. 学习者当前三维画像，尤其是 cognition 和 behavior
+
+请注意：
+- 低 cognition + 高 behavior 往往意味着“愿意学但还没理解”，优先考虑 confused 而不是单纯 anxious
+- 低 cognition + 低 behavior 且语言消极时，优先考虑 discouraged / overwhelmed / frustrated
+- 高 cognition + 高 behavior 且语言带有总结、确认、应用倾向时，优先考虑 confident / thoughtful / motivated
+- 保留旧 emotion 字段用于兼容，但详细结果必须写到 emotionDetail 中
+
+只输出 JSON，不要输出额外说明。格式如下：
 
 ```json
 {
-  "intent": "意图类型（从以下选择）: help-seeking | goal-setting | reflection | chat | exploration | confirmation | challenge | application",
-  "emotion": "情感状态（从以下选择）: confused | neutral | frustrated | curious | excited | confident | anxious | satisfied | motivated | thoughtful",
+  "intent": "help-seeking | goal-setting | reflection | chat | exploration | confirmation | challenge | application",
+  "emotion": "confused | neutral | frustrated | curious | excited | confident | anxious | satisfied | motivated | thoughtful",
+  "emotionDetail": {
+    "code": "E01-E13",
+    "name": "confused | curious | frustrated | anxious | encouraged | confident | excited | motivated | thoughtful | overwhelmed | discouraged | relieved | neutral",
+    "intensity": "low | medium | high",
+    "confidence": 0.85,
+    "arousal": -1 到 1,
+    "valence": -1 到 1,
+    "evidence": ["支持情感判断的简短证据1", "证据2"]
+  },
   "detectedConcepts": ["概念1", "概念2"],
   "delta": {
-    "cognition": 整数 [-10 到 +10]（认知维度变化：正数表示提升，负数表示困惑/退步）,
-    "affect": 整数 [-10 到 +10]（情感维度变化：正数表示积极情绪，负数表示消极情绪）,
-    "behavior": 整数 [-10 到 +10]（行为维度变化：正数表示主动参与，负数表示被动/逃避）
+    "cognition": 整数 [-10 到 10],
+    "affect": 整数 [-10 到 10],
+    "behavior": 整数 [-10 到 10]
   },
   "evidence": {
-    "spans": [{"text": "关键文本片段", "label": "标签", "start": 起始位置, "end": 结束位置}],
+    "spans": [{"text": "关键文本片段", "label": "标签", "start": 0, "end": 4}],
     "confidence": 0.85
   }
 }
 ```
-
-**分析维度说明：**
-
-1. **intent（意图）**：用户的主要意图是什么？
-   - help-seeking: 寻求帮助、不理解、请求解释
-   - exploration: 探索新知识、主动学习
-   - reflection: 反思总结、自我评估
-   - goal-setting: 设定学习目标、制定计划
-   - confirmation: 确认理解、验证认知
-   - challenge: 质疑观点、提出反驳
-   - application: 应用知识、实践操作
-   - chat: 闲聊、寒暄
-
-2. **emotion（情感）**：用户的情感状态？
-   - confused: 困惑、迷茫
-   - curious: 好奇、感兴趣
-   - frustrated: 沮丧、受挫
-   - excited: 兴奋、热情
-   - confident: 自信、笃定
-   - anxious: 焦虑、担忧
-   - neutral: 中性、平淡
-   - satisfied: 满意、满足
-   - motivated: 有动力、积极
-   - thoughtful: 深思、沉思
-
-3. **detectedConcepts（概念）**：提取消息中涉及的学科概念（如"神经网络"、"反向传播"等）
-
-4. **delta（画像增量）**：这条消息对学习者三维画像的影响
-   - cognition: 认知维度（理解程度、知识掌握）
-   - affect: 情感维度（学习情绪、动机状态）
-   - behavior: 行为维度（参与度、主动性）
-
-5. **evidence（证据）**：支持你分析结论的关键文本片段和置信度
-
-**重要：只输出 JSON，不要添加任何其他文字！**"""
+"""
 
     def __init__(self, provider: Optional[BaseProvider] = None):
-        """
-        初始化文本分析器
-
-        Args:
-            provider: LLM Provider（如不提供则使用默认配置）
-        """
         self.provider = provider or get_analysis_provider()
-        logger.info(f"TextAnalyzer initialized with provider: {type(self.provider).__name__}")
+        logger.info("TextAnalyzer initialized with provider: %s", type(self.provider).__name__)
 
     async def analyze(
         self,
         user_message: str,
         recent_messages: Optional[List[Dict[str, str]]] = None,
+        current_profile: Optional[UserProfile] = None,
     ) -> ChatAnalysis:
         """
         分析用户消息
-
-        Args:
-            user_message: 用户消息文本
-            recent_messages: 最近的对话历史（可选）[{"role": "user"|"assistant", "text": "..."}]
-
-        Returns:
-            ChatAnalysis 对象（符合前端契约）
         """
-        logger.info(f"Analyzing message: {user_message[:100]}...")
-
-        # 构建用户提示词（包含上下文）
-        user_prompt = self._build_user_prompt(user_message, recent_messages)
+        logger.info("Analyzing message: %s...", user_message[:100])
+        user_prompt = self._build_user_prompt(
+            user_message=user_message,
+            recent_messages=recent_messages,
+            current_profile=current_profile,
+        )
 
         try:
-            # 调用 LLM 分析
             llm_response = await self.provider.complete(
                 system_prompt=self.SYSTEM_PROMPT,
                 user_prompt=user_prompt,
-                temperature=0.3,  # 较低温度以获得更稳定的 JSON 输出
-                max_tokens=800,
+                temperature=0.3,
+                max_tokens=1000,
             )
-
-            # 解析 LLM 返回的 JSON
             analysis = self._parse_llm_response(llm_response)
-
+            chat_analysis = self._build_chat_analysis(analysis, current_profile=current_profile)
             logger.info(
-                f"LLM analysis successful: intent={analysis.intent}, "
-                f"emotion={analysis.emotion}, concepts={len(analysis.detectedConcepts)}"
+                "LLM analysis successful: intent=%s, emotion=%s, detail=%s",
+                chat_analysis.intent,
+                chat_analysis.emotion,
+                chat_analysis.emotionDetail.code if chat_analysis.emotionDetail else "none",
             )
-
-            # 转换为前端 Schema（去掉 evidence）
-            return ChatAnalysis(
-                intent=analysis.intent,
-                emotion=analysis.emotion,
-                detectedConcepts=analysis.detectedConcepts,
-                delta=analysis.delta,
+            return chat_analysis
+        except Exception as exc:
+            logger.warning("LLM analysis failed, falling back to rule-based: %s", exc)
+            fallback = self._fallback_rule_based(user_message)
+            analysis = AnalysisResult(
+                intent=fallback["intent"],
+                emotion=fallback["emotion"],
+                detectedConcepts=fallback["detectedConcepts"],
+                delta=ProfileDelta(**fallback["delta"]),
+                evidence=Evidence(spans=[], confidence=0.55),
+                emotionDetail=EmotionDetail(**fallback["emotionDetail"]),
             )
-
-        except Exception as e:
-            logger.warning(f"LLM analysis failed, falling back to rule-based: {e}")
-
-            # Fallback 到基于规则的分析
-            analysis = self._fallback_rule_based(user_message)
-
-            return ChatAnalysis(
-                intent=analysis["intent"],
-                emotion=analysis["emotion"],
-                detectedConcepts=analysis["detectedConcepts"],
-                delta=ProfileDelta(**analysis["delta"]),
-            )
+            return self._build_chat_analysis(analysis, current_profile=current_profile)
 
     def _build_user_prompt(
         self,
         user_message: str,
         recent_messages: Optional[List[Dict[str, str]]] = None,
+        current_profile: Optional[UserProfile] = None,
     ) -> str:
-        """构建用户提示词（包含上下文）"""
+        prompt_parts: List[str] = []
 
-        prompt_parts = []
+        if current_profile:
+            prompt_parts.append("**学习者当前画像：**")
+            prompt_parts.append(
+                f"cognition={current_profile.cognition}, affect={current_profile.affect}, behavior={current_profile.behavior}"
+            )
+            prompt_parts.append(
+                "请把 cognition 与 behavior 当作长期状态参考，不要直接照抄为情感标签。"
+            )
+            prompt_parts.append("")
 
-        # 添加对话历史（如果有）
-        if recent_messages and len(recent_messages) > 0:
-            prompt_parts.append("**对话历史：**")
-            for msg in recent_messages[-3:]:  # 只取最近 3 条
+        if recent_messages:
+            prompt_parts.append("**最近对话历史：**")
+            for msg in recent_messages[-4:]:
                 role = "用户" if msg["role"] == "user" else "助手"
                 prompt_parts.append(f"{role}: {msg['text']}")
             prompt_parts.append("")
 
-        # 添加当前消息
         prompt_parts.append("**当前消息（需要分析）：**")
         prompt_parts.append(user_message)
-
         return "\n".join(prompt_parts)
 
     def _parse_llm_response(self, llm_response: str) -> AnalysisResult:
-        """
-        解析 LLM 返回的 JSON
-
-        Args:
-            llm_response: LLM 返回的文本
-
-        Returns:
-            AnalysisResult 对象
-
-        Raises:
-            ValueError: 如果解析失败
-        """
-        # 提取 JSON（可能包含在 markdown 代码块中）
         json_text = self._extract_json(llm_response)
 
         try:
             data = json.loads(json_text)
-        except json.JSONDecodeError as e:
-            logger.error(f"JSON decode error: {e}\nRaw response: {llm_response}")
-            raise ValueError(f"Invalid JSON from LLM: {e}")
+        except json.JSONDecodeError as exc:
+            logger.error("JSON decode error: %s\nRaw response: %s", exc, llm_response)
+            raise ValueError(f"Invalid JSON from LLM: {exc}") from exc
 
-        # 验证和清洗数据
         data = self._validate_and_clean(data)
 
-        # 使用 Pydantic 验证
         try:
-            analysis = AnalysisResult(**data)
-            return analysis
-        except ValidationError as e:
-            logger.error(f"Pydantic validation error: {e}\nData: {data}")
-            raise ValueError(f"Invalid analysis structure: {e}")
+            return AnalysisResult(**data)
+        except ValidationError as exc:
+            logger.error("Pydantic validation error: %s\nData: %s", exc, data)
+            raise ValueError(f"Invalid analysis structure: {exc}") from exc
 
     def _extract_json(self, text: str) -> str:
-        """
-        从文本中提取 JSON（处理 markdown 代码块等情况）
-
-        Args:
-            text: 包含 JSON 的文本
-
-        Returns:
-            纯 JSON 字符串
-        """
-        # 尝试提取 markdown 代码块中的 JSON
         match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
         if match:
             return match.group(1)
 
-        # 尝试提取第一个 JSON 对象
         match = re.search(r"\{.*\}", text, re.DOTALL)
         if match:
             return match.group(0)
 
-        # 如果都失败，返回原文本
         return text.strip()
 
     def _validate_and_clean(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        验证和清洗 LLM 返回的数据
-
-        Args:
-            data: 原始数据字典
-
-        Returns:
-            清洗后的数据字典
-        """
-        # 验证必需字段
-        required_fields = ["intent", "emotion", "detectedConcepts", "delta"]
-        for field in required_fields:
+        for field in ["intent", "detectedConcepts", "delta"]:
             if field not in data:
                 raise ValueError(f"Missing required field: {field}")
 
-        # 验证 intent
         if data["intent"] not in VALID_INTENTS:
-            logger.warning(f"Invalid intent: {data['intent']}, defaulting to 'chat'")
+            logger.warning("Invalid intent: %s, defaulting to 'chat'", data["intent"])
             data["intent"] = "chat"
 
-        # 验证 emotion
-        if data["emotion"] not in VALID_EMOTIONS:
-            logger.warning(f"Invalid emotion: {data['emotion']}, defaulting to 'neutral'")
-            data["emotion"] = "neutral"
+        raw_emotion = str(data.get("emotion", "neutral")).strip().lower()
+        if raw_emotion not in VALID_LEGACY_EMOTIONS:
+            logger.warning("Invalid legacy emotion: %s, defaulting to 'neutral'", raw_emotion)
+            raw_emotion = "neutral"
 
-        # 确保 detectedConcepts 是列表
         if not isinstance(data["detectedConcepts"], list):
             data["detectedConcepts"] = []
+        data["detectedConcepts"] = [str(item) for item in data["detectedConcepts"] if str(item).strip()]
 
-        # 验证 delta
-        delta = data["delta"]
+        delta = data["delta"] if isinstance(data["delta"], dict) else {}
         for dim in ["cognition", "affect", "behavior"]:
-            if dim not in delta:
-                delta[dim] = 0
-            else:
-                # 限制范围在 [-10, +10]
-                delta[dim] = max(-10, min(10, int(delta[dim])))
+            try:
+                delta_value = int(delta.get(dim, 0))
+            except (TypeError, ValueError):
+                delta_value = 0
+            delta[dim] = max(-10, min(10, delta_value))
+        data["delta"] = delta
 
-        # 确保 evidence 存在
-        if "evidence" not in data:
-            data["evidence"] = {"spans": [], "confidence": 0.5}
+        evidence = data.get("evidence")
+        if not isinstance(evidence, dict):
+            evidence = {"spans": [], "confidence": 0.5}
+        if not isinstance(evidence.get("spans"), list):
+            evidence["spans"] = []
+        evidence["confidence"] = clamp_confidence(evidence.get("confidence"), default=0.5)
+        data["evidence"] = evidence
 
-        # 验证 evidence.confidence
-        if "confidence" not in data["evidence"]:
-            data["evidence"]["confidence"] = 0.5
-        else:
-            data["evidence"]["confidence"] = max(0.0, min(1.0, float(data["evidence"]["confidence"])))
+        raw_detail = data.get("emotionDetail")
+        if not isinstance(raw_detail, dict):
+            raw_detail = {}
 
+        detail_evidence = raw_detail.get("evidence")
+        if not isinstance(detail_evidence, list):
+            detail_evidence = self._extract_evidence_texts(evidence.get("spans", []))
+        detail_evidence = [str(item) for item in detail_evidence if str(item).strip()]
+
+        data["emotionDetail"] = build_emotion_detail(
+            code=raw_detail.get("code"),
+            name=raw_detail.get("name"),
+            legacy=raw_detail.get("legacyEmotion") or raw_emotion,
+            intensity=raw_detail.get("intensity"),
+            confidence=raw_detail.get("confidence", evidence["confidence"]),
+            arousal=raw_detail.get("arousal"),
+            valence=raw_detail.get("valence"),
+            evidence=detail_evidence,
+        )
+        data["emotion"] = data["emotionDetail"]["legacyEmotion"]
         return data
 
+    def _build_chat_analysis(
+        self,
+        analysis: AnalysisResult,
+        current_profile: Optional[UserProfile] = None,
+    ) -> ChatAnalysis:
+        chat_analysis = ChatAnalysis(
+            intent=analysis.intent,
+            emotion=analysis.emotion,
+            detectedConcepts=analysis.detectedConcepts,
+            delta=analysis.delta,
+            emotionDetail=analysis.emotionDetail,
+        )
+        return self._refine_with_profile_context(chat_analysis, current_profile=current_profile)
+
+    def _refine_with_profile_context(
+        self,
+        analysis: ChatAnalysis,
+        current_profile: Optional[UserProfile] = None,
+    ) -> ChatAnalysis:
+        if not current_profile or not analysis.emotionDetail:
+            return analysis
+
+        cognition = current_profile.cognition
+        behavior = current_profile.behavior
+        detail = analysis.emotionDetail
+        delta = analysis.delta.model_copy(deep=True)
+        evidence = list(detail.evidence)
+
+        if cognition <= 35 and behavior >= 60 and analysis.intent in {
+            "help-seeking",
+            "confirmation",
+            "exploration",
+        }:
+            evidence.append("画像提示：低认知但高行为参与")
+            refined_detail = EmotionDetail(
+                **build_emotion_detail(
+                    code="E01",
+                    intensity=self._promote_intensity(detail.intensity),
+                    confidence=max(detail.confidence, 0.7),
+                    evidence=evidence,
+                )
+            )
+            delta.cognition = min(delta.cognition, -2)
+            delta.behavior = max(delta.behavior, 3)
+            return ChatAnalysis(
+                intent=analysis.intent,
+                emotion=refined_detail.legacyEmotion,
+                detectedConcepts=analysis.detectedConcepts,
+                delta=delta,
+                emotionDetail=refined_detail,
+            )
+
+        if cognition <= 30 and behavior <= 40 and detail.code in {"E01", "E03", "E04", "E10", "E13"}:
+            evidence.append("画像提示：低认知且低行为参与")
+            refined_detail = EmotionDetail(
+                **build_emotion_detail(
+                    code="E11",
+                    intensity=self._promote_intensity(detail.intensity),
+                    confidence=max(detail.confidence, 0.65),
+                    evidence=evidence,
+                )
+            )
+            delta.affect = min(delta.affect, -4)
+            delta.behavior = min(delta.behavior, -3)
+            return ChatAnalysis(
+                intent=analysis.intent,
+                emotion=refined_detail.legacyEmotion,
+                detectedConcepts=analysis.detectedConcepts,
+                delta=delta,
+                emotionDetail=refined_detail,
+            )
+
+        if cognition >= 70 and behavior >= 65 and analysis.intent in {
+            "reflection",
+            "confirmation",
+            "application",
+        } and detail.code in {"E09", "E13", "E06"}:
+            evidence.append("画像提示：高认知且高行为参与")
+            refined_detail = EmotionDetail(
+                **build_emotion_detail(
+                    code="E06",
+                    intensity=self._promote_intensity(detail.intensity),
+                    confidence=max(detail.confidence, 0.72),
+                    evidence=evidence,
+                )
+            )
+            delta.cognition = max(delta.cognition, 2)
+            return ChatAnalysis(
+                intent=analysis.intent,
+                emotion=refined_detail.legacyEmotion,
+                detectedConcepts=analysis.detectedConcepts,
+                delta=delta,
+                emotionDetail=refined_detail,
+            )
+
+        if behavior >= 75 and analysis.intent in {"goal-setting", "exploration", "application"} and detail.code in {
+            "E02",
+            "E05",
+            "E07",
+            "E08",
+            "E13",
+        }:
+            evidence.append("画像提示：高行为参与")
+            refined_detail = EmotionDetail(
+                **build_emotion_detail(
+                    code="E08",
+                    intensity=self._promote_intensity(detail.intensity),
+                    confidence=max(detail.confidence, 0.68),
+                    evidence=evidence,
+                )
+            )
+            delta.behavior = max(delta.behavior, 4)
+            return ChatAnalysis(
+                intent=analysis.intent,
+                emotion=refined_detail.legacyEmotion,
+                detectedConcepts=analysis.detectedConcepts,
+                delta=delta,
+                emotionDetail=refined_detail,
+            )
+
+        return analysis
+
+    def _promote_intensity(self, intensity: str) -> str:
+        if intensity == "low":
+            return "medium"
+        if intensity == "medium":
+            return "high"
+        return "high"
+
+    def _extract_evidence_texts(self, spans: List[Dict[str, Any]]) -> List[str]:
+        evidence_texts = []
+        for span in spans:
+            if not isinstance(span, dict):
+                continue
+            text = str(span.get("text", "")).strip()
+            if text:
+                evidence_texts.append(text)
+        return evidence_texts[:3]
+
     def _fallback_rule_based(self, user_message: str) -> Dict[str, Any]:
-        """
-        基于规则的 Fallback 分析（当 LLM 失败时使用）
-
-        Args:
-            user_message: 用户消息
-
-        Returns:
-            分析结果字典
-        """
         logger.info("Using rule-based fallback analysis")
 
-        result = {
+        result: Dict[str, Any] = {
             "intent": "chat",
             "emotion": "neutral",
             "detectedConcepts": [],
             "delta": {"cognition": 0, "affect": 0, "behavior": 0},
+            "emotionDetail": build_emotion_detail(code="E13", intensity="medium", confidence=0.55),
         }
 
         message_lower = user_message.lower()
 
-        # 意图识别规则
         if any(word in message_lower for word in ["不懂", "不理解", "不会", "怎么", "为什么", "help", "?"]):
             result["intent"] = "help-seeking"
             result["emotion"] = "confused"
             result["delta"] = {"cognition": -5, "affect": -8, "behavior": 5}
-
-        elif any(word in message_lower for word in ["学习", "想学", "了解", "掌握", "learn", "study"]):
-            result["intent"] = "exploration"
-            result["emotion"] = "curious"
-            result["delta"] = {"cognition": 0, "affect": 5, "behavior": 10}
-
-        elif any(word in message_lower for word in ["我觉得", "我认为", "我的理解", "总结", "反思"]):
-            result["intent"] = "reflection"
-            result["emotion"] = "thoughtful"
-            result["delta"] = {"cognition": 5, "affect": 3, "behavior": 2}
-
+            result["emotionDetail"] = build_emotion_detail(
+                code="E01",
+                intensity="high",
+                confidence=0.7,
+                evidence=["不懂", "不理解", "怎么"],
+            )
         elif any(word in message_lower for word in ["目标", "计划", "打算", "准备", "goal", "plan"]):
             result["intent"] = "goal-setting"
             result["emotion"] = "motivated"
             result["delta"] = {"cognition": 2, "affect": 8, "behavior": 10}
-
+            result["emotionDetail"] = build_emotion_detail(
+                code="E08",
+                intensity="high",
+                confidence=0.68,
+                evidence=["目标", "计划", "准备"],
+            )
+        elif any(word in message_lower for word in ["学习", "想学", "了解", "掌握", "learn", "study"]):
+            result["intent"] = "exploration"
+            result["emotion"] = "curious"
+            result["delta"] = {"cognition": 0, "affect": 5, "behavior": 10}
+            result["emotionDetail"] = build_emotion_detail(
+                code="E02",
+                intensity="medium",
+                confidence=0.65,
+                evidence=["学习", "想学", "了解"],
+            )
+        elif any(word in message_lower for word in ["我觉得", "我认为", "我的理解", "总结", "反思"]):
+            result["intent"] = "reflection"
+            result["emotion"] = "thoughtful"
+            result["delta"] = {"cognition": 5, "affect": 3, "behavior": 2}
+            result["emotionDetail"] = build_emotion_detail(
+                code="E09",
+                intensity="medium",
+                confidence=0.65,
+                evidence=["我觉得", "我的理解"],
+            )
         elif any(word in message_lower for word in ["是不是", "对吗", "正确吗", "确认"]):
             result["intent"] = "confirmation"
             result["emotion"] = "anxious"
             result["delta"] = {"cognition": 1, "affect": -2, "behavior": 3}
+            result["emotionDetail"] = build_emotion_detail(
+                code="E04",
+                intensity="medium",
+                confidence=0.62,
+                evidence=["是不是", "对吗", "确认"],
+            )
 
-        # 概念检测（简单关键词匹配）
         concepts = [
-            "神经网络", "反向传播", "梯度下降", "激活函数", "过拟合", "欠拟合",
-            "深度学习", "机器学习", "卷积", "循环神经网络", "RNN", "CNN",
-            "注意力机制", "Transformer", "LSTM", "GRU", "Dropout", "Batch Normalization",
-            "优化器", "损失函数", "正则化", "数据增强", "迁移学习",
+            "神经网络",
+            "反向传播",
+            "梯度下降",
+            "激活函数",
+            "过拟合",
+            "欠拟合",
+            "深度学习",
+            "机器学习",
+            "卷积",
+            "循环神经网络",
+            "RNN",
+            "CNN",
+            "注意力机制",
+            "Transformer",
+            "LSTM",
+            "GRU",
+            "Dropout",
+            "Batch Normalization",
+            "优化器",
+            "损失函数",
+            "正则化",
+            "数据增强",
+            "迁移学习",
         ]
 
         detected = [concept for concept in concepts if concept in user_message]
         result["detectedConcepts"] = detected
 
-        # 如果检测到概念，调整认知维度
         if detected:
             result["delta"]["cognition"] += min(3, len(detected))
 

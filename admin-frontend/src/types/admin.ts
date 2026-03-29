@@ -25,7 +25,7 @@ export interface PaginationInfo {
 
 export interface TableData {
   table: string;
-  rows: Record<string, any>[];
+  rows: Record<string, unknown>[];
   pagination: PaginationInfo;
 }
 
