@@ -1,0 +1,21 @@
+text,,admiration,amusement,anger,annoyance,approval,caring,confusion,curiosity,desire,disappointment,disapproval,disgust,embarrassment,excitement,fear,gratitude,grief,joy,love,nervousness,optimism,pride,realization,relief,remorse,sadness,surprise,neutral,,LLM_Prediction,,
+Literally everywhere. There's nothing especially Texan about any of this. I heard all of this in freaking SCONSIN.,几乎到处都有。这其中没有任何特别的德克萨斯特色。我是在弗兰克林学院听到这一切的。,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,失望 (Disappointment),[C11],排斥厌恶,✅
+"[NAME] and [NAME] may be stronger, but [NAME] just gone mad. She's lost the plot for sure.",[姓名] 和 [姓名] 可能更强壮，但 [姓名] 则完全失去理智了。她肯定已经完全迷失了方向。,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,中性 (Neutral),[C04],挫败沮丧,❌
+Ik I’m crying rn,我现在正在哭泣。,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,悲哀/难过 (Sadness),[C04],挫败沮丧,✅
+"He was cut yesterday, unfortunately",他昨天受伤了，很不幸,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,中性 (Neutral),[C04],挫败沮丧,❌
+"Nice, I saw them during the Demo and was pretty impressed ",很好，我在演示过程中看到了它们，感觉非常惊艳。,0,1,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,"觉得有趣 (Amusement), 赞同 (Approval)",[C06],兴奋愉悦,✅
+Funny you ask,你这么问倒挺有意思的,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,觉得有趣 (Amusement),[C10],愤怒不耐,❌
+Minus the eyebrows I personally think it’s an attractive look. But the fucking eyebrows ruin it all.,除去眉毛的话，我个人觉得这造型还挺好看的。但那该死的眉毛却把整个效果都毁了。,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,"赞赏 (Admiration), 愤怒 (Anger)",[C11],排斥厌恶,✅
+[NAME] is 16 and [NAME] is 19... But she's looks 16 as [NAME] 0.0,8 [姓名] 16 岁，而[姓名] 19 岁……但她的样子看起来只有 16 岁，而[姓名] 的年龄却是 0 岁。,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,中性 (Neutral),[C02],困惑迟疑,✅
+J E S U S C H R I S T those eyes,耶稣基督 那双眼睛,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,中性 (Neutral),[C05],焦虑恐惧,✅
+my heart...,我的内心……,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,中性 (Neutral),[Neutral],中性,✅
+"Okay, gotcha. Does your wife have a lot of stress and anxiety from her job, or just in general?",好的，明白了。您妻子工作压力和焦虑情绪严重吗，还是只是日常生活中普遍如此？,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,中性 (Neutral),[C05],焦虑恐惧,❌
+Finally a whole season and 3 jornadas too late.,最终，整整一个赛季，而且比预定时间晚了 3 轮比赛,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,失望 (Disappointment),[C04],挫败沮丧,✅
+*pounces on you* uwu you’re so warm,*扑向你* 乌呜 你真是太温暖了,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,惊讶 (Surprise),[C09],赞赏亲近,✅
+"Higher ranking officer? Also, I'm curious, do MP have authority in scenarios like this?",级别更高的军官？另外，我很好奇，在这种情况下，宪兵队是否有权力采取行动？,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,好奇 (Curiosity),[C01],好奇探究,✅
+"Wow, kinda lame that if this true, most of us probably don't know about it.",哇，如果这是真的的话，那可真是有点可悲了，因为我们当中大多数人可能都不知道这件事啊。,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,惊讶 (Surprise),[C11],排斥厌恶,✅
+But he was so *hurt* when [NAME] acknowledged that homosexuality is a sin.,但当[姓名]承认同性恋是一种罪行时，他感到非常伤心。,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,不耐烦 (Annoyance),[C05],焦虑恐惧,❌
+"More like the choir isn't here, it's on Instagram",更像是这个合唱团不在这里，而是在 Instagram 上呢。,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,中性 (Neutral),[C04],挫败沮丧,❌
+"Assuming this is true, frankly I'm surprised they were still allowed to have images of the [NAME] in their homes.",假设这是事实的话，说实话，我感到很惊讶的是，他们竟然还能在家里保留[姓名]的画像。,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,中性 (Neutral),[C04],挫败沮丧,❌
+I hope you figure out what to do! It is real shit situation and it is awful what he said to you.,我希望你能想出应对的办法！这确实是个糟糕的情况，而且他对你所说的话也太糟糕了。,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,渴望 (Desire),[C04],挫败沮丧,✅
+Oh I wish that was how everyone thought. Unfortunately it's not.,哦，我希望每个人都能这么想就好了。但可惜并非如此。,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,顿悟 (Realization),[C04],挫败沮丧,✅

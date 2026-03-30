@@ -14,6 +14,7 @@ from app.api.endpoints.admin import (
     sessions,
     research as admin_research,
     emotion_experiments as admin_emotion_experiments,
+    emotion_compare as admin_emotion_compare,
     config as admin_config,
     auth as admin_auth,
 )
@@ -35,4 +36,5 @@ admin_router.include_router(scales.router, tags=["Admin - Scale Management"])
 admin_router.include_router(db_export.router, tags=["Admin - Data Export"])
 admin_router.include_router(admin_research.router, tags=["Admin - Research Management"])
 admin_router.include_router(admin_emotion_experiments.router, tags=["Admin - Emotion Experiments"])
+admin_router.include_router(admin_emotion_compare.router, tags=["Admin - Emotion Compare"])
 admin_router.include_router(admin_config.router, tags=["Admin - Model Config"])

@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './features/auth/authStore';
 import { useRequireAuth } from './features/auth/hooks';
 import { AdminLayout } from './components/AdminLayout';
@@ -13,8 +13,7 @@ import { ConversationDetail } from './pages/ConversationDetail';
 import { Exports } from './pages/Exports';
 import { ModelConfig } from './pages/ModelConfig';
 import { Login } from './pages/Login';
-import { EmotionExperiment } from './pages/EmotionExperiment';
-import { EmotionAnalytics } from './pages/EmotionAnalytics';
+import { EmotionCompare } from './pages/EmotionCompare';
 
 /**
  * 所有受保护的 /admin/* 路由容器。
@@ -50,8 +49,9 @@ function AdminApp() {
       <Route path="explorer" element={<AdminLayout><ResearchManagement /></AdminLayout>} />
       <Route path="conversations" element={<AdminLayout><Conversations /></AdminLayout>} />
       <Route path="conversations/:sessionId" element={<AdminLayout><ConversationDetail /></AdminLayout>} />
-      <Route path="analytics/emotion" element={<AdminLayout><EmotionAnalytics /></AdminLayout>} />
-      <Route path="emotion-experiments" element={<AdminLayout><EmotionExperiment /></AdminLayout>} />
+      <Route path="emotion-compare" element={<AdminLayout><EmotionCompare /></AdminLayout>} />
+      <Route path="analytics/emotion" element={<Navigate to="/emotion-compare" replace />} />
+      <Route path="emotion-experiments" element={<Navigate to="/emotion-compare" replace />} />
       <Route path="exports" element={<AdminLayout><Exports /></AdminLayout>} />
       <Route path="config" element={<AdminLayout><ModelConfig /></AdminLayout>} />
     </Routes>

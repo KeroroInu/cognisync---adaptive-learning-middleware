@@ -23,6 +23,7 @@ import type {
   LlmRoleConfig,
   EmotionExperimentResult,
   EmotionExperimentRunsResponse,
+  EmotionCompareResult,
   EmotionDistributionResponse,
   EmotionTrendResponse,
   EmotionUserDetailResponse,
@@ -350,6 +351,42 @@ class AdminApiClient {
     if (typeof data.previewLimit === 'number') formData.append('preview_limit', String(data.previewLimit));
 
     return this.request<EmotionExperimentResult>('/research/emotion-experiments/analyze-csv', {
+      method: 'POST',
+      body: formData,
+    });
+  }
+
+  async analyzeEmotionCompareDataset(data: {
+    file: File;
+    labelMode: 'single_label' | 'multi_binary';
+    textColumn: string;
+    expectedLabelColumn?: string;
+    expectedLabelColumnsJson?: string;
+    positiveLabelValue?: string;
+    sampleIdColumn?: string;
+    conversationIdColumn?: string;
+    speakerColumn?: string;
+    profileKeyColumn?: string;
+    labelMappingJson?: string;
+    previewLimit?: number;
+    datasetTemplate?: string;
+  }): Promise<EmotionCompareResult> {
+    const formData = new FormData();
+    formData.append('file', data.file);
+    formData.append('label_mode', data.labelMode);
+    formData.append('text_column', data.textColumn);
+    if (data.expectedLabelColumn) formData.append('expected_label_column', data.expectedLabelColumn);
+    if (data.expectedLabelColumnsJson) formData.append('expected_label_columns_json', data.expectedLabelColumnsJson);
+    if (data.positiveLabelValue) formData.append('positive_label_value', data.positiveLabelValue);
+    if (data.sampleIdColumn) formData.append('sample_id_column', data.sampleIdColumn);
+    if (data.conversationIdColumn) formData.append('conversation_id_column', data.conversationIdColumn);
+    if (data.speakerColumn) formData.append('speaker_column', data.speakerColumn);
+    if (data.profileKeyColumn) formData.append('profile_key_column', data.profileKeyColumn);
+    if (data.labelMappingJson) formData.append('label_mapping_json', data.labelMappingJson);
+    if (typeof data.previewLimit === 'number') formData.append('preview_limit', String(data.previewLimit));
+    if (data.datasetTemplate) formData.append('dataset_template', data.datasetTemplate);
+
+    return this.request<EmotionCompareResult>('/research/emotion-compare/analyze-dataset', {
       method: 'POST',
       body: formData,
     });

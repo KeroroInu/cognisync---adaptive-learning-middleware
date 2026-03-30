@@ -320,6 +320,134 @@ export interface EmotionExperimentRunsResponse {
   offset: number;
 }
 
+export interface EmotionCompareDatasetInfo {
+  datasetName: string;
+  sourceFormat: string;
+  taskType: 'single_label' | 'multi_label';
+  datasetTemplate: string | null;
+  sampleIdColumn: string | null;
+  textColumn: string;
+  expectedLabelColumn: string | null;
+  expectedLabelColumns: string[];
+  positiveLabelValue: string | null;
+  rowsProcessed: number;
+  rowsSkipped: number;
+  labelCount: number;
+  labels: string[];
+}
+
+export interface EmotionComparePrediction {
+  emotionCode: string | null;
+  emotionName: string | null;
+  intensity: 'low' | 'medium' | 'high' | null;
+  confidence: number | null;
+  rawLabel: string | null;
+}
+
+export interface EmotionCompareBaselineRow {
+  rowIndex: number;
+  sampleId: string | null;
+  text: string;
+  predictedEmotionCode: string | null;
+  predictedEmotionName: string | null;
+  predictedIntensity: 'low' | 'medium' | 'high' | null;
+  confidence: number | null;
+  rawLabel: string | null;
+}
+
+export interface EmotionCompareProfileSnapshot {
+  cognition: number;
+  affect: number;
+  behavior: number;
+}
+
+export interface EmotionCompareDelta {
+  cognition: number;
+  affect: number;
+  behavior: number;
+}
+
+export interface EmotionCompareContextUsed {
+  dialogue: boolean;
+  profile: boolean;
+  knowledge: boolean;
+}
+
+export interface EmotionCompareSystemRow {
+  rowIndex: number;
+  sampleId: string | null;
+  text: string;
+  predictedEmotionCode: string | null;
+  predictedEmotionName: string | null;
+  predictedIntensity: 'low' | 'medium' | 'high' | null;
+  confidence: number | null;
+  profileBefore: EmotionCompareProfileSnapshot | null;
+  profileAfter: EmotionCompareProfileSnapshot | null;
+  delta: EmotionCompareDelta | null;
+  contextUsed: EmotionCompareContextUsed;
+}
+
+export interface EmotionCompareComparisonRow {
+  rowIndex: number;
+  sampleId: string | null;
+  text: string;
+  groundTruthLabels: string[];
+  baselinePrediction: EmotionComparePrediction;
+  systemPrediction: EmotionComparePrediction;
+  baselineMatched: boolean | null;
+  systemMatched: boolean | null;
+  winner: 'baseline' | 'system' | 'tie' | 'none';
+}
+
+export interface EmotionCompareSingleMetrics {
+  accuracy: number | null;
+  macroF1: number | null;
+  weightedF1: number | null;
+}
+
+export interface EmotionCompareMultiMetrics {
+  exactMatch: number | null;
+  overlapMatch: number | null;
+  macroF1: number | null;
+}
+
+export interface EmotionCompareSingleSummaryMetrics {
+  taskType: 'single_label';
+  support: number;
+  labelCount: number;
+  labels: string[];
+  baseline: EmotionCompareSingleMetrics;
+  system: EmotionCompareSingleMetrics;
+}
+
+export interface EmotionCompareMultiSummaryMetrics {
+  taskType: 'multi_label';
+  support: number;
+  labelCount: number;
+  labels: string[];
+  baseline: EmotionCompareMultiMetrics;
+  system: EmotionCompareMultiMetrics;
+}
+
+export type EmotionCompareSummaryMetrics =
+  | EmotionCompareSingleSummaryMetrics
+  | EmotionCompareMultiSummaryMetrics;
+
+export interface EmotionCompareExportArtifacts {
+  comparisonCsvFileName: string;
+  comparisonCsvContent: string;
+  resultJsonFileName: string;
+}
+
+export interface EmotionCompareResult {
+  datasetInfo: EmotionCompareDatasetInfo;
+  baselineRows: EmotionCompareBaselineRow[];
+  systemRows: EmotionCompareSystemRow[];
+  comparisonRows: EmotionCompareComparisonRow[];
+  summaryMetrics: EmotionCompareSummaryMetrics;
+  exportArtifacts: EmotionCompareExportArtifacts;
+}
+
 export interface EmotionDistributionItem {
   legacyEmotion: string;
   emotionCode: string;

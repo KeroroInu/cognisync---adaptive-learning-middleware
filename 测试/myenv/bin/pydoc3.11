@@ -1,0 +1,5 @@
+#!/Users/kero_o/Desktop/测试/myenv/bin/python3.11
+
+import pydoc
+if __name__ == '__main__':
+    pydoc.cli()
