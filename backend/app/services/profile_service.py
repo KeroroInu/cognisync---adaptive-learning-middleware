@@ -118,6 +118,136 @@ class ProfileService:
             lastUpdate=snapshot.created_at.isoformat() + "Z"
         )
 
+    async def apply_delta_with_graph_cognition(
+        self,
+        user_id: UUID,
+        delta_affect: int,
+        delta_behavior: int
+    ) -> UserProfile:
+        """
+        应用画像增量（Affect 和 Behavior），但 Cognition 从知识图谱计算
+
+        流程：
+        1. 读取当前 profile
+        2. Affect 和 Behavior 应用 delta
+        3. Cognition 从知识图谱计算（忽略 LLM 提供的 delta）
+        4. 写入新的 ProfileSnapshot (source='system')
+
+        Args:
+            user_id: 用户 ID
+            delta_affect: 情感增量 [-100, 100]
+            delta_behavior: 行为增量 [-100, 100]
+
+        Returns:
+            更新后的 UserProfile
+        """
+        from app.services.graph_service import GraphService
+
+        # 1. 获取当前画像
+        current_profile = await self.get_profile(user_id)
+
+        # 2. Affect 和 Behavior 应用增量
+        new_affect = current_profile.affect + delta_affect
+        new_behavior = current_profile.behavior + delta_behavior
+
+        # Clamp 到 0-100
+        new_affect = max(0, min(100, new_affect))
+        new_behavior = max(0, min(100, new_behavior))
+
+        # 3. Cognition 从知识图谱计算
+        graph_service = GraphService()
+        new_cognition = await graph_service.calculate_cognition_from_graph(str(user_id))
+
+        logger.info(
+            f"Applying delta with graph cognition for user {user_id}: "
+            f"C: {new_cognition} (from graph), "
+            f"A: {current_profile.affect} + {delta_affect} = {new_affect}, "
+            f"B: {current_profile.behavior} + {delta_behavior} = {new_behavior}"
+        )
+
+        # 4. 创建新快照
+        snapshot = await self._create_snapshot(
+            user_id=user_id,
+            cognition=new_cognition,
+            affect=new_affect,
+            behavior=new_behavior,
+            source=ProfileSource.SYSTEM
+        )
+
+        return UserProfile(
+            cognition=snapshot.cognition,
+            affect=snapshot.affect,
+            behavior=snapshot.behavior,
+            lastUpdate=snapshot.created_at.isoformat() + "Z"
+        )
+
+    async def apply_affect_with_graph_cognition_and_log_behavior(
+        self,
+        user_id: UUID,
+        delta_affect: int
+    ) -> UserProfile:
+        """
+        最终方案：Affect 用 delta，Cognition 从图谱计算，Behavior 从行为日志计算
+
+        流程：
+        1. 读取当前 profile
+        2. Affect 应用 delta
+        3. Cognition 从知识图谱计算
+        4. Behavior 从行为日志计算（如果有日志，否则保持当前值）
+        5. 写入新的 ProfileSnapshot (source='system')
+
+        Args:
+            user_id: 用户 ID
+            delta_affect: 情感增量 [-100, 100]
+
+        Returns:
+            更新后的 UserProfile
+        """
+        from app.services.graph_service import GraphService
+        from app.services.behavior_service import BehaviorService
+
+        # 1. 获取当前画像
+        current_profile = await self.get_profile(user_id)
+
+        # 2. Affect 应用增量
+        new_affect = current_profile.affect + delta_affect
+        new_affect = max(0, min(100, new_affect))
+
+        # 3. Cognition 从知识图谱计算
+        graph_service = GraphService()
+        new_cognition = await graph_service.calculate_cognition_from_graph(str(user_id))
+
+        # 4. Behavior 从行为日志计算（如果有日志）
+        behavior_service = BehaviorService(self.db)
+        try:
+            new_behavior = await behavior_service.calculate_behavior_from_logs(user_id, lookback_days=7)
+        except Exception as e:
+            logger.warning(f"Failed to calculate behavior from logs: {e}, keeping current value")
+            new_behavior = current_profile.behavior
+
+        logger.info(
+            f"Applying profile update for user {user_id}: "
+            f"C: {new_cognition} (from graph), "
+            f"A: {current_profile.affect} + {delta_affect} = {new_affect}, "
+            f"B: {new_behavior} (from logs)"
+        )
+
+        # 5. 创建新快照
+        snapshot = await self._create_snapshot(
+            user_id=user_id,
+            cognition=new_cognition,
+            affect=new_affect,
+            behavior=new_behavior,
+            source=ProfileSource.SYSTEM
+        )
+
+        return UserProfile(
+            cognition=snapshot.cognition,
+            affect=snapshot.affect,
+            behavior=snapshot.behavior,
+            lastUpdate=snapshot.created_at.isoformat() + "Z"
+        )
+
     async def apply_user_override(
         self,
         user_id: UUID,

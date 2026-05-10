@@ -342,6 +342,7 @@ export interface EmotionComparePrediction {
   intensity: 'low' | 'medium' | 'high' | null;
   confidence: number | null;
   rawLabel: string | null;
+  predictedLabels?: string[];
 }
 
 export interface EmotionCompareBaselineRow {
@@ -408,7 +409,15 @@ export interface EmotionCompareSingleMetrics {
 export interface EmotionCompareMultiMetrics {
   exactMatch: number | null;
   overlapMatch: number | null;
+  microF1?: number | null;
   macroF1: number | null;
+  labelWiseMetrics?: Array<{
+    label: string;
+    precision: number | null;
+    recall: number | null;
+    f1: number | null;
+    support: number;
+  }>;
 }
 
 export interface EmotionCompareSingleSummaryMetrics {
@@ -440,12 +449,154 @@ export interface EmotionCompareExportArtifacts {
 }
 
 export interface EmotionCompareResult {
+  runId?: string | null;
   datasetInfo: EmotionCompareDatasetInfo;
   baselineRows: EmotionCompareBaselineRow[];
   systemRows: EmotionCompareSystemRow[];
   comparisonRows: EmotionCompareComparisonRow[];
   summaryMetrics: EmotionCompareSummaryMetrics;
   exportArtifacts: EmotionCompareExportArtifacts;
+}
+
+export interface EmotionComparePerClassMetricItem {
+  label: string;
+  support: number;
+  baselinePrecision: number | null;
+  baselineRecall: number | null;
+  baselineF1: number | null;
+  systemPrecision: number | null;
+  systemRecall: number | null;
+  systemF1: number | null;
+}
+
+export interface EmotionCompareConfusionAnalysis {
+  taskType: 'single_label' | 'multi_label';
+  labels: string[];
+  baselineMatrix: number[][];
+  systemMatrix: number[][];
+  available: boolean;
+}
+
+export interface EmotionCompareAgreementMetricSet {
+  overallAgreement: number | null;
+  observedAgreement: number | null;
+  expectedAgreement: number | null;
+  cohensKappa: number | null;
+}
+
+export interface EmotionCompareAgreementMetrics {
+  taskType: 'single_label' | 'multi_label';
+  baseline: EmotionCompareAgreementMetricSet;
+  system: EmotionCompareAgreementMetricSet;
+  available: boolean;
+}
+
+export interface EmotionCompareIntensityMetricSet {
+  intensityAccuracy: number | null;
+  intensityMAE: number | null;
+  support: number;
+}
+
+export interface EmotionCompareIntensityMetrics {
+  baseline: EmotionCompareIntensityMetricSet;
+  system: EmotionCompareIntensityMetricSet;
+  available: boolean;
+  note: string | null;
+}
+
+export interface EmotionCompareResultV2 {
+  base: EmotionCompareResult;
+  perClassMetrics: EmotionComparePerClassMetricItem[];
+  confusionAnalysis: EmotionCompareConfusionAnalysis;
+  agreementMetrics: EmotionCompareAgreementMetrics;
+  intensityMetrics: EmotionCompareIntensityMetrics;
+}
+
+export interface EmotionCompareAblationContexts {
+  profile: boolean;
+  dialogue: boolean;
+  knowledge: boolean;
+}
+
+export interface EmotionCompareAblationSummary {
+  accuracy: number | null;
+  macroF1: number | null;
+  weightedF1: number | null;
+  exactMatch: number | null;
+  overlapMatch: number | null;
+  microF1: number | null;
+}
+
+export interface EmotionCompareAblationDelta {
+  deltaAccuracy: number | null;
+  deltaMacroF1: number | null;
+  deltaWeightedF1: number | null;
+  deltaExactMatch: number | null;
+  deltaOverlapMatch: number | null;
+  deltaMicroF1: number | null;
+}
+
+export interface EmotionCompareAblationVariantResult {
+  variantKey:
+    | 'baseline_text_only'
+    | 'system_profile_only'
+    | 'system_dialogue_only'
+    | 'system_knowledge_only'
+    | 'system_full_fusion';
+  variantName: string;
+  taskType: 'single_label' | 'multi_label';
+  implemented: boolean;
+  note: string | null;
+  contexts: EmotionCompareAblationContexts;
+  support: number;
+  summary: EmotionCompareAblationSummary;
+  deltaVsBaseline: EmotionCompareAblationDelta;
+}
+
+export interface EmotionCompareAblationResult {
+  datasetInfo: EmotionCompareDatasetInfo;
+  variants: EmotionCompareAblationVariantResult[];
+}
+
+export interface EmotionCompareRunItem {
+  id: string;
+  originalFilename: string;
+  datasetTemplate: string | null;
+  labelMode: 'single_label' | 'multi_binary';
+  sourceFormat: string;
+  taskType: 'single_label' | 'multi_label';
+  textColumn: string;
+  expectedLabelColumn: string | null;
+  expectedLabelColumns: string[];
+  sampleIdColumn: string | null;
+  summaryMetrics: EmotionCompareSummaryMetrics;
+  createdAt: string;
+}
+
+export interface EmotionCompareRunsResponse {
+  runs: EmotionCompareRunItem[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface EmotionCompareRunDetail {
+  id: string;
+  originalFilename: string;
+  datasetTemplate: string | null;
+  labelMode: 'single_label' | 'multi_binary';
+  sourceFormat: string;
+  taskType: 'single_label' | 'multi_label';
+  textColumn: string;
+  expectedLabelColumn: string | null;
+  expectedLabelColumns: string[];
+  positiveLabelValue: string | null;
+  sampleIdColumn: string | null;
+  labelMapping: Record<string, string | string[] | number | boolean | null>;
+  baseResult: EmotionCompareResult;
+  v2Result: EmotionCompareResultV2 | null;
+  ablationResult: EmotionCompareAblationResult | null;
+  createdAt: string;
 }
 
 export interface EmotionDistributionItem {

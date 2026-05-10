@@ -12,6 +12,7 @@ from sqlalchemy.dialects.postgresql import TIMESTAMP
 from app.models.sql.base import Base, UUIDMixin
 
 if TYPE_CHECKING:
+    from app.models.sql.behavior_log import BehaviorLog
     from app.models.sql.calibration_log import CalibrationLog
     from app.models.sql.chat_session import ChatSession
     from app.models.sql.emotion_log import EmotionLog
@@ -142,6 +143,13 @@ class User(Base, UUIDMixin):
 
     onboarding_sessions: Mapped[list[OnboardingSession]] = relationship(
         "OnboardingSession",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        lazy="selectin"
+    )
+
+    behavior_logs: Mapped[list[BehaviorLog]] = relationship(
+        "BehaviorLog",
         back_populates="user",
         cascade="all, delete-orphan",
         lazy="selectin"

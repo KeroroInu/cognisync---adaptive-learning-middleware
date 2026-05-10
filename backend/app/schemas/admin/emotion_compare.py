@@ -127,6 +127,7 @@ class EmotionCompareExportArtifacts(BaseModel):
 
 
 class EmotionCompareAnalyzeResponse(BaseModel):
+    runId: str | None = None
     datasetInfo: EmotionCompareDatasetInfo
     baselineRows: list[EmotionCompareBaselineRow] = Field(default_factory=list)
     systemRows: list[EmotionCompareSystemRow] = Field(default_factory=list)

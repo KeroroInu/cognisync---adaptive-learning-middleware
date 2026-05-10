@@ -7,12 +7,14 @@ from app.models.sql.message import ChatMessage, MessageRole
 from app.models.sql.profile import ProfileSnapshot, ProfileSource
 from app.models.sql.calibration_log import CalibrationLog, Dimension, ConflictLevel
 from app.models.sql.chat_session import ChatSession
+from app.models.sql.emotion_compare_run import EmotionCompareRun
 from app.models.sql.emotion_experiment import EmotionExperimentRun
 from app.models.sql.emotion_log import EmotionLog
 from app.models.sql.onboarding import OnboardingSession
 from app.models.sql.scale import ScaleTemplate, ScaleResponse, ScaleStatus
 from app.models.sql.research import ResearchTask, ResearchTaskSubmission, ResearchTaskStatus
 from app.models.sql.system_config import SystemConfig
+from app.models.sql.behavior_log import BehaviorLog
 
 __all__ = [
     "Base",
@@ -26,6 +28,7 @@ __all__ = [
     "Dimension",
     "ConflictLevel",
     "ChatSession",
+    "EmotionCompareRun",
     "EmotionExperimentRun",
     "EmotionLog",
     "OnboardingSession",
@@ -36,4 +39,5 @@ __all__ = [
     "ResearchTaskSubmission",
     "ResearchTaskStatus",
     "SystemConfig",
+    "BehaviorLog",
 ]

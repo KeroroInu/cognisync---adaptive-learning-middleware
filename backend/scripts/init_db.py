@@ -14,6 +14,7 @@ from app.models.sql.calibration_log import CalibrationLog
 from app.models.sql.chat_session import ChatSession
 from app.models.sql.scale import ScaleTemplate, ScaleResponse
 from app.models.sql.onboarding import OnboardingSession
+from app.models.sql.behavior_log import BehaviorLog
 
 
 async def init_db():

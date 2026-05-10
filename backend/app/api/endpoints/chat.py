@@ -45,6 +45,59 @@ async def get_or_create_active_session(db: AsyncSession, user_id: UUID) -> ChatS
     return session
 
 
+def _calculate_mastery_delta(analysis) -> float:
+    """
+    根据对话分析结果计算概念掌握度增量
+
+    Args:
+        analysis: ChatAnalysis 对象（包含 emotion, intent, delta 等）
+
+    Returns:
+        掌握度增量 [-0.1, 0.1]，0 表示无变化
+    """
+    # 基础增量为 0
+    delta = 0.0
+
+    # 获取情感和意图
+    emotion = analysis.emotion.lower()
+    intent = analysis.intent.lower()
+    cognition_delta = analysis.delta.cognition
+
+    # 正向情感 -> 增加掌握度
+    if emotion in {"confident", "excited", "satisfied", "motivated", "thoughtful"}:
+        delta += 0.05
+    elif emotion in {"curious"}:
+        delta += 0.02  # 好奇心驱动，轻微增加
+
+    # 负向情感 -> 降低或保持
+    elif emotion in {"confused", "frustrated", "overwhelmed", "discouraged"}:
+        delta -= 0.03  # 表示理解出现问题
+    elif emotion in {"anxious"}:
+        delta += 0.0  # 焦虑不影响掌握度
+
+    # 意图修正
+    if intent in {"application", "reflection"}:
+        # 应用和反思说明理解深入
+        delta += 0.03
+    elif intent == "confirmation" and cognition_delta > 0:
+        # 确认且认知提升 -> 理解正确
+        delta += 0.04
+    elif intent == "help-seeking":
+        # 寻求帮助 -> 遇到困难
+        delta -= 0.02
+
+    # 认知维度变化也影响掌握度
+    if cognition_delta >= 5:
+        delta += 0.03
+    elif cognition_delta <= -5:
+        delta -= 0.02
+
+    # 限制范围在 [-0.1, 0.1]
+    delta = max(-0.1, min(0.1, delta))
+
+    return delta
+
+
 def build_assistant_system_prompt(
     emotion: str,
     language: str,
@@ -481,8 +534,8 @@ async def chat(
         # ========== 3. 分析消息 ==========
         analyzer = TextAnalyzer()
 
-        # 获取对话历史作为上下文
-        recent_messages = await get_recent_messages(db, user_id, limit=5)
+        # 获取对话历史作为上下文（增加到 20 条以保持更长的上下文）
+        recent_messages = await get_recent_messages(db, user_id, limit=20)
         current_profile = await profile_service.get_profile(user_id)
 
         analysis = await analyzer.analyze(
@@ -496,19 +549,7 @@ async def chat(
             f"concepts={len(analysis.detectedConcepts)}"
         )
 
-        # ========== 4. 更新画像 ==========
-        updated_profile = await profile_service.apply_delta(
-            user_id=user_id,
-            delta_cognition=analysis.delta.cognition,
-            delta_affect=analysis.delta.affect,
-            delta_behavior=analysis.delta.behavior
-        )
-
-        logger.info(
-            f"Profile updated: C={updated_profile.cognition}, "
-            f"A={updated_profile.affect}, B={updated_profile.behavior}"
-        )
-
+        # ========== 4. 记录情感日志（使用更新前的 profile） ==========
         emotion_log = await record_emotion_log(
             db=db,
             user_id=user_id,
@@ -533,9 +574,31 @@ async def chat(
                     concepts=analysis.detectedConcepts
                 )
                 logger.info(f"Knowledge graph updated with {len(analysis.detectedConcepts)} concepts")
+
+                # ========== 5.1 更新概念掌握度（基于对话质量） ==========
+                mastery_delta = _calculate_mastery_delta(analysis)
+                if mastery_delta != 0:
+                    updated_count = await graph_service.update_mastery_batch(
+                        user_id=str(user_id),
+                        concepts=analysis.detectedConcepts,
+                        mastery_delta=mastery_delta
+                    )
+                    logger.info(f"Updated mastery for {updated_count} concepts with delta {mastery_delta}")
             except Exception as graph_error:
                 logger.warning(f"Failed to update knowledge graph: {graph_error}")
                 # 继续处理，不因为图谱更新失败而中断
+
+        # ========== 5.2 更新画像（Cognition 从图谱计算，Affect/Behavior 用 delta） ==========
+        updated_profile = await profile_service.apply_delta_with_graph_cognition(
+            user_id=user_id,
+            delta_affect=analysis.delta.affect,
+            delta_behavior=analysis.delta.behavior
+        )
+
+        logger.info(
+            f"Profile updated: C={updated_profile.cognition} (from graph), "
+            f"A={updated_profile.affect}, B={updated_profile.behavior}"
+        )
 
         # ========== 6. 生成 AI 回复 ==========
         # 获取用户当前知识图谱
@@ -591,9 +654,10 @@ async def chat(
             system_prompt += teacher_hint
 
         # 构建 user prompt（包含历史对话）
+        # 使用最近 12 条消息（约 6 轮对话），在保持上下文和 token 效率间取得平衡
         conversation_context = "\n".join([
             f"{'学生' if msg['role'] == 'user' else '老师'}: {msg['text']}"
-            for msg in recent_messages[-3:]  # 只取最近 3 条
+            for msg in recent_messages[-12:]  # 使用最近 12 条消息
         ])
 
         # 检测学生是否表达了"理解/完成"

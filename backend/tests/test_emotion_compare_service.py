@@ -8,6 +8,7 @@ from openpyxl import Workbook
 import app.services.emotion_compare_service as compare_service
 from app.services.llm_provider import BaseProvider
 from app.services.emotion_compare_service import (
+    analyze_compare_ablation_v2,
     analyze_compare_dataset,
     analyze_compare_dataset_v2,
     build_emotion_compare_skeleton_response,
@@ -419,3 +420,44 @@ def test_analyze_compare_dataset_v2_builds_multi_label_extended_metrics():
     assert len(response.perClassMetrics) == 3
     confusion_metric = next(metric for metric in response.perClassMetrics if metric.label == "confusion")
     assert confusion_metric.systemRecall == 1.0
+
+
+def test_analyze_compare_ablation_v2_returns_five_variants_with_placeholder_flags():
+    raw_bytes = (
+        "id,content,label\n"
+        "1,今天心情不错,happy\n"
+        "2,今天心情不错,happy\n"
+    ).encode("utf-8")
+    dataset = normalize_compare_dataset(
+        filename="weibo.csv",
+        raw_bytes=raw_bytes,
+        label_mode="single_label",
+        text_column="content",
+        expected_label_column="label",
+        sample_id_column="id",
+    )
+
+    response = run_async(
+        analyze_compare_ablation_v2(
+            dataset=dataset,
+            provider=PromptAwareProvider(),
+            preview_limit=10,
+        )
+    )
+
+    assert response.datasetInfo.taskType == "single_label"
+    assert len(response.variants) == 5
+    baseline_variant = next(variant for variant in response.variants if variant.variantKey == "baseline_text_only")
+    profile_variant = next(variant for variant in response.variants if variant.variantKey == "system_profile_only")
+    dialogue_variant = next(variant for variant in response.variants if variant.variantKey == "system_dialogue_only")
+    full_variant = next(variant for variant in response.variants if variant.variantKey == "system_full_fusion")
+
+    assert baseline_variant.implemented is True
+    assert baseline_variant.deltaVsBaseline.deltaAccuracy == 0.0
+    assert profile_variant.implemented is True
+    assert profile_variant.deltaVsBaseline.deltaAccuracy == 1.0
+    assert dialogue_variant.implemented is False
+    assert "对话上下文" in (dialogue_variant.note or "")
+    assert full_variant.contexts.profile is True
+    assert full_variant.contexts.dialogue is True
+    assert full_variant.contexts.knowledge is True

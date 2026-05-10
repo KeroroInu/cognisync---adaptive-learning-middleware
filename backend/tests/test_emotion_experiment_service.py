@@ -1,12 +1,128 @@
 from datetime import datetime, timezone
 
+from app.models.sql import metadata
+from app.models.sql.emotion_compare_run import EmotionCompareRun
 from app.models.sql.emotion_experiment import EmotionExperimentRun
+from app.schemas.admin.emotion_compare import (
+    EmotionCompareAnalyzeResponse,
+    EmotionCompareDatasetInfo,
+    EmotionCompareExportArtifacts,
+    EmotionCompareSummaryMetrics,
+    EmotionCompareSingleMetrics,
+)
+from app.schemas.admin.emotion_compare_ablation import EmotionCompareAblationResponse
+from app.schemas.admin.emotion_compare_runs import EmotionCompareRunDetail
+from app.schemas.admin.emotion_compare_v2 import (
+    EmotionCompareAgreementMetrics,
+    EmotionCompareAnalyzeResponseV2,
+    EmotionCompareConfusionAnalysis,
+    EmotionCompareIntensityMetrics,
+)
 from app.schemas.admin.emotion_experiments import (
     EmotionExperimentAnalyzeResponse,
     EmotionExperimentRow,
     EmotionExperimentSummary,
 )
+from app.services.emotion_compare_run_service import build_emotion_compare_run_detail
 from app.services.emotion_experiment_service import build_emotion_experiment_detail
+
+
+def test_emotion_compare_run_model_registers_table_and_indexes():
+    table = metadata.tables["emotion_compare_runs"]
+    index_names = {index.name for index in table.indexes}
+
+    assert EmotionCompareRun.__tablename__ == "emotion_compare_runs"
+    assert {"rows_processed", "base_result", "created_at"}.issubset(table.columns.keys())
+    assert index_names == {
+        "ix_emotion_compare_runs_created_at",
+        "ix_emotion_compare_runs_original_filename",
+        "ix_emotion_compare_runs_dataset_template_created_at",
+        "ix_emotion_compare_runs_task_type_created_at",
+    }
+
+
+def test_build_emotion_compare_run_detail_restores_response_shape():
+    base_result = EmotionCompareAnalyzeResponse(
+        runId=None,
+        datasetInfo=EmotionCompareDatasetInfo(
+            datasetName="weibo.csv",
+            sourceFormat="csv",
+            taskType="single_label",
+            datasetTemplate="weibo_single",
+            sampleIdColumn="id",
+            textColumn="content",
+            expectedLabelColumn="label",
+            expectedLabelColumns=[],
+            positiveLabelValue=None,
+            rowsProcessed=2,
+            rowsSkipped=0,
+            labelCount=2,
+            labels=["happy", "sad"],
+        ),
+        summaryMetrics=EmotionCompareSummaryMetrics(
+            taskType="single_label",
+            support=2,
+            labelCount=2,
+            labels=["happy", "sad"],
+            baseline=EmotionCompareSingleMetrics(accuracy=0.5, macroF1=0.4, weightedF1=0.4),
+            system=EmotionCompareSingleMetrics(accuracy=1.0, macroF1=1.0, weightedF1=1.0),
+        ),
+        exportArtifacts=EmotionCompareExportArtifacts(
+            comparisonCsvFileName="weibo_compare_results.csv",
+            comparisonCsvContent="rowIndex,text\n1,今天真开心\n",
+            resultJsonFileName="weibo_compare_results.json",
+        ),
+    )
+    v2_result = EmotionCompareAnalyzeResponseV2(
+        base=base_result,
+        perClassMetrics=[],
+        confusionAnalysis=EmotionCompareConfusionAnalysis(
+            taskType="single_label",
+            labels=["happy", "sad"],
+            baselineMatrix=[[0, 1], [0, 1]],
+            systemMatrix=[[1, 0], [0, 1]],
+            available=True,
+        ),
+        agreementMetrics=EmotionCompareAgreementMetrics(
+            taskType="single_label",
+            available=True,
+        ),
+        intensityMetrics=EmotionCompareIntensityMetrics(available=False),
+    )
+    ablation_result = EmotionCompareAblationResponse(
+        datasetInfo=base_result.datasetInfo,
+        variants=[],
+    )
+    run = EmotionCompareRun(
+        original_filename="weibo.csv",
+        dataset_template="weibo_single",
+        label_mode="single_label",
+        source_format="csv",
+        task_type="single_label",
+        text_column="content",
+        expected_label_column="label",
+        expected_label_columns=[],
+        positive_label_value=None,
+        sample_id_column="id",
+        label_mapping={"happy": ["excited"]},
+        rows_processed=2,
+        rows_skipped=0,
+        label_count=2,
+        dataset_info=base_result.datasetInfo.model_dump(),
+        base_result=base_result.model_dump(),
+        v2_result=v2_result.model_dump(),
+        ablation_result=ablation_result.model_dump(),
+        created_at=datetime.now(timezone.utc),
+    )
+
+    detail = build_emotion_compare_run_detail(run)
+
+    assert isinstance(detail, EmotionCompareRunDetail)
+    assert detail.originalFilename == "weibo.csv"
+    assert detail.baseResult.datasetInfo.datasetTemplate == "weibo_single"
+    assert detail.v2Result is not None
+    assert detail.v2Result.confusionAnalysis.available is True
+    assert detail.ablationResult is not None
 
 
 def test_build_emotion_experiment_detail_restores_response_shape():

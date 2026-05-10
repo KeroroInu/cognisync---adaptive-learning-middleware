@@ -23,7 +23,11 @@ import type {
   LlmRoleConfig,
   EmotionExperimentResult,
   EmotionExperimentRunsResponse,
+  EmotionCompareAblationResult,
+  EmotionCompareRunDetail,
+  EmotionCompareRunsResponse,
   EmotionCompareResult,
+  EmotionCompareResultV2,
   EmotionDistributionResponse,
   EmotionTrendResponse,
   EmotionUserDetailResponse,
@@ -392,6 +396,78 @@ class AdminApiClient {
     });
   }
 
+  async analyzeEmotionCompareDatasetV2(data: {
+    file: File;
+    labelMode: 'single_label' | 'multi_binary';
+    textColumn: string;
+    expectedLabelColumn?: string;
+    expectedLabelColumnsJson?: string;
+    positiveLabelValue?: string;
+    sampleIdColumn?: string;
+    conversationIdColumn?: string;
+    speakerColumn?: string;
+    profileKeyColumn?: string;
+    labelMappingJson?: string;
+    previewLimit?: number;
+    datasetTemplate?: string;
+  }): Promise<EmotionCompareResultV2> {
+    const formData = new FormData();
+    formData.append('file', data.file);
+    formData.append('label_mode', data.labelMode);
+    formData.append('text_column', data.textColumn);
+    if (data.expectedLabelColumn) formData.append('expected_label_column', data.expectedLabelColumn);
+    if (data.expectedLabelColumnsJson) formData.append('expected_label_columns_json', data.expectedLabelColumnsJson);
+    if (data.positiveLabelValue) formData.append('positive_label_value', data.positiveLabelValue);
+    if (data.sampleIdColumn) formData.append('sample_id_column', data.sampleIdColumn);
+    if (data.conversationIdColumn) formData.append('conversation_id_column', data.conversationIdColumn);
+    if (data.speakerColumn) formData.append('speaker_column', data.speakerColumn);
+    if (data.profileKeyColumn) formData.append('profile_key_column', data.profileKeyColumn);
+    if (data.labelMappingJson) formData.append('label_mapping_json', data.labelMappingJson);
+    if (typeof data.previewLimit === 'number') formData.append('preview_limit', String(data.previewLimit));
+    if (data.datasetTemplate) formData.append('dataset_template', data.datasetTemplate);
+
+    return this.request<EmotionCompareResultV2>('/research/emotion-compare/analyze-dataset-v2', {
+      method: 'POST',
+      body: formData,
+    });
+  }
+
+  async analyzeEmotionCompareAblationV2(data: {
+    file: File;
+    labelMode: 'single_label' | 'multi_binary';
+    textColumn: string;
+    expectedLabelColumn?: string;
+    expectedLabelColumnsJson?: string;
+    positiveLabelValue?: string;
+    sampleIdColumn?: string;
+    conversationIdColumn?: string;
+    speakerColumn?: string;
+    profileKeyColumn?: string;
+    labelMappingJson?: string;
+    previewLimit?: number;
+    datasetTemplate?: string;
+  }): Promise<EmotionCompareAblationResult> {
+    const formData = new FormData();
+    formData.append('file', data.file);
+    formData.append('label_mode', data.labelMode);
+    formData.append('text_column', data.textColumn);
+    if (data.expectedLabelColumn) formData.append('expected_label_column', data.expectedLabelColumn);
+    if (data.expectedLabelColumnsJson) formData.append('expected_label_columns_json', data.expectedLabelColumnsJson);
+    if (data.positiveLabelValue) formData.append('positive_label_value', data.positiveLabelValue);
+    if (data.sampleIdColumn) formData.append('sample_id_column', data.sampleIdColumn);
+    if (data.conversationIdColumn) formData.append('conversation_id_column', data.conversationIdColumn);
+    if (data.speakerColumn) formData.append('speaker_column', data.speakerColumn);
+    if (data.profileKeyColumn) formData.append('profile_key_column', data.profileKeyColumn);
+    if (data.labelMappingJson) formData.append('label_mapping_json', data.labelMappingJson);
+    if (typeof data.previewLimit === 'number') formData.append('preview_limit', String(data.previewLimit));
+    if (data.datasetTemplate) formData.append('dataset_template', data.datasetTemplate);
+
+    return this.request<EmotionCompareAblationResult>('/research/emotion-compare/analyze-ablation-v2', {
+      method: 'POST',
+      body: formData,
+    });
+  }
+
   async getEmotionExperimentRuns(limit: number = 20, offset: number = 0): Promise<EmotionExperimentRunsResponse> {
     const params = new URLSearchParams({
       limit: String(limit),
@@ -402,6 +478,18 @@ class AdminApiClient {
 
   async getEmotionExperimentRunDetail(runId: string): Promise<EmotionExperimentResult> {
     return this.request<EmotionExperimentResult>(`/research/emotion-experiments/runs/${runId}`);
+  }
+
+  async getEmotionCompareRuns(limit: number = 20, offset: number = 0): Promise<EmotionCompareRunsResponse> {
+    const params = new URLSearchParams({
+      limit: String(limit),
+      offset: String(offset),
+    });
+    return this.request<EmotionCompareRunsResponse>(`/research/emotion-compare/runs?${params}`);
+  }
+
+  async getEmotionCompareRunDetail(runId: string): Promise<EmotionCompareRunDetail> {
+    return this.request<EmotionCompareRunDetail>(`/research/emotion-compare/runs/${runId}`);
   }
 
   async getEmotionDistribution(days: number = 30, limit: number = 20): Promise<EmotionDistributionResponse> {

@@ -36,6 +36,13 @@ from app.schemas.admin.emotion_compare_v2 import (
     EmotionCompareIntensityMetricSet,
     EmotionComparePerClassMetricItem,
 )
+from app.schemas.admin.emotion_compare_ablation import (
+    EmotionCompareAblationContexts,
+    EmotionCompareAblationDelta,
+    EmotionCompareAblationResponse,
+    EmotionCompareAblationSummary,
+    EmotionCompareAblationVariantResult,
+)
 from app.schemas.profile import UserProfile
 from app.services.emotion_dataset_service import normalize_label_mapping
 from app.services.emotion_compare_mapping import build_default_label_mapping
@@ -115,7 +122,13 @@ def _load_xlsx_records(raw_bytes: bytes) -> tuple[list[dict[str, str]], list[str
     try:
         workbook = load_workbook(io.BytesIO(raw_bytes), read_only=True, data_only=True)
     except Exception as exc:
-        raise ValueError("Failed to read XLSX file") from exc
+        detail = str(exc).strip()
+        if "File is not a zip file" in detail:
+            raise ValueError(
+                "Failed to read XLSX file: 当前文件不是有效的 Excel 工作簿。"
+                "如果你在使用中文微博数据集，请优先上传 usual_train.txt。"
+            ) from exc
+        raise ValueError(f"Failed to read XLSX file: {detail or 'unknown workbook error'}") from exc
 
     worksheet = workbook.active
     rows = list(worksheet.iter_rows(values_only=True))
@@ -1086,6 +1099,154 @@ async def analyze_compare_dataset_v2(
         intensityMetrics=_compute_intensity_metrics(
             comparison_rows=base.comparisonRows,
         ),
+    )
+
+
+def _build_ablation_summary(summary_metrics: EmotionCompareSummaryMetrics) -> EmotionCompareAblationSummary:
+    if summary_metrics.taskType == "single_label":
+        return EmotionCompareAblationSummary(
+            accuracy=summary_metrics.system.accuracy,
+            macroF1=summary_metrics.system.macroF1,
+            weightedF1=summary_metrics.system.weightedF1,
+        )
+    return EmotionCompareAblationSummary(
+        exactMatch=summary_metrics.system.exactMatch,
+        overlapMatch=summary_metrics.system.overlapMatch,
+        microF1=summary_metrics.system.microF1,
+        macroF1=summary_metrics.system.macroF1,
+    )
+
+
+def _build_baseline_ablation_summary(summary_metrics: EmotionCompareSummaryMetrics) -> EmotionCompareAblationSummary:
+    if summary_metrics.taskType == "single_label":
+        return EmotionCompareAblationSummary(
+            accuracy=summary_metrics.baseline.accuracy,
+            macroF1=summary_metrics.baseline.macroF1,
+            weightedF1=summary_metrics.baseline.weightedF1,
+        )
+    return EmotionCompareAblationSummary(
+        exactMatch=summary_metrics.baseline.exactMatch,
+        overlapMatch=summary_metrics.baseline.overlapMatch,
+        microF1=summary_metrics.baseline.microF1,
+        macroF1=summary_metrics.baseline.macroF1,
+    )
+
+
+def _compute_ablation_delta(
+    summary: EmotionCompareAblationSummary,
+    baseline: EmotionCompareAblationSummary,
+) -> EmotionCompareAblationDelta:
+    def diff(current: float | None, base_value: float | None) -> float | None:
+        if current is None or base_value is None:
+            return None
+        return current - base_value
+
+    return EmotionCompareAblationDelta(
+        deltaAccuracy=diff(summary.accuracy, baseline.accuracy),
+        deltaMacroF1=diff(summary.macroF1, baseline.macroF1),
+        deltaWeightedF1=diff(summary.weightedF1, baseline.weightedF1),
+        deltaExactMatch=diff(summary.exactMatch, baseline.exactMatch),
+        deltaOverlapMatch=diff(summary.overlapMatch, baseline.overlapMatch),
+        deltaMicroF1=diff(summary.microF1, baseline.microF1),
+    )
+
+
+def _placeholder_ablation_variant(
+    *,
+    variant_key: Literal["system_dialogue_only", "system_knowledge_only", "system_full_fusion"],
+    variant_name: str,
+    task_type: Literal["single_label", "multi_label"],
+    support: int,
+    contexts: EmotionCompareAblationContexts,
+    note: str,
+) -> EmotionCompareAblationVariantResult:
+    return EmotionCompareAblationVariantResult(
+        variantKey=variant_key,
+        variantName=variant_name,
+        taskType=task_type,
+        implemented=False,
+        note=note,
+        contexts=contexts,
+        support=support,
+        summary=EmotionCompareAblationSummary(),
+        deltaVsBaseline=EmotionCompareAblationDelta(),
+    )
+
+
+async def analyze_compare_ablation_v2(
+    *,
+    dataset: NormalizedDataset,
+    preview_limit: int = 50,
+    label_mapping: dict[str, str | list[str]] | None = None,
+    provider: BaseProvider | None = None,
+) -> EmotionCompareAblationResponse:
+    base_v2 = await analyze_compare_dataset_v2(
+        dataset=dataset,
+        preview_limit=preview_limit,
+        label_mapping=label_mapping,
+        provider=provider,
+    )
+
+    baseline_summary = _build_baseline_ablation_summary(base_v2.base.summaryMetrics)
+    profile_summary = _build_ablation_summary(base_v2.base.summaryMetrics)
+
+    variants = [
+        EmotionCompareAblationVariantResult(
+            variantKey="baseline_text_only",
+            variantName="纯文本基线",
+            taskType=base_v2.base.datasetInfo.taskType,
+            implemented=True,
+            contexts=EmotionCompareAblationContexts(profile=False, dialogue=False, knowledge=False),
+            support=base_v2.base.summaryMetrics.support,
+            summary=baseline_summary,
+            deltaVsBaseline=EmotionCompareAblationDelta(
+                deltaAccuracy=0.0 if baseline_summary.accuracy is not None else None,
+                deltaMacroF1=0.0 if baseline_summary.macroF1 is not None else None,
+                deltaWeightedF1=0.0 if baseline_summary.weightedF1 is not None else None,
+                deltaExactMatch=0.0 if baseline_summary.exactMatch is not None else None,
+                deltaOverlapMatch=0.0 if baseline_summary.overlapMatch is not None else None,
+                deltaMicroF1=0.0 if baseline_summary.microF1 is not None else None,
+            ),
+        ),
+        EmotionCompareAblationVariantResult(
+            variantKey="system_profile_only",
+            variantName="仅画像增强",
+            taskType=base_v2.base.datasetInfo.taskType,
+            implemented=True,
+            contexts=EmotionCompareAblationContexts(profile=True, dialogue=False, knowledge=False),
+            support=base_v2.base.summaryMetrics.support,
+            summary=profile_summary,
+            deltaVsBaseline=_compute_ablation_delta(profile_summary, baseline_summary),
+        ),
+        _placeholder_ablation_variant(
+            variant_key="system_dialogue_only",
+            variant_name="仅对话上下文",
+            task_type=base_v2.base.datasetInfo.taskType,
+            support=base_v2.base.summaryMetrics.support,
+            contexts=EmotionCompareAblationContexts(profile=False, dialogue=True, knowledge=False),
+            note="当前第二阶段 backend 尚未接入真实对话上下文分析链，先保留统一结构。",
+        ),
+        _placeholder_ablation_variant(
+            variant_key="system_knowledge_only",
+            variant_name="仅知识上下文",
+            task_type=base_v2.base.datasetInfo.taskType,
+            support=base_v2.base.summaryMetrics.support,
+            contexts=EmotionCompareAblationContexts(profile=False, dialogue=False, knowledge=True),
+            note="当前第二阶段 backend 尚未接入真实知识上下文分析链，先保留统一结构。",
+        ),
+        _placeholder_ablation_variant(
+            variant_key="system_full_fusion",
+            variant_name="完整融合",
+            task_type=base_v2.base.datasetInfo.taskType,
+            support=base_v2.base.summaryMetrics.support,
+            contexts=EmotionCompareAblationContexts(profile=True, dialogue=True, knowledge=True),
+            note="当前完整融合仅部分具备画像增强能力，对话与知识上下文仍在后续阶段接入。",
+        ),
+    ]
+
+    return EmotionCompareAblationResponse(
+        datasetInfo=base_v2.base.datasetInfo,
+        variants=variants,
     )
 
 

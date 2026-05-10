@@ -23,7 +23,7 @@ class Edge(BaseModel):
     """知识图谱边（前端契约）"""
     source: str = Field(..., description="源节点 ID")
     target: str = Field(..., description="目标节点 ID")
-    relType: Optional[str] = Field(None, description="关系类型：co_occurred | related")
+    relType: Optional[str] = Field(None, description="关系类型：co_occurred | related | prerequisite")
     weight: Optional[int] = Field(None, description="关系权重（共现次数）")
 
 

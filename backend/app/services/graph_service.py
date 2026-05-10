@@ -116,7 +116,7 @@ class GraphService:
         MERGE (s)-[r:INTERACTED_WITH]->(c)
         ON CREATE SET
             r.count = 1,
-            r.mastery = 0.5,
+            r.mastery = 0.1,
             r.isFlagged = false,
             r.lastUpdated = datetime()
         ON MATCH SET
@@ -240,6 +240,21 @@ class GraphService:
         edges += [
             Edge(source=row["source"], target=row["target"], relType="related")
             for row in (rel_edges_result or [])
+        ]
+
+        # 4. 获取前置关系边（PREREQUISITE_OF）
+        prereq_edges_query = """
+        MATCH (s:Student {id: $user_id})-[:INTERACTED_WITH]->(c1:Concept)
+        MATCH (s)-[:INTERACTED_WITH]->(c2:Concept)
+        MATCH (c1)-[:PREREQUISITE_OF]->(c2)
+        RETURN DISTINCT c1.uid as source, c2.uid as target
+        """
+
+        prereq_edges_result = await execute_query(prereq_edges_query, {"user_id": user_id})
+
+        edges += [
+            Edge(source=row["source"], target=row["target"], relType="prerequisite")
+            for row in (prereq_edges_result or [])
         ]
 
         logger.info(f"Retrieved graph for user {user_id}: {len(nodes)} nodes, {len(edges)} edges")
@@ -574,3 +589,222 @@ class GraphService:
 
         logger.info(f"Edge deleted successfully: {source} -> {target}")
         return True
+
+    async def create_prerequisite(self, user_id: str, prerequisite: str, concept: str) -> Edge:
+        """
+        创建前置关系：prerequisite 是 concept 的前置概念
+
+        只有当用户与两个概念都有 INTERACTED_WITH 关系时才能创建前置关系
+
+        Args:
+            user_id: 用户 ID（用于权限验证）
+            prerequisite: 前置概念 ID（Concept uid）
+            concept: 目标概念 ID（Concept uid）
+
+        Returns:
+            创建的 Edge 对象（relType="prerequisite"）
+        """
+        logger.info(f"Creating prerequisite: {prerequisite} -> {concept} for user {user_id}")
+
+        # 验证用户是否与两个节点都有交互
+        verify_query = """
+        MATCH (s:Student {id: $user_id})-[:INTERACTED_WITH]->(c1:Concept {uid: $prerequisite})
+        MATCH (s)-[:INTERACTED_WITH]->(c2:Concept {uid: $concept})
+        RETURN c1.uid as prerequisite, c2.uid as concept
+        """
+
+        verify_result = await execute_query(
+            verify_query,
+            {"user_id": user_id, "prerequisite": prerequisite, "concept": concept}
+        )
+
+        if not verify_result:
+            raise Exception(f"User has not interacted with one or both concepts: {prerequisite}, {concept}")
+
+        # 创建 PREREQUISITE_OF 关系
+        create_prereq_query = """
+        MATCH (c1:Concept {uid: $prerequisite})
+        MATCH (c2:Concept {uid: $concept})
+        MERGE (c1)-[r:PREREQUISITE_OF]->(c2)
+        ON CREATE SET r.createdAt = datetime()
+        RETURN c1.uid as source, c2.uid as target
+        """
+
+        result = await execute_write(
+            create_prereq_query,
+            {"prerequisite": prerequisite, "concept": concept}
+        )
+
+        if not result:
+            raise Exception("Failed to create prerequisite relationship")
+
+        logger.info(f"Prerequisite created successfully: {prerequisite} -> {concept}")
+        return Edge(source=prerequisite, target=concept, relType="prerequisite")
+
+    async def delete_prerequisite(self, user_id: str, prerequisite: str, concept: str) -> bool:
+        """
+        删除前置关系
+
+        Args:
+            user_id: 用户 ID（用于权限验证）
+            prerequisite: 前置概念 ID（Concept uid）
+            concept: 目标概念 ID（Concept uid）
+
+        Returns:
+            是否删除成功
+        """
+        logger.info(f"Deleting prerequisite: {prerequisite} -> {concept} for user {user_id}")
+
+        # 验证用户是否与两个节点都有交互（权限检查）
+        verify_query = """
+        MATCH (s:Student {id: $user_id})-[:INTERACTED_WITH]->(c1:Concept {uid: $prerequisite})
+        MATCH (s)-[:INTERACTED_WITH]->(c2:Concept {uid: $concept})
+        RETURN c1.uid as prerequisite, c2.uid as concept
+        """
+
+        verify_result = await execute_query(
+            verify_query,
+            {"user_id": user_id, "prerequisite": prerequisite, "concept": concept}
+        )
+
+        if not verify_result:
+            logger.warning(f"User does not have permission to delete prerequisite: {prerequisite} -> {concept}")
+            return False
+
+        # 删除 PREREQUISITE_OF 关系
+        delete_prereq_query = """
+        MATCH (c1:Concept {uid: $prerequisite})-[r:PREREQUISITE_OF]->(c2:Concept {uid: $concept})
+        DELETE r
+        RETURN count(r) as deleted
+        """
+
+        result = await execute_write(
+            delete_prereq_query,
+            {"prerequisite": prerequisite, "concept": concept}
+        )
+
+        if not result or result[0]["deleted"] == 0:
+            logger.warning(f"Prerequisite not found or already deleted: {prerequisite} -> {concept}")
+            return False
+
+        logger.info(f"Prerequisite deleted successfully: {prerequisite} -> {concept}")
+        return True
+
+    async def update_mastery_batch(
+        self,
+        user_id: str,
+        concepts: List[str],
+        mastery_delta: float
+    ) -> int:
+        """
+        批量更新概念的掌握度（基于对话质量）
+
+        Args:
+            user_id: 用户 ID
+            concepts: 概念名称列表
+            mastery_delta: 掌握度增量 [-1.0, 1.0]，例如 0.05 表示提高 5%
+
+        Returns:
+            更新的概念数量
+        """
+        if not concepts or mastery_delta == 0:
+            return 0
+
+        logger.info(
+            f"Updating mastery for user {user_id}: {len(concepts)} concepts, delta={mastery_delta}"
+        )
+
+        # 将概念名称转换为 uid
+        concept_uids = [self._slugify(name) for name in concepts]
+
+        # 批量更新掌握度（使用 CASE 确保在 0.0-1.0 之间）
+        update_query = """
+        MATCH (s:Student {id: $user_id})-[r:INTERACTED_WITH]->(c:Concept)
+        WHERE c.uid IN $concept_uids
+        SET r.mastery = CASE
+            WHEN r.mastery + $delta > 1.0 THEN 1.0
+            WHEN r.mastery + $delta < 0.0 THEN 0.0
+            ELSE r.mastery + $delta
+        END,
+        r.lastUpdated = datetime()
+        RETURN count(r) as updated_count
+        """
+
+        result = await execute_write(
+            update_query,
+            {
+                "user_id": user_id,
+                "concept_uids": concept_uids,
+                "delta": mastery_delta
+            }
+        )
+
+        updated_count = result[0]["updated_count"] if result else 0
+
+        logger.info(f"Updated mastery for {updated_count} concepts")
+        return updated_count
+
+    async def calculate_cognition_from_graph(self, user_id: str) -> int:
+        """
+        基于知识图谱计算用户的认知水平 [0-100]
+
+        计算逻辑：
+        - 40% 权重：所有概念的平均掌握度
+        - 30% 权重：高掌握度概念（>= 70%）占比
+        - 15% 权重：知识广度（涉及的领域类别数）
+        - 15% 权重：知识深度（前置关系链数量）
+
+        Args:
+            user_id: 用户 ID
+
+        Returns:
+            认知水平分数 [0-100]
+        """
+        logger.info(f"Calculating cognition from graph for user {user_id}")
+
+        # 获取用户的知识图谱
+        graph_data = await self.get_graph(user_id)
+
+        if not graph_data.nodes:
+            logger.info("No concepts found, returning default cognition 50")
+            return 50  # 无概念时返回默认值
+
+        nodes = graph_data.nodes
+        edges = graph_data.edges
+
+        # Component 1: 平均掌握度 (40% 权重)
+        avg_mastery = sum(n.mastery for n in nodes) / len(nodes)
+        mastery_score = avg_mastery  # 已经是 0-100 范围
+
+        # Component 2: 高掌握度概念占比 (30% 权重)
+        high_mastery_count = sum(1 for n in nodes if n.mastery >= 70.0)
+        high_mastery_ratio = high_mastery_count / len(nodes)
+        high_mastery_score = high_mastery_ratio * 100
+
+        # Component 3: 知识广度 - 领域类别多样性 (15% 权重)
+        categories = set(n.category for n in nodes if n.category)
+        # 假设 5 个不同领域即为满分
+        category_score = min(100, len(categories) * 20)
+
+        # Component 4: 知识深度 - 前置关系数量 (15% 权重)
+        prereq_edges = [e for e in edges if e.relType == "prerequisite"]
+        # 假设 10 条前置关系即为满分
+        depth_score = min(100, len(prereq_edges) * 10)
+
+        # 加权求和
+        cognition = (
+            mastery_score * 0.4 +
+            high_mastery_score * 0.3 +
+            category_score * 0.15 +
+            depth_score * 0.15
+        )
+
+        cognition_int = int(max(0, min(100, cognition)))
+
+        logger.info(
+            f"Cognition calculated for user {user_id}: {cognition_int} "
+            f"(avg_mastery={avg_mastery:.1f}, high_ratio={high_mastery_ratio:.2f}, "
+            f"categories={len(categories)}, prereqs={len(prereq_edges)})"
+        )
+
+        return cognition_int
