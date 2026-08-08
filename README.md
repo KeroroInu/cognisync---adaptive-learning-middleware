@@ -205,15 +205,19 @@ SEED_DEFAULT_ADMIN=false
 SEED_TEST_DATA=false
 
 # ── 安全配置（生产环境请修改）──────────────────────
-ADMIN_KEY=your-admin-api-key
+ADMIN_KEY=replace-with-a-random-key-at-least-24-chars
 JWT_SECRET=your-random-jwt-secret-at-least-32-chars
 ```
 
 ### 3. 一键启动
 
 ```bash
+export ADMIN_KEY='replace-with-a-random-key-at-least-24-chars'
 docker compose up -d --build
 ```
+
+`ADMIN_KEY` 由 Compose 在启动时显式注入后端，不能使用示例短密钥。仅在本机预览时，可通过
+`APP_ENV=development` 启动；服务器部署应保持默认的 `production`。
 
 首次启动需要拉取镜像和构建，约 5-10 分钟。
 
