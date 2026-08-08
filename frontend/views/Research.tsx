@@ -1,8 +1,4 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import CodeMirror from '@uiw/react-codemirror';
-import { python } from '@codemirror/lang-python';
-import { javascript } from '@codemirror/lang-javascript';
-import { oneDark } from '@codemirror/theme-one-dark';
 import { Send, CheckCircle, FlaskConical, Loader, Save, Play, Terminal, Trash2, X } from 'lucide-react';
 import type { ChatMessage, Language, User, UserProfile, ResearchTask } from '../types';
 import {
@@ -13,6 +9,14 @@ import {
   reopenResearchTask,
 } from '../services/api';
 import { SnakeProjectDemo } from '../components/SnakeProjectDemo';
+import {
+  ProjectFactoryHeader,
+  ProjectObservationStage,
+  ProjectStagePreview,
+  type ProjectStage,
+} from '../components/ProjectFactory';
+
+const ResearchCodeEditor = React.lazy(() => import('../components/ResearchCodeEditor'));
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -50,6 +54,8 @@ export const Research: React.FC<Props> = ({
   const [loadingTask, setLoadingTask] = useState(true);
   const [code, setCode] = useState('');
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved');
+  const [factoryStage, setFactoryStage] = useState<ProjectStage>('observe');
+  const [demoOpen, setDemoOpen] = useState(false);
 
   // Chat state
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -82,6 +88,13 @@ export const Research: React.FC<Props> = ({
   const isZh = language === 'zh';
   const isPython = task?.language?.toLowerCase() === 'python';
   const allowAI = experimentGroup === 'pdt' || experimentGroup === 'ai_pbl';
+  const factorySaveLabel = factoryStage === 'build'
+    ? (saveStatus === 'saving'
+      ? (isZh ? '保存中' : 'Saving')
+      : saveStatus === 'unsaved'
+        ? (isZh ? '待保存' : 'Unsaved')
+        : (isZh ? '已保存' : 'Saved'))
+    : (isZh ? '过程已暂存' : 'Progress saved');
 
   // ── Load task ──────────────────────────────────────────────────────────
 
@@ -332,20 +345,6 @@ export const Research: React.FC<Props> = ({
     }
   };
 
-  // ── Language extensions for CodeMirror ─────────────────────────────────
-
-  const getExtensions = () => {
-    if (!task) return [];
-    switch (task.language.toLowerCase()) {
-      case 'python':       return [python()];
-      case 'javascript':
-      case 'js':           return [javascript()];
-      case 'typescript':
-      case 'ts':           return [javascript({ typescript: true })];
-      default:             return [];
-    }
-  };
-
   // ── Guard states ────────────────────────────────────────────────────────
 
   if (loadingTask) {
@@ -378,9 +377,64 @@ export const Research: React.FC<Props> = ({
   // ── Render ──────────────────────────────────────────────────────────────
 
   return (
-    <div className={`research-workbench ${allowAI ? '' : 'research-workbench-solo'}`}>
+    <div className="project-factory">
+      <ProjectFactoryHeader
+        language={language}
+        taskTitle={task.title}
+        experimentGroup={experimentGroup}
+        activeStage={factoryStage}
+        onStageChange={setFactoryStage}
+        onOpenProject={() => setDemoOpen(true)}
+        saveLabel={factorySaveLabel}
+      />
 
-      <SnakeProjectDemo language={language} defaultOpen />
+      <SnakeProjectDemo
+        language={language}
+        open={demoOpen}
+        onOpenChange={setDemoOpen}
+        variant="viewer"
+        showLauncher={false}
+      />
+
+      {factoryStage === 'observe' && (
+        <ProjectObservationStage
+          language={language}
+          taskId={task.id}
+          onOpenProject={() => setDemoOpen(true)}
+          onContinue={() => setFactoryStage('decompose')}
+        />
+      )}
+
+      {factoryStage === 'decompose' && (
+        <ProjectStagePreview
+          language={language}
+          stage="decompose"
+          onBack={() => setFactoryStage('observe')}
+          onContinue={() => setFactoryStage('model')}
+        />
+      )}
+
+      {factoryStage === 'model' && (
+        <ProjectStagePreview
+          language={language}
+          stage="model"
+          onBack={() => setFactoryStage('decompose')}
+          onContinue={() => setFactoryStage('plan')}
+        />
+      )}
+
+      {factoryStage === 'plan' && (
+        <ProjectStagePreview
+          language={language}
+          stage="plan"
+          onBack={() => setFactoryStage('model')}
+          onContinue={() => setFactoryStage('build')}
+        />
+      )}
+
+      {factoryStage === 'build' && (
+      <div className="project-build-stage">
+      <div className={`research-workbench ${allowAI ? '' : 'research-workbench-solo'}`}>
 
       {/* ── Left: Code Editor + Terminal ─────────────────────────────── */}
       <div className="research-panel research-code-panel">
@@ -404,14 +458,14 @@ export const Research: React.FC<Props> = ({
 
         {/* CodeMirror editor — flex-1 shrinks when terminal opens */}
         <div className="research-editor-wrap">
-          <CodeMirror
-            value={code}
-            onChange={handleCodeChange}
-            extensions={getExtensions()}
-            theme={theme === 'dark' ? oneDark : undefined}
-            height="100%"
-            style={{ height: '100%', fontSize: '13px' }}
-          />
+          <React.Suspense fallback={<div className="view-loading">{isZh ? '正在准备编辑器…' : 'Preparing editor…'}</div>}>
+            <ResearchCodeEditor
+              value={code}
+              onChange={handleCodeChange}
+              language={task.language}
+              theme={theme}
+            />
+          </React.Suspense>
         </div>
 
         {/* ── Terminal panel ─────────────────────────────────────────── */}
@@ -642,6 +696,9 @@ export const Research: React.FC<Props> = ({
           </div>
         </form>
       </div>}
+      </div>
+      </div>
+      )}
     </div>
   );
 };

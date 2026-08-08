@@ -19,6 +19,10 @@ import './SnakeProjectDemo.css';
 interface Props {
   language: Language;
   defaultOpen?: boolean;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  variant?: 'floating' | 'viewer';
+  showLauncher?: boolean;
 }
 
 type Direction = 'up' | 'down' | 'left' | 'right';
@@ -80,9 +84,16 @@ const getDefaultPosition = () => {
   };
 };
 
-export const SnakeProjectDemo: React.FC<Props> = ({ language, defaultOpen = false }) => {
+export const SnakeProjectDemo: React.FC<Props> = ({
+  language,
+  defaultOpen = false,
+  open: controlledOpen,
+  onOpenChange,
+  variant = 'floating',
+  showLauncher = true,
+}) => {
   const isZh = language === 'zh';
-  const [open, setOpen] = useState(defaultOpen);
+  const [internalOpen, setInternalOpen] = useState(defaultOpen);
   const [minimized, setMinimized] = useState(false);
   const [position, setPosition] = useState(getDefaultPosition);
   const [snake, setSnake] = useState<Cell[]>(INITIAL_SNAKE);
@@ -94,6 +105,11 @@ export const SnakeProjectDemo: React.FC<Props> = ({ language, defaultOpen = fals
   const boardRef = useRef<HTMLDivElement>(null);
   const directionRef = useRef<Direction>('right');
   const dragRef = useRef({ pointerId: -1, offsetX: 0, offsetY: 0 });
+  const open = controlledOpen ?? internalOpen;
+  const setOpen = useCallback((nextOpen: boolean) => {
+    if (controlledOpen === undefined) setInternalOpen(nextOpen);
+    onOpenChange?.(nextOpen);
+  }, [controlledOpen, onOpenChange]);
 
   const clampPosition = useCallback((x: number, y: number) => {
     const rect = windowRef.current?.getBoundingClientRect();
@@ -110,6 +126,17 @@ export const SnakeProjectDemo: React.FC<Props> = ({ language, defaultOpen = fals
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, [clampPosition]);
+
+  useEffect(() => {
+    if (!open || variant !== 'viewer') return undefined;
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setOpen(false);
+      setStatus(current => (current === 'running' ? 'paused' : current));
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [open, setOpen, variant]);
 
   useEffect(() => {
     if (status !== 'running' || !open || minimized) return undefined;
@@ -227,6 +254,7 @@ export const SnakeProjectDemo: React.FC<Props> = ({ language, defaultOpen = fals
         : (isZh ? '等待开始' : 'READY');
 
   if (!open) {
+    if (!showLauncher) return null;
     return (
       <button
         type="button"
@@ -247,23 +275,26 @@ export const SnakeProjectDemo: React.FC<Props> = ({ language, defaultOpen = fals
     );
   }
 
-  return (
+  const dialog = (
     <section
       ref={windowRef}
-      className={`snake-demo-window ${minimized ? 'is-minimized' : ''}`}
-      style={{ left: position.x, top: position.y }}
+      className={`snake-demo-window ${minimized ? 'is-minimized' : ''} ${variant === 'viewer' ? 'is-viewer' : ''}`}
+      style={variant === 'floating' ? { left: position.x, top: position.y } : undefined}
       role="dialog"
+      aria-modal={variant === 'viewer' ? true : undefined}
       aria-label={isZh ? '贪吃蛇完整项目演示窗口' : 'Playable snake project demo'}
     >
       <div
         className="snake-demo-titlebar"
-        onPointerDown={handleDragStart}
-        onPointerMove={handleDragMove}
-        onPointerUp={handleDragEnd}
-        onPointerCancel={handleDragEnd}
+        onPointerDown={variant === 'floating' ? handleDragStart : undefined}
+        onPointerMove={variant === 'floating' ? handleDragMove : undefined}
+        onPointerUp={variant === 'floating' ? handleDragEnd : undefined}
+        onPointerCancel={variant === 'floating' ? handleDragEnd : undefined}
       >
         <div className="snake-demo-window-title">
-          <span className="snake-demo-drag-mark"><GripHorizontal size={16} /></span>
+          <span className="snake-demo-drag-mark">
+            {variant === 'floating' ? <GripHorizontal size={16} /> : <Gamepad2 size={16} />}
+          </span>
           <span>
             <small>PROJECT_001 / COMPLETE BUILD</small>
             <strong>{isZh ? '贪吃蛇项目演示' : 'Snake project demo'}</strong>
@@ -271,13 +302,15 @@ export const SnakeProjectDemo: React.FC<Props> = ({ language, defaultOpen = fals
         </div>
         <div className="snake-demo-window-actions">
           <span className="snake-demo-live"><i />{isZh ? '可交互' : 'LIVE'}</span>
-          <button
-            type="button"
-            onClick={() => setMinimized(current => !current)}
-            title={minimized ? (isZh ? '展开' : 'Expand') : (isZh ? '收起' : 'Minimize')}
-          >
-            {minimized ? <Maximize2 size={15} /> : <Minus size={15} />}
-          </button>
+          {variant === 'floating' && (
+            <button
+              type="button"
+              onClick={() => setMinimized(current => !current)}
+              title={minimized ? (isZh ? '展开' : 'Expand') : (isZh ? '收起' : 'Minimize')}
+            >
+              {minimized ? <Maximize2 size={15} /> : <Minus size={15} />}
+            </button>
+          )}
           <button
             type="button"
             onClick={() => {
@@ -374,11 +407,21 @@ export const SnakeProjectDemo: React.FC<Props> = ({ language, defaultOpen = fals
 
             <div className="snake-demo-keyboard-note">
               <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>
-              <span>{isZh ? '点击窗口标题可拖动到不遮挡的位置' : 'Drag the title bar out of your way'}</span>
+              <span>
+                {variant === 'floating'
+                  ? (isZh ? '点击窗口标题可拖动到不遮挡的位置' : 'Drag the title bar out of your way')
+                  : (isZh ? '完成观察后关闭窗口，系统会保留你的观察记录' : 'Close the viewer when finished; your observations stay saved')}
+              </span>
             </div>
           </aside>
         </div>
       )}
     </section>
   );
+
+  if (variant === 'viewer') {
+    return <div className="snake-demo-backdrop">{dialog}</div>;
+  }
+
+  return dialog;
 };
