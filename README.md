@@ -1,6 +1,8 @@
-# CogniSync — 自适应学习中间件
+# CogniSync — AI 时代的项目解构式编程学习平台
 
-> 面向编程教学的 AI 伴学系统，实时追踪学生认知、情感与行为状态，提供个性化引导。
+> **从解构，到建构。**
+>
+> 以项目解构为学习主线、以 AI 过程支架为中间层，帮助学生从观察完整项目走向自主建构、验证与反思。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.13+-green.svg)](https://python.org)
@@ -11,13 +13,20 @@
 
 ## 这个系统是做什么的？
 
-CogniSync 是一个专为**编程课堂教学研究**设计的 AI 中间件系统。教师部署后，学生通过 AI 助手完成代码练习，系统在后台自动：
+CogniSync 是一个面向**编程课堂教学研究**的项目解构学习与过程诊断平台，也是项目解构式教学（Project Deconstruction Teaching, PDT）的数字化实施载体。系统围绕以下学习主线组织学生端体验：
 
-1. **分析每条消息**的学习意图与情感状态（10 种情绪类别）
-2. **动态更新三维学习者画像**：认知（0-100）/ 情感（0-100）/ 行为（0-100）
-3. **构建个人知识图谱**，追踪概念掌握轨迹
-4. **调整 AI 的教学策略**（苏格拉底式引导 / 直接讲解），适配学生当前状态
-5. **记录前后测量表数据**，供教学研究分析
+> 完整项目 → 观察运行 → 解构功能、数据与关系 → 表达理解 → 分步建构 → 验证整合 → 反思留证
+
+AI 不代替学生完成解构和代码建构，而是在关键节点分析过程信息、提出追问并提供适量支架。当前系统已经提供项目任务、AI 对话、学习者画像、知识图谱、校准、量表、过程记录和研究数据导出等基础能力；专用项目解构工作台是当前迭代的核心方向。
+
+在运行过程中，系统可以：
+
+1. **承载完整编程项目与分步任务**，为“解构—建构—验证”提供共同项目环境。
+2. **分析学生对话与过程信息**，识别学习意图、情感状态和概念线索。
+3. **动态更新三维学习者画像**：认知（0-100）/ 情感（0-100）/ 行为（0-100）。
+4. **构建个人知识图谱**，呈现学生接触的概念及其关系。
+5. **调整 AI 支架方式**，在追问、解释和局部提示之间匹配学生当前状态。
+6. **记录量表、校准、代码进度与提交数据**，供课堂诊断和教学研究分析。
 
 教师通过管理后台可实时查看每位学生的学习状态、对话记录和量表结果，并可导出 CSV 数据用于研究。
 
@@ -35,7 +44,7 @@ CogniSync 是一个专为**编程课堂教学研究**设计的 AI 中间件系�
 │   Port: 3000/8003       │      Port: 3001/8003/admin/          │
 │   - 学习对话            │      - 用户管理                       │
 │   - 知识图谱可视化       │      - 数据分析                       │
-│   - 研究任务编程         │      - 情感实验对比                   │
+│   - 研究任务编程         │      - 研究数据导出                   │
 └──────────────┬───────────┴──────────────┬───────────────────────┘
                │                          │
                │    HTTP/REST API        │
@@ -47,7 +56,7 @@ CogniSync 是一个专为**编程课堂教学研究**设计的 AI 中间件系�
 │  API层           │  核心服务层          │  数据访问层             │
 │  /api/auth       │  TextAnalyzer       │  SQLAlchemy ORM       │
 │  /api/chat       │  Personalization    │  Neo4j Driver         │
-│  /api/profile    │  EmotionCoding      │  Redis Client         │
+│  /api/profile    │  EmotionCoding      │  Async connection pool│
 │  /api/graph      │  GraphService       │                       │
 │  /api/admin      │  ProfileService     │                       │
 └──────┬──────────┴──────────┬───────────┴──────────┬─────────────┘
@@ -56,13 +65,13 @@ CogniSync 是一个专为**编程课堂教学研究**设计的 AI 中间件系�
 ┌─────────────────────────────────────────────────────────────────┐
 │                        数据持久层                                 │
 ├──────────────────┬──────────────────┬───────────────────────────┤
-│  PostgreSQL 15   │   Neo4j 6.1.0    │      Redis 7              │
-│  Port: 5432      │   Port: 7687     │      Port: 6379           │
-│                  │                  │                           │
-│  - 用户数据      │   - 知识图谱     │      - 会话缓存            │
-│  - 对话记录      │   - 概念关系     │      - 实时状态            │
+│  PostgreSQL 15   │   Neo4j 5.x      │   可降级依赖              │
+│  Port: 5432      │   Port: 7687     │   图谱短暂不可用时       │
+│                  │                  │   学生对话与画像仍可继续   │
+│  - 用户数据      │   - 知识图谱     │                           │
+│  - 对话记录      │   - 概念关系     │                           │
 │  - 学习画像      │   - 学习路径     │                           │
-│  - 情感分析结果  │                  │                           │
+│  - 过程研究数据  │                  │                           │
 └──────────────────┴──────────────────┴───────────────────────────┘
                               │
                               ▼
@@ -82,7 +91,6 @@ CogniSync 是一个专为**编程课堂教学研究**设计的 AI 中间件系�
 | 后端 API | FastAPI 0.128 + SQLAlchemy 2.0 | 全异步架构、Pydantic 数据验证、JWT 认证 |
 | 主数据库 | PostgreSQL 15 | 用户、对话、学习画像、情感分析结果 |
 | 知识图谱 | Neo4j 6.1.0 | 概念节点、学习关系、知识路径推理 |
-| 缓存 | Redis 7 | 会话状态、实时数据缓存 |
 | LLM | DeepSeek / OpenAI / Ollama / LM Studio | 多模型抽象层、统一接口、降级策略 |
 | 部署 | Docker Compose | 单命令启动、Nginx 反向代理 |
 
@@ -96,10 +104,7 @@ CogniSync 是一个专为**编程课堂教学研究**设计的 AI 中间件系�
 - **Affect (情感)**：学习动机、情绪状态、心理韧性
 - **Behavior (行为)**：学习习惯、自主性、坚持度
 
-画像更新算法采用加权移动平均：
-```python
-new_score = 0.7 * historical_score + 0.3 * current_analysis
-```
+画像以注册量表或 AI 问答的初始快照为起点；之后认知信号优先由知识图谱计算，情感和行为信号按可追溯的过程记录更新，所有维度约束在 0–100。
 
 #### 2. 十三情感编码系统
 
@@ -154,23 +159,6 @@ new_score = 0.7 * historical_score + 0.3 * current_analysis
 - **量表管理**：发布前测/后测问卷，导出评分数据
 - **数据导出**：CSV 格式导出学生提交记录、量表评分
 
-### 研究实验开发说明
-- **情感对比实验设计**：见 [emotion-compare-dev.md](file:///Users/kero_o/Desktop/cognisync---adaptive-learning-middleware/docs/emotion-compare-dev.md)
-- **演示 / 提测 / 交接说明**：见 [emotion-compare-handover.md](file:///Users/kero_o/Desktop/cognisync---adaptive-learning-middleware/docs/emotion-compare-handover.md)
-- **第二阶段论文指标与消融规划**：见 [emotion-compare-phase2-plan.md](file:///Users/kero_o/Desktop/cognisync---adaptive-learning-middleware/docs/emotion-compare-phase2-plan.md)
-- **适配的数据集形态**：
-  - 单标签类别列数据集（如中文微博 usual / virus 数据集）
-  - 多标签 one-hot 数据集（如本地测试用 GoEmotions 清洗版）
-- **第一阶段目标**：
-  - 上传数据集
-  - 同时输出 baseline 与 CogniSync system 两套结果
-  - 导出逐条 comparison CSV
-- **当前推荐演示输入**：
-  - 中文微博优先使用 `usual_train.txt`
-  - GoEmotions 使用 `goemotions_train_clean.csv`
-
----
-
 ## 快速部署（Docker Compose，推荐）
 
 ### 前置条件
@@ -212,10 +200,9 @@ DEEPSEEK_MODEL=deepseek-chat
 # OLLAMA_BASE_URL=http://host.docker.internal:11434/v1
 # OLLAMA_MODEL=llama3.2:latest
 
-# ── 管理员账号（首次启动自动创建）──────────────────
-ADMIN_DEFAULT_STUDENT_ID=admin
-ADMIN_DEFAULT_PASSWORD=your-admin-password
-ADMIN_DEFAULT_NAME=系统管理员
+# ── 生产环境不自动创建默认账号或演示数据 ─────────
+SEED_DEFAULT_ADMIN=false
+SEED_TEST_DATA=false
 
 # ── 安全配置（生产环境请修改）──────────────────────
 ADMIN_KEY=your-admin-api-key
@@ -255,7 +242,7 @@ curl http://localhost:8003/health  # 检查后端健康
 
 | 角色 | 账号 | 密码 | 说明 |
 |------|------|------|------|
-| 管理员 | `admin` | 见 `.env` 中 `ADMIN_DEFAULT_PASSWORD` | 可登录管理后台 |
+| 管理员 | `admin` | `admin` | 可登录管理后台 |
 | 测试学生 | `kero` | `kero` | 用于验证学生端功能 |
 
 > 生产使用时建议在管理后台删除 `kero` 测试账号，或通过管理后台为真实学生批量创建账号。
@@ -395,10 +382,17 @@ OLLAMA_MODEL=llama3.2:latest
 ADMIN_KEY=your-admin-api-key
 JWT_SECRET=your-random-jwt-secret
 
-# ── 默认管理员（首次启动自动创建）──────────────────────
-ADMIN_DEFAULT_STUDENT_ID=admin
-ADMIN_DEFAULT_PASSWORD=your-password
-ADMIN_DEFAULT_NAME=系统管理员
+SEED_DEFAULT_ADMIN=false
+SEED_TEST_DATA=false
+```
+
+系统不内置默认管理员密码。首次部署后，用 `ADMIN_KEY` 调用一次 `/api/admin/auth/create-admin` 创建管理员，随后通过管理端的学号和密码登录。
+
+```bash
+curl -X POST http://localhost:8003/api/admin/auth/create-admin \
+  -H 'Content-Type: application/json' \
+  -H 'X-ADMIN-KEY: 你配置的ADMIN_KEY' \
+  -d '{"student_id":"teacher-admin","password":"请换成强密码","name":"系统管理员"}'
 ```
 
 ---
@@ -444,8 +438,8 @@ docker compose up -d --build
 如需修改代码，可以在本地运行各服务：
 
 ```bash
-# 启动数据库（PostgreSQL + Redis + Neo4j）
-docker compose up -d postgres redis neo4j
+# 启动数据库（PostgreSQL + Neo4j）
+docker compose up -d postgres neo4j
 
 # 启动后端
 cd backend
@@ -490,7 +484,7 @@ cognisync---adaptive-learning-middleware/
 如果本项目对你的教学研究有帮助，欢迎在论文中引用：
 
 ```
-CogniSync: An Adaptive Learning Middleware for Programming Education
+CogniSync: Project Deconstruction Learning for the AI Era
 https://github.com/KeroroInu/cognisync---adaptive-learning-middleware
 ```
 
@@ -573,10 +567,10 @@ C(u,t+1) = α·C(u,t) + (1-α)·f_cog(msg, history)
 
 #### 系统性能指标
 
-- **平均响应时间**：< 2秒（含 LLM 调用）
-- **并发支持**：100+ 同时在线用户
-- **情感分类准确率**：85%+（需实验验证）
-- **数据库查询优化**：Neo4j 图查询性能比关系数据库快 10-1000倍
+- **并发基线**：以单班 40–50 人同时使用为最低压测目标。
+- **连接控制**：PostgreSQL 连接池、LLM 并发限流、HTTP Keep-Alive 和有界重试均可配置。
+- **前端加载**：学生端与管理端按页面拆包，大型图谱、图表和编程环境按需加载。
+- **验证边界**：响应时间和可承载上限需在目标服务器上通过压测确认，不在文档中预设结论。
 
 #### 技术选型理由
 
@@ -687,7 +681,7 @@ ORDER BY c2.difficulty ASC LIMIT 5
 
 1. **Neo4j 连接稳定性**：添加连接池管理和心跳检测
 2. **情感分析提示词热更新**：从硬编码迁移到数据库/配置文件
-3. **前端组件拆分**：Research.tsx (704行)、EmotionCompare.tsx (1103行)
+3. **前端组件拆分**：Research.tsx (704行)
 4. **API 文档完善**：补充 Postman Collection 或 API Blueprint
 5. **日志系统升级**：集成 ELK Stack 或 Loki
 
@@ -737,11 +731,9 @@ frontend/ (学生端, 8,500行)
     ├── Graph.tsx (512行) - D3可视化
     └── Dashboard.tsx (298行)
 
-admin-frontend/ (管理端, 12,000行)
+admin-frontend/ (管理端)
 ├── App.tsx (120行) - React Router
 ├── features/auth/ (3文件) - 认证模块
-├── pages/
-│   └── EmotionCompare.tsx (1103行) - ⚠️需拆分
 └── lib/
     ├── adminApi.ts (450行)
     └── apiClient.ts (125行)

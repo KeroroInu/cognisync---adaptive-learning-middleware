@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Query, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Optional
+from typing import Literal, Optional
 
 from app.core.security import verify_admin_key
 from app.db.postgres import get_db
@@ -23,10 +23,24 @@ async def list_users(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     query: Optional[str] = Query(None, description="搜索关键词（邮箱或用户名）"),
+    experiment_group: Optional[str] = Query(None, description="按实验条件筛选"),
     db: AsyncSession = Depends(get_db)
 ) -> SuccessResponse[UserListResponse]:
     """获取用户列表（分页 + 搜索）"""
-    base_stmt = select(User)
+    message_stats = (
+        select(
+            ChatMessage.user_id.label("user_id"),
+            func.count(ChatMessage.id).label("message_count"),
+            func.max(ChatMessage.timestamp).label("last_active_at"),
+        )
+        .group_by(ChatMessage.user_id)
+        .subquery()
+    )
+    base_stmt = select(
+        User,
+        func.coalesce(message_stats.c.message_count, 0),
+        message_stats.c.last_active_at,
+    ).outerjoin(message_stats, message_stats.c.user_id == User.id)
     count_stmt = select(func.count(User.id))
 
     # 支持按 student_id、name、email 搜索
@@ -40,29 +54,20 @@ async def list_users(
         base_stmt = base_stmt.where(condition)
         count_stmt = count_stmt.where(condition)
 
+    if experiment_group:
+        base_stmt = base_stmt.where(User.experiment_group == experiment_group)
+        count_stmt = count_stmt.where(User.experiment_group == experiment_group)
+
     total_result = await db.execute(count_stmt)
     total = total_result.scalar() or 0
 
     offset = (page - 1) * page_size
     stmt = base_stmt.offset(offset).limit(page_size).order_by(User.created_at.desc())
     result = await db.execute(stmt)
-    users = result.scalars().all()
+    rows = result.all()
 
     user_summaries = []
-    for user in users:
-        msg_count_result = await db.execute(
-            select(func.count(ChatMessage.id)).where(ChatMessage.user_id == user.id)
-        )
-        msg_count = msg_count_result.scalar() or 0
-
-        last_msg_result = await db.execute(
-            select(ChatMessage.timestamp)
-            .where(ChatMessage.user_id == user.id)
-            .order_by(ChatMessage.timestamp.desc())
-            .limit(1)
-        )
-        last_active = last_msg_result.scalar()
-
+    for user, msg_count, last_active in rows:
         user_summaries.append(UserSummary(
             id=str(user.id),
             student_id=user.student_id,
@@ -72,7 +77,9 @@ async def list_users(
             is_active=getattr(user, "is_active", True) if hasattr(user, "is_active") else True,
             created_at=user.created_at,
             message_count=msg_count,
-            last_active_at=last_active
+            last_active_at=last_active,
+            class_name=user.class_name,
+            experiment_group=user.experiment_group,
         ))
 
     return SuccessResponse(data=UserListResponse(
@@ -86,6 +93,8 @@ async def list_users(
 class UpdateUserRequest(BaseModel):
     name: Optional[str] = None
     is_active: Optional[bool] = None
+    class_name: Optional[str] = None
+    experiment_group: Optional[Literal["unassigned", "pdt", "ai_pbl", "lecture"]] = None
 
 
 @router.patch("/users/{user_id}", dependencies=[Depends(verify_admin_key)])
@@ -109,6 +118,10 @@ async def update_user(
         user.name = body.name
     if body.is_active is not None and hasattr(user, "is_active"):
         user.is_active = body.is_active
+    if body.class_name is not None:
+        user.class_name = body.class_name.strip() or None
+    if body.experiment_group is not None:
+        user.experiment_group = body.experiment_group
 
     await db.commit()
     await db.refresh(user)
@@ -119,6 +132,8 @@ async def update_user(
         "email": user.email,
         "name": user.name or "",
         "is_active": getattr(user, "is_active", True),
+        "class_name": user.class_name,
+        "experiment_group": user.experiment_group,
     })
 
 

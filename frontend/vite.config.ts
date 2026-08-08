@@ -10,7 +10,7 @@ export default defineConfig(({ mode }) => {
         host: '0.0.0.0',
         proxy: {
           '/api': {
-            target: env.VITE_DEV_API_TARGET || 'http://localhost:8003',
+            target: env.VITE_DEV_API_TARGET || 'http://localhost:8000',
             changeOrigin: true,
           },
         },
@@ -29,13 +29,6 @@ export default defineConfig(({ mode }) => {
         alias: {
           '@': path.resolve(__dirname, '.'),
         }
-      },
-      build: {
-        rollupOptions: {
-          output: {
-            manualChunks: undefined,
-          },
-        },
       },
     };
 });

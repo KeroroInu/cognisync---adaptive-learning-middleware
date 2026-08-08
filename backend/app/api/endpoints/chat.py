@@ -154,8 +154,8 @@ def build_assistant_system_prompt(
     # 研究模式 vs 直接回答模式
     if is_research_mode:
         mode_instruction = {
-            "zh": "采用「苏格拉底式提问」：不要直接给出答案，而是通过提问引导用户自己思考和发现答案。",
-            "en": "Use Socratic questioning: Don't give direct answers, but guide users to think and discover answers themselves through questions."
+            "zh": "采用“讲解一点 + 引导一步”的节奏：先给一个关键解释或观察，再问一个具体检查问题。不要连续只提问。",
+            "en": "Use an explain-then-guide rhythm: give one key explanation or observation, then ask one targeted check question. Do not respond with questions only."
         }[language]
     else:
         mode_instruction = {
@@ -183,8 +183,8 @@ def build_assistant_system_prompt(
     if is_research_mode and current_code:
         code_snippet = current_code[:3000]  # 防止过长
         code_context = {
-            "zh": f"\n**学生当前代码：**\n```\n{code_snippet}\n```\n请根据以上代码内容理解学生的进度，结合代码给出引导性提问，帮助学生自己发现问题和解决方案。不要直接给出完整代码答案。\n",
-            "en": f"\n**Student's current code:**\n```\n{code_snippet}\n```\nUse this code to understand the student's progress. Ask guiding questions based on the code to help them discover problems and solutions themselves. Do not give complete code answers directly.\n",
+            "zh": f"\n**学生当前代码：**\n```\n{code_snippet}\n```\n请根据以上代码内容理解学生的进度。先指出一个具体观察或小提示，再问一个检查问题；可以给局部伪代码或小片段，但不要直接给出完整代码答案。\n",
+            "en": f"\n**Student's current code:**\n```\n{code_snippet}\n```\nUse this code to understand the student's progress. First point out one concrete observation or small hint, then ask one check question. You may give local pseudocode or a small snippet, but do not provide a complete code answer.\n",
         }[language]
         system_prompt += code_context
 
@@ -639,8 +639,8 @@ async def chat(
             code_snippet = request.currentCode[:3000]
             lang = request.language or "zh"
             code_context = {
-                "zh": f"\n\n**学生当前代码：**\n```\n{code_snippet}\n```\n请根据以上代码内容理解学生进度，给出引导性提问，帮助学生自己发现和解决问题，不要直接给出完整答案。\n",
-                "en": f"\n\n**Student's current code:**\n```\n{code_snippet}\n```\nUse this code to understand the student's progress. Ask guiding questions to help them discover and solve problems themselves. Do not provide complete code answers directly.\n",
+                "zh": f"\n\n**学生当前代码：**\n```\n{code_snippet}\n```\n请根据以上代码内容理解学生进度。先给一个具体观察、关键解释或小提示，再问一个检查问题；可以给局部伪代码或小片段，但不要直接给出完整答案。\n",
+                "en": f"\n\n**Student's current code:**\n```\n{code_snippet}\n```\nUse this code to understand the student's progress. First give one concrete observation, key explanation, or small hint, then ask one check question. You may provide local pseudocode or a small snippet, but do not provide a complete answer.\n",
             }[lang]
             system_prompt += code_context
 

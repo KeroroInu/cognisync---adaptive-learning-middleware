@@ -6,7 +6,7 @@ Personalization Service - 个性化服务
 import logging
 from typing import List, Dict
 from app.schemas.profile import UserProfile
-from app.services.llm_provider import get_provider
+from app.services.llm_config import get_chat_provider
 from app.services.graph_service import GraphService
 
 logger = logging.getLogger(__name__)
@@ -16,7 +16,7 @@ class PersonalizationService:
     """个性化服务"""
 
     def __init__(self):
-        self.llm_provider = get_provider()
+        self.llm_provider = get_chat_provider()
         self.graph_service = GraphService()
 
     def get_cognition_level(self, cognition: int) -> str:
@@ -209,9 +209,11 @@ class PersonalizationService:
 """
 
         try:
-            response = await self.llm_provider.generate(
-                prompt=prompt,
-                system_prompt="你是一个教育内容设计专家，擅长根据学习者画像设计个性化的学习内容。"
+            response = await self.llm_provider.complete(
+                system_prompt="你是一个教育内容设计专家，擅长根据学习者画像设计个性化的学习内容。",
+                user_prompt=prompt,
+                temperature=0.5,
+                max_tokens=1200,
             )
 
             # 解析 JSON 响应
@@ -342,9 +344,10 @@ class PersonalizationService:
 1. 禁止使用任何 Markdown 格式：不用 **加粗**、不用 # 标题、不用 - 列表符号、不用 ``` 代码块标记。直接用自然语言对话。
 2. 回答要简短聚焦，100 字以内，像老师口头讲解一样，不写长篇大论。
 3. 每次只围绕学生提出的那一个具体问题来回答，不要主动展开不相关的话题。
-4. 当学生说"我理解了""懂了""明白了""好的""完成了"等表示理解的话时，不要简单肯定，要立刻追问一个具体问题来检验他是否真的理解，例如"那你能解释一下 X 为什么会 Y 吗？"。
-5. 用启发式提问引导学生思考，不要直接给出完整答案，先问"你觉得呢？"或"你能想到什么例子吗？"。
-6. 语气自然口语化，像真人老师在面对面聊天，不像在写文章或教科书。"""
+4. 当学生表达困惑或求助时，先给一句直接解释、一个小例子或一个关键观察，再问一个具体的检查问题；不要连续只提问。
+5. 当学生说"我理解了""懂了""明白了""好的""完成了"等表示理解的话时，不要简单肯定，要用一个具体问题检验他是否真的理解，例如"那你能解释一下 X 为什么会 Y 吗？"。
+6. 不直接甩完整答案或整段代码，但可以给局部提示、伪代码、小片段或下一步操作，让学生有抓手。
+7. 语气自然口语化，像真人老师在面对面聊天，不像在写文章或教科书。"""
         else:
             system_prompt = f"""You are an experienced teacher having a one-on-one conversation with a student.
 
@@ -362,9 +365,10 @@ class PersonalizationService:
 1. No Markdown formatting — no **bold**, no # headers, no - bullet points, no ``` code fences. Use natural conversational language only.
 2. Keep responses short and focused — under 80 words, like a teacher speaking aloud, not writing an essay.
 3. Answer only the specific question the student asked. Don't expand into unrelated topics.
-4. When the student says "I understand", "Got it", "OK", "Done" or similar, don't just affirm them — immediately ask a targeted follow-up to verify: e.g. "Can you explain why X leads to Y in your own words?"
-5. Use Socratic questioning — guide the student to discover the answer rather than giving it directly. Ask "What do you think?" or "Can you think of an example?"
-6. Sound natural and conversational, like a real teacher talking, not like a textbook."""
+4. When the student is confused or asks for help, first give one direct explanation, small example, or key observation, then ask one targeted check question. Do not respond with questions only across turns.
+5. When the student says "I understand", "Got it", "OK", "Done" or similar, don't just affirm them — ask a targeted follow-up to verify: e.g. "Can you explain why X leads to Y in your own words?"
+6. Do not dump a full solution or a full code block, but you may give a local hint, pseudocode, small snippet, or next action so the student has something concrete to work with.
+7. Sound natural and conversational, like a real teacher talking, not like a textbook."""
 
         logger.debug(f"Generated personalized prompt for user with cognition={user_profile.cognition}")
 

@@ -82,6 +82,9 @@ export interface User {
   name: string;
   createdAt: string;
   hasCompletedOnboarding: boolean;
+  onboardingMode?: 'scale' | 'ai';
+  className?: string;
+  experimentGroup: 'unassigned' | 'pdt' | 'ai_pbl' | 'lecture';
 }
 
 export interface AuthResponse {
@@ -108,6 +111,7 @@ export interface RegisterRequest {
   password: string;
   email?: string;
   mode: 'scale' | 'ai';
+  className?: string;
 }
 
 // ============================================
@@ -241,6 +245,7 @@ export interface ResearchTask {
   ai_prompt: string | null;
   code_content: string;
   language: string;
+  target_group: 'all' | 'unassigned' | 'pdt' | 'ai_pbl' | 'lecture';
   status: 'draft' | 'active' | 'archived';
   created_at: string;
   updated_at: string;

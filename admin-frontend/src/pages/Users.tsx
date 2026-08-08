@@ -4,8 +4,12 @@ import { adminApi } from '../lib/adminApi';
 import type { User } from '../types';
 import { Search, ChevronLeft, ChevronRight, Edit2, Trash2, Eye, X, Save, Download, KeyRound } from 'lucide-react';
 
-const ADMIN_KEY = (import.meta.env.VITE_ADMIN_KEY as string) || '';
-const BASE_URL = (import.meta.env.VITE_API_BASE_URL as string) || 'http://localhost:8000/api';
+const GROUP_LABELS: Record<User['experiment_group'], string> = {
+  unassigned: '未分组',
+  pdt: '项目解构式',
+  ai_pbl: 'AI 项目式',
+  lecture: '普通讲授式',
+};
 
 export const Users = () => {
   const navigate = useNavigate();
@@ -24,6 +28,8 @@ export const Users = () => {
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [editName, setEditName] = useState('');
   const [editIsActive, setEditIsActive] = useState(true);
+  const [editClassName, setEditClassName] = useState('');
+  const [editExperimentGroup, setEditExperimentGroup] = useState<User['experiment_group']>('unassigned');
   const [editLoading, setEditLoading] = useState(false);
   const [editError, setEditError] = useState('');
 
@@ -62,6 +68,8 @@ export const Users = () => {
     setEditingUser(user);
     setEditName(user.name || '');
     setEditIsActive(user.is_active ?? true);
+    setEditClassName(user.class_name || '');
+    setEditExperimentGroup(user.experiment_group || 'unassigned');
     setEditError('');
   };
 
@@ -73,6 +81,8 @@ export const Users = () => {
       await adminApi.updateUser(editingUser.id, {
         name: editName,
         is_active: editIsActive,
+        class_name: editClassName,
+        experiment_group: editExperimentGroup,
       });
       setEditingUser(null);
       await loadUsers();
@@ -130,10 +140,7 @@ export const Users = () => {
   const handleExportUser = async (e: React.MouseEvent, user: User) => {
     e.stopPropagation();
     try {
-      const url = `${BASE_URL}/admin/export/csv/user/${user.id}`;
-      const response = await fetch(url, { headers: { 'X-ADMIN-KEY': ADMIN_KEY } });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const blob = await response.blob();
+      const blob = await adminApi.exportCsv(`/export/csv/user/${user.id}`);
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
       a.download = `user_${user.student_id}_${new Date().toISOString().split('T')[0]}.csv`;
@@ -175,10 +182,7 @@ export const Users = () => {
     setBulkLoading(true);
     try {
       const ids = Array.from(selectedIds).join(',');
-      const url = `${BASE_URL}/admin/export/csv/scale-responses?user_ids=${encodeURIComponent(ids)}`;
-      const response = await fetch(url, { headers: { 'X-ADMIN-KEY': ADMIN_KEY } });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const blob = await response.blob();
+      const blob = await adminApi.exportCsv(`/export/csv/scale-responses?user_ids=${encodeURIComponent(ids)}`);
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
       a.download = `scale_responses_selected_${new Date().toISOString().split('T')[0]}.csv`;
@@ -268,6 +272,33 @@ export const Users = () => {
                   className="w-full px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                   style={inputStyle}
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-tertiary)' }}>班级</label>
+                <input
+                  type="text"
+                  value={editClassName}
+                  onChange={(e) => setEditClassName(e.target.value)}
+                  placeholder="例如：高二（3）班"
+                  className="w-full px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  style={inputStyle}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-tertiary)' }}>实验条件</label>
+                <select
+                  value={editExperimentGroup}
+                  onChange={(e) => setEditExperimentGroup(e.target.value as User['experiment_group'])}
+                  className="w-full px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  style={inputStyle}
+                >
+                  <option value="unassigned">未分组（仅开放画像与量表）</option>
+                  <option value="pdt">项目解构式教学组</option>
+                  <option value="ai_pbl">AI 项目式教学组</option>
+                  <option value="lecture">普通讲授式教学组</option>
+                </select>
               </div>
 
               <div className="flex items-center gap-3">
@@ -480,6 +511,7 @@ export const Users = () => {
                 <th className="px-6 py-4 text-left text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>姓名</th>
                 <th className="px-6 py-4 text-left text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>邮箱</th>
                 <th className="px-6 py-4 text-left text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>角色</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>班级 / 条件</th>
                 <th className="px-6 py-4 text-left text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>状态</th>
                 <th className="px-6 py-4 text-left text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>最后活跃</th>
                 <th className="px-6 py-4 text-left text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>操作</th>
@@ -488,7 +520,7 @@ export const Users = () => {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="px-6 py-12 text-center">
+                  <td colSpan={9} className="px-6 py-12 text-center">
                     <div className="flex justify-center">
                       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500"></div>
                     </div>
@@ -496,7 +528,7 @@ export const Users = () => {
                 </tr>
               ) : users.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-6 py-12 text-center" style={{ color: 'var(--text-light)' }}>
+                  <td colSpan={9} className="px-6 py-12 text-center" style={{ color: 'var(--text-light)' }}>
                     暂无用户
                   </td>
                 </tr>
@@ -529,6 +561,10 @@ export const Users = () => {
                       }}>
                         {user.role}
                       </span>
+                    </td>
+                    <td className="px-6 py-4 text-sm">
+                      <div className="font-medium" style={{ color: 'var(--text-primary)' }}>{user.class_name || '—'}</div>
+                      <div className="text-xs mt-1" style={{ color: 'var(--text-light)' }}>{GROUP_LABELS[user.experiment_group || 'unassigned']}</div>
                     </td>
                     <td className="px-6 py-4 text-sm">
                       <span className={`px-2 py-1 rounded text-xs ${user.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>

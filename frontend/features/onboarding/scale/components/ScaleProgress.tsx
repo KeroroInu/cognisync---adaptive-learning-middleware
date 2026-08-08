@@ -26,7 +26,7 @@ export const ScaleProgress: React.FC<ScaleProgressProps> = ({
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           {isComplete ? (
-            <CheckCircle className="w-5 h-5 text-green-500" />
+            <CheckCircle className="w-5 h-5 text-fuchsia-500" />
           ) : (
             <Circle className="w-5 h-5 text-blue-500" />
           )}
@@ -35,7 +35,7 @@ export const ScaleProgress: React.FC<ScaleProgressProps> = ({
           </span>
         </div>
         <div className="text-sm font-semibold">
-          <span className={isComplete ? 'text-green-600 dark:text-green-400' : 'text-blue-600 dark:text-blue-400'}>
+          <span className={isComplete ? 'text-violet-500 dark:text-violet-300' : 'text-blue-600 dark:text-blue-400'}>
             {answered}
           </span>
           <span className="text-gray-500 dark:text-gray-400">
@@ -50,7 +50,7 @@ export const ScaleProgress: React.FC<ScaleProgressProps> = ({
         <div
           className={`absolute top-0 left-0 h-full transition-all duration-500 ease-out rounded-full ${
             isComplete
-              ? 'bg-gradient-to-r from-green-500 to-emerald-600'
+              ? 'bg-gradient-to-r from-violet-500 to-fuchsia-600'
               : 'bg-gradient-to-r from-blue-500 to-indigo-600'
           }`}
           style={{ width: `${percentage}%` }}
@@ -61,7 +61,7 @@ export const ScaleProgress: React.FC<ScaleProgressProps> = ({
       <div className="mt-2 text-center">
         <span className={`text-xs font-medium ${
           isComplete
-            ? 'text-green-600 dark:text-green-400'
+            ? 'text-violet-500 dark:text-violet-300'
             : 'text-gray-600 dark:text-gray-400'
         }`}>
           {percentage}% 完成

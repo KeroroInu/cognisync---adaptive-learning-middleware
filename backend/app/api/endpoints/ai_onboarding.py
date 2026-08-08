@@ -7,11 +7,13 @@ from typing import List, Dict, Optional, Any, Generic, TypeVar
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.params import Depends as FastAPIDepends
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from pydantic import BaseModel, Field
 
 from app.api.endpoints.auth import get_current_user, save_user_profile
 from app.services.llm_provider import get_provider
 from app.db.postgres import get_db
+from app.models.sql.onboarding import OnboardingSession
 
 router = APIRouter()
 
@@ -53,7 +55,7 @@ class AiStartResponse(BaseModel):
 class AiStepRequest(BaseModel):
     """单步请求"""
     sessionId: str
-    answer: str
+    answer: str = Field(..., min_length=1, max_length=4000)
 
 
 class AiStepResponse(BaseModel):
@@ -102,8 +104,72 @@ class AiFinishResponse(BaseModel):
     conceptSeeds: List[ConceptSeed]
 
 
-# 会话存储（生产环境应使用Redis或数据库）
-sessions: Dict[str, Dict] = {}
+def _initial_profile_from_analysis(analysis: Dict[str, Any]) -> InitialProfile:
+    """将 AI 分析结果转换为唯一的正式初始画像。"""
+    profile_data = analysis.get("profile", {})
+    return InitialProfile(
+        cognition=profile_data.get("cognition", 75.0),
+        affect=profile_data.get("affect", 80.0),
+        behavior=profile_data.get("behavior", 70.0),
+    )
+
+
+async def _load_session(
+    db: AsyncSession,
+    session_id: str,
+    user_id: uuid.UUID,
+    *,
+    lock: bool = False,
+) -> OnboardingSession:
+    """按会话和所有者读取；行锁避免双击导致同一步被提交两次。"""
+    try:
+        sid = uuid.UUID(session_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Session not found")
+    stmt = select(OnboardingSession).where(
+        OnboardingSession.id == sid,
+        OnboardingSession.user_id == user_id,
+        OnboardingSession.mode == "ai",
+    )
+    if lock:
+        stmt = stmt.with_for_update()
+    result = await db.execute(stmt)
+    model = result.scalar_one_or_none()
+    if model is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return model
+
+
+def _summary_models(session: Dict[str, Any]) -> List[ConfirmedInfo]:
+    return [item if isinstance(item, ConfirmedInfo) else ConfirmedInfo(**item) for item in session.get("summary", [])]
+
+
+def _finish_response(session_id: str, analysis: Dict[str, Any]) -> AiFinishResponse:
+    initial_profile = _initial_profile_from_analysis(analysis)
+    attr_data = analysis.get("attributes", {})
+    attributes = UserAttributes(
+        learningGoals=attr_data.get("learningGoals", []),
+        strengths=attr_data.get("strengths", []),
+        weaknesses=attr_data.get("weaknesses", []),
+        interests=attr_data.get("interests", []),
+        preferredStyle=attr_data.get("preferredStyle", "未知"),
+        background=attr_data.get("background", "未知"),
+    )
+    concept_seeds = [
+        ConceptSeed(
+            concept=item.get("concept", ""),
+            category=item.get("category", ""),
+            importance=item.get("importance", 0.5),
+            relatedConcepts=item.get("relatedConcepts", []),
+        )
+        for item in analysis.get("conceptSeeds", [])
+    ]
+    return AiFinishResponse(
+        sessionId=session_id,
+        initialProfile=initial_profile,
+        attributes=attributes,
+        conceptSeeds=concept_seeds,
+    )
 
 
 # AI 对话系统提示词
@@ -204,10 +270,9 @@ async def analyze_all_answers_for_profile(session: Dict) -> Dict:
     """分析所有回答生成初始画像"""
 
     # 构建完整对话历史
-    conversation_summary = "\n".join([
-        f"- {info.key}: {info.value}"
-        for info in session.get("summary", [])
-    ])
+    conversation_summary = "\n".join(
+        f"- {info.key}: {info.value}" for info in _summary_models(session)
+    )
 
     analysis_prompt = f"""基于以下用户的完整回答，生成初始学习画像和用户属性。
 
@@ -300,21 +365,28 @@ async def start_ai_onboarding(
             detail="User has already completed onboarding. Please go to dashboard."
         )
 
-    session_id = str(uuid.uuid4())
-
-    # 初始化会话
-    sessions[session_id] = {
+    session_id = uuid.uuid4()
+    session_state = {
         "user_id": str(current_user.id),
         "step": 0,
         "summary": [],
-        "answers": []
+        "answers": [],
+        "completed": False,
     }
+    db.add(OnboardingSession(
+        id=session_id,
+        user_id=current_user.id,
+        mode="ai",
+        raw_transcript="[]",
+        extracted_json=session_state,
+    ))
+    await db.flush()
 
     # 第一个问题（固定）
     first_question = "您好！我是您的学习助手。首先，能告诉我您想通过这个平台学习什么吗？"
 
     response_data = AiStartResponse(
-        sessionId=session_id,
+        sessionId=str(session_id),
         question=first_question,
         summary=[]
     )
@@ -325,23 +397,25 @@ async def start_ai_onboarding(
 @router.post("/step")
 async def step_ai_onboarding(
     data: AiStepRequest,
-    current_user = Depends(get_current_user)
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user),
 ):
     """
     单步对话
 
     接收用户回答，调用LLM生成下一个问题
     """
-    session_id = data.sessionId
-
-    if session_id not in sessions:
-        raise HTTPException(status_code=404, detail="Session not found")
-
-    session = sessions[session_id]
+    session_model = await _load_session(db, data.sessionId, current_user.id, lock=True)
+    session = dict(session_model.extracted_json or {})
+    if session.get("completed"):
+        raise HTTPException(status_code=409, detail="Session already completed")
     session["answers"].append(data.answer)
 
     # 调用LLM生成下一个问题
-    llm_response = await call_llm_for_next_question(session, data.answer)
+    try:
+        llm_response = await call_llm_for_next_question(session, data.answer)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail="AI service is temporarily unavailable") from exc
 
     # 更新摘要
     if "extracted_info" in llm_response:
@@ -350,7 +424,7 @@ async def step_ai_onboarding(
             key=info.get("key", "信息"),
             value=info.get("value", data.answer[:100]),
             confidence=info.get("confidence", 0.8)
-        ))
+        ).model_dump())
 
     session["step"] += 1
 
@@ -358,11 +432,17 @@ async def step_ai_onboarding(
     is_complete = llm_response.get("is_complete", False) or session["step"] >= 4
 
     if is_complete:
-        # 对话结束
+        # 对话结束时生成一次正式画像并缓存。注册预览与最终入库必须使用同一份结果。
+        try:
+            final_analysis = await analyze_all_answers_for_profile(session)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail="AI service is temporarily unavailable") from exc
+        session["final_analysis"] = final_analysis
+        initial_profile = _initial_profile_from_analysis(final_analysis)
         response_data = AiStepResponse(
             question=None,
-            summary=session["summary"],
-            draftProfile=DraftProfile(cognition=75, affect=80, behavior=70),
+            summary=_summary_models(session),
+            draftProfile=DraftProfile(**initial_profile.model_dump()),
             isComplete=True
         )
     else:
@@ -371,7 +451,7 @@ async def step_ai_onboarding(
 
         response_data = AiStepResponse(
             question=next_question,
-            summary=session["summary"],
+            summary=_summary_models(session),
             draftProfile=DraftProfile(
                 cognition=60 + session["step"] * 5,
                 affect=65 + session["step"] * 5,
@@ -380,6 +460,9 @@ async def step_ai_onboarding(
             isComplete=False
         )
 
+    session_model.extracted_json = session
+    session_model.raw_transcript = json.dumps(session.get("answers", []), ensure_ascii=False)
+    await db.flush()
     return ApiResponse(success=True, data=response_data)
 
 
@@ -394,23 +477,25 @@ async def finish_ai_onboarding(
 
     分析所有回答生成最终画像和用户属性
     """
-    session_id = data.sessionId
+    session_model = await _load_session(db, data.sessionId, current_user.id, lock=True)
+    session = dict(session_model.extracted_json or {})
 
-    if session_id not in sessions:
-        raise HTTPException(status_code=404, detail="Session not found")
+    # 复用问答结束时已向用户展示的正式分析，避免二次 AI 计算导致分数跳变。
+    analysis = session.get("final_analysis")
+    if analysis is None:
+        # 兼容修复部署前已经进入最后一步的内存会话。
+        try:
+            analysis = await analyze_all_answers_for_profile(session)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail="AI service is temporarily unavailable") from exc
+        session["final_analysis"] = analysis
 
-    session = sessions[session_id]
+    response_data = _finish_response(data.sessionId, analysis)
 
-    # 调用LLM分析所有回答
-    analysis = await analyze_all_answers_for_profile(session)
+    if session.get("completed"):
+        return ApiResponse(success=True, data=response_data)
 
-    # 提取画像
-    profile_data = analysis.get("profile", {})
-    initial_profile = InitialProfile(
-        cognition=profile_data.get("cognition", 75.0),
-        affect=profile_data.get("affect", 80.0),
-        behavior=profile_data.get("behavior", 70.0)
-    )
+    initial_profile = response_data.initialProfile
 
     # 保存用户画像到数据库
     await save_user_profile(
@@ -421,37 +506,9 @@ async def finish_ai_onboarding(
         initial_profile.behavior
     )
 
-    # 提取用户属性
-    attr_data = analysis.get("attributes", {})
-    attributes = UserAttributes(
-        learningGoals=attr_data.get("learningGoals", []),
-        strengths=attr_data.get("strengths", []),
-        weaknesses=attr_data.get("weaknesses", []),
-        interests=attr_data.get("interests", []),
-        preferredStyle=attr_data.get("preferredStyle", "未知"),
-        background=attr_data.get("background", "未知")
-    )
-
-    # 提取概念种子
-    concepts_data = analysis.get("conceptSeeds", [])
-    concept_seeds = [
-        ConceptSeed(
-            concept=c.get("concept", ""),
-            category=c.get("category", ""),
-            importance=c.get("importance", 0.5),
-            relatedConcepts=c.get("relatedConcepts", [])
-        )
-        for c in concepts_data
-    ]
-
-    # 清理会话
-    del sessions[session_id]
-
-    response_data = AiFinishResponse(
-        sessionId=session_id,
-        initialProfile=initial_profile,
-        attributes=attributes,
-        conceptSeeds=concept_seeds
-    )
+    # 保留完整过程证据并使 finish 幂等，支持多 worker/容器部署。
+    session["completed"] = True
+    session_model.extracted_json = session
+    await db.flush()
 
     return ApiResponse(success=True, data=response_data)

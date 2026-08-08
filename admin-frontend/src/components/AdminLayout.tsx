@@ -7,7 +7,6 @@ import {
   MessageSquare,
   FileText,
   FlaskConical,
-  Activity,
   Download,
   Settings2,
   Sun,
@@ -31,7 +30,7 @@ export const AdminLayout = ({ children }: AdminLayoutProps) => {
   const { theme, toggleTheme } = useTheme();
   const { t } = useTranslation();
   const { logout, user } = useAuth();
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth > 860);
 
   const handleLogout = () => {
     logout();
@@ -43,50 +42,51 @@ export const AdminLayout = ({ children }: AdminLayoutProps) => {
     { path: '/users', icon: Users, label: t('nav.users') },
     { path: '/conversations', icon: MessageSquare, label: t('nav.conversations') },
     { path: '/scales', icon: FileText, label: t('nav.scales') },
-    { path: '/explorer', icon: FlaskConical, label: t('nav.research') },
-    { path: '/emotion-compare', icon: Activity, label: '情感对比实验' },
+    { path: '/research', icon: FlaskConical, label: t('nav.research') },
     { path: '/exports', icon: Download, label: t('nav.exports') },
     { path: '/config', icon: Settings2, label: t('nav.modelConfig') },
   ];
 
   return (
-    <div className="flex h-screen font-sans gradient-mesh">
-      {/* Sidebar */}
-      <aside className={`${sidebarOpen ? 'w-64' : 'w-20'} transition-all duration-300 glass-card rounded-r-3xl border-r-0 flex flex-col shadow-xl m-2 ml-0 animate-slide-in-left`}>
-        {/* Logo */}
-        <div className="h-16 flex items-center justify-between px-6 border-b" style={{ borderColor: theme === 'light' ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.1)' }}>
+    <div className={`admin-shell gradient-mesh ${sidebarOpen ? '' : 'is-sidebar-collapsed'}`}>
+      <aside className={`admin-sidebar glass-card animate-slide-in-left ${sidebarOpen ? 'is-open' : 'is-collapsed'}`}>
+        <div className="admin-brand-block">
           {sidebarOpen && (
-            <div className="flex items-center space-x-2">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold">
+            <div className="admin-brand-row">
+              <div className="admin-brand-mark flow-surface">
                 A
               </div>
-              <span className="font-semibold text-lg">CogniSync Admin</span>
+              <div className="min-w-0">
+                <p className="admin-brand-title metallic-text">CogniSync Teacher</p>
+                <p className="admin-brand-subtitle">PDT teaching & evidence console</p>
+              </div>
             </div>
           )}
           <button 
             onClick={() => setSidebarOpen(!sidebarOpen)} 
-            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+            className="admin-icon-button"
+            aria-label={sidebarOpen ? '收起导航' : '展开导航'}
+            title={sidebarOpen ? '收起导航' : '展开导航'}
           >
             {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
           </button>
         </div>
 
-        {/* Navigation */}
-        <nav className="flex-1 p-4 space-y-1.5 overflow-y-auto">
-          {navItems.map((item) => {
+        <nav className="admin-nav">
+          {navItems.map((item, index) => {
             const Icon = item.icon;
-            const isActive = location.pathname === item.path;
+            const isActive = item.path === '/'
+              ? location.pathname === '/'
+              : location.pathname.startsWith(item.path);
             
             return (
               <Link
                 key={item.path}
                 to={item.path}
-                className={`w-full flex items-center ${sidebarOpen ? 'space-x-3' : 'justify-center'} px-4 py-3.5 rounded-xl transition-all duration-300 ${
-                  isActive
-                    ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-lg'
-                    : 'hover:bg-gray-100 dark:hover:bg-gray-700'
-                }`}
+                className={`admin-nav-item ${isActive ? 'is-active' : ''} ${sidebarOpen ? '' : 'is-collapsed'}`}
+                title={sidebarOpen ? undefined : item.label}
               >
+                {sidebarOpen && <span className="admin-nav-index">{String(index + 1).padStart(2, '0')}</span>}
                 <Icon size={20} />
                 {sidebarOpen && <span className="font-medium">{item.label}</span>}
               </Link>
@@ -94,21 +94,20 @@ export const AdminLayout = ({ children }: AdminLayoutProps) => {
           })}
         </nav>
 
-        {/* Theme Toggle, Language Switcher & Logout */}
-        <div className="p-4 border-t space-y-1.5" style={{ borderColor: theme === 'light' ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.1)' }}>
+        <div className="admin-sidebar-footer">
           <button
             onClick={toggleTheme}
-            className={`w-full flex items-center ${sidebarOpen ? 'space-x-3' : 'justify-center'} px-4 py-3 rounded-xl transition-all duration-300 hover:bg-gray-100 dark:hover:bg-gray-700`}
+            className={`admin-tool-button ${sidebarOpen ? '' : 'is-collapsed'}`}
+            title={theme === 'light' ? t('common.darkMode') : t('common.lightMode')}
           >
             {theme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
             {sidebarOpen && <span>{theme === 'light' ? t('common.darkMode') : t('common.lightMode')}</span>}
           </button>
           <LanguageSwitcher compact={!sidebarOpen} />
-          {/* 退出登录 */}
           <button
             onClick={handleLogout}
             title={sidebarOpen ? undefined : '退出登录'}
-            className={`w-full flex items-center ${sidebarOpen ? 'space-x-3' : 'justify-center'} px-4 py-3 rounded-xl transition-all duration-300 hover:bg-red-50 dark:hover:bg-red-900/20 text-red-500 dark:text-red-400`}
+            className={`admin-tool-button is-danger ${sidebarOpen ? '' : 'is-collapsed'}`}
           >
             <LogOut size={20} />
             {sidebarOpen && (
@@ -120,22 +119,23 @@ export const AdminLayout = ({ children }: AdminLayoutProps) => {
         </div>
       </aside>
 
-      {/* Main Content */}
-      <main className="flex-1 overflow-hidden relative flex flex-col m-2 ml-0">
-        {/* Header */}
-        <header className="h-16 flex items-center justify-between px-8 glass-card rounded-t-3xl shadow-sm">
-          <h1 className="text-xl font-semibold">
-            {navItems.find(item => item.path === location.pathname)?.label || t('common.adminPanel')}
-          </h1>
-          <div className="flex items-center space-x-4">
-            <span className="text-sm text-gray-600 dark:text-gray-400">
-              {t('common.adminPanel')}
-            </span>
+      <main className="admin-main glass-card">
+        <header className="admin-header">
+          <div>
+            <p className="admin-page-kicker">COGNISYNC / PDT 教学控制台</p>
+            <h1 className="admin-page-title">
+              {navItems.find(item => (
+                item.path === '/' ? location.pathname === '/' : location.pathname.startsWith(item.path)
+              ))?.label || t('common.adminPanel')}
+            </h1>
+          </div>
+          <div className="admin-status-pill">
+            <span className="status-dot" />
+            <span>{user?.name || t('common.adminPanel')}</span>
           </div>
         </header>
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-8 relative glass-card rounded-b-3xl border-t-0">
+        <div className="admin-content">
           {children}
         </div>
       </main>

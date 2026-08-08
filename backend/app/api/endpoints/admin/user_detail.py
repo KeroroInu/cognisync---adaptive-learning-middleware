@@ -77,6 +77,8 @@ async def get_user_detail(
         is_active=user.is_active,
         created_at=user.created_at,
         last_active_at=user.last_active_at,
+        class_name=user.class_name,
+        experiment_group=user.experiment_group,
         messages_count=messages_count,
         sessions_count=sessions_count,
         responses_count=responses_count

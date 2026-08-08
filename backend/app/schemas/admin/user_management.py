@@ -17,6 +17,8 @@ class UserSummary(BaseModel):
     created_at: datetime = Field(..., description="创建时间")
     message_count: int = Field(0, description="消息数量")
     last_active_at: Optional[datetime] = Field(None, description="最后活跃时间")
+    class_name: Optional[str] = Field(None, description="班级名称或代码")
+    experiment_group: str = Field("unassigned", description="实验条件")
 
 
 class UserListResponse(BaseModel):

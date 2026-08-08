@@ -128,7 +128,7 @@ export const OnboardingStepList: React.FC<OnboardingStepListProps> = ({
               {/* 图标 */}
               <div className="flex-shrink-0 mt-0.5">
                 {isCompleted ? (
-                  <CheckCircle className="w-5 h-5 text-emerald-500" />
+                  <CheckCircle className="w-5 h-5 text-fuchsia-400" />
                 ) : isCurrent ? (
                   <div className="w-5 h-5 rounded-full border-2 border-indigo-500 flex items-center justify-center">
                     <div className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
@@ -149,8 +149,8 @@ export const OnboardingStepList: React.FC<OnboardingStepListProps> = ({
                   style={{
                     color: isCompleted
                       ? theme === 'light'
-                        ? '#10b981'
-                        : '#34d399'
+                        ? '#a855f7'
+                        : '#c084fc'
                       : isCurrent
                       ? theme === 'light'
                         ? '#6366f1'

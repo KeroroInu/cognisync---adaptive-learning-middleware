@@ -17,7 +17,7 @@ export const LanguageSwitcher = ({ compact = false }: LanguageSwitcherProps) => 
   return (
     <button
       onClick={toggleLanguage}
-      className={`flex items-center ${compact ? 'justify-center' : 'space-x-3'} w-full px-4 py-3 rounded-xl transition-all duration-300 hover:bg-gray-100 dark:hover:bg-gray-700`}
+      className={`admin-tool-button ${compact ? 'is-collapsed' : ''}`}
       title={i18n.language === 'zh' ? t('language.english') : t('language.chinese')}
     >
       <Languages size={20} />

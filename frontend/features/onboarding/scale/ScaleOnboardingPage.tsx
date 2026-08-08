@@ -351,7 +351,7 @@ export const ScaleOnboardingPage: React.FC<ScaleOnboardingPageProps> = ({
         <div className="glass-card p-8 rounded-2xl max-w-2xl w-full animate-scale-in">
           {/* 成功图标 */}
           <div className="text-center mb-6">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-green-500 to-emerald-600 text-white mb-4 shadow-lg">
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-600 text-white mb-4 shadow-lg">
               <CheckCircle className="w-8 h-8" />
             </div>
             <h1 className="text-3xl font-bold text-gradient mb-2">
@@ -395,7 +395,7 @@ export const ScaleOnboardingPage: React.FC<ScaleOnboardingPageProps> = ({
                 <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">
                   {language === 'zh' ? '行为特征' : 'Behavior'}
                 </p>
-                <p className="text-2xl font-bold text-green-600 dark:text-green-400">
+                <p className="text-2xl font-bold text-violet-500 dark:text-violet-300">
                   {initialProfile.behavior}
                 </p>
               </div>

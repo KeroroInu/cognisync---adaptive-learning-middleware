@@ -4,7 +4,7 @@ Profile Service - 学习者画像服务（PostgreSQL）
 """
 import logging
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import UUID
 from sqlalchemy import select, desc, update as sql_update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -54,7 +54,7 @@ class ProfileService:
             cognition=self.DEFAULT_COGNITION,
             affect=self.DEFAULT_AFFECT,
             behavior=self.DEFAULT_BEHAVIOR,
-            lastUpdate=datetime.utcnow().isoformat() + "Z"
+            lastUpdate=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         )
 
     async def apply_delta(
@@ -156,7 +156,17 @@ class ProfileService:
 
         # 3. Cognition 从知识图谱计算
         graph_service = GraphService()
-        new_cognition = await graph_service.calculate_cognition_from_graph(str(user_id))
+        try:
+            new_cognition = await graph_service.calculate_cognition_from_graph(str(user_id))
+        except Exception as exc:
+            # Neo4j 是增强性依赖，不应让图谱短暂不可用中断学生对话。
+            new_cognition = current_profile.cognition
+            logger.warning(
+                "Knowledge graph unavailable for user %s; keeping cognition=%s: %s",
+                user_id,
+                new_cognition,
+                exc,
+            )
 
         logger.info(
             f"Applying delta with graph cognition for user {user_id}: "
@@ -570,7 +580,7 @@ class ProfileService:
             affect=affect,
             behavior=behavior,
             source=source,
-            created_at=datetime.utcnow()
+            created_at=datetime.now(timezone.utc)
         )
 
         self.db.add(snapshot)
@@ -604,7 +614,7 @@ class ProfileService:
             # 创建 CalibrationLog
             log = CalibrationLog(
                 user_id=user_id,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 dimension=dimension,
                 system_value=system_value,
                 user_value=user_value,

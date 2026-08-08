@@ -1,12 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { Suspense, useState, useEffect } from 'react';
 import { Layout } from './components/Layout';
-import { Dashboard } from './views/Dashboard';
-import { Chat } from './views/Chat';
-import { KnowledgeGraph } from './views/KnowledgeGraph';
-import { Calibration } from './views/Calibration';
-import { Evidence } from './views/Evidence';
-import { Research } from './views/Research';
-import { Scales } from './views/Scales';
 import { Login } from './views/Login';
 import { Register } from './views/Register';
 import type { PendingScaleRegistration } from './views/Register';
@@ -14,7 +7,15 @@ import { RegisterScale } from './views/RegisterScale';
 import { RegisterAI } from './views/RegisterAI';
 import { useAppStore } from './services/store';
 import { getActiveResearchTask } from './services/api';
-import type { UserProfile } from './types';
+import type { User, UserProfile } from './types';
+
+const Dashboard = React.lazy(() => import('./views/Dashboard').then(module => ({ default: module.Dashboard })));
+const Chat = React.lazy(() => import('./views/Chat').then(module => ({ default: module.Chat })));
+const KnowledgeGraph = React.lazy(() => import('./views/KnowledgeGraph').then(module => ({ default: module.KnowledgeGraph })));
+const Calibration = React.lazy(() => import('./views/Calibration').then(module => ({ default: module.Calibration })));
+const Evidence = React.lazy(() => import('./views/Evidence').then(module => ({ default: module.Evidence })));
+const Research = React.lazy(() => import('./views/Research').then(module => ({ default: module.Research })));
+const Scales = React.lazy(() => import('./views/Scales').then(module => ({ default: module.Scales })));
 
 // 视图类型定义
 type AppView = 'dashboard' | 'chat' | 'graph' | 'calibration' | 'evidence' | 'research' | 'scales';
@@ -58,6 +59,19 @@ function App() {
     }
   }, [state.user, currentView]);
 
+  useEffect(() => {
+    if (!state.user) return;
+    const allowed: Record<User['experimentGroup'], AppView[]> = {
+      pdt: ['dashboard', 'chat', 'graph', 'calibration', 'evidence', 'research', 'scales'],
+      ai_pbl: ['dashboard', 'chat', 'evidence', 'research', 'scales'],
+      lecture: ['dashboard', 'evidence', 'research', 'scales'],
+      unassigned: ['dashboard', 'scales'],
+    };
+    if (requiresAuth(currentView) && !allowed[state.user.experimentGroup ?? 'unassigned'].includes(currentView as AppView)) {
+      setCurrentView('dashboard');
+    }
+  }, [state.user, currentView]);
+
   // 登录成功处理
   const handleLoginSuccess = async (token: string, user: any, profile?: UserProfile) => {
     setAuth(user, token, profile);
@@ -66,7 +80,7 @@ function App() {
     if (user.hasCompletedOnboarding) {
       // 检查是否有激活的研究任务
       try {
-        const task = await getActiveResearchTask();
+        const task = user.experimentGroup !== 'unassigned' ? await getActiveResearchTask() : null;
         if (task) {
           setCurrentView('research');
           return;
@@ -98,10 +112,15 @@ function App() {
   const handleRegistrationComplete = (
     initialProfile: UserProfile,
     attributes?: string[],
-    conceptSeeds?: string[]
+    conceptSeeds?: string[],
+    auth?: { token: string; user: User }
   ) => {
     setPendingScaleReg(null);
-    updateProfile(initialProfile);
+    if (auth) {
+      setAuth(auth.user, auth.token, initialProfile);
+    } else {
+      updateProfile(initialProfile);
+    }
     setCurrentView('dashboard');
   };
 
@@ -142,7 +161,7 @@ function App() {
         return (
           <RegisterScale
             language={state.language}
-            onComplete={handleRegistrationComplete}
+            onComplete={(profile, auth) => handleRegistrationComplete(profile, undefined, undefined, auth)}
             onBack={() => { setPendingScaleReg(null); setCurrentView('register'); }}
             pendingRegistration={pendingScaleReg ?? undefined}
           />
@@ -178,6 +197,8 @@ function App() {
             language={state.language}
             theme={theme}
             userId={state.user?.id}
+            userName={state.user?.name}
+            experimentGroup={state.user.experimentGroup ?? 'unassigned'}
           />
         );
 
@@ -186,12 +207,14 @@ function App() {
           <Chat
             key={chatKey}
             messages={state.messages}
+            profile={state.profile}
             onSendMessage={addMessage}
             onUpdateProfile={updateProfile}
             language={state.language}
             isResearchMode={state.isResearchMode}
             theme={theme}
             userId={state.user?.id}
+            experimentGroup={state.user.experimentGroup ?? 'unassigned'}
             onNewConversation={handleNewConversation}
           />
         );
@@ -255,6 +278,8 @@ function App() {
             onNavigate={setCurrentView as (view: AppView) => void}
             language={state.language}
             theme={theme}
+            userName={state.user?.name}
+            experimentGroup={state.user.experimentGroup ?? 'unassigned'}
           />
         );
     }
@@ -283,7 +308,9 @@ function App() {
       user={state.user}
       onLogout={handleLogout}
     >
-      {renderProtectedContent()}
+      <Suspense fallback={<div className="view-loading" role="status">正在加载学习界面…</div>}>
+        {renderProtectedContent()}
+      </Suspense>
     </Layout>
   );
 }

@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
-import { LogIn, Hash, Lock, AlertCircle } from 'lucide-react';
+import { Hash, AlertCircle } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Input } from '../components/Input';
+import { SpotlightCard } from '../components/SpotlightCard';
+import { RetroLearningTerminal } from '../components/RetroLearningTerminal';
 import { login } from '../services/api';
 import { translations } from '../utils/translations';
 import type { Language } from '../types';
@@ -52,78 +54,69 @@ export const Login: React.FC<LoginProps> = ({
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center gradient-mesh p-4">
-      <div className="w-full max-w-md animate-scale-in">
-        {/* Logo/Title */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white mb-4 shadow-lg">
-            <LogIn className="w-8 h-8" />
+    <div className="auth-shell auth-shell-login">
+      <div className="login-stage">
+        <section className="auth-wrap login-panel animate-scale-in">
+          <div className="login-brandline">
+            <span className="login-brandmark">C</span>
+            <span>COGNISYNC / PROJECT DECONSTRUCTION</span>
           </div>
-          <h1 className="text-3xl font-bold text-gradient mb-2">
-            {t.loginTitle}
-          </h1>
-          <p style={{ color: 'var(--text-light)' }}>
-            {t.loginDesc}
-          </p>
-        </div>
-
-        {/* Login Form */}
-        <form onSubmit={handleSubmit} className="glass-card p-8 space-y-6">
-          {error && (
-            <div className="border border-red-200 rounded-lg p-4 flex items-start gap-3 animate-fade-in" style={{ backgroundColor: 'rgba(239,68,68,0.08)' }}>
-              <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
-              <p className="text-sm text-red-500">{error}</p>
-            </div>
-          )}
-
-          <div>
-            <Input
-              type="text"
-              label={t.studentId}
-              placeholder={t.studentIdPlaceholder}
-              value={studentId}
-              onChange={(e) => setStudentId(e.target.value)}
-              disabled={isLoading}
-              autoComplete="username"
-              required
-            />
+          <div className="auth-header login-header">
+            <p className="login-kicker">WELCOME BACK / 2026</p>
+            <h1 className="auth-title">{t.loginTitle}</h1>
+            <p className="auth-copy">{t.loginDesc}</p>
           </div>
 
-          <div>
-            <Input
-              type="password"
-              label={t.password}
-              placeholder={t.passwordPlaceholder}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              disabled={isLoading}
-              autoComplete="current-password"
-              required
-            />
-          </div>
+          <SpotlightCard className="auth-card login-card" spotlightColor="rgba(142, 169, 68, 0.13)">
+            <form onSubmit={handleSubmit} className="space-y-6">
+              {error && (
+                <div className="auth-error animate-fade-in">
+                  <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0" />
+                  <p className="m-0 text-sm">{error}</p>
+                </div>
+              )}
 
-          <Button
-            type="submit"
-            variant="primary"
-            size="lg"
-            isLoading={isLoading}
-            className="w-full"
-          >
-            <Hash className="w-5 h-5 mr-2" />
-            {isLoading ? t.loggingIn : t.loginButton}
-          </Button>
+              <Input
+                type="text"
+                label={t.studentId}
+                placeholder={t.studentIdPlaceholder}
+                value={studentId}
+                onChange={(e) => setStudentId(e.target.value)}
+                disabled={isLoading}
+                autoComplete="username"
+                required
+              />
 
-          <div className="text-center text-sm" style={{ color: 'var(--text-light)' }}>
-            {t.noAccount}{' '}
-            <button
-              type="button"
-              onClick={onNavigateToRegister}
-              className="text-blue-500 hover:text-blue-600 font-medium transition-colors"
-            >
-              {t.signUp}
-            </button>
-          </div>
-        </form>
+              <Input
+                type="password"
+                label={t.password}
+                placeholder={t.passwordPlaceholder}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                disabled={isLoading}
+                autoComplete="current-password"
+                required
+              />
+
+              <Button type="submit" variant="primary" size="lg" isLoading={isLoading} className="w-full login-submit">
+                <Hash className="w-5 h-5 mr-2" />
+                {isLoading ? t.loggingIn : t.loginButton}
+              </Button>
+
+              <div className="auth-footer">
+                {t.noAccount}{' '}
+                <button type="button" onClick={onNavigateToRegister} className="auth-link">
+                  {t.signUp}
+                </button>
+              </div>
+            </form>
+          </SpotlightCard>
+          <p className="login-footnote">OBSERVE · DECONSTRUCT · REBUILD · VERIFY</p>
+        </section>
+
+        <section className="login-visual animate-fade-in stagger-2">
+          <RetroLearningTerminal language={language} />
+        </section>
       </div>
     </div>
   );

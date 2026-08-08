@@ -106,10 +106,9 @@ def test_chat_endpoint_writes_emotion_log(monkeypatch):
             captured["get_profile_user_id"] = requested_user_id
             return current_profile
 
-        async def apply_delta(self, user_id, delta_cognition, delta_affect, delta_behavior):
+        async def apply_delta_with_graph_cognition(self, user_id, delta_affect, delta_behavior):
             captured["apply_delta"] = {
                 "user_id": user_id,
-                "delta_cognition": delta_cognition,
                 "delta_affect": delta_affect,
                 "delta_behavior": delta_behavior,
             }
@@ -121,6 +120,10 @@ def test_chat_endpoint_writes_emotion_log(monkeypatch):
 
         async def get_graph(self, user_id):
             return SimpleNamespace(nodes=[])
+
+        async def update_mastery_batch(self, user_id, concepts, mastery_delta):
+            captured["mastery_batch"] = {"user_id": user_id, "concepts": concepts, "mastery_delta": mastery_delta}
+            return len(concepts)
 
     class FakeChatProvider:
         async def complete(self, **kwargs):

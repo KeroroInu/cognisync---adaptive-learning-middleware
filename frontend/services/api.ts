@@ -200,6 +200,7 @@ export async function registerWithScale(data: {
   template_id: string;
   answers: Record<string, number>;
   started_at?: string;
+  className?: string;
 }): Promise<AuthResponse> {
   try {
     const response = await fetch(`${API_BASE_URL}/api/auth/register-with-scale`, {

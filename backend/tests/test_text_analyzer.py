@@ -101,7 +101,58 @@ def test_profile_context_promotes_confused_for_low_cognition_high_behavior():
     assert result.emotionDetail is not None
     assert result.emotionDetail.code == "E01"
     assert result.delta.cognition <= -1
-    assert result.delta.behavior >= 3
+    assert result.delta.behavior <= 1
+
+
+def test_help_seeking_question_does_not_auto_boost_behavior():
+    analyzer = TextAnalyzer(
+        provider=StaticProvider(
+            {
+                "intent": "help-seeking",
+                "emotion": "confused",
+                "emotionDetail": {"code": "E01", "intensity": "medium", "confidence": 0.7},
+                "detectedConcepts": ["Django"],
+                "delta": {"cognition": -2, "affect": -3, "behavior": 10},
+                "evidence": {
+                    "spans": [{"text": "怎么保存", "label": "question", "start": 0, "end": 4}],
+                    "confidence": 0.7,
+                },
+            }
+        )
+    )
+
+    result = run_async(analyzer.analyze("Django 表单数据怎么保存到数据库？"))
+
+    assert result.intent == "help-seeking"
+    assert result.delta.behavior <= 1
+
+
+def test_exploration_question_is_not_promoted_by_existing_high_behavior():
+    analyzer = TextAnalyzer(
+        provider=StaticProvider(
+            {
+                "intent": "exploration",
+                "emotion": "curious",
+                "emotionDetail": {"code": "E02", "intensity": "medium", "confidence": 0.7},
+                "detectedConcepts": ["Django"],
+                "delta": {"cognition": 0, "affect": 3, "behavior": 10},
+                "evidence": {
+                    "spans": [{"text": "想了解", "label": "exploration", "start": 0, "end": 3}],
+                    "confidence": 0.7,
+                },
+            }
+        )
+    )
+
+    result = run_async(
+        analyzer.analyze(
+            "我想了解 Django 表单，有什么入门资料吗？",
+            current_profile=UserProfile(cognition=60, affect=72, behavior=90, lastUpdate=None),
+        )
+    )
+
+    assert result.intent == "exploration"
+    assert result.delta.behavior <= 2
 
 
 def test_profile_context_promotes_discouraged_for_low_cognition_low_behavior():

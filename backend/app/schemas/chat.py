@@ -2,7 +2,7 @@
 Chat Schema - 对话相关数据结构（与前端完全对齐）
 """
 from typing import Optional, List, Literal
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from app.schemas.profile import UserProfile, ProfileDelta
 
 
@@ -45,13 +45,13 @@ class ChatAnalysis(BaseModel):
         description="详细情感结果（13 种情感 × 3 级强度）"
     )
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "intent": "help-seeking",
                 "emotion": "confused",
                 "detectedConcepts": ["反向传播", "梯度下降"],
-                "delta": {"cognition": -5, "affect": -10, "behavior": 5},
+                "delta": {"cognition": -5, "affect": -10, "behavior": 1},
                 "emotionDetail": {
                     "code": "E01",
                     "name": "confused",
@@ -64,6 +64,7 @@ class ChatAnalysis(BaseModel):
                 }
             }
         }
+    )
 
 
 class ChatRequest(BaseModel):
@@ -79,7 +80,7 @@ class ChatRequest(BaseModel):
     )
     isResearchMode: Optional[bool] = Field(
         default=False,
-        description="研究模式（true: 提问式引导；false: 直接回答）"
+        description="研究模式（true: 讲解一点再引导一步；false: 直接回答）"
     )
     currentCode: Optional[str] = Field(
         default=None,
@@ -90,14 +91,15 @@ class ChatRequest(BaseModel):
         description="教师给 AI 的教学提示（本节课上下文与学习目标）"
     )
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "message": "我对反向传播还是不太理解",
                 "language": "zh",
                 "isResearchMode": False
             }
         }
+    )
 
 
 class ChatResponse(BaseModel):
@@ -110,15 +112,15 @@ class ChatResponse(BaseModel):
     updatedProfile: UserProfile = Field(..., description="更新后的学习者画像")
     updatedGraph: Optional[List[dict]] = Field(None, alias="updatedGraph", description="更新后的知识图谱")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "message": "让我用更简单的方式解释反向传播...",
                 "analysis": {
                     "intent": "help-seeking",
                     "emotion": "confused",
                     "detectedConcepts": ["反向传播"],
-                    "delta": {"cognition": -5, "affect": -10, "behavior": 5},
+                    "delta": {"cognition": -5, "affect": -10, "behavior": 1},
                     "emotionDetail": {
                         "code": "E01",
                         "name": "confused",
@@ -146,6 +148,7 @@ class ChatResponse(BaseModel):
                 ]
             }
         }
+    )
 
 
 class ChatMessage(BaseModel):

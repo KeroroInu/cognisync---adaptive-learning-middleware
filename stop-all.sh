@@ -67,7 +67,10 @@ echo ""
 echo -e "${YELLOW}🧹 清理残留进程...${NC}"
 
 # 清理后端进程
-BACKEND_PIDS=$(ps aux | grep '[u]vicorn app.main:app' | awk '{print $2}')
+launchctl remove local.cognisync.backend 2>/dev/null || true
+launchctl remove local.cognisync.frontend 2>/dev/null || true
+launchctl remove local.cognisync.admin 2>/dev/null || true
+BACKEND_PIDS=$(ps aux | grep -E '[u]vicorn (app\\.main|main):app' | awk '{print $2}')
 if [ ! -z "$BACKEND_PIDS" ]; then
     echo -e "${YELLOW}发现残留后端进程: $BACKEND_PIDS${NC}"
     kill $BACKEND_PIDS 2>/dev/null || true

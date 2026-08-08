@@ -2,8 +2,8 @@
 基础 Schema - 定义通用响应格式和基础模型
 """
 from typing import Generic, TypeVar, Optional, Any
-from datetime import datetime
-from pydantic import BaseModel, Field
+from datetime import datetime, timezone
+from pydantic import BaseModel, Field, field_serializer
 
 T = TypeVar("T")
 
@@ -29,9 +29,8 @@ class ErrorResponse(BaseModel):
 
 class TimestampMixin(BaseModel):
     """时间戳 Mixin"""
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
-    class Config:
-        json_encoders = {
-            datetime: lambda v: v.isoformat() + "Z"
-        }
+    @field_serializer("timestamp")
+    def serialize_timestamp(self, value: datetime) -> str:
+        return value.isoformat().replace("+00:00", "Z")

@@ -1,5 +1,22 @@
-import React from 'react';
-import { LayoutDashboard, MessageSquareText, Network, Scale, FileText, FlaskConical, ClipboardList, Languages, Sun, Moon, LogOut, User as UserIcon } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import {
+  Activity,
+  ClipboardList,
+  FileText,
+  FlaskConical,
+  Grid3X3,
+  Home,
+  Languages,
+  LayoutDashboard,
+  LogOut,
+  MessageSquareText,
+  Moon,
+  Network,
+  Scale,
+  Sun,
+  User as UserIcon,
+  X,
+} from 'lucide-react';
 import { translations } from '../utils/translations';
 import type { Language, User } from '../types';
 
@@ -18,6 +35,13 @@ interface Props {
   children: React.ReactNode;
 }
 
+interface NavigationItem {
+  id: View;
+  label: string;
+  description: string;
+  icon: React.ReactNode;
+}
+
 export const Layout: React.FC<Props> = ({
   currentView,
   onViewChange,
@@ -27,175 +51,232 @@ export const Layout: React.FC<Props> = ({
   theme,
   onToggleTheme,
   user,
-  onLogout
+  onLogout,
 }) => {
   const t = translations[language];
+  const [menuOpen, setMenuOpen] = useState(false);
 
-  const navItems: { id: View; label: string; icon: React.ReactNode }[] = [
-    { id: 'dashboard', label: t.dashboard, icon: <LayoutDashboard size={20} /> },
-    { id: 'chat', label: t.chat, icon: <MessageSquareText size={20} /> },
-    { id: 'graph', label: t.graph, icon: <Network size={20} /> },
-    { id: 'calibration', label: t.calibration, icon: <Scale size={20} /> },
-    { id: 'evidence', label: t.evidence, icon: <FileText size={20} /> },
-    { id: 'research', label: t.research, icon: <FlaskConical size={20} /> },
-    { id: 'scales', label: t.scales, icon: <ClipboardList size={20} /> },
+  const allNavItems: NavigationItem[] = [
+    {
+      id: 'dashboard',
+      label: t.dashboard,
+      description: language === 'zh' ? '查看今天的学习入口' : 'Your learning starting point',
+      icon: <LayoutDashboard size={18} />,
+    },
+    {
+      id: 'chat',
+      label: t.chat,
+      description: language === 'zh' ? '与 AI 一起分析和推进任务' : 'Work through tasks with AI',
+      icon: <MessageSquareText size={18} />,
+    },
+    {
+      id: 'graph',
+      label: t.graph,
+      description: language === 'zh' ? '整理概念及其连接' : 'Organize concepts and links',
+      icon: <Network size={18} />,
+    },
+    {
+      id: 'research',
+      label: language === 'zh' ? '项目工坊' : 'Project studio',
+      description: language === 'zh' ? '从项目解构走向重新建构' : 'Move from deconstruction to reconstruction',
+      icon: <FlaskConical size={18} />,
+    },
+    {
+      id: 'calibration',
+      label: t.calibration,
+      description: language === 'zh' ? '检查并修正学习判断' : 'Review and revise the learner model',
+      icon: <Scale size={18} />,
+    },
+    {
+      id: 'evidence',
+      label: t.evidence,
+      description: language === 'zh' ? '回看调试、提问和反思记录' : 'Review debugging and reflection evidence',
+      icon: <FileText size={18} />,
+    },
+    {
+      id: 'scales',
+      label: t.scales,
+      description: language === 'zh' ? '完成教师发布的测量任务' : 'Complete assigned measurement tasks',
+      icon: <ClipboardList size={18} />,
+    },
   ];
 
+  const group = user?.experimentGroup ?? 'unassigned';
+  const allowedViews: Record<User['experimentGroup'], View[]> = {
+    pdt: ['dashboard', 'chat', 'graph', 'research', 'calibration', 'evidence', 'scales'],
+    ai_pbl: ['dashboard', 'chat', 'research', 'evidence', 'scales'],
+    lecture: ['dashboard', 'research', 'evidence', 'scales'],
+    unassigned: ['dashboard', 'scales'],
+  };
+  const navItems = allNavItems.filter(item => allowedViews[group].includes(item.id));
+
+  const primaryViews: View[] = ['dashboard', 'chat', 'graph', 'research'];
+  const primaryItems = navItems.filter(item => primaryViews.includes(item.id));
+  const currentItem = navItems.find(item => item.id === currentView) ?? navItems[0];
+  const userMeta = user?.email || user?.student_id || user?.id;
+
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [currentView]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMenuOpen(false);
+    };
+
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [menuOpen]);
+
+  const navigate = (view: View) => {
+    onViewChange(view);
+    setMenuOpen(false);
+  };
+
   return (
-    <div className="flex h-screen font-sans" style={{
-      backgroundColor: theme === 'light' ? '#fafafa' : '#0f172a'
-    }}>
-      {/* 侧边栏 */}
-      <aside className="w-64 glass-card rounded-r-3xl border-r-0 flex flex-col shadow-xl m-2 ml-0 animate-slide-in-left">
-        <div className="p-6" style={{
-          borderBottom: `1px solid ${theme === 'light' ? 'rgba(0, 0, 0, 0.1)' : 'rgba(255, 255, 255, 0.1)'}`
-        }}>
-          <h1 className="text-2xl font-semibold text-gradient tracking-tight">
-            CogniSync
-          </h1>
-          <p className="text-xs mt-1.5 uppercase tracking-wider font-medium" style={{
-            color: theme === 'light' ? '#6b7280' : '#cbd5e1'
-          }}>
-            Research Prototype
-          </p>
-        </div>
-
-        <nav className="flex-1 p-4 space-y-1.5">
-          {navItems.map((item, idx) => (
+    <div className="app-shell app-shell-fullscreen">
+      <main className="app-main app-main-fullscreen animate-fade-in">
+        <header className="app-header workspace-header">
+          <div className="workspace-identity">
             <button
-              key={item.id}
-              onClick={() => onViewChange(item.id)}
-              className={`w-full flex items-center space-x-3 px-4 py-3.5 rounded-xl transition-all duration-300 group stagger-${idx + 1} animate-fade-in ${
-                currentView === item.id
-                  ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg shadow-blue-500/30 scale-[1.02]'
-                  : ''
-              }`}
-              style={currentView !== item.id ? {
-                color: theme === 'light' ? '#000000' : '#ffffff',
-                backgroundColor: 'transparent'
-              } : {}}
+              type="button"
+              className="workspace-brand"
+              onClick={() => navigate('dashboard')}
+              aria-label={language === 'zh' ? '返回学习首页' : 'Return to learning home'}
             >
-              <span className={`transition-transform duration-300 ${currentView === item.id ? '' : 'group-hover:scale-110'}`}>
-                {item.icon}
+              <span className="brand-mark">C</span>
+              <span className="workspace-brand-copy">
+                <span className="brand-title">CogniSync</span>
+                <span className="brand-subtitle">
+                  {language === 'zh' ? 'AI 时代编程学习平台' : 'AI-era programming platform'}
+                </span>
               </span>
-              <span className="font-medium text-sm">{item.label}</span>
             </button>
-          ))}
-        </nav>
 
-        <div className="p-4 space-y-3" style={{
-          borderTop: `1px solid ${theme === 'light' ? 'rgba(0, 0, 0, 0.1)' : 'rgba(255, 255, 255, 0.1)'}`
-        }}>
-          {/* 主题切换 */}
-          <div className="glass-card p-3.5 rounded-xl border shadow-sm hover:shadow-md transition-all duration-300">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                {theme === 'light' ? <Sun size={16} className="text-amber-500" /> : <Moon size={16} className="text-indigo-400" />}
-                <span className="text-xs font-semibold" style={{
-                  color: theme === 'light' ? '#000000' : '#ffffff'
-                }}>
-                  {theme === 'light' ? '浅色模式' : '深色模式'}
-                </span>
-              </div>
-              <button
-                onClick={onToggleTheme}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-all duration-300 shadow-inner ${
-                  theme === 'dark'
-                    ? 'bg-gradient-to-r from-blue-500 to-indigo-600'
-                    : 'bg-gradient-to-r from-amber-400 to-orange-400'
-                }`}
-              >
-                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-all duration-300 shadow-md ${theme === 'dark' ? 'translate-x-6' : 'translate-x-1'}`} />
-              </button>
+            <span className="workspace-title-divider" aria-hidden="true" />
+
+            <div className="workspace-current min-w-0">
+              <p className="page-kicker">
+                {language === 'zh' ? '当前视图' : 'Current view'}
+              </p>
+              <h2 className="page-title truncate-text">{currentItem.label}</h2>
             </div>
           </div>
 
-          {/* 语言切换 */}
-          <div className="glass-card p-3.5 rounded-xl border shadow-sm hover:shadow-md transition-all duration-300">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                <Languages size={16} style={{
-                  color: theme === 'light' ? '#6b7280' : '#cbd5e1'
-                }} />
-                <span className="text-xs font-semibold" style={{
-                  color: theme === 'light' ? '#000000' : '#ffffff'
-                }}>
-                  Language
-                </span>
-              </div>
+          <nav className="workspace-primary-nav" aria-label={language === 'zh' ? '解构学习路径' : 'Deconstruction learning path'}>
+            {primaryItems.map(item => (
               <button
-                onClick={() => onSetLanguage(language === 'zh' ? 'en' : 'zh')}
-                className="text-xs font-semibold px-3 py-1.5 rounded-lg transition-all duration-200 shadow-sm hover:shadow-md"
-                style={{
-                  backgroundColor: theme === 'light' ? '#ffffff' : '#334155',
-                  color: theme === 'light' ? '#000000' : '#ffffff',
-                  border: `1px solid ${theme === 'light' ? 'rgba(0, 0, 0, 0.1)' : 'rgba(255, 255, 255, 0.1)'}`
-                }}
+                key={item.id}
+                type="button"
+                onClick={() => navigate(item.id)}
+                className={`workspace-nav-button ${currentView === item.id ? 'is-active' : ''}`}
+                aria-current={currentView === item.id ? 'page' : undefined}
               >
-                {language === 'zh' ? '中文' : 'EN'}
+                {item.icon}
+                <span>{item.label}</span>
               </button>
-            </div>
-          </div>
+            ))}
+          </nav>
 
-          {/* 用户信息和登出 */}
-          {user && onLogout && (
-            <div className="glass-card p-3.5 rounded-xl border shadow-sm">
-              <div className="flex items-center space-x-3 mb-3">
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white shadow-md">
-                  <UserIcon size={16} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold truncate" style={{
-                    color: theme === 'light' ? '#000000' : '#ffffff'
-                  }}>
-                    {user.name}
-                  </p>
-                  <p className="text-xs truncate" style={{
-                    color: theme === 'light' ? '#6b7280' : '#94a3b8'
-                  }}>
-                    {user.email}
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={onLogout}
-                className="w-full flex items-center justify-center space-x-2 px-3 py-2 rounded-lg transition-all duration-200 hover:scale-[1.02]"
-                style={{
-                  backgroundColor: theme === 'light' ? '#fee2e2' : '#7f1d1d',
-                  color: theme === 'light' ? '#991b1b' : '#fca5a5',
-                  border: `1px solid ${theme === 'light' ? '#fecaca' : '#991b1b'}`
-                }}
-              >
-                <LogOut size={14} />
-                <span className="text-xs font-semibold">{t.logout}</span>
-              </button>
+          <div className="workspace-actions">
+            <div className="workspace-online" title={t.systemActive}>
+              <span className="status-dot" />
+              <Activity size={14} />
+              <span>{language === 'zh' ? '在线' : 'Live'}</span>
             </div>
-          )}
-        </div>
-      </aside>
-
-      {/* 主内容区 */}
-      <main className="flex-1 overflow-hidden relative flex flex-col m-2 ml-0">
-        <header className="h-16 flex items-center justify-between px-8 glass-card rounded-t-3xl shadow-sm animate-slide-in-right stagger-1" style={{
-          borderBottom: `1px solid ${theme === 'light' ? 'rgba(0, 0, 0, 0.1)' : 'rgba(255, 255, 255, 0.1)'}`
-        }}>
-          <h2 className="text-xl font-semibold capitalize tracking-tight" style={{
-            color: theme === 'light' ? '#000000' : '#ffffff'
-          }}>
-            {navItems.find(n => n.id === currentView)?.label}
-          </h2>
-          <div className="flex items-center space-x-3">
-            <span className="flex h-2 w-2 rounded-full bg-green-500 shadow-lg shadow-green-500/50 animate-pulse"></span>
-            <span className="text-sm font-medium" style={{
-              color: theme === 'light' ? '#000000' : '#ffffff'
-            }}>
-              {t.systemActive}
-            </span>
+            <button
+              type="button"
+              className={`workspace-menu-button ${menuOpen ? 'is-open' : ''}`}
+              onClick={() => setMenuOpen(open => !open)}
+              aria-expanded={menuOpen}
+              aria-controls="workspace-navigation-panel"
+            >
+              {menuOpen ? <X size={18} /> : <Grid3X3 size={18} />}
+              <span>{language === 'zh' ? '更多' : 'More'}</span>
+            </button>
           </div>
         </header>
-        <div className="flex-1 min-h-0 overflow-hidden flex flex-col p-8 relative glass-card rounded-b-3xl border-t-0 shadow-xl animate-fade-in stagger-2">
-          {children}
-        </div>
+
+        {menuOpen && (
+          <>
+            <button
+              type="button"
+              className="workspace-menu-scrim"
+              onClick={() => setMenuOpen(false)}
+              aria-label={language === 'zh' ? '关闭功能面板' : 'Close navigation panel'}
+            />
+            <section
+              id="workspace-navigation-panel"
+              className={`workspace-menu-panel ${navItems.length <= 2 ? 'is-compact' : ''}`}
+              aria-label={language === 'zh' ? '全部学习功能' : 'All learning tools'}
+            >
+              <div className="workspace-menu-user">
+                <div className="user-avatar">
+                  <UserIcon size={18} />
+                </div>
+                <div className="min-w-0">
+                  <p>{user?.name || (language === 'zh' ? '学习者' : 'Learner')}</p>
+                  <span>{userMeta}</span>
+                </div>
+                <span className="workspace-menu-state">
+                  <span className="status-dot" />
+                  {language === 'zh' ? '学习中' : 'Learning'}
+                </span>
+              </div>
+
+              <div className="workspace-menu-heading">
+                <div>
+                  <p>{language === 'zh' ? '从解构到建构' : 'From deconstruction to reconstruction'}</p>
+                  <span>{language === 'zh' ? '选择你接下来要推进的学习阶段' : 'Choose the learning stage to move forward'}</span>
+                </div>
+                <Home size={18} />
+              </div>
+
+              <nav className="workspace-menu-grid">
+                {navItems.map((item, index) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => navigate(item.id)}
+                    className={`workspace-menu-item ${currentView === item.id ? 'is-active' : ''}`}
+                  >
+                    <span className="workspace-menu-index">{String(index + 1).padStart(2, '0')}</span>
+                    <span className="workspace-menu-icon">{item.icon}</span>
+                    <span className="workspace-menu-copy">
+                      <strong>{item.label}</strong>
+                      <small>{item.description}</small>
+                    </span>
+                  </button>
+                ))}
+              </nav>
+
+              <div className="workspace-menu-tools">
+                <button type="button" onClick={onToggleTheme} className="workspace-tool-button">
+                  {theme === 'light' ? <Moon size={17} /> : <Sun size={17} />}
+                  <span>{theme === 'light' ? (language === 'zh' ? '深色模式' : 'Dark mode') : (language === 'zh' ? '浅色模式' : 'Light mode')}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onSetLanguage(language === 'zh' ? 'en' : 'zh')}
+                  className="workspace-tool-button"
+                >
+                  <Languages size={17} />
+                  <span>{language === 'zh' ? 'English' : '中文'}</span>
+                </button>
+                {onLogout && (
+                  <button type="button" onClick={onLogout} className="workspace-tool-button is-danger">
+                    <LogOut size={17} />
+                    <span>{t.logout}</span>
+                  </button>
+                )}
+              </div>
+            </section>
+          </>
+        )}
+
+        <section className="app-content app-content-fullscreen">{children}</section>
       </main>
     </div>
   );

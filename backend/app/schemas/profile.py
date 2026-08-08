@@ -3,7 +3,7 @@ Profile Schema - 学习者画像相关数据结构（与前端完全对齐）
 """
 from typing import Optional
 from datetime import datetime
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class ProfileDelta(BaseModel):
@@ -30,8 +30,8 @@ class UserProfile(BaseModel):
             return v.isoformat() + "Z"
         return v
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "cognition": 65,
                 "affect": 42,
@@ -39,6 +39,7 @@ class UserProfile(BaseModel):
                 "lastUpdate": "2026-02-09T10:00:00.000Z"
             }
         }
+    )
 
 
 class ProfileUpdateRequest(BaseModel):
@@ -61,4 +62,3 @@ class ProfileChange(BaseModel):
 class ProfileChangesResponse(BaseModel):
     """画像变化列表响应"""
     changes: list[ProfileChange] = Field(default_factory=list, description="最近的变化记录")
-

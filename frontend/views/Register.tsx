@@ -10,6 +10,7 @@ export interface PendingScaleRegistration {
   name: string;
   email?: string;
   password: string;
+  className?: string;
 }
 
 export interface RegisterProps {
@@ -32,6 +33,7 @@ export const Register: React.FC<RegisterProps> = ({
   const [step, setStep] = useState<'info' | 'mode'>('info');
   const [name, setName] = useState('');
   const [studentId, setStudentId] = useState('');
+  const [className, setClassName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -90,6 +92,7 @@ export const Register: React.FC<RegisterProps> = ({
         name: name.trim(),
         email: email.trim() || undefined,
         password,
+        className: className.trim() || undefined,
       });
       return;
     }
@@ -104,7 +107,8 @@ export const Register: React.FC<RegisterProps> = ({
         name: name.trim(),
         email: email.trim() || undefined,
         password,
-        mode
+        mode,
+        className: className.trim() || undefined,
       });
 
       const token = response.success && response.data ? response.data.token : '';
@@ -172,6 +176,19 @@ export const Register: React.FC<RegisterProps> = ({
                 disabled={isLoading}
                 autoComplete="username"
                 required
+              />
+            </div>
+
+            {/* 密码（必填） */}
+            <div>
+              <Input
+                type="text"
+                label={language === 'zh' ? '班级' : 'Class'}
+                placeholder={language === 'zh' ? '例如：高二（3）班' : 'e.g. Class 3'}
+                value={className}
+                onChange={(e) => setClassName(e.target.value)}
+                disabled={isLoading}
+                autoComplete="organization"
               />
             </div>
 

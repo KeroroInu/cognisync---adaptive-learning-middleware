@@ -16,11 +16,12 @@ logger = logging.getLogger(__name__)
 
 # 创建异步引擎
 engine: AsyncEngine = create_async_engine(
-    settings.DATABASE_URL,
+    settings.database_url,
     echo=settings.DEBUG,
     pool_pre_ping=True,
-    pool_size=10,
-    max_overflow=20,
+    pool_size=settings.DB_POOL_SIZE,
+    max_overflow=settings.DB_MAX_OVERFLOW,
+    pool_timeout=settings.DB_POOL_TIMEOUT,
     future=True,
 )
 
@@ -72,6 +73,9 @@ async def init_db():
         # 迁移：为 emotion_logs.created_at 添加时间窗口统计索引
         await _migrate_emotion_log_created_index()
 
+        # 迁移：实验班级、实验条件与分组任务
+        await _migrate_experiment_groups()
+
         # 打印已创建的表
         async with engine.begin() as conn:
             def get_table_names(sync_conn):
@@ -82,9 +86,11 @@ async def init_db():
             logger.info(f"📊 Created tables: {', '.join(tables)}")
 
         # 种子：首次启动自动创建默认管理员（幂等，已存在则跳过）
-        await _seed_default_admin()
+        if settings.SEED_DEFAULT_ADMIN:
+            await _seed_default_admin()
         # 种子：测试学生账号 kero/kero（幂等）
-        await _seed_test_student()
+        if settings.SEED_TEST_DATA:
+            await _seed_test_student()
         # 种子：默认量表 v1.0（幂等，已存在则跳过）
         await _seed_default_scale()
 
@@ -307,6 +313,27 @@ async def _migrate_emotion_log_created_index():
     )
 
 
+async def _migrate_experiment_groups():
+    """幂等迁移：增加实验班级/条件，并允许研究任务按条件投放。"""
+    from sqlalchemy import text
+
+    statements = (
+        ("ALTER TABLE users ADD COLUMN IF NOT EXISTS class_name VARCHAR(100);", "ADD users.class_name"),
+        ("ALTER TABLE users ADD COLUMN IF NOT EXISTS experiment_group VARCHAR(20) NOT NULL DEFAULT 'unassigned';", "ADD users.experiment_group"),
+        ("CREATE INDEX IF NOT EXISTS ix_users_class_name ON users (class_name);", "INDEX users.class_name"),
+        ("CREATE INDEX IF NOT EXISTS ix_users_experiment_group ON users (experiment_group);", "INDEX users.experiment_group"),
+        ("ALTER TABLE research_tasks ADD COLUMN IF NOT EXISTS target_group VARCHAR(20) NOT NULL DEFAULT 'all';", "ADD research_tasks.target_group"),
+        ("CREATE INDEX IF NOT EXISTS ix_research_tasks_target_group_status ON research_tasks (target_group, status);", "INDEX research task target/status"),
+    )
+    for sql, label in statements:
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(text(sql))
+            logger.info("  ✅ %s", label)
+        except Exception as exc:
+            logger.warning("  ⚠️ %s (skipped): %s", label, exc)
+
+
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """
     依赖注入：获取数据库会话
@@ -347,12 +374,7 @@ async def _seed_default_admin():
         existing = result.scalar_one_or_none()
 
         if existing:
-            if existing.role != "admin":
-                existing.role = "admin"
-                await session.commit()
-                logger.info(f"✅ Promoted existing user '{settings.ADMIN_DEFAULT_STUDENT_ID}' to admin")
-            else:
-                logger.info(f"✅ Default admin '{settings.ADMIN_DEFAULT_STUDENT_ID}' already exists, skipping")
+            logger.info("Default admin already exists; credentials were not changed")
             return
 
         pw_hash = bcrypt.hashpw(
@@ -371,10 +393,7 @@ async def _seed_default_admin():
         )
         session.add(admin_user)
         await session.commit()
-        logger.info(
-            f"✅ Default admin created: student_id='{settings.ADMIN_DEFAULT_STUDENT_ID}' "
-            f"password='{settings.ADMIN_DEFAULT_PASSWORD}'"
-        )
+        logger.info("✅ Default admin created: student_id='%s'", settings.ADMIN_DEFAULT_STUDENT_ID)
 
 
 async def _seed_test_student():
@@ -395,8 +414,9 @@ async def _seed_test_student():
         result = await session.execute(
             select(User).where(User.student_id == TEST_STUDENT_ID)
         )
-        if result.scalar_one_or_none():
-            logger.info(f"✅ Test student '{TEST_STUDENT_ID}' already exists, skipping")
+        existing = result.scalar_one_or_none()
+        if existing:
+            logger.info("Test student already exists; credentials were not changed")
             return
 
         pw_hash = bcrypt.hashpw(
@@ -414,7 +434,7 @@ async def _seed_test_student():
         )
         session.add(student)
         await session.commit()
-        logger.info(f"✅ Test student created: student_id='{TEST_STUDENT_ID}' password='{TEST_PASSWORD}'")
+        logger.info("✅ Test student created: student_id='%s'", TEST_STUDENT_ID)
 
 
 async def _seed_default_scale():

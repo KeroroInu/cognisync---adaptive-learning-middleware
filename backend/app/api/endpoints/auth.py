@@ -2,7 +2,7 @@
 Auth API Endpoints - 认证相关接口 (PostgreSQL Database Version)
 """
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict
 from fastapi import APIRouter, HTTPException, Header, Depends
 from sqlalchemy import select
@@ -33,7 +33,7 @@ ACCESS_TOKEN_EXPIRE_MINUTES = settings.JWT_EXPIRES_IN
 
 def create_access_token(user_id: str) -> str:
     """创建访问令牌"""
-    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode = {"sub": str(user_id), "exp": expire}
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
@@ -48,6 +48,12 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
 
 
+def ensure_self_scope(requested_user_id: str, current_user: User) -> None:
+    """旧版路由仍携带 userId；只允许当前登录者访问自己的 UUID。"""
+    if requested_user_id != str(current_user.id):
+        raise HTTPException(status_code=403, detail="Cannot access another user's data")
+
+
 async def get_current_user(
     authorization: Optional[str] = Header(None),
     db: AsyncSession = Depends(get_db)
@@ -56,15 +62,11 @@ async def get_current_user(
     import logging
     logger = logging.getLogger(__name__)
 
-    logger.info(f"[AUTH] Authorization header: {authorization[:50] if authorization else 'None'}...")
-
     if not authorization or not authorization.startswith("Bearer "):
         logger.warning("[AUTH] No valid Authorization header")
         raise HTTPException(status_code=401, detail="Not authenticated")
 
     token = authorization.split(" ")[1]
-    logger.info(f"[AUTH] Extracted token: {token[:20]}...")
-
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         user_id: str = payload.get("sub")
@@ -85,7 +87,7 @@ async def get_current_user(
     result = await db.execute(stmt)
     user = result.scalar_one_or_none()
 
-    if user is None:
+    if user is None or not user.is_active:
         logger.warning(f"[AUTH] User not found in database: {user_id}")
         raise HTTPException(status_code=401, detail="User not found")
 
@@ -110,7 +112,7 @@ async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
     result = await db.execute(stmt)
     user = result.scalar_one_or_none()
 
-    if not user:
+    if not user or not user.is_active:
         logger.warning(f"[LOGIN] User not found: {data.student_id}")
         raise HTTPException(status_code=401, detail="Invalid student ID or password")
 
@@ -141,7 +143,9 @@ async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
         name=user.name,
         createdAt=user.created_at.isoformat(),
         hasCompletedOnboarding=user.has_completed_onboarding,
-        onboardingMode=user.onboarding_mode
+        onboardingMode=user.onboarding_mode,
+        className=user.class_name,
+        experimentGroup=user.experiment_group,
     )
 
     # 包含最新画像（如果有），避免前端首次渲染时显示默认值
@@ -175,55 +179,9 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
     existing_user = result.scalar_one_or_none()
 
     if existing_user:
-        # 已完成 onboarding → 正常冲突报错
-        if existing_user.has_completed_onboarding:
-            logger.warning(f"[REGISTER] Student ID already registered: {data.student_id}")
-            raise HTTPException(status_code=400, detail="Student ID already registered")
-
-        # 未完成 onboarding（注册中途退出）→ 允许续接，更新信息后返回新 token
-        logger.info(f"[REGISTER] Resuming incomplete registration for: {data.student_id}")
-        existing_user.onboarding_mode = data.mode
-        existing_user.password_hash = hash_password(data.password)
-        if data.name:
-            existing_user.name = data.name
-        # 邮箱变更时检查唯一性
-        if data.email and data.email != existing_user.email:
-            email_stmt = select(User).where(User.email == data.email)
-            email_result = await db.execute(email_stmt)
-            if email_result.scalar_one_or_none():
-                raise HTTPException(status_code=400, detail="Email already registered")
-            existing_user.email = data.email
-        await db.commit()
-        await db.refresh(existing_user)
-
-        token = create_access_token(str(existing_user.id))
-        user_info = UserInfo(
-            id=str(existing_user.id),
-            student_id=existing_user.student_id,
-            email=existing_user.email,
-            name=existing_user.name,
-            createdAt=existing_user.created_at.isoformat(),
-            hasCompletedOnboarding=False,
-            onboardingMode=existing_user.onboarding_mode
-        )
-
-        # AI 模式需要重新生成初始图谱
-        initial_profile = None
-        initial_graph = None
-        if data.mode == 'ai':
-            try:
-                from app.services.personalization_service import PersonalizationService
-                personalization_service = PersonalizationService()
-                initial_profile = ProfileData(cognition=50.0, affect=50.0, behavior=50.0)
-                initial_graph = await personalization_service.generate_initial_graph(
-                    cognition=50.0, affect=50.0, behavior=50.0, num_concepts=10
-                )
-            except Exception as e:
-                logger.warning(f"[REGISTER] Failed to generate initial graph on resume: {e}")
-                initial_graph = []
-
-        logger.info(f"[REGISTER] ✅ Resumed registration: {existing_user.student_id}")
-        return AuthResponse(token=token, user=user_info, initialProfile=initial_profile, initialGraph=initial_graph)
+        # 不允许通过重复注册改写未完成账号的密码。中断后应使用原密码登录继续。
+        logger.warning(f"[REGISTER] Student ID already registered: {data.student_id}")
+        raise HTTPException(status_code=400, detail="Student ID already registered")
 
     # 如果提供了邮箱，检查邮箱唯一性
     if data.email:
@@ -244,8 +202,10 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
             password_hash=hash_password(data.password),
             role="learner",
             is_active=True,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
             onboarding_mode=data.mode,  # 'scale' or 'ai'
+            class_name=data.class_name,
+            experiment_group="unassigned",
             has_completed_onboarding=False
         )
 
@@ -268,7 +228,9 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
             name=new_user.name,
             createdAt=new_user.created_at.isoformat(),
             hasCompletedOnboarding=False,
-            onboardingMode=new_user.onboarding_mode
+            onboardingMode=new_user.onboarding_mode,
+            className=new_user.class_name,
+            experimentGroup=new_user.experiment_group,
         )
 
         # 生成初始画像和知识图谱（仅 AI 模式）
@@ -284,7 +246,7 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
             affect=50,    # 默认值
             behavior=50,   # 默认值
             source=ProfileSource.SYSTEM,
-            created_at=datetime.utcnow()
+            created_at=datetime.now(timezone.utc)
         )
 
         db.add(initial_snapshot)
@@ -401,6 +363,7 @@ async def register_with_scale(data: RegisterWithScaleRequest, db: AsyncSession =
             new_user = existing_user
             new_user.onboarding_mode = data.mode
             new_user.password_hash   = hash_password(data.password)
+            new_user.class_name = data.class_name or new_user.class_name
             if data.name:
                 new_user.name = data.name
         else:
@@ -412,8 +375,10 @@ async def register_with_scale(data: RegisterWithScaleRequest, db: AsyncSession =
                 password_hash=hash_password(data.password),
                 role="learner",
                 is_active=True,
-                created_at=datetime.utcnow(),
+                created_at=datetime.now(timezone.utc),
                 onboarding_mode='scale',
+                class_name=data.class_name,
+                experiment_group="unassigned",
                 has_completed_onboarding=False,
             )
             db.add(new_user)
@@ -427,7 +392,7 @@ async def register_with_scale(data: RegisterWithScaleRequest, db: AsyncSession =
             affect=affect,
             behavior=behavior,
             source=ProfileSource.SYSTEM,
-            created_at=datetime.utcnow()
+            created_at=datetime.now(timezone.utc)
         )
         db.add(initial_snapshot)
 
@@ -465,8 +430,10 @@ async def register_with_scale(data: RegisterWithScaleRequest, db: AsyncSession =
             createdAt=new_user.created_at.isoformat(),
             hasCompletedOnboarding=True,
             onboardingMode='scale',
+            className=new_user.class_name,
+            experimentGroup=new_user.experiment_group,
         )
-        current_time = datetime.utcnow().isoformat()
+        current_time = datetime.now(timezone.utc).isoformat()
         profile_data = ProfileData(cognition=cognition, affect=affect, behavior=behavior)
 
         return AuthResponse(token=token, user=user_info, initialProfile=profile_data)
@@ -518,7 +485,9 @@ async def get_current_user_info(
         name=current_user.name,
         createdAt=current_user.created_at.isoformat(),
         hasCompletedOnboarding=current_user.has_completed_onboarding,
-        onboardingMode=current_user.onboarding_mode
+        onboardingMode=current_user.onboarding_mode,
+        className=current_user.class_name,
+        experimentGroup=current_user.experiment_group,
     )
 
     response_data = CurrentUserResponse(user=user_info, profile=profile_data)
@@ -550,7 +519,7 @@ async def save_user_profile(
         affect=int(affect),
         behavior=int(behavior),
         source=ProfileSource.SYSTEM,
-        created_at=datetime.utcnow()
+        created_at=datetime.now(timezone.utc)
     )
 
     db.add(new_profile)

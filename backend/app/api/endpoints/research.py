@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import case, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.endpoints.auth import get_current_user
@@ -28,6 +28,7 @@ class ActiveTaskResponse(BaseModel):
     ai_prompt: Optional[str]
     code_content: str
     language: str
+    target_group: str
     # 当前用户的提交状态（若无提交记录则为默认值）
     is_completed: bool = False
     code_submitted: Optional[str] = None
@@ -53,8 +54,17 @@ async def get_active_task(
     """获取当前激活的研究任务"""
     result = await db.execute(
         select(ResearchTask)
-        .where(ResearchTask.status == ResearchTaskStatus.ACTIVE)
-        .order_by(ResearchTask.updated_at.desc())
+        .where(
+            ResearchTask.status == ResearchTaskStatus.ACTIVE,
+            or_(
+                ResearchTask.target_group == "all",
+                ResearchTask.target_group == current_user.experiment_group,
+            ),
+        )
+        .order_by(
+            case((ResearchTask.target_group == current_user.experiment_group, 0), else_=1),
+            ResearchTask.updated_at.desc(),
+        )
         .limit(1)
     )
     task = result.scalar_one_or_none()
@@ -80,6 +90,7 @@ async def get_active_task(
         ai_prompt=task.ai_prompt,
         code_content=task.code_content,
         language=task.language,
+        target_group=task.target_group,
         is_completed=submission.is_completed if submission else False,
         code_submitted=submission.code_submitted if submission else None,
     ))
@@ -99,7 +110,12 @@ async def save_progress(
         raise HTTPException(status_code=400, detail="Invalid task_id")
 
     # 检查任务存在
-    task_result = await db.execute(select(ResearchTask).where(ResearchTask.id == tid))
+    task_result = await db.execute(
+        select(ResearchTask).where(
+            ResearchTask.id == tid,
+            or_(ResearchTask.target_group == "all", ResearchTask.target_group == current_user.experiment_group),
+        )
+    )
     if not task_result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Task not found")
 
@@ -154,7 +170,12 @@ async def complete_task(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid task_id")
 
-    task_result = await db.execute(select(ResearchTask).where(ResearchTask.id == tid))
+    task_result = await db.execute(
+        select(ResearchTask).where(
+            ResearchTask.id == tid,
+            or_(ResearchTask.target_group == "all", ResearchTask.target_group == current_user.experiment_group),
+        )
+    )
     if not task_result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Task not found")
 

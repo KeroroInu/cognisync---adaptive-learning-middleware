@@ -5,7 +5,7 @@ import { useTheme } from '../lib/useTheme';
 import { Sun, Moon, Shield } from 'lucide-react';
 
 export const Login = () => {
-  const { login, isAuthed, isLoading } = useAuth();
+  const { login, isAuthed, isLoading, bootstrap } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
@@ -14,6 +14,10 @@ export const Login = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    void bootstrap();
+  }, [bootstrap]);
 
   // 已登录则直接跳转
   useEffect(() => {
@@ -48,42 +52,39 @@ export const Login = () => {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-screen gradient-mesh">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500" />
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[color:var(--brand-purple)]" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen gradient-mesh flex items-center justify-center p-4">
-      {/* 主题切换按钮 */}
+    <div className="admin-login-shell gradient-mesh">
       <button
         onClick={toggleTheme}
-        className="fixed top-4 right-4 p-2 rounded-lg glass-card hover:opacity-80 transition-opacity"
+        className="admin-icon-button admin-theme-toggle glass-card"
+        aria-label={theme === 'dark' ? '切换浅色模式' : '切换深色模式'}
         title={theme === 'dark' ? '切换浅色模式' : '切换深色模式'}
       >
         {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
       </button>
 
-      <div className="w-full max-w-md">
-        {/* 卡片 */}
-        <div className="glass-card rounded-2xl p-8 shadow-xl animate-slide-in-left">
-          {/* Logo + 标题 */}
-          <div className="flex flex-col items-center mb-8">
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white mb-4 shadow-lg">
+      <div className="admin-login-wrap">
+        <div className="admin-login-card glass-card animate-slide-in-left">
+          <div className="mb-8 flex flex-col items-center text-center">
+            <div className="admin-login-mark flow-surface">
               <Shield size={28} />
             </div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-              CogniSync 管理后台
+            <h1 className="metallic-text text-3xl font-bold leading-tight">
+              CogniSync 教师端
             </h1>
-            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-              请使用管理员账号登录
+            <p className="mt-2 text-sm" style={{ color: 'var(--text-tertiary)' }}>
+              项目解构教学、过程诊断与研究数据控制台
             </p>
           </div>
 
-          {/* 表单 */}
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+              <label className="mb-1.5 block text-sm font-bold" style={{ color: 'var(--text-secondary)' }}>
                 账号
               </label>
               <input
@@ -92,13 +93,13 @@ export const Login = () => {
                 onChange={e => setStudentId(e.target.value)}
                 placeholder="请输入管理员账号"
                 autoComplete="username"
-                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+                className="admin-input"
                 disabled={submitting}
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+              <label className="mb-1.5 block text-sm font-bold" style={{ color: 'var(--text-secondary)' }}>
                 密码
               </label>
               <input
@@ -107,22 +108,21 @@ export const Login = () => {
                 onChange={e => setPassword(e.target.value)}
                 placeholder="请输入密码"
                 autoComplete="current-password"
-                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+                className="admin-input"
                 disabled={submitting}
               />
             </div>
 
-            {/* 错误提示 */}
             {error && (
-              <div className="px-4 py-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
-                <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+              <div className="rounded-lg border px-4 py-3" style={{ borderColor: 'rgba(240,30,156,0.38)', background: 'rgba(240,30,156,0.1)' }}>
+                <p className="text-sm" style={{ color: 'var(--brand-rose)' }}>{error}</p>
               </div>
             )}
 
             <button
               type="submit"
               disabled={submitting}
-              className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-medium hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition"
+              className="admin-flow-button"
             >
               {submitting ? (
                 <span className="flex items-center justify-center gap-2">
@@ -136,7 +136,7 @@ export const Login = () => {
           </form>
         </div>
 
-        <p className="mt-4 text-center text-xs text-gray-400 dark:text-gray-500">
+        <p className="mt-4 text-center text-xs" style={{ color: 'var(--text-tertiary)' }}>
           仅限授权管理员访问
         </p>
       </div>

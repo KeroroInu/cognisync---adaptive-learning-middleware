@@ -4,7 +4,7 @@ import { python } from '@codemirror/lang-python';
 import { javascript } from '@codemirror/lang-javascript';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { Send, CheckCircle, FlaskConical, Loader, Save, Play, Terminal, Trash2, X } from 'lucide-react';
-import type { ChatMessage, Language, UserProfile, ResearchTask } from '../types';
+import type { ChatMessage, Language, User, UserProfile, ResearchTask } from '../types';
 import {
   sendChatMessage,
   getActiveResearchTask,
@@ -12,6 +12,7 @@ import {
   completeResearchTask,
   reopenResearchTask,
 } from '../services/api';
+import { SnakeProjectDemo } from '../components/SnakeProjectDemo';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -25,6 +26,7 @@ interface Props {
   language: Language;
   theme: 'light' | 'dark';
   userId?: string;
+  experimentGroup: User['experimentGroup'];
 }
 
 // Extend Window so TS knows about Pyodide on CDN
@@ -41,6 +43,7 @@ export const Research: React.FC<Props> = ({
   language,
   theme,
   userId,
+  experimentGroup,
 }) => {
   // Task / code state
   const [task, setTask] = useState<ResearchTask | null>(null);
@@ -78,6 +81,7 @@ export const Research: React.FC<Props> = ({
 
   const isZh = language === 'zh';
   const isPython = task?.language?.toLowerCase() === 'python';
+  const allowAI = experimentGroup === 'pdt' || experimentGroup === 'ai_pbl';
 
   // ── Load task ──────────────────────────────────────────────────────────
 
@@ -342,13 +346,6 @@ export const Research: React.FC<Props> = ({
     }
   };
 
-  // ── Theme helpers ───────────────────────────────────────────────────────
-
-  const borderColor = theme === 'light' ? 'rgba(0,0,0,0.1)'       : 'rgba(255,255,255,0.1)';
-  const textColor   = theme === 'light' ? '#000000'                : '#ffffff';
-  const panelBg     = theme === 'light' ? 'rgba(249,250,251,0.8)'  : 'rgba(15,23,42,0.8)';
-  const inputBg     = theme === 'light' ? '#ffffff'                : '#1e293b';
-
   // ── Guard states ────────────────────────────────────────────────────────
 
   if (loadingTask) {
@@ -381,36 +378,32 @@ export const Research: React.FC<Props> = ({
   // ── Render ──────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex gap-4 flex-1 min-h-0">
+    <div className={`research-workbench ${allowAI ? '' : 'research-workbench-solo'}`}>
+
+      <SnakeProjectDemo language={language} defaultOpen />
 
       {/* ── Left: Code Editor + Terminal ─────────────────────────────── */}
-      <div
-        className="flex-[3] flex flex-col min-h-0 rounded-2xl overflow-hidden border"
-        style={{ borderColor, background: theme === 'light' ? '#ffffff' : '#0f172a' }}
-      >
+      <div className="research-panel research-code-panel">
         {/* Task header */}
-        <div
-          className="px-4 py-3 border-b flex items-center justify-between shrink-0"
-          style={{ borderColor, backgroundColor: panelBg }}
-        >
-          <div className="flex items-center gap-2 min-w-0">
-            <FlaskConical size={16} className="text-indigo-500 shrink-0" />
-            <span className="font-semibold text-sm truncate" style={{ color: textColor }}>
+        <div className="research-panel-header research-code-header">
+          <div className="research-title-row">
+            <FlaskConical size={16} className="research-title-icon" />
+            <span className="research-task-title">
               {task.title}
             </span>
-            <span className="px-2 py-0.5 text-xs font-mono rounded shrink-0 bg-blue-100 text-blue-800">
+            <span className="research-language-badge">
               {task.language}
             </span>
           </div>
           {task.instructions && (
-            <span className="text-xs text-gray-500 max-w-xs truncate ml-4 shrink-0">
+            <span className="research-instructions">
               {task.instructions}
             </span>
           )}
         </div>
 
         {/* CodeMirror editor — flex-1 shrinks when terminal opens */}
-        <div className="flex-1 overflow-hidden min-h-0">
+        <div className="research-editor-wrap">
           <CodeMirror
             value={code}
             onChange={handleCodeChange}
@@ -423,38 +416,29 @@ export const Research: React.FC<Props> = ({
 
         {/* ── Terminal panel ─────────────────────────────────────────── */}
         {terminalOpen && (
-          <div
-            className="shrink-0 flex flex-col border-t"
-            style={{ borderColor, maxHeight: '200px', minHeight: '120px' }}
-          >
+          <div className="research-terminal">
             {/* Terminal title bar */}
-            <div
-              className="flex items-center justify-between px-3 py-1.5 shrink-0"
-              style={{
-                background: '#0d1117',
-                borderBottom: '1px solid rgba(255,255,255,0.06)',
-              }}
-            >
+            <div className="research-terminal-bar">
               <div className="flex items-center gap-1.5">
-                <Terminal size={12} className="text-green-400" />
-                <span className="text-xs font-mono text-gray-400">
+                <Terminal size={12} className="text-violet-300" />
+                <span className="research-terminal-title">
                   {isZh ? '输出' : 'Output'}
                   {pyodideReady && (
-                    <span className="ml-2 text-green-500">● Python 3.x</span>
+                    <span className="research-python-status">● Python 3.x</span>
                   )}
                 </span>
               </div>
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => setTerminalLines([])}
-                  className="text-gray-500 hover:text-gray-300 transition-colors"
+                  className="research-icon-button"
                   title={isZh ? '清空' : 'Clear'}
                 >
                   <Trash2 size={12} />
                 </button>
                 <button
                   onClick={() => setTerminalOpen(false)}
-                  className="text-gray-500 hover:text-gray-300 transition-colors"
+                  className="research-icon-button"
                   title={isZh ? '关闭' : 'Close'}
                 >
                   <X size={12} />
@@ -465,11 +449,10 @@ export const Research: React.FC<Props> = ({
             {/* Terminal output lines */}
             <div
               ref={terminalScrollRef}
-              className="flex-1 overflow-y-auto px-3 py-2 font-mono text-xs"
-              style={{ background: '#0d1117' }}
+              className="research-terminal-output"
             >
               {terminalLines.length === 0 ? (
-                <span className="text-gray-600">
+                <span className="research-terminal-empty">
                   {isZh ? '点击"运行"执行代码' : 'Click "Run" to execute code'}
                 </span>
               ) : (
@@ -490,7 +473,7 @@ export const Research: React.FC<Props> = ({
                 ))
               )}
               {running && (
-                <div className="flex items-center gap-1.5 mt-1 text-yellow-400">
+                <div className="research-running-line">
                   <Loader size={10} className="animate-spin" />
                   <span>{isZh ? '运行中...' : 'Running...'}</span>
                 </div>
@@ -500,12 +483,9 @@ export const Research: React.FC<Props> = ({
         )}
 
         {/* Footer: save status + run + complete */}
-        <div
-          className="px-4 py-2 border-t flex items-center justify-between shrink-0"
-          style={{ borderColor, backgroundColor: panelBg }}
-        >
+        <div className="research-actionbar">
           {/* Save status */}
-          <div className="flex items-center gap-3 text-xs text-gray-500">
+          <div className="research-save-status">
             <div className="flex items-center gap-1.5">
               <Save size={12} />
               <span>
@@ -524,19 +504,14 @@ export const Research: React.FC<Props> = ({
           </div>
 
           {/* Action buttons */}
-          <div className="flex items-center gap-2">
+          <div className="research-action-buttons">
 
             {/* Run button — only shown for Python tasks */}
             {isPython && (
               <button
                 onClick={handleRun}
                 disabled={running || completed}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg transition-all disabled:opacity-40"
-                style={{
-                  background: 'rgba(99,102,241,0.12)',
-                  color: '#818cf8',
-                  border: '1px solid rgba(99,102,241,0.25)',
-                }}
+                className="research-run-button"
                 title={isZh ? '运行代码 (Pyodide)' : 'Run code (Pyodide)'}
               >
                 {running
@@ -550,12 +525,7 @@ export const Research: React.FC<Props> = ({
             <button
               onClick={handleComplete}
               disabled={completing || completed}
-              className="flex items-center gap-1.5 px-4 py-1.5 text-sm font-medium text-white rounded-lg hover:opacity-90 disabled:opacity-50 transition-all"
-              style={{
-                background: completed
-                  ? '#6b7280'
-                  : 'linear-gradient(to right, #10b981, #059669)',
-              }}
+              className={`research-submit-button ${completed ? 'research-submit-button-done' : ''}`}
             >
               {completing
                 ? <Loader size={14} className="animate-spin" />
@@ -572,12 +542,7 @@ export const Research: React.FC<Props> = ({
               <button
                 onClick={handleReopen}
                 disabled={reopening}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg transition-all disabled:opacity-50"
-                style={{
-                  background: 'rgba(239,68,68,0.1)',
-                  color: '#ef4444',
-                  border: '1px solid rgba(239,68,68,0.3)',
-                }}
+                className="research-reopen-button"
                 title={isZh ? '撤回提交，重新编辑' : 'Reopen to edit again'}
               >
                 {reopening
@@ -591,37 +556,28 @@ export const Research: React.FC<Props> = ({
 
         {/* Complete error */}
         {completeError && (
-          <div className="px-4 py-1 text-xs text-red-500 text-center shrink-0">
+          <div className="research-error-line">
             {completeError}
           </div>
         )}
       </div>
 
       {/* ── Right: Chat Panel ─────────────────────────────────────── */}
-      <div
-        className="flex-[2] flex flex-col min-h-0 rounded-2xl overflow-hidden border"
-        style={{ borderColor, background: theme === 'light' ? '#ffffff' : '#0f172a' }}
-      >
+      {allowAI && <div className="research-panel research-assistant-panel">
         {/* Chat header */}
-        <div
-          className="px-4 py-3 border-b shrink-0"
-          style={{ borderColor, backgroundColor: panelBg }}
-        >
-          <p className="text-sm font-semibold" style={{ color: textColor }}>
+        <div className="research-panel-header research-assistant-header">
+          <p className="research-assistant-title">
             {isZh ? 'AI 学习助手' : 'AI Learning Assistant'}
           </p>
-          <p className="text-xs mt-0.5" style={{ color: theme === 'light' ? '#6b7280' : '#94a3b8' }}>
+          <p className="research-assistant-subtitle">
             {isZh ? '遇到问题？和我聊聊吧' : 'Stuck? Chat with me'}
           </p>
         </div>
 
         {/* Messages */}
-        <div ref={chatScrollRef} className="flex-1 overflow-y-auto p-4 space-y-3">
+        <div ref={chatScrollRef} className="research-chat-stream">
           {messages.length === 0 && (
-            <div
-              className="text-center text-sm mt-8"
-              style={{ color: theme === 'light' ? '#9ca3af' : '#64748b' }}
-            >
+            <div className="research-empty-chat">
               {isZh
                 ? '开始提问，我会帮助你完成代码！'
                 : "Start asking — I'll help you complete the code!"}
@@ -633,20 +589,11 @@ export const Research: React.FC<Props> = ({
               className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
             >
               <div
-                className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm whitespace-pre-wrap ${
+                className={`research-chat-bubble ${
                   msg.role === 'user'
-                    ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-br-sm'
-                    : ''
+                    ? 'research-chat-bubble-user'
+                    : 'research-chat-bubble-assistant'
                 }`}
-                style={
-                  msg.role === 'assistant'
-                    ? {
-                        backgroundColor: theme === 'light' ? '#f3f4f6' : '#1e293b',
-                        color: textColor,
-                        borderRadius: '1rem 1rem 1rem 0.25rem',
-                      }
-                    : {}
-                }
               >
                 {msg.text}
               </div>
@@ -654,16 +601,13 @@ export const Research: React.FC<Props> = ({
           ))}
           {isTyping && (
             <div className="flex justify-start">
-              <div
-                className="rounded-2xl rounded-bl-sm px-4 py-3"
-                style={{ backgroundColor: theme === 'light' ? '#f3f4f6' : '#1e293b' }}
-              >
+              <div className="research-typing-bubble">
                 <div className="flex gap-1">
                   {[0, 150, 300].map(delay => (
                     <span
                       key={delay}
-                      className="w-2 h-2 rounded-full animate-bounce"
-                      style={{ backgroundColor: '#9ca3af', animationDelay: `${delay}ms` }}
+                      className="research-typing-dot animate-bounce"
+                      style={{ animationDelay: `${delay}ms` }}
                     />
                   ))}
                 </div>
@@ -674,31 +618,30 @@ export const Research: React.FC<Props> = ({
 
         {/* Chat error */}
         {chatError && (
-          <div className="mx-4 mb-1 text-xs text-red-500 text-center">{chatError}</div>
+          <div className="research-error-line">{chatError}</div>
         )}
 
         {/* Input */}
-        <form onSubmit={handleChatSubmit} className="px-4 pb-4 pt-2 shrink-0">
-          <div className="flex gap-2">
+        <form onSubmit={handleChatSubmit} className="research-composer">
+          <div className="research-composer-row">
             <input
               value={input}
               onChange={e => setInput(e.target.value)}
               placeholder={isZh ? '问我任何问题...' : 'Ask me anything...'}
               disabled={completed}
-              className="flex-1 px-3 py-2 text-sm rounded-xl border focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              style={{ borderColor, backgroundColor: inputBg, color: textColor }}
+              className="research-composer-input"
             />
             <button
               type="submit"
               disabled={!input.trim() || isTyping || completed}
-              className="p-2 rounded-xl text-white hover:opacity-90 disabled:opacity-40 transition-all"
-              style={{ background: 'linear-gradient(to right, #6366f1, #9333ea)' }}
+              className="research-send-button"
+              title={isZh ? '发送' : 'Send'}
             >
               <Send size={16} />
             </button>
           </div>
         </form>
-      </div>
+      </div>}
     </div>
   );
 };

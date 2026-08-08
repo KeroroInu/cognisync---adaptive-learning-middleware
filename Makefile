@@ -16,7 +16,7 @@ install: ## Install dependencies
 	cd backend && pip install -e ".[dev]"
 
 dev: ## Run development server
-	cd backend && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+	cd backend && uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
 test: ## Run tests
 	cd backend && pytest tests/ -v --cov=app --cov-report=html

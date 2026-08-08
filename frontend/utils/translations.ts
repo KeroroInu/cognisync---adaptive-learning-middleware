@@ -81,7 +81,7 @@ export const translations = {
     // 认证 - 登录
     login: "登录",
     loginTitle: "登录 CogniSync",
-    loginDesc: "欢迎回来！请使用学号登录",
+    loginDesc: "AI 时代的项目解构式编程学习平台 · 从解构，到建构。",
     studentId: "学号",
     studentIdPlaceholder: "请输入学号",
     email: "邮箱地址（可选）",
@@ -97,7 +97,7 @@ export const translations = {
     // 认证 - 注册
     register: "注册",
     registerTitle: "注册 CogniSync",
-    registerDesc: "创建账户，开始您的个性化学习之旅",
+    registerDesc: "创建账户，从完整项目的解构走向自主建构",
     name: "姓名",
     namePlaceholder: "张三",
     registerButton: "注册",
@@ -238,7 +238,7 @@ export const translations = {
     // Auth - Login
     login: "Login",
     loginTitle: "Login to CogniSync",
-    loginDesc: "Welcome back! Sign in with your student ID",
+    loginDesc: "Project deconstruction learning for the AI era · Deconstruct to understand. Rebuild to create.",
     studentId: "Student ID",
     studentIdPlaceholder: "Enter your student ID",
     email: "Email Address (optional)",
@@ -254,7 +254,7 @@ export const translations = {
     // Auth - Register
     register: "Register",
     registerTitle: "Register for CogniSync",
-    registerDesc: "Create an account to start your personalized learning journey",
+    registerDesc: "Create an account and move from project deconstruction to reconstruction",
     name: "Name",
     namePlaceholder: "John Doe",
     registerButton: "Register",

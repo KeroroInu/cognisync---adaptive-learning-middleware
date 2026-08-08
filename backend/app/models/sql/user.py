@@ -85,6 +85,21 @@ class User(Base, UUIDMixin):
         comment="是否完成引导"
     )
 
+    class_name: Mapped[Optional[str]] = mapped_column(
+        String(100),
+        nullable=True,
+        index=True,
+        comment="实验班级名称/代码（由管理员核对）"
+    )
+
+    experiment_group: Mapped[str] = mapped_column(
+        String(20),
+        default="unassigned",
+        nullable=False,
+        index=True,
+        comment="实验条件：unassigned | pdt | ai_pbl | lecture"
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True),
         default=lambda: datetime.now(timezone.utc),

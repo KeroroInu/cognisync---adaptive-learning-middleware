@@ -1,6 +1,7 @@
 import type {
   ApiResponse,
   OverviewStats,
+  User,
   UsersListResponse,
   UserDetail,
   MessagesListResponse,
@@ -8,9 +9,6 @@ import type {
   ScaleTemplate,
   ScalesListResponse,
   ScaleResponse,
-  TableInfo,
-  ColumnInfo,
-  TableRowsResponse,
   SessionsListResponse,
   SessionDetail,
   SessionMessagesResponse,
@@ -21,19 +19,12 @@ import type {
   ResearchSubmissionsResponse,
   LlmConfig,
   LlmRoleConfig,
-  EmotionExperimentResult,
-  EmotionExperimentRunsResponse,
-  EmotionCompareAblationResult,
-  EmotionCompareRunDetail,
-  EmotionCompareRunsResponse,
-  EmotionCompareResult,
-  EmotionCompareResultV2,
   EmotionDistributionResponse,
   EmotionTrendResponse,
   EmotionUserDetailResponse,
 } from '../types';
 
-const BASE_URL = (import.meta.env.VITE_API_BASE_URL as string) || 'http://localhost:8000/api';
+const BASE_URL = (import.meta.env.VITE_API_BASE_URL as string) || '/api';
 
 class AdminApiClient {
   private getAuthHeaders(includeJsonContentType: boolean = true): Record<string, string> {
@@ -135,7 +126,7 @@ class AdminApiClient {
     return this.request<{ deleted: boolean }>(`/users/${userId}`, { method: 'DELETE' });
   }
 
-  async updateUser(userId: string, data: { name?: string; is_active?: boolean }): Promise<{ id: string; email: string; name: string; is_active: boolean }> {
+  async updateUser(userId: string, data: { name?: string; is_active?: boolean; class_name?: string; experiment_group?: User['experiment_group'] }): Promise<{ id: string; email: string; name: string; is_active: boolean }> {
     return this.request(`/users/${userId}`, {
       method: 'PATCH',
       body: JSON.stringify(data),
@@ -214,44 +205,6 @@ class AdminApiClient {
     return this.request<{ deleted: boolean }>(`/sessions/${sessionId}`, { method: 'DELETE' });
   }
 
-  // Data Explorer
-  async getTables(): Promise<TableInfo[]> {
-    return this.request<TableInfo[]>('/db/tables');
-  }
-
-  async getTableColumns(tableName: string): Promise<ColumnInfo[]> {
-    return this.request<ColumnInfo[]>(`/db/tables/${tableName}/columns`);
-  }
-
-  async getTableRows(
-    tableName: string,
-    limit: number = 50,
-    offset: number = 0,
-    orderBy?: string,
-    order: 'asc' | 'desc' = 'desc',
-    filters?: Record<string, unknown>
-  ): Promise<TableRowsResponse> {
-    const params = new URLSearchParams({
-      limit: limit.toString(),
-      offset: offset.toString(),
-    });
-    if (orderBy) params.append('order_by', orderBy);
-    params.append('order', order);
-    if (filters) params.append('filters', JSON.stringify(filters));
-
-    return this.request<TableRowsResponse>(`/db/tables/${tableName}/rows?${params}`);
-  }
-
-  async exportTable(tableName: string, format: 'json' = 'json', filters?: Record<string, unknown>): Promise<unknown[]> {
-    const params = new URLSearchParams({
-      table: tableName,
-      format,
-    });
-    if (filters) params.append('filters', JSON.stringify(filters));
-
-    return this.request<unknown[]>(`/db/export?${params}`);
-  }
-
   async exportCsv(endpoint: string): Promise<Blob> {
     const url = `${BASE_URL}/admin${endpoint}`;
     const response = await fetch(url, {
@@ -275,6 +228,7 @@ class AdminApiClient {
     ai_prompt?: string;
     code_content: string;
     language: string;
+    target_group?: ResearchTask['target_group'];
   }): Promise<ResearchTask> {
     return this.request<ResearchTask>('/research/tasks', {
       method: 'POST',
@@ -289,6 +243,7 @@ class AdminApiClient {
     ai_prompt?: string;
     code_content?: string;
     language?: string;
+    target_group?: ResearchTask['target_group'];
   }): Promise<ResearchTask> {
     return this.request<ResearchTask>(`/research/tasks/${taskId}`, {
       method: 'PATCH',
@@ -328,168 +283,6 @@ class AdminApiClient {
       method: 'PUT',
       body: JSON.stringify({ role, config }),
     });
-  }
-
-  async analyzeEmotionExperimentCsv(data: {
-    file: File;
-    textColumn: string;
-    conversationIdColumn?: string;
-    speakerColumn?: string;
-    expectedLabelColumn?: string;
-    expectedLabelColumnsJson?: string;
-    positiveLabelValue?: string;
-    profileKeyColumn?: string;
-    labelMappingJson?: string;
-    previewLimit?: number;
-  }): Promise<EmotionExperimentResult> {
-    const formData = new FormData();
-    formData.append('file', data.file);
-    formData.append('text_column', data.textColumn);
-    if (data.conversationIdColumn) formData.append('conversation_id_column', data.conversationIdColumn);
-    if (data.speakerColumn) formData.append('speaker_column', data.speakerColumn);
-    if (data.expectedLabelColumn) formData.append('expected_label_column', data.expectedLabelColumn);
-    if (data.expectedLabelColumnsJson) formData.append('expected_label_columns_json', data.expectedLabelColumnsJson);
-    if (data.positiveLabelValue) formData.append('positive_label_value', data.positiveLabelValue);
-    if (data.profileKeyColumn) formData.append('profile_key_column', data.profileKeyColumn);
-    if (data.labelMappingJson) formData.append('label_mapping_json', data.labelMappingJson);
-    if (typeof data.previewLimit === 'number') formData.append('preview_limit', String(data.previewLimit));
-
-    return this.request<EmotionExperimentResult>('/research/emotion-experiments/analyze-csv', {
-      method: 'POST',
-      body: formData,
-    });
-  }
-
-  async analyzeEmotionCompareDataset(data: {
-    file: File;
-    labelMode: 'single_label' | 'multi_binary';
-    textColumn: string;
-    expectedLabelColumn?: string;
-    expectedLabelColumnsJson?: string;
-    positiveLabelValue?: string;
-    sampleIdColumn?: string;
-    conversationIdColumn?: string;
-    speakerColumn?: string;
-    profileKeyColumn?: string;
-    labelMappingJson?: string;
-    previewLimit?: number;
-    datasetTemplate?: string;
-  }): Promise<EmotionCompareResult> {
-    const formData = new FormData();
-    formData.append('file', data.file);
-    formData.append('label_mode', data.labelMode);
-    formData.append('text_column', data.textColumn);
-    if (data.expectedLabelColumn) formData.append('expected_label_column', data.expectedLabelColumn);
-    if (data.expectedLabelColumnsJson) formData.append('expected_label_columns_json', data.expectedLabelColumnsJson);
-    if (data.positiveLabelValue) formData.append('positive_label_value', data.positiveLabelValue);
-    if (data.sampleIdColumn) formData.append('sample_id_column', data.sampleIdColumn);
-    if (data.conversationIdColumn) formData.append('conversation_id_column', data.conversationIdColumn);
-    if (data.speakerColumn) formData.append('speaker_column', data.speakerColumn);
-    if (data.profileKeyColumn) formData.append('profile_key_column', data.profileKeyColumn);
-    if (data.labelMappingJson) formData.append('label_mapping_json', data.labelMappingJson);
-    if (typeof data.previewLimit === 'number') formData.append('preview_limit', String(data.previewLimit));
-    if (data.datasetTemplate) formData.append('dataset_template', data.datasetTemplate);
-
-    return this.request<EmotionCompareResult>('/research/emotion-compare/analyze-dataset', {
-      method: 'POST',
-      body: formData,
-    });
-  }
-
-  async analyzeEmotionCompareDatasetV2(data: {
-    file: File;
-    labelMode: 'single_label' | 'multi_binary';
-    textColumn: string;
-    expectedLabelColumn?: string;
-    expectedLabelColumnsJson?: string;
-    positiveLabelValue?: string;
-    sampleIdColumn?: string;
-    conversationIdColumn?: string;
-    speakerColumn?: string;
-    profileKeyColumn?: string;
-    labelMappingJson?: string;
-    previewLimit?: number;
-    datasetTemplate?: string;
-  }): Promise<EmotionCompareResultV2> {
-    const formData = new FormData();
-    formData.append('file', data.file);
-    formData.append('label_mode', data.labelMode);
-    formData.append('text_column', data.textColumn);
-    if (data.expectedLabelColumn) formData.append('expected_label_column', data.expectedLabelColumn);
-    if (data.expectedLabelColumnsJson) formData.append('expected_label_columns_json', data.expectedLabelColumnsJson);
-    if (data.positiveLabelValue) formData.append('positive_label_value', data.positiveLabelValue);
-    if (data.sampleIdColumn) formData.append('sample_id_column', data.sampleIdColumn);
-    if (data.conversationIdColumn) formData.append('conversation_id_column', data.conversationIdColumn);
-    if (data.speakerColumn) formData.append('speaker_column', data.speakerColumn);
-    if (data.profileKeyColumn) formData.append('profile_key_column', data.profileKeyColumn);
-    if (data.labelMappingJson) formData.append('label_mapping_json', data.labelMappingJson);
-    if (typeof data.previewLimit === 'number') formData.append('preview_limit', String(data.previewLimit));
-    if (data.datasetTemplate) formData.append('dataset_template', data.datasetTemplate);
-
-    return this.request<EmotionCompareResultV2>('/research/emotion-compare/analyze-dataset-v2', {
-      method: 'POST',
-      body: formData,
-    });
-  }
-
-  async analyzeEmotionCompareAblationV2(data: {
-    file: File;
-    labelMode: 'single_label' | 'multi_binary';
-    textColumn: string;
-    expectedLabelColumn?: string;
-    expectedLabelColumnsJson?: string;
-    positiveLabelValue?: string;
-    sampleIdColumn?: string;
-    conversationIdColumn?: string;
-    speakerColumn?: string;
-    profileKeyColumn?: string;
-    labelMappingJson?: string;
-    previewLimit?: number;
-    datasetTemplate?: string;
-  }): Promise<EmotionCompareAblationResult> {
-    const formData = new FormData();
-    formData.append('file', data.file);
-    formData.append('label_mode', data.labelMode);
-    formData.append('text_column', data.textColumn);
-    if (data.expectedLabelColumn) formData.append('expected_label_column', data.expectedLabelColumn);
-    if (data.expectedLabelColumnsJson) formData.append('expected_label_columns_json', data.expectedLabelColumnsJson);
-    if (data.positiveLabelValue) formData.append('positive_label_value', data.positiveLabelValue);
-    if (data.sampleIdColumn) formData.append('sample_id_column', data.sampleIdColumn);
-    if (data.conversationIdColumn) formData.append('conversation_id_column', data.conversationIdColumn);
-    if (data.speakerColumn) formData.append('speaker_column', data.speakerColumn);
-    if (data.profileKeyColumn) formData.append('profile_key_column', data.profileKeyColumn);
-    if (data.labelMappingJson) formData.append('label_mapping_json', data.labelMappingJson);
-    if (typeof data.previewLimit === 'number') formData.append('preview_limit', String(data.previewLimit));
-    if (data.datasetTemplate) formData.append('dataset_template', data.datasetTemplate);
-
-    return this.request<EmotionCompareAblationResult>('/research/emotion-compare/analyze-ablation-v2', {
-      method: 'POST',
-      body: formData,
-    });
-  }
-
-  async getEmotionExperimentRuns(limit: number = 20, offset: number = 0): Promise<EmotionExperimentRunsResponse> {
-    const params = new URLSearchParams({
-      limit: String(limit),
-      offset: String(offset),
-    });
-    return this.request<EmotionExperimentRunsResponse>(`/research/emotion-experiments/runs?${params}`);
-  }
-
-  async getEmotionExperimentRunDetail(runId: string): Promise<EmotionExperimentResult> {
-    return this.request<EmotionExperimentResult>(`/research/emotion-experiments/runs/${runId}`);
-  }
-
-  async getEmotionCompareRuns(limit: number = 20, offset: number = 0): Promise<EmotionCompareRunsResponse> {
-    const params = new URLSearchParams({
-      limit: String(limit),
-      offset: String(offset),
-    });
-    return this.request<EmotionCompareRunsResponse>(`/research/emotion-compare/runs?${params}`);
-  }
-
-  async getEmotionCompareRunDetail(runId: string): Promise<EmotionCompareRunDetail> {
-    return this.request<EmotionCompareRunDetail>(`/research/emotion-compare/runs/${runId}`);
   }
 
   async getEmotionDistribution(days: number = 30, limit: number = 20): Promise<EmotionDistributionResponse> {

@@ -27,6 +27,7 @@ class ResearchTask(Base, UUIDMixin):
     __tablename__ = "research_tasks"
     __table_args__ = (
         Index("ix_research_tasks_status", "status"),
+        Index("ix_research_tasks_target_group_status", "target_group", "status"),
         {"comment": "教学研究任务表"},
     )
 
@@ -65,6 +66,13 @@ class ResearchTask(Base, UUIDMixin):
         nullable=False,
         default="python",
         comment="编程语言：python / javascript / java / cpp / go",
+    )
+
+    target_group: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="all",
+        comment="投放实验条件：all | pdt | ai_pbl | lecture | unassigned",
     )
 
     status: Mapped[ResearchTaskStatus] = mapped_column(

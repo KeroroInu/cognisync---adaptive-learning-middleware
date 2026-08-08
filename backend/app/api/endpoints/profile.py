@@ -10,13 +10,15 @@ from app.db.postgres import get_db
 from app.schemas.base import SuccessResponse
 from app.schemas.profile import UserProfile, ProfileUpdateRequest, ProfileChangesResponse
 from app.services.profile_service import ProfileService
+from app.api.endpoints.auth import ensure_self_scope, get_current_user
+from app.models.sql.user import User
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
 @router.get("/{userId}", response_model=SuccessResponse[UserProfile])
-async def get_profile(userId: str, db: AsyncSession = Depends(get_db)):
+async def get_profile(userId: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     """
     获取用户画像
 
@@ -26,16 +28,16 @@ async def get_profile(userId: str, db: AsyncSession = Depends(get_db)):
     logger.info(f"Fetching profile for user: {userId}")
 
     try:
+        ensure_self_scope(userId, current_user)
         profile_service = ProfileService(db)
 
-        # 创建/获取用户
-        user = await profile_service.get_or_create_user(userId)
-
         # 获取画像（如果不存在则返回默认值）
-        profile = await profile_service.get_profile(user.id)
+        profile = await profile_service.get_profile(current_user.id)
 
         return SuccessResponse(data=profile)
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to fetch profile for user {userId}: {e}", exc_info=True)
         raise HTTPException(
@@ -48,7 +50,8 @@ async def get_profile(userId: str, db: AsyncSession = Depends(get_db)):
 async def update_profile(
     userId: str,
     update: ProfileUpdateRequest,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     更新用户画像（手动校准）
@@ -66,14 +69,12 @@ async def update_profile(
     logger.info(f"Updating profile for user: {userId}")
 
     try:
+        ensure_self_scope(userId, current_user)
         profile_service = ProfileService(db)
-
-        # 创建/获取用户
-        user = await profile_service.get_or_create_user(userId)
 
         # 应用用户校准
         updated_profile = await profile_service.apply_user_override(
-            user_id=user.id,
+            user_id=current_user.id,
             cognition=update.cognition,
             affect=update.affect,
             behavior=update.behavior,
@@ -85,6 +86,8 @@ async def update_profile(
 
         return SuccessResponse(data=updated_profile)
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to update profile for user {userId}: {e}", exc_info=True)
         await db.rollback()
@@ -98,7 +101,8 @@ async def update_profile(
 async def get_recent_changes(
     userId: str,
     limit: int = 5,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     获取用户画像的最近变化
@@ -115,20 +119,19 @@ async def get_recent_changes(
     logger.info(f"Fetching recent changes for user: {userId}, limit={limit}")
 
     try:
+        ensure_self_scope(userId, current_user)
         profile_service = ProfileService(db)
 
-        # 创建/获取用户
-        user = await profile_service.get_or_create_user(userId)
-
         # 获取最近的变化
-        changes = await profile_service.get_recent_changes(user.id, limit=limit)
+        changes = await profile_service.get_recent_changes(current_user.id, limit=min(max(limit, 1), 50))
 
         return SuccessResponse(data=ProfileChangesResponse(changes=changes))
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to fetch recent changes for user {userId}: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail=f"Failed to fetch recent changes: {str(e)}"
         )
-

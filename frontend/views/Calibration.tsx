@@ -61,7 +61,7 @@ export const Calibration: React.FC<Props> = ({ profile, onLogCalibration, langua
               backgroundColor: theme === 'light' ? '#e5e7eb' : '#475569'
             }}>
                 <div
-                    className={`h-full transition-all duration-500 ${calculateTotalDelta() > 50 ? 'bg-rose-500' : 'bg-emerald-500'}`}
+                    className={`h-full transition-all duration-500 ${calculateTotalDelta() > 50 ? 'bg-rose-500' : 'bg-fuchsia-500'}`}
                     style={{ width: `${Math.min(100, calculateTotalDelta())}%`}}
                 />
             </div>
@@ -87,7 +87,7 @@ export const Calibration: React.FC<Props> = ({ profile, onLogCalibration, langua
                         <label className="capitalize text-sm font-medium" style={{ color: theme === 'light' ? '#000000' : '#ffffff' }}>{t[dim]}</label>
                         <div className="flex space-x-3 text-sm">
                             <span className="text-indigo-500 dark:text-indigo-300">AI: {Math.round(profile[dim])}</span>
-                            <span className="text-emerald-500 dark:text-emerald-300">You: {selfProfile[dim]}</span>
+                            <span className="text-fuchsia-400 dark:text-fuchsia-300">You: {selfProfile[dim]}</span>
                         </div>
                     </div>
                     <input
@@ -95,7 +95,7 @@ export const Calibration: React.FC<Props> = ({ profile, onLogCalibration, langua
                         min="0" max="100"
                         value={selfProfile[dim]}
                         onChange={(e) => setSelfProfile({...selfProfile, [dim]: parseInt(e.target.value)})}
-                        className="w-full accent-emerald-500 h-2 rounded-lg appearance-none cursor-pointer"
+                        className="w-full accent-fuchsia-500 h-2 rounded-lg appearance-none cursor-pointer"
                         style={{
                           backgroundColor: theme === 'light' ? '#e5e7eb' : '#475569'
                         }}
@@ -163,7 +163,7 @@ export const Calibration: React.FC<Props> = ({ profile, onLogCalibration, langua
             disabled={submitted}
             className={`w-full py-4 rounded-xl font-bold text-white shadow-lg transition-all flex items-center justify-center space-x-2 animate-slide-in-right stagger-4 ${
                 submitted
-                ? 'bg-emerald-600 cursor-default'
+                ? 'bg-violet-600 cursor-default'
                 : 'bg-gradient-to-r from-indigo-500 to-purple-600 hover:shadow-indigo-500/30 hover:shadow-xl active:scale-[0.98]'
             }`}
         >

@@ -2,7 +2,9 @@
 Knowledge Graph Endpoint - 知识图谱接口
 """
 import logging
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
+from app.api.endpoints.auth import ensure_self_scope, get_current_user
+from app.models.sql.user import User
 from app.schemas.base import SuccessResponse
 from app.schemas.graph import UpdateNodeRequest, CreateNodeRequest, CreateEdgeRequest
 from app.services.graph_service import GraphService
@@ -12,27 +14,31 @@ logger = logging.getLogger(__name__)
 
 
 @router.get("/{userId}")
-async def get_knowledge_graph(userId: str):
+async def get_knowledge_graph(userId: str, current_user: User = Depends(get_current_user)):
     """获取用户的知识图谱"""
     logger.info(f"Fetching knowledge graph for user: {userId}")
 
     try:
+        ensure_self_scope(userId, current_user)
         graph_service = GraphService()
         graph_data = await graph_service.get_graph(userId)
 
         return SuccessResponse(data=graph_data.model_dump())
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to fetch graph for user {userId}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to fetch knowledge graph: {str(e)}")
 
 
 @router.post("/node")
-async def create_node(userId: str, node_data: CreateNodeRequest):
+async def create_node(userId: str, node_data: CreateNodeRequest, current_user: User = Depends(get_current_user)):
     """创建新的知识节点"""
     logger.info(f"Creating node '{node_data.name}' for user {userId}")
 
     try:
+        ensure_self_scope(userId, current_user)
         graph_service = GraphService()
         new_node = await graph_service.create_node(
             userId,
@@ -43,17 +49,20 @@ async def create_node(userId: str, node_data: CreateNodeRequest):
 
         return SuccessResponse(data=new_node.model_dump())
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to create node: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to create node: {str(e)}")
 
 
 @router.put("/node/{nodeId}")
-async def update_node(userId: str, nodeId: str, updates: UpdateNodeRequest):
+async def update_node(userId: str, nodeId: str, updates: UpdateNodeRequest, current_user: User = Depends(get_current_user)):
     """更新知识节点"""
     logger.info(f"Updating node {nodeId} for user {userId}")
 
     try:
+        ensure_self_scope(userId, current_user)
         graph_service = GraphService()
         updated_node = await graph_service.update_node(userId, nodeId, updates)
 
@@ -70,11 +79,12 @@ async def update_node(userId: str, nodeId: str, updates: UpdateNodeRequest):
 
 
 @router.delete("/node/{nodeId}")
-async def delete_node(userId: str, nodeId: str):
+async def delete_node(userId: str, nodeId: str, current_user: User = Depends(get_current_user)):
     """删除知识节点"""
     logger.info(f"Deleting node {nodeId} for user {userId}")
 
     try:
+        ensure_self_scope(userId, current_user)
         graph_service = GraphService()
         deleted = await graph_service.delete_node(userId, nodeId)
 
@@ -91,27 +101,31 @@ async def delete_node(userId: str, nodeId: str):
 
 
 @router.post("/edge")
-async def create_edge(userId: str, edge_data: CreateEdgeRequest):
+async def create_edge(userId: str, edge_data: CreateEdgeRequest, current_user: User = Depends(get_current_user)):
     """创建概念之间的关系"""
     logger.info(f"Creating edge {edge_data.source} -> {edge_data.target} for user {userId}")
 
     try:
+        ensure_self_scope(userId, current_user)
         graph_service = GraphService()
         new_edge = await graph_service.create_edge(userId, edge_data.source, edge_data.target)
 
         return SuccessResponse(data=new_edge.model_dump())
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to create edge: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to create edge: {str(e)}")
 
 
 @router.delete("/edge")
-async def delete_edge(userId: str, source: str, target: str):
+async def delete_edge(userId: str, source: str, target: str, current_user: User = Depends(get_current_user)):
     """删除概念之间的关系"""
     logger.info(f"Deleting edge {source} -> {target} for user {userId}")
 
     try:
+        ensure_self_scope(userId, current_user)
         graph_service = GraphService()
         deleted = await graph_service.delete_edge(userId, source, target)
 

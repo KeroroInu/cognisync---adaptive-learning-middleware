@@ -20,7 +20,7 @@ async def get_overview(
     """
     获取系统概览统计
 
-    需要 Admin Key 认证（X-ADMIN-KEY Header）
+    需要已登录管理员的 Bearer JWT。
 
     Returns:
         系统各项统计数据

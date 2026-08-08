@@ -17,6 +17,8 @@ class UserDetail(BaseModel):
     is_active: bool
     created_at: datetime
     last_active_at: Optional[datetime] = None
+    class_name: Optional[str] = None
+    experiment_group: str = "unassigned"
     messages_count: int = 0
     sessions_count: int = 0
     responses_count: int = 0

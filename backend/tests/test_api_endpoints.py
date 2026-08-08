@@ -8,6 +8,8 @@ API 端点集成测试
   cd backend
   pytest tests/test_api_endpoints.py -v
 """
+import asyncio
+
 import pytest
 from httpx import AsyncClient
 
@@ -179,13 +181,15 @@ async def test_chat_requires_auth(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_get_profile(client: AsyncClient, registered_user: dict):
+async def test_get_profile(
+    client: AsyncClient, registered_user: dict, auth_headers: dict
+):
     """
     测试 GET /api/profile/{userId}
     获取用户画像（注册时已创建初始画像 50/50/50）
     """
     user_id = registered_user["user_id"]
-    response = await client.get(f"/api/profile/{user_id}")
+    response = await client.get(f"/api/profile/{user_id}", headers=auth_headers)
     assert response.status_code == 200
 
     data = response.json()
@@ -198,6 +202,20 @@ async def test_get_profile(client: AsyncClient, registered_user: dict):
     assert "lastUpdate" in profile
 
     print(f"\n✅ Profile test passed: {profile}")
+
+
+@pytest.mark.asyncio
+async def test_single_class_profile_concurrency_smoke(
+    client: AsyncClient, registered_user: dict, auth_headers: dict
+):
+    """用 50 个并发画像请求覆盖单班最低并发基线。"""
+    user_id = registered_user["user_id"]
+    responses = await asyncio.gather(*[
+        client.get(f"/api/profile/{user_id}", headers=auth_headers)
+        for _ in range(50)
+    ])
+    assert all(response.status_code == 200 for response in responses)
+    assert all(response.json()["success"] is True for response in responses)
 
 
 # ==================== 完整流程测试 ====================
@@ -234,12 +252,12 @@ async def test_complete_auth_and_chat_flow(client: AsyncClient):
     assert 0 <= profile_after_chat["cognition"] <= 100
 
     # 3. 获取画像
-    profile_response = await client.get(f"/api/profile/{user_id}")
+    profile_response = await client.get(f"/api/profile/{user_id}", headers=auth)
     assert profile_response.status_code == 200
     assert profile_response.json()["success"] is True
 
     # 4. 获取日志
-    logs_response = await client.get(f"/api/logs/{user_id}")
+    logs_response = await client.get(f"/api/logs/{user_id}", headers=auth)
     assert logs_response.status_code == 200
     logs = logs_response.json()["data"]
     assert "messages" in logs

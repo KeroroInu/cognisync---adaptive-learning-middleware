@@ -5,6 +5,7 @@ LLM Config Service - LLM 配置管理
 """
 import json
 import logging
+import inspect
 from typing import Optional
 
 from app.core.config import settings
@@ -14,6 +15,16 @@ logger = logging.getLogger(__name__)
 
 # 内存缓存：{"analysis": {...}, "chat": {...}}
 _config_cache: dict = {}
+# 复用 HTTP 连接池，避免每条对话都新建 AsyncClient。
+_provider_cache: dict[str, tuple[tuple[str, str, str, str], BaseProvider]] = {}
+
+
+async def _close_provider(provider: BaseProvider) -> None:
+    close = getattr(provider, "close", None)
+    if close:
+        result = close()
+        if inspect.isawaitable(result):
+            await result
 
 
 def _get_role_config(role: str) -> dict:
@@ -85,23 +96,41 @@ def _build_provider(config: dict) -> BaseProvider:
     )
 
 
+def _get_cached_provider(role: str) -> BaseProvider:
+    config = _get_role_config(role)
+    signature = (
+        config.get("provider", "mock"),
+        config.get("base_url", ""),
+        config.get("model", ""),
+        config.get("api_key", ""),
+    )
+    cached = _provider_cache.get(role)
+    if cached and cached[0] == signature:
+        return cached[1]
+
+    provider = _build_provider(config)
+    _provider_cache[role] = (signature, provider)
+    return provider
+
+
 def get_analysis_provider() -> BaseProvider:
     """获取语义分析专用 LLM Provider（低温度、结构化 JSON 输出）"""
     config = _get_role_config("analysis")
     logger.debug(f"Analysis provider: {config.get('provider')} / {config.get('model')}")
-    return _build_provider(config)
+    return _get_cached_provider("analysis")
 
 
 def get_chat_provider() -> BaseProvider:
     """获取 AI 对话专用 LLM Provider（较高温度、自然语言回复）"""
     config = _get_role_config("chat")
     logger.debug(f"Chat provider: {config.get('provider')} / {config.get('model')}")
-    return _build_provider(config)
+    return _get_cached_provider("chat")
 
 
 def update_cache(role: str, config: dict) -> None:
     """更新内存缓存（由 admin 配置端点调用）"""
     _config_cache[role] = config
+    _provider_cache.pop(role, None)
     logger.info(f"LLM config cache updated for role={role}: provider={config.get('provider')}")
 
 
@@ -125,7 +154,12 @@ async def load_from_db(db) -> None:
             )
             row = result.scalar_one_or_none()
             if row:
-                _config_cache[role] = json.loads(row.value)
+                new_config = json.loads(row.value)
+                if _config_cache.get(role) != new_config:
+                    old = _provider_cache.pop(role, None)
+                    _config_cache[role] = new_config
+                    if old:
+                        await _close_provider(old[1])
                 logger.info(f"Loaded LLM config for role={role} from DB")
     except Exception as e:
         logger.warning(f"Failed to load LLM config from DB (using env defaults): {e}")
@@ -135,20 +169,31 @@ async def save_to_db(db, role: str, config: dict) -> None:
     """将 LLM 配置保存到数据库并更新内存缓存"""
     from sqlalchemy.dialects.postgresql import insert as pg_insert
     from app.models.sql.system_config import SystemConfig
-    from datetime import datetime
+    from datetime import datetime, timezone
 
     key = f"{role}_llm"
     value = json.dumps(config, ensure_ascii=False)
 
     # Upsert
     stmt = pg_insert(SystemConfig).values(
-        key=key, value=value, updated_at=datetime.utcnow()
+        key=key, value=value, updated_at=datetime.now(timezone.utc)
     ).on_conflict_do_update(
         index_elements=["key"],
-        set_={"value": value, "updated_at": datetime.utcnow()}
+        set_={"value": value, "updated_at": datetime.now(timezone.utc)}
     )
     await db.execute(stmt)
     await db.commit()
 
+    old = _provider_cache.get(role)
     update_cache(role, config)
+    if old:
+        await _close_provider(old[1])
     logger.info(f"Saved LLM config for role={role}: {config.get('provider')}/{config.get('model')}")
+
+
+async def close_providers() -> None:
+    """应用关闭时释放共享 HTTP 连接池。"""
+    providers = [cached[1] for cached in _provider_cache.values()]
+    _provider_cache.clear()
+    for provider in providers:
+        await _close_provider(provider)

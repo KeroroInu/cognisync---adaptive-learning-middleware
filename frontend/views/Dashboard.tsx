@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { RadarDisplay } from '../components/RadarDisplay';
-import { UserProfile, Language, ProfileChange } from '../types';
-import { ArrowRight, Activity, Brain, Target, TrendingUp } from 'lucide-react';
+import { SpotlightCard } from '../components/SpotlightCard';
+import { LearnerCardDeck } from '../components/LearnerCardDeck';
+import { ProfileTrendChart } from '../components/ProfileTrendChart';
+import { UserProfile, Language, ProfileChange, User } from '../types';
+import { ArrowRight, Activity, Brain, Target, TrendingUp, Gauge } from 'lucide-react';
 import { translations } from '../utils/translations';
 import { getRecentChanges } from '../services/api';
 
@@ -11,21 +14,22 @@ interface Props {
   language: Language;
   theme: 'light' | 'dark';
   userId?: string;
+  userName?: string;
+  experimentGroup: User['experimentGroup'];
 }
 
-export const Dashboard: React.FC<Props> = ({ profile, onNavigate, language, theme, userId }) => {
+export const Dashboard: React.FC<Props> = ({ profile, onNavigate, language, userId, userName, experimentGroup }) => {
   const t = translations[language];
   const [recentChanges, setRecentChanges] = useState<ProfileChange[]>([]);
   const [isLoadingChanges, setIsLoadingChanges] = useState(false);
 
-  // 获取最近的变化
   useEffect(() => {
     const fetchRecentChangesData = async () => {
       if (!userId) return;
 
       setIsLoadingChanges(true);
       try {
-        const response = await getRecentChanges(userId);
+        const response = await getRecentChanges(userId, 8);
         setRecentChanges(response.data?.changes || []);
       } catch (error) {
         console.error('Failed to fetch recent changes:', error);
@@ -37,213 +41,150 @@ export const Dashboard: React.FC<Props> = ({ profile, onNavigate, language, them
     fetchRecentChangesData();
   }, [userId]);
 
+  const metrics = [
+    {
+      key: 'cognition' as const,
+      label: t.cognition,
+      value: profile.cognition,
+      description: language === 'zh' ? '概念理解与问题拆解' : 'Concept understanding and problem decomposition',
+      icon: <Brain size={23} />,
+      iconClass: 'metric-cognition',
+    },
+    {
+      key: 'affect' as const,
+      label: t.affect,
+      value: profile.affect,
+      description: language === 'zh' ? '投入状态与学习韧性' : 'Engagement and learning resilience',
+      icon: <Activity size={23} />,
+      iconClass: 'metric-affect',
+    },
+    {
+      key: 'behavior' as const,
+      label: t.behavior,
+      value: profile.behavior,
+      description: language === 'zh' ? '行动节奏与持续投入' : 'Learning rhythm and sustained effort',
+      icon: <Target size={23} />,
+      iconClass: 'metric-behavior',
+    },
+  ];
+
+  const hero = {
+    pdt: {
+      kicker: 'PROJECT DECONSTRUCTION / 2026',
+      platform: 'AI 时代的项目解构式编程学习平台',
+      slogan: '从解构，到建构。',
+      intro: '先运行和观察，再拆出功能、数据与关系；之后通过表达、编码和验证，让理解重新成为可以运行的项目。',
+      action: '开始项目解构',
+    },
+    ai_pbl: {
+      kicker: 'AI PROJECT LEARNING / 2026',
+      platform: 'AI 支持的项目式编程学习平台',
+      slogan: '从目标，到作品。',
+      intro: '围绕真实项目持续规划、编码、调试与改进，在需要时借助 AI 提问并推进作品。',
+      action: '进入项目工坊',
+    },
+    lecture: {
+      kicker: 'PROGRAMMING PRACTICE / 2026',
+      platform: '讲授与在线编程实践平台',
+      slogan: '从讲解，到练习。',
+      intro: '跟随课堂讲解理解概念与示例，并在统一的在线环境中完成编码、运行与提交。',
+      action: '进入编程练习',
+    },
+    unassigned: {
+      kicker: 'LEARNER PROFILE / 2026',
+      platform: 'AI 时代的编程学习平台',
+      slogan: '等待教师开放学习路径。',
+      intro: '你的起始画像已经生成。教师完成实验班分配后，这里会自动开放对应的学习界面。',
+      action: '查看测量任务',
+    },
+  }[experimentGroup];
+
   return (
-    <div className="grid grid-cols-12 gap-6 h-full overflow-y-auto">
-      {/* Top Row: Metrics Cards */}
-      <div className="col-span-12 grid grid-cols-3 gap-6">
-        {[
-          {
-            label: t.cognition,
-            value: profile.cognition,
-            icon: <Brain size={28} strokeWidth={2} />,
-            desc: "Knowledge retention & reasoning",
-            gradient: "from-blue-500 to-cyan-500",
-            iconColor: "text-white",
-            bgColor: "bg-gradient-to-br from-blue-500 to-cyan-500"
-          },
-          {
-            label: t.affect,
-            value: profile.affect,
-            icon: <Activity size={28} strokeWidth={2} />,
-            desc: "Engagement & frustration levels",
-            gradient: "from-rose-500 to-pink-500",
-            iconColor: "text-white",
-            bgColor: "bg-gradient-to-br from-rose-500 to-pink-500"
-          },
-          {
-            label: t.behavior,
-            value: profile.behavior,
-            icon: <Target size={28} strokeWidth={2} />,
-            desc: "Interaction patterns & consistency",
-            gradient: "from-green-500 to-emerald-500",
-            iconColor: "text-white",
-            bgColor: "bg-gradient-to-br from-green-500 to-emerald-500"
-          },
-        ].map((metric, idx) => (
-          <div
-            key={metric.label}
-            className={`glass-card p-6 rounded-2xl flex flex-col justify-between hover:shadow-xl transition-all duration-300 animate-scale-in group stagger-${idx + 1}`}
-          >
-            <div className="flex justify-between items-start mb-6">
-              <div className={`p-3.5 rounded-xl ${metric.bgColor} shadow-lg group-hover:scale-110 transition-transform duration-300`}>
-                <span className={metric.iconColor}>
-                  {metric.icon}
-                </span>
-              </div>
-              <div className="text-right">
-                <span className="text-3xl font-semibold" style={{
-                  color: theme === 'light' ? '#000000' : '#f8fafc'
-                }}>
-                  {metric.value}
-                </span>
-                <span className="text-lg" style={{
-                  color: theme === 'light' ? '#000000' : '#cbd5e1'
-                }}>/100</span>
-              </div>
-            </div>
+    <div className="dashboard-grid">
+      <section className="dashboard-hero animate-fade-in">
+        <div className="dashboard-hero-copy">
+          <p className="dashboard-kicker">{hero.kicker}</p>
+          <h2 className="dashboard-display">
+            {language === 'zh' ? (
+              <>
+                <span className="dashboard-platform-line">{hero.platform}</span>
+                <span className="dashboard-slogan-line">{hero.slogan}</span>
+              </>
+            ) : 'From deconstruction to reconstruction.'}
+          </h2>
+          <p className="dashboard-intro">
+            {language === 'zh'
+              ? hero.intro
+              : 'Observe a working artifact, expose its functions, data, and relations, then turn that understanding back into a running project through explanation, code, and verification.'}
+          </p>
+          <div className="dashboard-hero-actions">
+            <button type="button" onClick={() => onNavigate(experimentGroup === 'unassigned' ? 'scales' : 'research')} className="hero-action hero-action-primary">
+              <span>{language === 'zh' ? hero.action : 'Open learning workspace'}</span>
+              <ArrowRight size={18} />
+            </button>
+            {experimentGroup === 'pdt' && <button type="button" onClick={() => onNavigate('graph')} className="hero-action">
+              <span>{language === 'zh' ? '查看结构关系' : 'View structural relations'}</span>
+              <ArrowRight size={18} />
+            </button>}
+          </div>
+        </div>
+        <div className="dashboard-deck-stage">
+          <LearnerCardDeck profile={profile} userName={userName} language={language} />
+        </div>
+      </section>
+
+      <section className="dashboard-insights animate-fade-in stagger-1">
+        <SpotlightCard className="dashboard-radar-panel" spotlightColor="rgba(142, 169, 68, 0.13)">
+          <div className="panel-heading">
             <div>
-              <h3 className="text-lg font-semibold mb-1" style={{
-                color: theme === 'light' ? '#000000' : '#ffffff'
-              }}>{metric.label}</h3>
-              <p className="text-xs leading-relaxed" style={{
-                color: theme === 'light' ? '#404040' : '#e2e8f0'
-              }}>{metric.desc}</p>
+              <h3 className="panel-title">{language === 'zh' ? '当前画像雷达' : 'Current profile radar'}</h3>
+              <p className="panel-copy">
+                {language === 'zh' ? '认知、情感与行为的当前学习状态' : 'Current cognition, affect, and behavior signals'}
+              </p>
             </div>
+            <div className="dashboard-panel-icon"><Gauge size={21} /></div>
           </div>
-        ))}
-      </div>
-
-      {/* Main Visualization: Radar Chart */}
-      <div className="col-span-8 glass-card rounded-2xl p-8 relative overflow-hidden group hover:shadow-xl transition-all duration-300 animate-fade-in stagger-4">
-        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-purple-500 to-green-500 opacity-60" />
-        <h3 className="text-2xl font-semibold mb-2" style={{
-          color: theme === 'light' ? '#000000' : '#ffffff'
-        }}>Real-time Learner Model</h3>
-        <p className="text-sm mb-8" style={{
-          color: theme === 'light' ? '#404040' : '#e2e8f0'
-        }}>Triangulated analysis based on last 5 interactions.</p>
-        <div className="h-[320px] w-full flex items-center justify-center">
-          <RadarDisplay data={profile} language={language} />
-        </div>
-      </div>
-
-      {/* Side Column: Actions & Trends */}
-      <div className="col-span-4 flex flex-col space-y-6">
-        {/* Recent Shifts Card */}
-        <div className="glass-card rounded-2xl p-6 flex-1 hover:shadow-xl transition-all duration-300 animate-slide-in-right stagger-5">
-          <div className="flex items-center space-x-2 mb-5">
-            <TrendingUp size={20} className="text-indigo-500" />
-            <h3 className="text-lg font-semibold" style={{
-              color: theme === 'light' ? '#000000' : '#ffffff'
-            }}>{t.recentShifts}</h3>
+          <div className="dashboard-radar-frame">
+            <RadarDisplay data={profile} language={language} />
           </div>
-          {isLoadingChanges ? (
-            <div className="text-center py-4" style={{ color: theme === 'light' ? '#000000' : '#ffffff' }}>
-              Loading...
+        </SpotlightCard>
+
+        <div className="dashboard-signals-column">
+          <div className="dashboard-metrics-grid">
+            {metrics.map((metric, idx) => (
+              <SpotlightCard key={metric.key} className={`metric-card dashboard-metric-card animate-scale-in stagger-${idx + 1}`}>
+                <div className="metric-card-top">
+                  <div className={`metric-icon ${metric.iconClass}`}>{metric.icon}</div>
+                  <div className="text-right">
+                    <span className="metric-value">{metric.value}</span>
+                    <span className="metric-total">/100</span>
+                  </div>
+                </div>
+                <h3 className="metric-label">{metric.label}</h3>
+                <p className="metric-desc">{metric.description}</p>
+              </SpotlightCard>
+            ))}
+          </div>
+
+          <SpotlightCard className="dashboard-trend-panel" spotlightColor="rgba(245, 184, 75, 0.12)">
+            <div className="panel-heading">
+              <div>
+                <h3 className="panel-title">{t.recentShifts}</h3>
+                <p className="panel-copy">
+                  {language === 'zh' ? '记录每次学习后的画像变化' : 'Profile changes after each learning session'}
+                </p>
+              </div>
+              <div className="dashboard-panel-icon dashboard-panel-icon-amber"><TrendingUp size={21} /></div>
             </div>
-          ) : recentChanges.length === 0 ? (
-            <div className="text-center py-4 text-sm" style={{ color: theme === 'light' ? '#404040' : '#e2e8f0' }}>
-              {language === 'zh' ? '暂无变化数据' : 'No recent changes'}
-            </div>
-          ) : (
-            <ul className="space-y-4">
-              {recentChanges.map((change, idx) => {
-                const isPositive = change.change > 0;
-                const isStable = change.change === 0;
-
-                // 维度标签
-                const dimensionLabels = {
-                  cognition: t.cognition,
-                  affect: t.affect,
-                  behavior: t.behavior
-                };
-
-                // 背景色
-                const getBgColor = () => {
-                  if (isStable) {
-                    return theme === 'light' ? '#f1f5f9' : '#334155';
-                  } else if (isPositive) {
-                    return theme === 'light' ? '#f0fdf4' : '#14532d';
-                  } else {
-                    return theme === 'light' ? '#fff1f2' : '#881337';
-                  }
-                };
-
-                // 边框色
-                const getBorderColor = () => {
-                  if (isStable) {
-                    return theme === 'light' ? '#cbd5e1' : '#475569';
-                  } else if (isPositive) {
-                    return theme === 'light' ? '#bbf7d0' : '#166534';
-                  } else {
-                    return theme === 'light' ? '#fecdd3' : '#9f1239';
-                  }
-                };
-
-                // 文本色
-                const getTextColor = () => {
-                  if (isStable) {
-                    return 'text-gray-600 dark:text-gray-400';
-                  } else if (isPositive) {
-                    return 'text-green-600 dark:text-green-300';
-                  } else {
-                    return 'text-rose-600 dark:text-rose-300';
-                  }
-                };
-
-                return (
-                  <li
-                    key={idx}
-                    className="flex items-center justify-between p-3 rounded-xl transition-colors duration-200"
-                    style={{
-                      backgroundColor: getBgColor(),
-                      border: `1px solid ${getBorderColor()}`
-                    }}
-                  >
-                    <span className="text-sm font-medium" style={{
-                      color: theme === 'light' ? '#000000' : '#ffffff'
-                    }}>
-                      {dimensionLabels[change.dimension as keyof typeof dimensionLabels] || change.dimension}
-                    </span>
-                    <span className={`${getTextColor()} flex items-center font-semibold text-sm`}>
-                      {change.change > 0 ? '+' : ''}{change.change}
-                      <Activity size={14} className="ml-1" />
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
+            <ProfileTrendChart
+              profile={profile}
+              changes={recentChanges}
+              language={language}
+              isLoading={isLoadingChanges}
+            />
+          </SpotlightCard>
         </div>
-
-        {/* Quick Actions Card */}
-        <div className="glass-card rounded-2xl p-6 hover:shadow-xl transition-all duration-300 animate-slide-in-right stagger-6">
-          <h3 className="text-lg font-semibold mb-5" style={{
-            color: theme === 'light' ? '#000000' : '#ffffff'
-          }}>{t.quickActions}</h3>
-          <div className="space-y-3">
-            <button
-              onClick={() => onNavigate('calibration')}
-              className="w-full flex items-center justify-between p-4 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg shadow-blue-500/30 hover:shadow-xl hover:shadow-blue-500/40 transition-all duration-300 group"
-            >
-              <span className="font-medium">{t.calibrateModel}</span>
-              <ArrowRight size={18} className="transform group-hover:translate-x-2 transition-transform duration-300" />
-            </button>
-            <button
-              onClick={() => onNavigate('graph')}
-              className="w-full flex items-center justify-between p-4 rounded-xl glass-card hover:shadow-md transition-all duration-300 group"
-              style={{
-                color: theme === 'light' ? '#000000' : '#ffffff',
-                border: `1px solid ${theme === 'light' ? 'rgba(0, 0, 0, 0.1)' : 'rgba(255, 255, 255, 0.1)'}`
-              }}
-            >
-              <span className="font-medium">{t.exploreGraph}</span>
-              <ArrowRight size={18} className="transform group-hover:translate-x-2 transition-transform duration-300" />
-            </button>
-            <button
-              onClick={() => onNavigate('chat')}
-              className="w-full flex items-center justify-between p-4 rounded-xl glass-card hover:shadow-md transition-all duration-300 group"
-              style={{
-                color: theme === 'light' ? '#000000' : '#ffffff',
-                border: `1px solid ${theme === 'light' ? 'rgba(0, 0, 0, 0.1)' : 'rgba(255, 255, 255, 0.1)'}`
-              }}
-            >
-              <span className="font-medium">{t.startDialogue}</span>
-              <ArrowRight size={18} className="transform group-hover:translate-x-2 transition-transform duration-300" />
-            </button>
-          </div>
-        </div>
-      </div>
+      </section>
     </div>
   );
 };

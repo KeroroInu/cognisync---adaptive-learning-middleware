@@ -16,26 +16,59 @@ import uuid
 
 import pytest
 from httpx import AsyncClient, ASGITransport
+from sqlalchemy import text
+from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 
 from main import app
 from app.db.postgres import get_db
 from app.models.sql.base import Base
 from app.core.config import settings
+from app.core.security import verify_admin_key
+from app.services import llm_config
 
 # 测试数据库 URL（必须是 PostgreSQL，不支持 SQLite）
 TEST_DATABASE_URL = os.getenv(
     "TEST_DATABASE_URL",
-    "postgresql+asyncpg://postgres:postgres@localhost:5432/cognisync_test",
+    "postgresql+asyncpg://cognisync:cognisync_dev_password_2024@localhost:5432/cognisync_test",
 )
 
 # 测试用 Admin Key
 TEST_ADMIN_KEY = "test_admin_key_for_testing"
 
 
+@pytest.fixture(autouse=True)
+def force_mock_llm():
+    """集成测试不访问外部 LLM，保证离线可重复且不消耗 API 配额。"""
+    previous_config = dict(llm_config._config_cache)
+    previous_providers = dict(llm_config._provider_cache)
+    llm_config._config_cache.clear()
+    llm_config._config_cache.update({
+        "analysis": {"provider": "mock"},
+        "chat": {"provider": "mock"},
+    })
+    llm_config._provider_cache.clear()
+    yield
+    llm_config._config_cache.clear()
+    llm_config._config_cache.update(previous_config)
+    llm_config._provider_cache.clear()
+    llm_config._provider_cache.update(previous_providers)
+
+
 @pytest.fixture
 async def test_db():
     """创建干净的测试数据库，测试结束后清理所有表"""
+    test_url = make_url(TEST_DATABASE_URL)
+    database_name = test_url.database or ""
+    if not database_name.replace("_", "").isalnum() or database_name == settings.POSTGRES_DB:
+        raise RuntimeError("TEST_DATABASE_URL must point to a dedicated *_test database")
+    admin_engine = create_async_engine(test_url.set(database="postgres"), isolation_level="AUTOCOMMIT")
+    async with admin_engine.connect() as conn:
+        exists = await conn.scalar(text("SELECT 1 FROM pg_database WHERE datname = :name"), {"name": database_name})
+        if not exists:
+            await conn.execute(text(f'CREATE DATABASE "{database_name}"'))
+    await admin_engine.dispose()
+
     engine = create_async_engine(TEST_DATABASE_URL, echo=False)
 
     # 清理旧数据 + 创建所有表
@@ -73,18 +106,20 @@ async def client(test_db):
 
 @pytest.fixture
 async def admin_client(test_db):
-    """带 Admin Key 的测试客户端"""
-    original_key = settings.ADMIN_KEY
-    settings.ADMIN_KEY = TEST_ADMIN_KEY
+    """已通过管理员鉴权的端点测试客户端。鉴权本身由独立测试覆盖。"""
+    async def override_admin_auth():
+        return True
+
+    app.dependency_overrides[verify_admin_key] = override_admin_auth
 
     async with AsyncClient(
         transport=ASGITransport(app=app),
         base_url="http://test",
-        headers={"X-ADMIN-KEY": TEST_ADMIN_KEY},
+        headers={"Authorization": "Bearer integration-test-admin"},
     ) as ac:
         yield ac
 
-    settings.ADMIN_KEY = original_key
+    app.dependency_overrides.pop(verify_admin_key, None)
 
 
 @pytest.fixture

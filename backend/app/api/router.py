@@ -3,7 +3,7 @@ API 路由聚合 - 将所有端点路由集中管理
 """
 from fastapi import APIRouter
 
-from app.api.endpoints import auth, chat, profile, graph, calibration, logs, export, onboarding, forms, ai_onboarding, research
+from app.api.endpoints import auth, chat, profile, graph, calibration, logs, export, forms, ai_onboarding, research
 
 # 创建主路由器
 api_router = APIRouter()
@@ -18,5 +18,4 @@ api_router.include_router(graph.router, prefix="/knowledge-graph", tags=["Knowle
 api_router.include_router(calibration.router, prefix="/calibration", tags=["Calibration"])
 api_router.include_router(logs.router, prefix="/logs", tags=["Logs"])
 api_router.include_router(export.router, prefix="/export", tags=["Export"])
-api_router.include_router(onboarding.router, prefix="/onboarding", tags=["Onboarding"])
 api_router.include_router(research.router, prefix="/research", tags=["Research"])

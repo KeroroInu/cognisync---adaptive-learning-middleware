@@ -4,14 +4,19 @@ import { INITIAL_STATE } from '../constants';
 import { getCurrentUser } from './api';
 
 export type Theme = 'light' | 'dark';
+const THEME_VERSION = 'terminal-v2';
 
 export const useAppStore = () => {
   // 从localStorage读取主题偏好，默认为light
   const [theme, setThemeState] = useState<Theme>(() => {
     const saved = localStorage.getItem('cognisync-theme');
-    const initialTheme = (saved as Theme) || 'light';
+    const savedVersion = localStorage.getItem('cognisync-theme-version');
+    const savedTheme = saved === 'light' || saved === 'dark' ? saved : null;
+    const initialTheme: Theme = savedVersion === THEME_VERSION && savedTheme ? savedTheme : 'light';
     // 立即设置到DOM上，避免闪烁
     if (typeof document !== 'undefined') {
+      localStorage.setItem('cognisync-theme', initialTheme);
+      localStorage.setItem('cognisync-theme-version', THEME_VERSION);
       document.documentElement.setAttribute('data-theme', initialTheme);
     }
     return initialTheme;
@@ -74,6 +79,7 @@ export const useAppStore = () => {
   // 主题切换时更新localStorage和document类名
   useEffect(() => {
     localStorage.setItem('cognisync-theme', theme);
+    localStorage.setItem('cognisync-theme-version', THEME_VERSION);
     document.documentElement.setAttribute('data-theme', theme);
   }, [theme]);
 

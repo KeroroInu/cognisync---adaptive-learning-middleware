@@ -1,11 +1,34 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ChatMessage, Language, UserProfile } from '../types';
-import { Send, Bot, User, Sparkles, AlertCircle, History, Plus, X, Clock, MessageSquare, ChevronDown, ChevronUp } from 'lucide-react';
+import {
+  Send,
+  Bot,
+  User,
+  Sparkles,
+  AlertCircle,
+  History,
+  Plus,
+  X,
+  Clock,
+  MessageSquare,
+  ChevronDown,
+  ChevronUp,
+  Activity,
+} from 'lucide-react';
 import { translations } from '../utils/translations';
-import { sendChatMessage, getChatGreeting, getChatSessions, getSessionMessages, ChatSession, SessionMessage } from '../services/api';
+import {
+  sendChatMessage,
+  getChatGreeting,
+  getChatSessions,
+  getSessionMessages,
+  ChatSession,
+  SessionMessage,
+} from '../services/api';
+import { SpotlightCard } from '../components/SpotlightCard';
 
 interface Props {
   messages: ChatMessage[];
+  profile: UserProfile;
   onSendMessage: (text: string, role: 'user' | 'assistant', analysis?: any) => void;
   onUpdateProfile: (profile: UserProfile) => void;
   language: Language;
@@ -17,29 +40,28 @@ interface Props {
 
 export const Chat: React.FC<Props> = ({
   messages,
+  profile,
   onSendMessage,
   onUpdateProfile,
   language,
   isResearchMode,
-  theme,
   userId,
-  onNewConversation
+  onNewConversation,
 }) => {
   const t = translations[language];
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [latestProfile, setLatestProfile] = useState<UserProfile | null>(null);
+  const [latestProfile, setLatestProfile] = useState<UserProfile | null>(profile);
+  const [profileBeforeLatest, setProfileBeforeLatest] = useState<UserProfile | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const greetingFetchedRef = useRef(false);
 
-  // History panel state
   const [historyExpanded, setHistoryExpanded] = useState(true);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [sessionsLoading, setSessionsLoading] = useState(false);
   const [selectedSession, setSelectedSession] = useState<{ session: ChatSession; messages: SessionMessage[] } | null>(null);
 
-  // Fetch greeting on first load
   useEffect(() => {
     if (messages.length === 0 && userId && !greetingFetchedRef.current) {
       greetingFetchedRef.current = true;
@@ -56,10 +78,9 @@ export const Chat: React.FC<Props> = ({
         .catch(console.error)
         .finally(() => setIsTyping(false));
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 
-  // Load history sessions
   useEffect(() => {
     if (userId) {
       setSessionsLoading(true);
@@ -72,6 +93,10 @@ export const Chat: React.FC<Props> = ({
   const refreshSessions = () => {
     if (userId) getChatSessions().then(setSessions);
   };
+
+  useEffect(() => {
+    setLatestProfile(profile);
+  }, [profile]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -89,20 +114,21 @@ export const Chat: React.FC<Props> = ({
 
     onSendMessage(userText, 'user');
     setIsTyping(true);
+    const baselineProfile = latestProfile ?? profile;
+    setProfileBeforeLatest(baselineProfile);
 
     try {
       const response = await sendChatMessage({
         userId: userId || 'guest',
         message: userText,
         language,
-        isResearchMode
+        isResearchMode,
       });
 
       onSendMessage(response.message, 'assistant', response.analysis);
       onUpdateProfile(response.updatedProfile);
       setLatestProfile(response.updatedProfile);
       refreshSessions();
-
     } catch (err) {
       console.error('Failed to send message:', err);
       setError(err instanceof Error ? err.message : 'Failed to connect to backend');
@@ -115,7 +141,7 @@ export const Chat: React.FC<Props> = ({
         intent: 'error',
         emotion: 'neutral',
         detectedConcepts: [],
-        delta: { cognition: 0, affect: 0, behavior: 0 }
+        delta: { cognition: 0, affect: 0, behavior: 0 },
       });
     } finally {
       setIsTyping(false);
@@ -140,167 +166,200 @@ export const Chat: React.FC<Props> = ({
 
     if (diffDays === 0) {
       return d.toLocaleTimeString(language === 'zh' ? 'zh-CN' : 'en-US', { hour: '2-digit', minute: '2-digit' });
-    } else if (diffDays === 1) {
-      return language === 'zh' ? '昨天' : 'Yesterday';
-    } else if (diffDays < 7) {
-      return language === 'zh' ? `${diffDays}天前` : `${diffDays}d ago`;
-    } else {
-      return d.toLocaleDateString(language === 'zh' ? 'zh-CN' : 'en-US', { month: 'short', day: 'numeric' });
     }
+    if (diffDays === 1) {
+      return language === 'zh' ? '昨天' : 'Yesterday';
+    }
+    if (diffDays < 7) {
+      return language === 'zh' ? `${diffDays}天前` : `${diffDays}d ago`;
+    }
+    return d.toLocaleDateString(language === 'zh' ? 'zh-CN' : 'en-US', { month: 'short', day: 'numeric' });
   };
 
-  const cardBg = theme === 'light' ? '#ffffff' : '#1e293b';
-  const cardBorder = `1px solid ${theme === 'light' ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.1)'}`;
-  const textPrimary = theme === 'light' ? '#000000' : '#ffffff';
-  const textSecondary = theme === 'light' ? '#404040' : '#cbd5e1';
-  const textMuted = theme === 'light' ? '#6b7280' : '#94a3b8';
-  const bgMuted = theme === 'light' ? '#f3f4f6' : '#334155';
-
-  // Latest assistant message with analysis
   const latestAnalysis = [...messages].reverse().find(m => m.role === 'assistant' && m.analysis);
+  const detectedConcepts = latestAnalysis?.analysis?.detectedConcepts ?? [];
+  const activeProfile = latestProfile ?? profile;
+  const dimensions = [
+    { key: 'cognition', label: language === 'zh' ? '认知' : 'Cognition' },
+    { key: 'affect', label: language === 'zh' ? '情感' : 'Affect' },
+    { key: 'behavior', label: language === 'zh' ? '行为' : 'Behavior' },
+  ] as const;
+  const formatDelta = (value: number) => `${value > 0 ? '+' : ''}${value}`;
 
   return (
-    <div className="flex h-[calc(100vh-8rem)] gap-6">
-      {/* Chat Area */}
-      <div className="flex-1 flex flex-col glass-card overflow-hidden animate-fade-in">
+    <div className="chat-grid">
+      <SpotlightCard className="chat-panel animate-fade-in">
         {error && (
-          <div className="bg-rose-500/10 dark:bg-rose-900/40 border-b border-rose-300 dark:border-rose-700 px-4 py-2 flex items-center gap-2 text-rose-600 dark:text-rose-300 text-sm">
+          <div className="flex items-center gap-2 border-b border-[color:var(--line)] bg-rose-500/10 px-4 py-2 text-sm text-[color:var(--brand-rose)]">
             <AlertCircle size={16} />
             <span>{error}</span>
           </div>
         )}
 
-        <div className="flex-1 overflow-y-auto p-6 space-y-6" ref={scrollRef}>
+        <div className="chat-stream" ref={scrollRef}>
           {messages.map((msg) => (
-            <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-scale-in`}>
-              <div className={`max-w-[80%] flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${msg.role === 'user' ? 'bg-gradient-to-br from-indigo-500 to-purple-600' : 'bg-gradient-to-br from-emerald-500 to-green-600'} text-white shadow-lg`}>
-                    {msg.role === 'user' ? <User size={16} /> : <Bot size={16} />}
+            <div
+              key={msg.id}
+              className={`message-row animate-scale-in ${msg.role === 'user' ? 'message-row-user' : ''}`}
+            >
+              <div className="message-inner">
+                <div className="message-avatar">
+                  {msg.role === 'user' ? <User size={16} /> : <Bot size={16} />}
                 </div>
-                <div className={`p-4 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap shadow-md transition-all duration-300 hover:shadow-lg ${
-                    msg.role === 'user'
-                    ? 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white rounded-tr-sm'
-                    : 'rounded-tl-sm'
-                }`} style={msg.role !== 'user' ? {
-                  backgroundColor: cardBg,
-                  color: textPrimary,
-                  border: cardBorder
-                } : {}}>
-                    {msg.text}
-                </div>
+                <div className="message-bubble">{msg.text}</div>
               </div>
             </div>
           ))}
+
           {isTyping && (
-             <div className="flex justify-start animate-fade-in">
-                 <div className="flex gap-3">
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-500 to-green-600 flex items-center justify-center shrink-0 animate-pulse text-white shadow-lg">
-                         <Bot size={16} />
-                    </div>
-                    <div className="p-4 rounded-2xl rounded-tl-sm flex space-x-1 items-center shadow-md" style={{
-                      backgroundColor: cardBg,
-                      border: cardBorder
-                    }}>
-                        <div className="w-2 h-2 rounded-full animate-bounce" style={{ backgroundColor: textMuted, animationDelay: '0ms' }}></div>
-                        <div className="w-2 h-2 rounded-full animate-bounce" style={{ backgroundColor: textMuted, animationDelay: '150ms' }}></div>
-                        <div className="w-2 h-2 rounded-full animate-bounce" style={{ backgroundColor: textMuted, animationDelay: '300ms' }}></div>
-                    </div>
-                 </div>
-             </div>
+            <div className="message-row animate-fade-in">
+              <div className="message-inner">
+                <div className="message-avatar">
+                  <Bot size={16} />
+                </div>
+                <div className="message-bubble typing-bubble">
+                  <span className="typing-dot" />
+                  <span className="typing-dot" style={{ animationDelay: '140ms' }} />
+                  <span className="typing-dot" style={{ animationDelay: '280ms' }} />
+                </div>
+              </div>
+            </div>
           )}
         </div>
 
-        <form onSubmit={handleSubmit} className="p-4" style={{ borderTop: cardBorder }}>
-            <div className="relative">
-                <input
-                    type="text"
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    placeholder={t.inputPlaceholder}
-                    disabled={isTyping}
-                    className="w-full rounded-xl py-3 pl-4 pr-12 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all disabled:opacity-50 shadow-sm"
-                    style={{ backgroundColor: cardBg, border: cardBorder, color: textPrimary }}
-                />
-                <button
-                    type="submit"
-                    disabled={!input.trim() || isTyping}
-                    className="absolute right-2 top-2 p-1.5 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-lg hover:shadow-lg hover:shadow-indigo-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 active:scale-95"
-                >
-                    <Send size={18} />
-                </button>
-            </div>
+        <form onSubmit={handleSubmit} className="chat-composer">
+          <div className="composer-row">
+            <input
+              type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder={t.inputPlaceholder}
+              disabled={isTyping}
+              className="composer-input"
+            />
+            <button
+              type="submit"
+              disabled={!input.trim() || isTyping}
+              className="send-button"
+              aria-label={language === 'zh' ? '发送' : 'Send'}
+              title={language === 'zh' ? '发送' : 'Send'}
+            >
+              <Send size={18} />
+            </button>
+          </div>
         </form>
-      </div>
+      </SpotlightCard>
 
-      {/* Right Sidebar — scrollable column, no tabs */}
-      <div className="w-80 shrink-0 flex flex-col gap-3 overflow-y-auto">
-
-        {/* New Conversation Button */}
-        <button
-          onClick={handleNewConversation}
-          className="w-full shrink-0 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-green-600 text-white text-sm font-semibold shadow hover:shadow-lg hover:shadow-emerald-500/30 transition-all active:scale-95"
-        >
+      <aside className="chat-sidebar">
+        <button type="button" onClick={handleNewConversation} className="new-conversation">
           <Plus size={16} />
           {t.newConversation}
         </button>
 
-        {/* Live Analysis Card */}
-        <div className="glass-card p-4 shrink-0 space-y-3 animate-slide-in-right">
-          <div className="flex items-center gap-2 text-indigo-500 dark:text-indigo-300">
-            <Sparkles size={14} />
-            <span className="font-semibold text-sm">{t.turnAnalysis}</span>
+        <SpotlightCard className="side-panel profile-analysis-panel animate-slide-in-right" spotlightColor="rgba(142, 169, 68, 0.14)">
+          <div className="chat-panel-heading mb-3">
+            <div>
+              <h3 className="panel-title">{t.turnAnalysis}</h3>
+              <p className="panel-copy">
+                {isTyping
+                  ? (language === 'zh' ? '正在生成回复...' : 'Generating...')
+                  : t.trackingConcepts}
+              </p>
+            </div>
+            <Sparkles size={18} className="text-[color:var(--brand-cyan)]" />
           </div>
 
           {latestAnalysis?.analysis ? (
-            <div className="space-y-2.5">
-              <div>
-                <span className="text-xs block mb-1" style={{ color: textSecondary }}>{t.detectedIntent}</span>
-                <span className="inline-block px-2 py-1 rounded text-xs capitalize shadow-sm" style={{ backgroundColor: bgMuted, border: cardBorder, color: textPrimary }}>
-                  {latestAnalysis.analysis.intent}
-                </span>
+            <div className="analysis-stack">
+              <div className="profile-current-card">
+                <div className="profile-current-header">
+                  <span>{language === 'zh' ? '当前画像' : 'Current profile'}</span>
+                  {activeProfile.lastUpdate && (
+                    <span>
+                      {new Date(activeProfile.lastUpdate).toLocaleTimeString(language === 'zh' ? 'zh-CN' : 'en-US', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </span>
+                  )}
+                </div>
+                <div className="profile-score-grid">
+                  {dimensions.map(({ key, label }) => (
+                    <div key={key} className="profile-score-tile">
+                      <span className="profile-score-label">{label}</span>
+                      <span className="profile-score-value">{Math.round(activeProfile[key])}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <div>
-                <span className="text-xs block mb-1" style={{ color: textSecondary }}>{t.emotionState}</span>
-                <span className="inline-block px-2 py-1 rounded text-xs capitalize shadow-sm" style={{ backgroundColor: bgMuted, border: cardBorder, color: textPrimary }}>
-                  {latestAnalysis.analysis.emotion}
-                </span>
+
+              <div className="analysis-chip">
+                <span className="analysis-chip-label">{t.detectedIntent}</span>
+                <span className="analysis-chip-value capitalize">{latestAnalysis.analysis.intent}</span>
               </div>
-              {latestAnalysis.analysis.detectedConcepts && latestAnalysis.analysis.detectedConcepts.length > 0 && (
-                <div>
-                  <span className="text-xs block mb-1" style={{ color: textSecondary }}>
-                    {language === 'zh' ? '检测到的概念' : 'Detected Concepts'}
+              <div className="analysis-chip">
+                <span className="analysis-chip-label">{t.emotionState}</span>
+                <span className="analysis-chip-value capitalize">{latestAnalysis.analysis.emotion}</span>
+              </div>
+
+              {detectedConcepts.length > 0 && (
+                <div className="analysis-chip">
+                  <span className="analysis-chip-label">
+                    {language === 'zh' ? '检测概念' : 'Detected concepts'}
                   </span>
-                  <div className="flex flex-wrap gap-1">
-                    {latestAnalysis.analysis.detectedConcepts.map((concept: string, idx: number) => (
-                      <span key={idx} className="inline-block px-2 py-1 rounded bg-emerald-50 dark:bg-emerald-950 border border-emerald-200 dark:border-emerald-700 text-xs text-emerald-700 dark:text-emerald-300 shadow-sm">
+                  <div className="flex flex-wrap gap-1.5">
+                    {detectedConcepts.map((concept: string, idx: number) => (
+                      <span
+                        key={`${concept}-${idx}`}
+                        className="rounded-full border border-[color:var(--line)] bg-[color:var(--surface-muted)] px-2 py-1 text-xs font-semibold text-[color:var(--text-secondary)]"
+                      >
                         {concept}
                       </span>
                     ))}
                   </div>
                 </div>
               )}
+
               <div>
-                <span className="text-xs block mb-1" style={{ color: textSecondary }}>{t.profileImpact}</span>
-                <div className="grid grid-cols-3 gap-1.5">
-                  {(['cognition', 'affect', 'behavior'] as const).map((key) => {
+                <span className="analysis-chip-label">{t.profileImpact}</span>
+                <div className="impact-grid">
+                  {dimensions.map(({ key, label }) => {
                     const delta = (latestAnalysis.analysis.delta as Record<string, number>)?.[key] ?? 0;
-                    const absVal = latestProfile?.[key];
-                    const label = language === 'zh'
-                      ? { cognition: '认知', affect: '情感', behavior: '行为' }[key]
-                      : key.slice(0, 3);
+                    const currentValue = activeProfile[key];
+                    const beforeValue = profileBeforeLatest?.[key];
+                    const actualDelta = beforeValue !== undefined
+                      ? Math.round(currentValue - beforeValue)
+                      : delta;
+                    const isCapped =
+                      (beforeValue !== undefined && currentValue >= 100 && delta > 0) ||
+                      (beforeValue !== undefined && currentValue <= 0 && delta < 0);
+
                     return (
-                      <div key={key} className={`text-center p-1.5 rounded border text-xs ${
-                        delta > 0
-                          ? 'bg-emerald-50 dark:bg-emerald-950 border-emerald-200 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300'
-                          : delta < 0
-                            ? 'bg-rose-50 dark:bg-rose-950 border-rose-200 dark:border-rose-700 text-rose-700 dark:text-rose-300'
-                            : 'bg-gray-100 dark:bg-slate-700 border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300'
-                      }`}>
-                        <div className="font-medium">{label}</div>
-                        {absVal !== undefined && (
-                          <div className="font-bold text-sm">{absVal}</div>
+                      <div key={key} className="impact-tile">
+                        <div className="impact-label">{label}</div>
+                        <div className="impact-value">{Math.round(currentValue)}</div>
+                        <div className={`change-delta justify-center ${
+                          actualDelta > 0 ? 'delta-positive' : actualDelta < 0 ? 'delta-negative' : 'delta-stable'
+                        }`}>
+                          {formatDelta(actualDelta)}
+                        </div>
+                        <div className="impact-meta">
+                          {beforeValue !== undefined
+                            ? `${Math.round(beforeValue)} -> ${Math.round(currentValue)}`
+                            : `${language === 'zh' ? '信号' : 'signal'} ${formatDelta(delta)}`}
+                        </div>
+                        {delta !== actualDelta && (
+                          <div className="impact-meta">
+                            {language === 'zh' ? '模型信号' : 'model'} {formatDelta(delta)}
+                          </div>
                         )}
-                        <div className="opacity-80">{delta > 0 ? '+' : ''}{delta}</div>
+                        {isCapped && (
+                          <div className="impact-limit">
+                            {currentValue >= 100
+                              ? (language === 'zh' ? '已达上限' : 'maxed')
+                              : (language === 'zh' ? '已达下限' : 'min')}
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -308,115 +367,101 @@ export const Chat: React.FC<Props> = ({
               </div>
             </div>
           ) : (
-            <p className="text-xs" style={{ color: textMuted }}>
-              {language === 'zh' ? '发送消息后查看实时分析' : 'Send a message to see live analysis'}
-            </p>
+            <div className="empty-state">
+              {language === 'zh' ? '发送消息后查看分析' : 'Send a message to see analysis'}
+            </div>
           )}
 
-          {/* System status */}
-          <div className="pt-2 flex items-center gap-2" style={{ borderTop: cardBorder }}>
-            <span className="h-2 w-2 rounded-full bg-emerald-500 shadow-lg shadow-emerald-500/50 animate-pulse shrink-0" />
-            <span className="text-xs" style={{ color: textMuted }}>
-              {isTyping
-                ? (language === 'zh' ? '正在生成回复...' : 'Generating...')
-                : t.trackingConcepts}
-            </span>
+          <div className="mt-3 flex items-center gap-2 border-t border-[color:var(--line)] pt-3 text-xs text-[color:var(--text-tertiary)]">
+            <span className="status-dot" />
+            <Activity size={14} />
+            <span>{isTyping ? (language === 'zh' ? '生成中' : 'Generating') : t.systemActive}</span>
           </div>
-        </div>
+        </SpotlightCard>
 
-        {/* Conversation History Card */}
-        <div className="glass-card flex flex-col animate-slide-in-right" style={{ minHeight: 0 }}>
-          {/* Header — clickable to expand/collapse */}
+        <SpotlightCard className="chat-panel chat-history-panel animate-slide-in-right" spotlightColor="rgba(245, 184, 75, 0.12)">
           <button
+            type="button"
             onClick={() => setHistoryExpanded(prev => !prev)}
-            className="flex items-center justify-between px-4 py-3 w-full text-left hover:opacity-80 transition-opacity"
-            style={{ borderBottom: historyExpanded ? cardBorder : 'none' }}
+            className="history-toggle"
           >
-            <div className="flex items-center gap-2">
-              <History size={14} style={{ color: textMuted }} />
-              <span className="text-sm font-semibold" style={{ color: textPrimary }}>{t.chatHistory}</span>
+            <span className="inline-flex min-w-0 items-center gap-2">
+              <History size={15} />
+              <span className="truncate">{t.chatHistory}</span>
               {sessions.length > 0 && (
-                <span className="text-xs px-1.5 py-0.5 rounded-full" style={{ backgroundColor: bgMuted, color: textMuted }}>
+                <span className="rounded-full border border-[color:var(--line)] px-2 py-0.5 text-xs text-[color:var(--text-tertiary)]">
                   {sessions.length}
                 </span>
               )}
-            </div>
-            {historyExpanded ? <ChevronUp size={14} style={{ color: textMuted }} /> : <ChevronDown size={14} style={{ color: textMuted }} />}
+            </span>
+            {historyExpanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
           </button>
 
-          {historyExpanded && (
-            <div className="flex flex-col overflow-hidden" style={{ maxHeight: '360px' }}>
-              {/* Inline session viewer */}
-              {selectedSession && (
-                <div className="flex flex-col" style={{ maxHeight: '360px' }}>
-                  <div className="flex items-center justify-between px-3 py-2 shrink-0" style={{ borderBottom: cardBorder }}>
-                    <span className="text-xs font-semibold truncate flex-1" style={{ color: textPrimary }}>
-                      {selectedSession.session.title}
-                    </span>
-                    <button onClick={() => setSelectedSession(null)} className="shrink-0 ml-2 hover:opacity-70 transition-opacity">
-                      <X size={13} style={{ color: textMuted }} />
-                    </button>
-                  </div>
-                  <div className="flex-1 overflow-y-auto p-3 space-y-2">
-                    {selectedSession.messages.map((msg) => (
-                      <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                        <div className={`max-w-[90%] px-3 py-2 rounded-xl text-xs leading-relaxed ${
-                          msg.role === 'user'
-                            ? 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white rounded-tr-sm'
-                            : 'rounded-tl-sm'
-                        }`} style={msg.role !== 'user' ? { backgroundColor: bgMuted, color: textPrimary, border: cardBorder } : {}}>
-                          {msg.text}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Session list */}
-              {!selectedSession && (
-                <div className="overflow-y-auto p-2 space-y-1.5">
-                  {sessionsLoading && (
-                    <div className="text-center py-6 text-sm" style={{ color: textMuted }}>
-                      {t.loading}
+          {historyExpanded && selectedSession && (
+            <div className="flex max-h-[360px] min-h-0 flex-col">
+              <div className="flex items-center justify-between gap-2 border-b border-[color:var(--line)] px-3 py-2">
+                <span className="truncate text-xs font-bold text-[color:var(--text-primary)]">
+                  {selectedSession.session.title}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedSession(null)}
+                  className="icon-button !min-h-7 !min-w-7"
+                  aria-label={language === 'zh' ? '关闭历史会话' : 'Close session'}
+                >
+                  <X size={13} />
+                </button>
+              </div>
+              <div className="session-list">
+                {selectedSession.messages.map((msg) => (
+                  <div
+                    key={msg.id}
+                    className={`message-row ${msg.role === 'user' ? 'message-row-user' : ''}`}
+                  >
+                    <div className="message-inner !max-w-[95%]">
+                      <div className="message-bubble !p-2 !text-xs">{msg.text}</div>
                     </div>
-                  )}
-                  {!sessionsLoading && sessions.length === 0 && (
-                    <div className="text-center py-8 space-y-2">
-                      <MessageSquare size={28} className="mx-auto opacity-30" style={{ color: textMuted }} />
-                      <p className="text-xs" style={{ color: textMuted }}>{t.noHistory}</p>
-                    </div>
-                  )}
-                  {sessions.map((session, idx) => (
-                    <button
-                      key={idx}
-                      onClick={() => handleViewSession(session)}
-                      className="w-full text-left rounded-lg p-2.5 space-y-1 hover:opacity-80 transition-all duration-150 active:scale-[0.98]"
-                      style={{ backgroundColor: bgMuted, border: cardBorder }}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <span className="text-xs font-semibold line-clamp-1 flex-1" style={{ color: textPrimary }}>
-                          {session.title}
-                        </span>
-                        <span className="text-xs shrink-0 flex items-center gap-0.5" style={{ color: textMuted }}>
-                          <Clock size={9} />
-                          {formatTime(session.sessionStart)}
-                        </span>
-                      </div>
-                      <p className="text-xs line-clamp-1" style={{ color: textSecondary }}>
-                        {session.preview}
-                      </p>
-                      <span className="text-xs" style={{ color: textMuted }}>
-                        {session.messageCount} {t.messagesCount}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              )}
+                  </div>
+                ))}
+              </div>
             </div>
           )}
-        </div>
-      </div>
+
+          {historyExpanded && !selectedSession && (
+            <div className="session-list">
+              {sessionsLoading && <div className="loading-state">{t.loading}</div>}
+              {!sessionsLoading && sessions.length === 0 && (
+                <div className="empty-state">
+                  <div>
+                    <MessageSquare size={26} className="mx-auto mb-2 opacity-50" />
+                    <p className="m-0">{t.noHistory}</p>
+                  </div>
+                </div>
+              )}
+              {sessions.map((session, idx) => (
+                <button
+                  key={`${session.sessionStart}-${idx}`}
+                  type="button"
+                  onClick={() => handleViewSession(session)}
+                  className="session-card"
+                >
+                  <div className="mb-1 flex items-start justify-between gap-2">
+                    <span className="session-title truncate">{session.title}</span>
+                    <span className="session-meta inline-flex shrink-0 items-center gap-1">
+                      <Clock size={10} />
+                      {formatTime(session.sessionStart)}
+                    </span>
+                  </div>
+                  <p className="session-preview m-0 truncate">{session.preview}</p>
+                  <p className="session-meta m-0 mt-1">
+                    {session.messageCount} {t.messagesCount}
+                  </p>
+                </button>
+              ))}
+            </div>
+          )}
+        </SpotlightCard>
+      </aside>
     </div>
   );
 };

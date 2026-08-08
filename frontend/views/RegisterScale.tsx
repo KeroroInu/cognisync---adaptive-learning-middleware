@@ -9,12 +9,13 @@ import type {
   ScaleAnswer,
   Dimension,
   ScaleListItem,
+  User,
 } from '../types';
 import type { PendingScaleRegistration } from './Register';
 
 export interface RegisterScaleProps {
   language: Language;
-  onComplete: (initialProfile: UserProfile) => void;
+  onComplete: (initialProfile: UserProfile, auth?: { token: string; user: User }) => void;
   onBack: () => void;
   /** 量表模式新注册时传入，有值则提交时同时建账号 */
   pendingRegistration?: PendingScaleRegistration;
@@ -149,11 +150,10 @@ export const RegisterScale: React.FC<RegisterScaleProps> = ({
           started_at,
         }).then(response => {
           if (response.success && response.data) {
-            // 把 token 写入 localStorage 供后续请求使用
-            const token = (response.data as any).token;
-            const user  = (response.data as any).user;
-            if (token) localStorage.setItem('token', token);
-            return { initialProfile: (response.data as any).initialProfile };
+            return {
+              initialProfile: response.data.initialProfile as UserProfile,
+              auth: { token: response.data.token, user: response.data.user },
+            };
           }
           throw new Error('Invalid response');
         })
@@ -166,7 +166,7 @@ export const RegisterScale: React.FC<RegisterScaleProps> = ({
     submitPromise
       .then(data => {
         setIsComplete(true);
-        setTimeout(() => onComplete(data.initialProfile), 2000);
+        setTimeout(() => onComplete(data.initialProfile, 'auth' in data ? data.auth : undefined), 2000);
       })
       .catch(err => {
         setError(err instanceof Error ? err.message : 'Failed to submit scale');
@@ -306,12 +306,12 @@ export const RegisterScale: React.FC<RegisterScaleProps> = ({
       case 'SE':  return 'from-purple-500 to-violet-600';
       case 'LM':  return 'from-pink-500 to-rose-600';
       case 'CPS': return 'from-amber-500 to-orange-600';
-      case 'PA':  return 'from-green-500 to-emerald-600';
+      case 'PA':  return 'from-violet-500 to-fuchsia-600';
       case 'AIL': return 'from-indigo-500 to-blue-700';
       // 旧维度兼容
       case 'Cognition': return 'from-blue-500 to-cyan-600';
       case 'Affect':    return 'from-purple-500 to-pink-600';
-      case 'Behavior':  return 'from-green-500 to-emerald-600';
+      case 'Behavior':  return 'from-violet-500 to-fuchsia-600';
       default:          return 'from-gray-500 to-gray-600';
     }
   };
@@ -442,7 +442,7 @@ export const RegisterScale: React.FC<RegisterScaleProps> = ({
     return (
       <div className="min-h-screen flex items-center justify-center gradient-mesh">
         <div className="glass-card p-12 max-w-md w-full text-center animate-scale-in">
-          <div className="w-20 h-20 rounded-full bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center mx-auto mb-6 animate-bounce-in">
+          <div className="w-20 h-20 rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-600 flex items-center justify-center mx-auto mb-6 animate-bounce-in">
             <CheckCircle className="w-12 h-12 text-white" />
           </div>
           <h2 className="text-3xl font-bold text-gradient mb-3">{t.scaleComplete}</h2>
@@ -650,7 +650,7 @@ export const RegisterScale: React.FC<RegisterScaleProps> = ({
 
           {/* Submitting indicator (last question only) */}
           {isLastQuestion && isSubmitting && (
-            <div className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white font-medium rounded-xl shadow-lg">
+            <div className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-violet-500 to-fuchsia-600 text-white font-medium rounded-xl shadow-lg">
               <Loader className="w-5 h-5 animate-spin" />
               {t.submittingScale}
             </div>
@@ -668,7 +668,7 @@ export const RegisterScale: React.FC<RegisterScaleProps> = ({
                 ${index === currentQuestionIndex
                   ? 'bg-gradient-to-r from-blue-500 to-purple-500 w-8'
                   : answers[index]?.value > 0
-                    ? 'bg-green-500'
+                    ? 'bg-fuchsia-500'
                     : ''
                 }
               `}

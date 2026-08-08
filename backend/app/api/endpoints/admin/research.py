@@ -3,7 +3,7 @@ Admin 研究任务管理 API 端点
 """
 from uuid import UUID
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Literal, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import select, func, update
@@ -27,6 +27,7 @@ class ResearchTaskCreate(BaseModel):
     ai_prompt: Optional[str] = None
     code_content: str
     language: str = "python"
+    target_group: Literal["all", "pdt", "ai_pbl", "lecture", "unassigned"] = "all"
 
 
 class ResearchTaskUpdate(BaseModel):
@@ -36,6 +37,7 @@ class ResearchTaskUpdate(BaseModel):
     ai_prompt: Optional[str] = None
     code_content: Optional[str] = None
     language: Optional[str] = None
+    target_group: Optional[Literal["all", "pdt", "ai_pbl", "lecture", "unassigned"]] = None
 
 
 class ResearchTaskItem(BaseModel):
@@ -46,6 +48,7 @@ class ResearchTaskItem(BaseModel):
     ai_prompt: Optional[str]
     code_content: str
     language: str
+    target_group: str
     status: str
     submissions_count: int
     created_at: str
@@ -74,20 +77,17 @@ async def list_research_tasks(
 ) -> SuccessResponse[dict]:
     """获取所有研究任务列表（含提交数统计）"""
     result = await db.execute(
-        select(ResearchTask).order_by(ResearchTask.created_at.desc())
+        select(ResearchTask, func.count(ResearchTaskSubmission.id).label("submissions_count"))
+        .outerjoin(ResearchTaskSubmission, ResearchTaskSubmission.task_id == ResearchTask.id)
+        .group_by(ResearchTask.id)
+        .order_by(ResearchTask.created_at.desc())
     )
-    tasks = result.scalars().all()
+    task_rows = result.all()
 
     total = await db.scalar(select(func.count()).select_from(ResearchTask)) or 0
 
     task_items = []
-    for task in tasks:
-        submissions_count = await db.scalar(
-            select(func.count())
-            .select_from(ResearchTaskSubmission)
-            .where(ResearchTaskSubmission.task_id == task.id)
-        ) or 0
-
+    for task, submissions_count in task_rows:
         task_items.append(ResearchTaskItem(
             id=str(task.id),
             title=task.title,
@@ -96,6 +96,7 @@ async def list_research_tasks(
             ai_prompt=task.ai_prompt,
             code_content=task.code_content,
             language=task.language,
+            target_group=task.target_group,
             status=task.status.value,
             submissions_count=submissions_count,
             created_at=task.created_at.isoformat(),
@@ -118,6 +119,7 @@ async def create_research_task(
         ai_prompt=data.ai_prompt,
         code_content=data.code_content,
         language=data.language,
+        target_group=data.target_group,
         status=ResearchTaskStatus.DRAFT,
     )
     db.add(task)
@@ -132,6 +134,7 @@ async def create_research_task(
         ai_prompt=task.ai_prompt,
         code_content=task.code_content,
         language=task.language,
+        target_group=task.target_group,
         status=task.status.value,
         submissions_count=0,
         created_at=task.created_at.isoformat(),
@@ -163,6 +166,8 @@ async def update_research_task(
         task.code_content = data.code_content
     if data.language is not None:
         task.language = data.language
+    if data.target_group is not None:
+        task.target_group = data.target_group
     task.updated_at = datetime.now(timezone.utc)
 
     await db.commit()
@@ -182,6 +187,7 @@ async def update_research_task(
         ai_prompt=task.ai_prompt,
         code_content=task.code_content,
         language=task.language,
+        target_group=task.target_group,
         status=task.status.value,
         submissions_count=submissions_count,
         created_at=task.created_at.isoformat(),
@@ -212,10 +218,18 @@ async def activate_research_task(
     db: AsyncSession = Depends(get_db),
 ) -> SuccessResponse[dict]:
     """激活研究任务（同时将其他激活任务归档）"""
-    # 先将其他 ACTIVE 任务改为 ARCHIVED
+    task_result = await db.execute(select(ResearchTask).where(ResearchTask.id == task_id))
+    task = task_result.scalar_one_or_none()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    # 每个实验条件只保留一个当前任务，互不覆盖其他组。
     await db.execute(
         update(ResearchTask)
-        .where(ResearchTask.status == ResearchTaskStatus.ACTIVE)
+        .where(
+            ResearchTask.status == ResearchTaskStatus.ACTIVE,
+            ResearchTask.target_group == task.target_group,
+        )
         .where(ResearchTask.id != task_id)
         .values(status=ResearchTaskStatus.ARCHIVED, updated_at=datetime.now(timezone.utc))
     )
@@ -226,8 +240,7 @@ async def activate_research_task(
         .values(status=ResearchTaskStatus.ACTIVE, updated_at=datetime.now(timezone.utc))
         .returning(ResearchTask.id)
     )
-    if not result.scalar_one_or_none():
-        raise HTTPException(status_code=404, detail="Task not found")
+    result.scalar_one()
 
     await db.commit()
     return SuccessResponse(data={"message": "Task activated"})

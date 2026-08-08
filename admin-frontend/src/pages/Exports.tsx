@@ -1,8 +1,6 @@
 import { useState } from 'react';
 import { Download, Users, FileText, MessageSquare, TrendingUp, CheckCircle, AlertCircle, Loader } from 'lucide-react';
-
-const BASE_URL = (import.meta.env.VITE_API_BASE_URL as string) || 'http://localhost:8000/api';
-const ADMIN_KEY = (import.meta.env.VITE_ADMIN_KEY as string) || '';
+import { adminApi } from '../lib/adminApi';
 
 interface DatasetConfig {
   id: string;
@@ -89,16 +87,7 @@ export const Exports = () => {
     setErrors(prev => ({ ...prev, [dataset.id]: '' }));
 
     try {
-      const url = `${BASE_URL}${dataset.endpoint}`;
-      const response = await fetch(url, {
-        headers: { 'X-ADMIN-KEY': ADMIN_KEY },
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const blob = await response.blob();
+      const blob = await adminApi.exportCsv(dataset.endpoint.replace(/^\/admin/, ''));
       const objectUrl = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = objectUrl;
@@ -127,17 +116,15 @@ export const Exports = () => {
       </div>
 
       {/* Research Note */}
-      <div className="rounded-xl p-4 flex gap-3"
-        style={{ background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.25)' }}>
-        <div className="shrink-0 mt-0.5 text-blue-500">
+      <div className="admin-research-note rounded-xl p-4 flex gap-3">
+        <div className="shrink-0 mt-0.5">
           <AlertCircle size={18} />
         </div>
         <div className="text-sm space-y-1" style={{ color: 'var(--text-primary)' }}>
           <p className="font-semibold">数据使用说明</p>
           <p style={{ color: 'var(--text-secondary)' }}>
             导出数据包含用户邮箱，请在分析前进行去标识化处理。建议使用{' '}
-            <code className="px-1 py-0.5 rounded font-mono text-xs"
-              style={{ background: 'rgba(59,130,246,0.15)', color: 'var(--text-primary)' }}>
+            <code className="px-1 py-0.5 rounded font-mono text-xs">
               student_id
             </code>{' '}
             作为分析主键替代 email，以符合数据脱敏要求。所有数据使用 UTF-8 with BOM 编码，Excel 可直接打开中文内容。
@@ -180,7 +167,7 @@ export const Exports = () => {
                         ? 'bg-red-500 text-white'
                         : status === 'loading'
                         ? 'text-gray-500 cursor-not-allowed'
-                        : 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:shadow-lg hover:scale-105'
+                        : 'admin-export-button bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:shadow-lg hover:scale-105'
                     }`}
                     style={status === 'loading' ? { background: 'var(--bg-tertiary)' } : undefined}
                   >

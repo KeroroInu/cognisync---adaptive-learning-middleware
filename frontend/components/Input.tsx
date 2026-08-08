@@ -25,15 +25,15 @@ export const Input: React.FC<InputProps> = ({
         className={`
           w-full px-4 py-2.5 rounded-lg
           border ${error ? 'border-red-500' : ''}
-          focus:outline-none focus:ring-2 ${error ? 'focus:ring-red-500' : 'focus:ring-blue-500'}
+          focus:outline-none focus:ring-2 ${error ? 'focus:ring-red-500' : 'focus:ring-[color:var(--brand-cyan)]'}
           transition-all duration-200
           disabled:opacity-50 disabled:cursor-not-allowed
           ${className}
         `}
         style={{
-          background: 'var(--bg-secondary)',
+          background: 'var(--surface-strong)',
           color: 'var(--text-primary)',
-          borderColor: error ? undefined : 'var(--glass-border)',
+          borderColor: error ? undefined : 'var(--line)',
           ...style,
         }}
         {...props}
@@ -47,7 +47,7 @@ export const Input: React.FC<InputProps> = ({
         </p>
       )}
       {helperText && !error && (
-        <p className="mt-1.5 text-sm" style={{ color: 'var(--text-light)' }}>
+        <p className="mt-1.5 text-sm" style={{ color: 'var(--text-tertiary)' }}>
           {helperText}
         </p>
       )}

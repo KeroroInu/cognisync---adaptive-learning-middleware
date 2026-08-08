@@ -18,6 +18,27 @@ BACKEND_DIR="$PROJECT_ROOT/backend"
 FRONTEND_DIR="$PROJECT_ROOT/frontend"
 ADMIN_DIR="$PROJECT_ROOT/admin-frontend"
 
+get_port_pid() {
+    lsof -nP -tiTCP:"$1" -sTCP:LISTEN 2>/dev/null | head -n 1
+}
+
+wait_for_url() {
+    local url="$1"
+    local name="$2"
+    local retries="${3:-30}"
+
+    for ((i=1; i<=retries; i++)); do
+        if curl -fsS "$url" > /dev/null 2>&1; then
+            echo -e "${GREEN}✅ $name 已就绪${NC}"
+            return 0
+        fi
+        sleep 1
+    done
+
+    echo -e "${RED}❌ $name 启动超时，请查看日志${NC}"
+    return 1
+}
+
 echo -e "${BLUE}╔════════════════════════════════════════╗${NC}"
 echo -e "${BLUE}║   CogniSync 系统启动脚本               ║${NC}"
 echo -e "${BLUE}╚════════════════════════════════════════╝${NC}"
@@ -72,9 +93,15 @@ cd "$BACKEND_DIR"
 source venv/bin/activate
 
 # 后台启动后端
-echo -e "${BLUE}🚀 启动 FastAPI 后端 (http://localhost:8000)${NC}"
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 > /tmp/cognisync-backend.log 2>&1 &
-BACKEND_PID=$!
+EXISTING_BACKEND_PID=$(get_port_pid 8000)
+if [ -n "$EXISTING_BACKEND_PID" ]; then
+    echo -e "${YELLOW}⚠️  端口 8000 已有服务运行，复用现有后端 (PID: $EXISTING_BACKEND_PID)${NC}"
+    BACKEND_PID=$EXISTING_BACKEND_PID
+else
+    echo -e "${BLUE}🚀 启动 FastAPI 后端 (http://localhost:8000)${NC}"
+    uvicorn main:app --reload --host 0.0.0.0 --port 8000 > /tmp/cognisync-backend.log 2>&1 &
+    BACKEND_PID=$!
+fi
 echo $BACKEND_PID > /tmp/cognisync-backend.pid
 echo -e "${GREEN}✅ 后端已启动 (PID: $BACKEND_PID)${NC}"
 echo -e "${BLUE}   日志文件: /tmp/cognisync-backend.log${NC}"
@@ -82,32 +109,48 @@ echo -e "${BLUE}   API 文档: http://localhost:8000/docs${NC}"
 
 # 等待后端启动
 echo -e "${BLUE}⏳ 等待后端初始化...${NC}"
-sleep 3
+if ! wait_for_url "http://localhost:8000/health" "后端服务" 30; then
+    tail -n 80 /tmp/cognisync-backend.log 2>/dev/null || true
+    exit 1
+fi
 
 # 6. 启动前端服务
 echo -e "${YELLOW}[6/6] 启动前端服务...${NC}"
 
 # 6.1 启动用户前端
 cd "$FRONTEND_DIR"
-echo -e "${BLUE}🚀 启动用户前端 (http://localhost:3000)${NC}"
-npm run dev > /tmp/cognisync-frontend.log 2>&1 &
-FRONTEND_PID=$!
+EXISTING_FRONTEND_PID=$(get_port_pid 3000)
+if [ -n "$EXISTING_FRONTEND_PID" ]; then
+    echo -e "${YELLOW}⚠️  端口 3000 已有服务运行，复用现有用户前端 (PID: $EXISTING_FRONTEND_PID)${NC}"
+    FRONTEND_PID=$EXISTING_FRONTEND_PID
+else
+    echo -e "${BLUE}🚀 启动用户前端 (http://localhost:3000)${NC}"
+    npm run dev > /tmp/cognisync-frontend.log 2>&1 &
+    FRONTEND_PID=$!
+fi
 echo $FRONTEND_PID > /tmp/cognisync-frontend.pid
 echo -e "${GREEN}✅ 用户前端已启动 (PID: $FRONTEND_PID)${NC}"
 echo -e "${BLUE}   日志文件: /tmp/cognisync-frontend.log${NC}"
 
 # 6.2 启动后台管理系统
 cd "$ADMIN_DIR"
-echo -e "${BLUE}🚀 启动后台管理系统 (http://localhost:3001)${NC}"
-npm run dev > /tmp/cognisync-admin.log 2>&1 &
-ADMIN_PID=$!
+EXISTING_ADMIN_PID=$(get_port_pid 3001)
+if [ -n "$EXISTING_ADMIN_PID" ]; then
+    echo -e "${YELLOW}⚠️  端口 3001 已有服务运行，复用现有管理端 (PID: $EXISTING_ADMIN_PID)${NC}"
+    ADMIN_PID=$EXISTING_ADMIN_PID
+else
+    echo -e "${BLUE}🚀 启动后台管理系统 (http://localhost:3001)${NC}"
+    npm run dev > /tmp/cognisync-admin.log 2>&1 &
+    ADMIN_PID=$!
+fi
 echo $ADMIN_PID > /tmp/cognisync-admin.pid
 echo -e "${GREEN}✅ 后台管理系统已启动 (PID: $ADMIN_PID)${NC}"
 echo -e "${BLUE}   日志文件: /tmp/cognisync-admin.log${NC}"
 
 # 等待前端启动
 echo -e "${BLUE}⏳ 等待前端服务初始化...${NC}"
-sleep 3
+wait_for_url "http://localhost:3000" "用户前端" 30 || exit 1
+wait_for_url "http://localhost:3001" "后台管理系统" 30 || exit 1
 
 # 启动完成
 echo ""

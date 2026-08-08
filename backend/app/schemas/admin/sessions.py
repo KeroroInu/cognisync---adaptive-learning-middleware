@@ -4,7 +4,7 @@ Admin 会话管理 Schema
 from uuid import UUID
 from datetime import datetime
 from typing import List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class SessionItem(BaseModel):
@@ -18,8 +18,7 @@ class SessionItem(BaseModel):
     created_at: datetime = Field(..., description="创建时间")
     updated_at: Optional[datetime] = Field(None, description="最后更新时间")
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class SessionsListResponse(BaseModel):
@@ -41,8 +40,7 @@ class SessionDetail(BaseModel):
     created_at: datetime = Field(..., description="创建时间")
     updated_at: Optional[datetime] = Field(None, description="最后更新时间")
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class SessionMessageItem(BaseModel):
@@ -53,8 +51,7 @@ class SessionMessageItem(BaseModel):
     timestamp: datetime = Field(..., description="消息时间戳")
     analysis: Optional[dict] = Field(None, description="消息分析结果（可选）")
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class SessionMessagesResponse(BaseModel):

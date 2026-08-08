@@ -54,6 +54,13 @@ const LANGUAGES = [
 ];
 
 const STATUS_LABEL: Record<string, string> = { active: '活跃', draft: '草稿', archived: '已归档' };
+const TARGET_GROUPS: Array<{ value: ResearchTask['target_group']; label: string }> = [
+  { value: 'all', label: '全部实验组（公共任务）' },
+  { value: 'pdt', label: '项目解构式教学组' },
+  { value: 'ai_pbl', label: 'AI 项目式教学组' },
+  { value: 'lecture', label: '普通讲授式教学组' },
+  { value: 'unassigned', label: '未分组学生' },
+];
 
 export const ResearchManagement = () => {
   const [tasks, setTasks] = useState<ResearchTask[]>([]);
@@ -77,6 +84,7 @@ export const ResearchManagement = () => {
     ai_prompt: '',
     code_content: '',
     language: 'python',
+    target_group: 'all' as ResearchTask['target_group'],
   });
   const [creating, setCreating] = useState(false);
   const [exportingRow, setExportingRow] = useState<string | null>(null);
@@ -89,6 +97,7 @@ export const ResearchManagement = () => {
     ai_prompt: '',
     code_content: '',
     language: 'python',
+    target_group: 'all' as ResearchTask['target_group'],
   });
   const [saving, setSaving] = useState(false);
   const editFileInputRef = useRef<HTMLInputElement>(null);
@@ -129,9 +138,10 @@ export const ResearchManagement = () => {
         ai_prompt: form.ai_prompt || undefined,
         code_content: form.code_content,
         language: form.language,
+        target_group: form.target_group,
       });
       setShowCreateModal(false);
-      setForm({ title: '', description: '', instructions: '', ai_prompt: '', code_content: '', language: 'python' });
+      setForm({ title: '', description: '', instructions: '', ai_prompt: '', code_content: '', language: 'python', target_group: 'all' });
       await loadTasks();
     } catch (e) {
       setError(e instanceof Error ? e.message : '创建失败');
@@ -217,6 +227,7 @@ export const ResearchManagement = () => {
       ai_prompt: task.ai_prompt || '',
       code_content: task.code_content,
       language: task.language,
+      target_group: task.target_group,
     });
     setEditingTask(task);
   };
@@ -232,6 +243,7 @@ export const ResearchManagement = () => {
         ai_prompt: editForm.ai_prompt || undefined,
         code_content: editForm.code_content,
         language: editForm.language,
+        target_group: editForm.target_group,
       });
       setEditingTask(null);
       await loadTasks();
@@ -292,6 +304,7 @@ export const ResearchManagement = () => {
               <tr>
                 <th className="px-6 py-4 text-left text-sm font-semibold dark:text-white">任务名称</th>
                 <th className="px-6 py-4 text-left text-sm font-semibold dark:text-white">语言</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold dark:text-white">适用实验组</th>
                 <th className="px-6 py-4 text-left text-sm font-semibold dark:text-white">状态</th>
                 <th className="px-6 py-4 text-left text-sm font-semibold dark:text-white">提交数</th>
                 <th className="px-6 py-4 text-left text-sm font-semibold dark:text-white">创建时间</th>
@@ -301,7 +314,7 @@ export const ResearchManagement = () => {
             <tbody>
               {tasks.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
+                  <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
                     暂无研究任务，点击「创建任务」上传代码填空练习
                   </td>
                 </tr>
@@ -322,6 +335,9 @@ export const ResearchManagement = () => {
                       <span className="px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded-lg text-xs font-mono">
                         {task.language}
                       </span>
+                    </td>
+                    <td className="px-6 py-4 text-sm" style={{ color: 'var(--text-secondary)' }}>
+                      {TARGET_GROUPS.find(group => group.value === task.target_group)?.label || task.target_group}
                     </td>
                     <td className="px-6 py-4 text-sm">
                       <span className={`px-3 py-1 rounded-lg text-xs font-semibold inline-flex items-center gap-1 ${
@@ -409,7 +425,7 @@ export const ResearchManagement = () => {
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-2xl font-bold">创建研究任务</h2>
               <button
-                onClick={() => { setShowCreateModal(false); setForm({ title: '', description: '', instructions: '', ai_prompt: '', code_content: '', language: 'python' }); }}
+                onClick={() => { setShowCreateModal(false); setForm({ title: '', description: '', instructions: '', ai_prompt: '', code_content: '', language: 'python', target_group: 'all' }); }}
                 className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
               >
                 <X size={20} />
@@ -468,6 +484,18 @@ export const ResearchManagement = () => {
                   style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)' }}
                   placeholder="例：本节课讲解 Python 列表推导式。学生应理解列表推导式的语法，能将 for 循环改写为推导式，并知道何时使用条件过滤。请引导学生自己发现规律，不要直接给出答案。"
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">投放实验组 *</label>
+                <select
+                  value={form.target_group}
+                  onChange={e => setForm(f => ({ ...f, target_group: e.target.value as ResearchTask['target_group'] }))}
+                  className="w-full px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)' }}
+                >
+                  {TARGET_GROUPS.map(group => <option key={group.value} value={group.value}>{group.label}</option>)}
+                </select>
               </div>
 
               <div>
@@ -603,6 +631,18 @@ export const ResearchManagement = () => {
                   className="w-full px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 resize-none"
                   style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)' }}
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">投放实验组 *</label>
+                <select
+                  value={editForm.target_group}
+                  onChange={e => setEditForm(f => ({ ...f, target_group: e.target.value as ResearchTask['target_group'] }))}
+                  className="w-full px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)' }}
+                >
+                  {TARGET_GROUPS.map(group => <option key={group.value} value={group.value}>{group.label}</option>)}
+                </select>
               </div>
 
               <div>

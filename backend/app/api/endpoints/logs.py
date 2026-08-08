@@ -16,6 +16,8 @@ from app.schemas.calibration import CalibrationLogResponse
 from app.models.sql.message import ChatMessage
 from app.models.sql.calibration_log import CalibrationLog, Dimension
 from app.services.profile_service import ProfileService
+from app.api.endpoints.auth import ensure_self_scope, get_current_user
+from app.models.sql.user import User
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -28,7 +30,7 @@ class LogsResponse(BaseModel):
 
 
 @router.get("/{userId}", response_model=SuccessResponse[LogsResponse])
-async def get_logs(userId: str, db: AsyncSession = Depends(get_db)):
+async def get_logs(userId: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     """
     获取用户的所有日志（消息 + 校准日志）
     用于 Evidence 页面展示
@@ -42,11 +44,8 @@ async def get_logs(userId: str, db: AsyncSession = Depends(get_db)):
     logger.info(f"Fetching logs for user: {userId}")
 
     try:
-        profile_service = ProfileService(db)
-
-        # 创建/获取用户
-        user = await profile_service.get_or_create_user(userId)
-        user_id = user.id
+        ensure_self_scope(userId, current_user)
+        user_id = current_user.id
 
         # ========== 获取对话消息 ==========
         messages_query = (
@@ -107,6 +106,8 @@ async def get_logs(userId: str, db: AsyncSession = Depends(get_db)):
             )
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to fetch logs for user {userId}: {e}", exc_info=True)
         raise HTTPException(

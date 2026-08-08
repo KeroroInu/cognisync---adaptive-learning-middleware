@@ -40,7 +40,7 @@ export const SummaryPanel: React.FC<SummaryPanelProps> = ({
       {/* 已确认信息列表 */}
       {summary.length > 0 ? (
         <div className="glass-card p-5 space-y-4 animate-slide-in-right hover:shadow-xl transition-all duration-300">
-          <div className="flex items-center space-x-2 text-emerald-500 dark:text-emerald-300 mb-2">
+          <div className="flex items-center space-x-2 text-fuchsia-400 dark:text-fuchsia-300 mb-2">
             <CheckCircle size={16} />
             <span className="font-semibold text-sm">
               {language === 'zh' ? '画像构建中' : 'Profile Building'}
@@ -69,7 +69,7 @@ export const SummaryPanel: React.FC<SummaryPanelProps> = ({
                     {info.value}
                   </p>
                   {info.confidence !== undefined && (
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 whitespace-nowrap">
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-violet-100 dark:bg-violet-900/30 text-fuchsia-600 dark:text-fuchsia-300 whitespace-nowrap">
                       {Math.round(info.confidence * 100)}%
                     </span>
                   )}
@@ -127,11 +127,11 @@ export const SummaryPanel: React.FC<SummaryPanelProps> = ({
             )}
 
             {draftProfile.behavior !== undefined && (
-              <div className="text-center p-2 rounded bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-700">
-                <p className="text-xs text-green-600 dark:text-green-400 mb-1">
+              <div className="text-center p-2 rounded bg-violet-50 dark:bg-violet-950 border border-violet-200 dark:border-violet-700">
+                <p className="text-xs text-violet-500 dark:text-violet-300 mb-1">
                   {language === 'zh' ? '行为' : 'Beh'}
                 </p>
-                <p className="text-lg font-bold text-green-700 dark:text-green-300">
+                <p className="text-lg font-bold text-violet-700 dark:text-violet-300">
                   {draftProfile.behavior}
                 </p>
               </div>
@@ -151,7 +151,7 @@ export const SummaryPanel: React.FC<SummaryPanelProps> = ({
           {language === 'zh' ? '系统状态' : 'System Status'}
         </h4>
         <div className="flex items-center space-x-2">
-          <span className="h-2 w-2 rounded-full bg-emerald-500 shadow-lg shadow-emerald-500/50 animate-pulse"></span>
+          <span className="h-2 w-2 rounded-full bg-fuchsia-500 shadow-lg shadow-fuchsia-500/50 animate-pulse"></span>
           <span
             className="text-sm font-medium"
             style={{

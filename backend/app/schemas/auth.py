@@ -20,6 +20,9 @@ class RegisterRequest(BaseModel):
     password: str = Field(..., min_length=6, description="密码（≥6字符）")
     email: Optional[EmailStr] = Field(None, description="邮箱（可选）")
     mode: str = Field(..., description="注册模式：scale | ai")
+    class_name: Optional[str] = Field(None, alias="className", max_length=100, description="班级名称或代码")
+
+    model_config = {"populate_by_name": True}
 
 
 class UserInfo(BaseModel):
@@ -31,6 +34,8 @@ class UserInfo(BaseModel):
     created_at: datetime = Field(..., alias="createdAt")
     has_completed_onboarding: bool = Field(False, alias="hasCompletedOnboarding")
     onboarding_mode: Optional[str] = Field(None, alias="onboardingMode", description="注册模式: scale | ai")
+    class_name: Optional[str] = Field(None, alias="className", description="班级名称或代码")
+    experiment_group: str = Field("unassigned", alias="experimentGroup", description="实验条件")
 
     model_config = {
         "from_attributes": True,

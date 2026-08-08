@@ -36,7 +36,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
           className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
             isUser
               ? 'bg-gradient-to-br from-indigo-500 to-purple-600'
-              : 'bg-gradient-to-br from-emerald-500 to-green-600'
+              : 'bg-gradient-to-br from-violet-500 to-fuchsia-600'
           } text-white shadow-lg`}
         >
           {isUser ? <User size={16} /> : <Bot size={16} />}
@@ -81,7 +81,7 @@ export const TypingIndicator: React.FC<{ theme?: 'light' | 'dark' }> = ({
     <div className="flex justify-start animate-fade-in">
       <div className="flex gap-3">
         {/* AI 头像 */}
-        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-500 to-green-600 flex items-center justify-center shrink-0 animate-pulse text-white shadow-lg">
+        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-600 flex items-center justify-center shrink-0 animate-pulse text-white shadow-lg">
           <Bot size={16} />
         </div>
 

@@ -16,13 +16,13 @@ export const Button: React.FC<ButtonProps> = ({
   children,
   ...props
 }) => {
-  const baseStyles = 'inline-flex items-center justify-center rounded-lg font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed';
+  const baseStyles = 'inline-flex items-center justify-center rounded-lg border font-semibold transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed';
 
   const variants = {
-    primary: 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white hover:from-blue-600 hover:to-indigo-700 shadow-md hover:shadow-lg',
-    secondary: 'bg-gradient-to-r from-purple-500 to-pink-600 text-white hover:from-purple-600 hover:to-pink-700 shadow-md hover:shadow-lg',
-    outline: 'border-2 border-current text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20',
-    ghost: 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
+    primary: 'flow-button border-[color:color-mix(in_srgb,var(--brand-cyan)_44%,var(--line))] text-white shadow-sm hover:border-[color:var(--brand-cyan)] hover:shadow-md',
+    secondary: 'border-[color:color-mix(in_srgb,var(--brand-amber)_44%,var(--line))] bg-[color:color-mix(in_srgb,var(--brand-amber)_18%,var(--surface-strong))] text-[color:var(--text-primary)] shadow-sm hover:border-[color:var(--brand-amber)] hover:shadow-md',
+    outline: 'border-[color:var(--line)] bg-transparent text-[color:var(--text-primary)] hover:bg-[color:var(--surface-muted)]',
+    ghost: 'border-transparent bg-transparent text-[color:var(--text-secondary)] hover:bg-[color:var(--surface-muted)]'
   };
 
   const sizes = {

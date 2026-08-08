@@ -17,21 +17,21 @@ from httpx import AsyncClient
 
 @pytest.mark.asyncio
 async def test_admin_auth_no_key(client: AsyncClient):
-    """测试 1: 未提供 Admin Key 时返回 403"""
+    """测试 1: 未登录时返回 401"""
     response = await client.get("/api/admin/overview")
-    assert response.status_code == 403
+    assert response.status_code == 401
 
     print(f"\n✅ Admin auth (no key) test passed: {response.status_code}")
 
 
 @pytest.mark.asyncio
 async def test_admin_auth_invalid_key(client: AsyncClient):
-    """测试 2: 提供错误 Admin Key 时返回 403"""
+    """测试 2: 提供无效 Bearer token 时返回 401"""
     response = await client.get(
         "/api/admin/overview",
-        headers={"X-ADMIN-KEY": "wrong_key_totally_invalid"},
+        headers={"Authorization": "Bearer wrong-token"},
     )
-    assert response.status_code == 403
+    assert response.status_code == 401
 
     print(f"\n✅ Admin auth (invalid key) test passed: {response.status_code}")
 
@@ -209,96 +209,77 @@ async def test_analytics_overview(admin_client: AsyncClient):
     data = response.json()
     assert data["success"] is True
 
-    stats = data["data"]
-    assert "totalUsers" in stats
-    assert "totalMessages" in stats
+    overview = data["data"]["overview"]
+    assert "totalUsers" in overview
+    assert "totalMessages" in overview
 
     print(
         f"\n✅ Analytics overview test passed: "
-        f"users={stats['totalUsers']}, messages={stats['totalMessages']}"
+        f"users={overview['totalUsers']}, messages={overview['totalMessages']}"
     )
 
 
-# ==================== Data Explorer 测试 ====================
-
-
 @pytest.mark.asyncio
-async def test_list_tables(admin_client: AsyncClient):
-    """
-    测试 10: GET /api/admin/explorer/tables
-    列出所有可视化表
-    """
-    response = await admin_client.get("/api/admin/explorer/tables")
-    assert response.status_code == 200
-
-    data = response.json()
-    assert data["success"] is True
-    assert "tables" in data["data"]
-
-    tables = data["data"]["tables"]
-    assert isinstance(tables, list)
-
-    table_names = [t["name"] for t in tables]
-    assert "users" in table_names
-
-    for table in tables:
-        assert "name" in table
-        assert "rowCount" in table
-        assert isinstance(table["rowCount"], int)
-
-    print(f"\n✅ List tables test passed: {len(tables)} tables, names={table_names}")
-
-
-@pytest.mark.asyncio
-async def test_get_table_data(admin_client: AsyncClient, client: AsyncClient):
-    """
-    测试 11: GET /api/admin/explorer/tables/users/data
-    获取用户表数据，并验证无敏感字段泄露
-    """
-    await client.post(
+async def test_experiment_group_assignment_and_task_isolation(
+    admin_client: AsyncClient, client: AsyncClient
+):
+    """管理员分组后，学生只能看到并提交所在实验组的任务。"""
+    registration = await client.post(
         "/api/auth/register",
         json={
-            "student_id": "explorer_test_001",
-            "name": "探索测试用户",
+            "student_id": "group_test_001",
+            "name": "分组测试学生",
             "password": "testpass123",
             "mode": "scale",
+            "className": "高二1班",
         },
     )
+    assert registration.status_code == 200
+    registered = registration.json()
+    user_id = registered["user"]["id"]
+    auth = {"Authorization": f"Bearer {registered['token']}"}
 
-    response = await admin_client.get(
-        "/api/admin/explorer/tables/users/data?page=1&page_size=10"
+    assigned = await admin_client.patch(
+        f"/api/admin/users/{user_id}",
+        json={"class_name": "高二1班", "experiment_group": "pdt"},
     )
-    assert response.status_code == 200
+    assert assigned.status_code == 200
+    assert assigned.json()["data"]["experiment_group"] == "pdt"
 
-    data = response.json()
-    assert data["success"] is True
-    assert "rows" in data["data"]
-    assert "pagination" in data["data"]
+    detail = await admin_client.get(f"/api/admin/users/{user_id}")
+    assert detail.status_code == 200
+    assert detail.json()["data"]["class_name"] == "高二1班"
+    assert detail.json()["data"]["experiment_group"] == "pdt"
 
-    rows = data["data"]["rows"]
-    assert len(rows) >= 1
+    async def create_task(title: str, target_group: str) -> str:
+        response = await admin_client.post(
+            "/api/admin/research/tasks",
+            json={
+                "title": title,
+                "code_content": "print('hello')",
+                "language": "python",
+                "target_group": target_group,
+            },
+        )
+        assert response.status_code == 200
+        return response.json()["data"]["id"]
 
-    # 验证无密码字段泄露
-    if rows:
-        first_row = rows[0]
-        assert "password_hash" not in first_row
-        assert "password" not in first_row
+    pdt_task_id = await create_task("PDT 任务", "pdt")
+    lecture_task_id = await create_task("讲授组任务", "lecture")
+    assert (await admin_client.post(f"/api/admin/research/tasks/{pdt_task_id}/activate")).status_code == 200
+    assert (await admin_client.post(f"/api/admin/research/tasks/{lecture_task_id}/activate")).status_code == 200
 
-    print(
-        f"\n✅ Table data test passed: {len(rows)} rows, "
-        f"total={data['data']['pagination']['total']}"
+    active = await client.get("/api/research/active-task", headers=auth)
+    assert active.status_code == 200
+    assert active.json()["data"]["id"] == pdt_task_id
+    assert active.json()["data"]["target_group"] == "pdt"
+
+    forbidden_save = await client.post(
+        f"/api/research/tasks/{lecture_task_id}/save-progress",
+        json={"code_submitted": "print('not allowed')"},
+        headers=auth,
     )
-
-
-@pytest.mark.asyncio
-async def test_get_table_data_forbidden(admin_client: AsyncClient):
-    """测试 12: 访问不在白名单中的表应被拒绝"""
-    response = await admin_client.get(
-        "/api/admin/explorer/tables/pg_shadow/data"
-    )
-    assert response.status_code in (403, 400, 404)
-
-    print(f"\n✅ Table (forbidden) test passed: {response.status_code}")
+    assert forbidden_save.status_code == 404
 
 
 # ==================== 完整 Admin 工作流测试 ====================
@@ -308,7 +289,7 @@ async def test_get_table_data_forbidden(admin_client: AsyncClient):
 async def test_complete_admin_workflow(admin_client: AsyncClient, client: AsyncClient):
     """
     测试 13: 完整 Admin 工作流程
-    注册用户 → 查看概览 → 查看用户列表 → 查看表数据
+    注册用户 → 查看概览 → 查看用户列表
     """
     for i in range(2):
         await client.post(
@@ -333,15 +314,9 @@ async def test_complete_admin_workflow(admin_client: AsyncClient, client: AsyncC
     users = users_response.json()["data"]["users"]
     assert len(users) >= 2
 
-    # 3. 查看可用表
-    tables_response = await admin_client.get("/api/admin/explorer/tables")
-    assert tables_response.status_code == 200
-    tables = tables_response.json()["data"]["tables"]
-    assert len(tables) > 0
-
     print(
         f"\n✅ Complete admin workflow test passed: "
-        f"users={overview['users_count']}, tables={len(tables)}"
+        f"users={overview['users_count']}"
     )
 
 

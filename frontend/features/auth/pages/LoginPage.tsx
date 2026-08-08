@@ -173,7 +173,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
               <div>
                 <h2 className="text-2xl font-bold text-gradient">CogniSync</h2>
                 <p className="text-sm text-gray-600 dark:text-gray-400">
-                  {language === 'zh' ? '自适应学习中间件' : 'Adaptive Learning Middleware'}
+                  {language === 'zh' ? 'AI 时代的项目解构式编程学习平台' : 'Project Deconstruction Learning for the AI Era'}
                 </p>
               </div>
             </div>
@@ -212,8 +212,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({
               </div>
 
               <div className="flex items-start gap-3">
-                <div className="w-8 h-8 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0 mt-0.5">
-                  <span className="text-green-600 dark:text-green-400 font-semibold">03</span>
+                <div className="w-8 h-8 rounded-lg bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <span className="text-violet-500 dark:text-violet-300 font-semibold">03</span>
                 </div>
                 <div>
                   <h3 className="font-semibold mb-1">

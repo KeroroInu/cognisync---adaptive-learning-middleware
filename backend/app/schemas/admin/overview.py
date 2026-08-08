@@ -1,7 +1,7 @@
 """
 Admin 概览 Schema
 """
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class OverviewStats(BaseModel):
@@ -12,8 +12,8 @@ class OverviewStats(BaseModel):
     templates_count: int = Field(..., description="量表模板总数")
     responses_count: int = Field(..., description="量表响应总数")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "users_count": 150,
                 "sessions_count": 450,
@@ -22,3 +22,4 @@ class OverviewStats(BaseModel):
                 "responses_count": 280
             }
         }
+    )

@@ -1,19 +1,25 @@
-import { useEffect } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './features/auth/authStore';
 import { useRequireAuth } from './features/auth/hooks';
 import { AdminLayout } from './components/AdminLayout';
-import { Dashboard } from './pages/Dashboard';
-import { Users } from './pages/Users';
-import { UserDetail } from './pages/UserDetail';
-import { Scales } from './pages/Scales';
-import { ResearchManagement } from './pages/ResearchManagement';
-import { Conversations } from './pages/Conversations';
-import { ConversationDetail } from './pages/ConversationDetail';
-import { Exports } from './pages/Exports';
-import { ModelConfig } from './pages/ModelConfig';
 import { Login } from './pages/Login';
-import { EmotionCompare } from './pages/EmotionCompare';
+
+const Dashboard = lazy(() => import('./pages/Dashboard').then(module => ({ default: module.Dashboard })));
+const Users = lazy(() => import('./pages/Users').then(module => ({ default: module.Users })));
+const UserDetail = lazy(() => import('./pages/UserDetail').then(module => ({ default: module.UserDetail })));
+const Scales = lazy(() => import('./pages/Scales').then(module => ({ default: module.Scales })));
+const ResearchManagement = lazy(() => import('./pages/ResearchManagement').then(module => ({ default: module.ResearchManagement })));
+const Conversations = lazy(() => import('./pages/Conversations').then(module => ({ default: module.Conversations })));
+const ConversationDetail = lazy(() => import('./pages/ConversationDetail').then(module => ({ default: module.ConversationDetail })));
+const Exports = lazy(() => import('./pages/Exports').then(module => ({ default: module.Exports })));
+const ModelConfig = lazy(() => import('./pages/ModelConfig').then(module => ({ default: module.ModelConfig })));
+
+const PageFallback = () => (
+  <div className="admin-page-loading" role="status" aria-label="页面加载中">
+    <div className="admin-page-loading-spinner" />
+  </div>
+);
 
 /**
  * 所有受保护的 /admin/* 路由容器。
@@ -41,20 +47,20 @@ function AdminApp() {
   if (!isAuthed) return null;
 
   return (
-    <Routes>
+    <Suspense fallback={<PageFallback />}>
+      <Routes>
       <Route index element={<AdminLayout><Dashboard /></AdminLayout>} />
       <Route path="users" element={<AdminLayout><Users /></AdminLayout>} />
       <Route path="users/:userId" element={<AdminLayout><UserDetail /></AdminLayout>} />
       <Route path="scales" element={<AdminLayout><Scales /></AdminLayout>} />
-      <Route path="explorer" element={<AdminLayout><ResearchManagement /></AdminLayout>} />
+      <Route path="research" element={<AdminLayout><ResearchManagement /></AdminLayout>} />
       <Route path="conversations" element={<AdminLayout><Conversations /></AdminLayout>} />
       <Route path="conversations/:sessionId" element={<AdminLayout><ConversationDetail /></AdminLayout>} />
-      <Route path="emotion-compare" element={<AdminLayout><EmotionCompare /></AdminLayout>} />
-      <Route path="analytics/emotion" element={<Navigate to="/emotion-compare" replace />} />
-      <Route path="emotion-experiments" element={<Navigate to="/emotion-compare" replace />} />
       <Route path="exports" element={<AdminLayout><Exports /></AdminLayout>} />
       <Route path="config" element={<AdminLayout><ModelConfig /></AdminLayout>} />
-    </Routes>
+      <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </Suspense>
   );
 }
 

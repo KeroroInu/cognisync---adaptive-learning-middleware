@@ -77,6 +77,8 @@ class TextAnalyzer:
 - 低 cognition + 高 behavior 往往意味着“愿意学但还没理解”，优先考虑 confused 而不是单纯 anxious
 - 低 cognition + 低 behavior 且语言消极时，优先考虑 discouraged / overwhelmed / frustrated
 - 高 cognition + 高 behavior 且语言带有总结、确认、应用倾向时，优先考虑 confident / thoughtful / motivated
+- behavior 表示持续参与、自我调节、主动尝试和执行计划，不等于“发了一条问题”
+- 普通求助或追问最多给 behavior 小幅变化（-1 到 +1）；只有明确复述、总结、计划、尝试、应用、完成步骤时才给明显正向 behavior
 - 保留旧 emotion 字段用于兼容，但详细结果必须写到 emotionDetail 中
 
 只输出 JSON，不要输出额外说明。格式如下：
@@ -283,7 +285,37 @@ class TextAnalyzer:
             delta=analysis.delta,
             emotionDetail=analysis.emotionDetail,
         )
-        return self._refine_with_profile_context(chat_analysis, current_profile=current_profile)
+        calibrated_analysis = self._calibrate_behavior_delta(chat_analysis)
+        return self._refine_with_profile_context(calibrated_analysis, current_profile=current_profile)
+
+    def _calibrate_behavior_delta(self, analysis: ChatAnalysis) -> ChatAnalysis:
+        """
+        将 behavior 约束为“学习行为证据”而不是“消息活跃度”。
+
+        普通提问只说明学生在求助，不应自动等同于更强的自律、计划或执行。
+        """
+        delta = analysis.delta.model_copy(deep=True)
+
+        intent_limits = {
+            "help-seeking": (-1, 1),
+            "confirmation": (-1, 1),
+            "chat": (-1, 1),
+            "challenge": (-2, 1),
+            "exploration": (0, 2),
+            "reflection": (0, 3),
+            "application": (0, 4),
+            "goal-setting": (1, 4),
+        }
+        lower, upper = intent_limits.get(analysis.intent, (-1, 1))
+        delta.behavior = max(lower, min(upper, delta.behavior))
+
+        return ChatAnalysis(
+            intent=analysis.intent,
+            emotion=analysis.emotion,
+            detectedConcepts=analysis.detectedConcepts,
+            delta=delta,
+            emotionDetail=analysis.emotionDetail,
+        )
 
     def _refine_with_profile_context(
         self,
@@ -314,7 +346,7 @@ class TextAnalyzer:
                 )
             )
             delta.cognition = min(delta.cognition, -2)
-            delta.behavior = max(delta.behavior, 3)
+            delta.behavior = min(max(delta.behavior, 0), 1)
             return ChatAnalysis(
                 intent=analysis.intent,
                 emotion=refined_detail.legacyEmotion,
@@ -366,7 +398,7 @@ class TextAnalyzer:
                 emotionDetail=refined_detail,
             )
 
-        if behavior >= 75 and analysis.intent in {"goal-setting", "exploration", "application"} and detail.code in {
+        if behavior >= 75 and analysis.intent in {"goal-setting", "application"} and detail.code in {
             "E02",
             "E05",
             "E07",
@@ -382,7 +414,7 @@ class TextAnalyzer:
                     evidence=evidence,
                 )
             )
-            delta.behavior = max(delta.behavior, 4)
+            delta.behavior = max(delta.behavior, 3)
             return ChatAnalysis(
                 intent=analysis.intent,
                 emotion=refined_detail.legacyEmotion,
@@ -426,7 +458,7 @@ class TextAnalyzer:
         if any(word in message_lower for word in ["不懂", "不理解", "不会", "怎么", "为什么", "help", "?"]):
             result["intent"] = "help-seeking"
             result["emotion"] = "confused"
-            result["delta"] = {"cognition": -5, "affect": -8, "behavior": 5}
+            result["delta"] = {"cognition": -5, "affect": -8, "behavior": 1}
             result["emotionDetail"] = build_emotion_detail(
                 code="E01",
                 intensity="high",
@@ -436,7 +468,7 @@ class TextAnalyzer:
         elif any(word in message_lower for word in ["目标", "计划", "打算", "准备", "goal", "plan"]):
             result["intent"] = "goal-setting"
             result["emotion"] = "motivated"
-            result["delta"] = {"cognition": 2, "affect": 8, "behavior": 10}
+            result["delta"] = {"cognition": 2, "affect": 8, "behavior": 4}
             result["emotionDetail"] = build_emotion_detail(
                 code="E08",
                 intensity="high",
@@ -446,7 +478,7 @@ class TextAnalyzer:
         elif any(word in message_lower for word in ["学习", "想学", "了解", "掌握", "learn", "study"]):
             result["intent"] = "exploration"
             result["emotion"] = "curious"
-            result["delta"] = {"cognition": 0, "affect": 5, "behavior": 10}
+            result["delta"] = {"cognition": 0, "affect": 5, "behavior": 2}
             result["emotionDetail"] = build_emotion_detail(
                 code="E02",
                 intensity="medium",
@@ -466,7 +498,7 @@ class TextAnalyzer:
         elif any(word in message_lower for word in ["是不是", "对吗", "正确吗", "确认"]):
             result["intent"] = "confirmation"
             result["emotion"] = "anxious"
-            result["delta"] = {"cognition": 1, "affect": -2, "behavior": 3}
+            result["delta"] = {"cognition": 1, "affect": -2, "behavior": 0}
             result["emotionDetail"] = build_emotion_detail(
                 code="E04",
                 intensity="medium",

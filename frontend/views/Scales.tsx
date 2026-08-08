@@ -29,11 +29,11 @@ function getDimensionColor(dimension: string): string {
     case 'SE':  return 'from-purple-500 to-violet-600';
     case 'LM':  return 'from-pink-500 to-rose-600';
     case 'CPS': return 'from-amber-500 to-orange-600';
-    case 'PA':  return 'from-green-500 to-emerald-600';
+    case 'PA':  return 'from-violet-500 to-fuchsia-600';
     case 'AIL': return 'from-indigo-500 to-blue-700';
     case 'Cognition': return 'from-blue-500 to-cyan-600';
     case 'Affect':    return 'from-purple-500 to-pink-600';
-    case 'Behavior':  return 'from-green-500 to-emerald-600';
+    case 'Behavior':  return 'from-violet-500 to-fuchsia-600';
     default:          return 'from-gray-500 to-gray-600';
   }
 }
@@ -234,7 +234,7 @@ export const Scales: React.FC<Props> = ({ language, theme, onUpdateProfile }) =>
     return (
       <div className="flex items-center justify-center h-full">
         <div className="glass-card p-12 max-w-md w-full text-center">
-          <div className="w-20 h-20 rounded-full bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center mx-auto mb-6">
+          <div className="w-20 h-20 rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-600 flex items-center justify-center mx-auto mb-6">
             <CheckCircle className="w-12 h-12 text-white" />
           </div>
           <h2 className="text-2xl font-bold mb-2" style={{ color: 'var(--text-primary)' }}>
@@ -410,7 +410,7 @@ export const Scales: React.FC<Props> = ({ language, theme, onUpdateProfile }) =>
             </button>
 
             {isLastQuestion && isSubmitting && (
-              <div className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white font-medium rounded-xl shadow-lg">
+              <div className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-violet-500 to-fuchsia-600 text-white font-medium rounded-xl shadow-lg">
                 <Loader className="w-5 h-5 animate-spin" />
                 {isZh ? '提交中...' : 'Submitting...'}
               </div>
@@ -427,7 +427,7 @@ export const Scales: React.FC<Props> = ({ language, theme, onUpdateProfile }) =>
                   index === currentQuestionIndex
                     ? 'w-8 bg-gradient-to-r from-blue-500 to-purple-500'
                     : answers[index]?.value > 0
-                      ? 'w-2.5 bg-green-500'
+                      ? 'w-2.5 bg-fuchsia-500'
                       : 'w-2.5'
                 }`}
                 style={index !== currentQuestionIndex && !(answers[index]?.value > 0) ? { backgroundColor: 'var(--bg-tertiary)' } : undefined}
@@ -496,7 +496,7 @@ export const Scales: React.FC<Props> = ({ language, theme, onUpdateProfile }) =>
             className={`glass-card rounded-2xl p-6 border transition-all duration-200 ${
               scale.is_completed ? 'opacity-70' : 'hover:shadow-lg hover:scale-[1.01] cursor-pointer'
             }`}
-            style={{ borderColor: scale.is_completed ? 'rgba(16,185,129,0.4)' : 'var(--glass-border)' }}
+            style={{ borderColor: scale.is_completed ? 'rgba(168,85,247,0.4)' : 'var(--glass-border)' }}
             onClick={() => !scale.is_completed && handleSelectScale(scale.id)}
           >
             <div className="flex items-start justify-between mb-3">
@@ -504,7 +504,7 @@ export const Scales: React.FC<Props> = ({ language, theme, onUpdateProfile }) =>
                 {scale.name}
               </h3>
               {scale.is_completed ? (
-                <span className="shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300">
+                <span className="shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300">
                   <CheckCircle size={12} />
                   {isZh ? '已完成' : 'Completed'}
                 </span>

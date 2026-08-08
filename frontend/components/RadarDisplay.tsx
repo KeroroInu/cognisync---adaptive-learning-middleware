@@ -20,33 +20,33 @@ export const RadarDisplay: React.FC<Props> = ({ data, compareData, showLegend = 
   ];
 
   return (
-    <ResponsiveContainer width="100%" height="100%">
+    <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0} debounce={80}>
       <RadarChart cx="50%" cy="50%" outerRadius="70%" data={chartData}>
-        <PolarGrid stroke="#334155" />
-        <PolarAngleAxis dataKey="subject" tick={{ fill: '#94a3b8', fontSize: 12 }} />
+        <PolarGrid stroke="var(--line-strong)" />
+        <PolarAngleAxis dataKey="subject" tick={{ fill: 'var(--text-tertiary)', fontSize: 12 }} />
         <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
         
         <Radar
           name={t.modelLabel}
           dataKey="A"
-          stroke="#6366f1"
+          stroke="var(--brand-cyan)"
           strokeWidth={3}
-          fill="#6366f1"
-          fillOpacity={0.4}
+          fill="var(--brand-cyan)"
+          fillOpacity={0.32}
         />
         
         {compareData && (
           <Radar
             name={t.userLabel}
             dataKey="B"
-            stroke="#10b981"
+            stroke="var(--brand-amber)"
             strokeWidth={3}
-            fill="#10b981"
-            fillOpacity={0.4}
+            fill="var(--brand-amber)"
+            fillOpacity={0.28}
           />
         )}
         
-        {showLegend && <Legend wrapperStyle={{ color: '#cbd5e1' }} />}
+        {showLegend && <Legend wrapperStyle={{ color: 'var(--text-secondary)' }} />}
       </RadarChart>
     </ResponsiveContainer>
   );

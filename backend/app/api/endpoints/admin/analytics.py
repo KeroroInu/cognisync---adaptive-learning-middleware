@@ -52,7 +52,7 @@ async def get_analytics_overview(
     avg_messages = total_messages / total_users if total_users > 0 else 0
 
     # 7天活跃用户数（简化：有消息的用户）
-    seven_days_ago = datetime.utcnow() - timedelta(days=7)
+    seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
     active_users_result = await db.execute(
         select(func.count(func.distinct(ChatMessage.user_id)))
         .where(ChatMessage.timestamp >= seven_days_ago)
@@ -70,7 +70,7 @@ async def get_analytics_overview(
     # 活跃度趋势（简化：最近7天的消息数）
     activity_trend = []
     for i in range(7):
-        date = datetime.utcnow() - timedelta(days=6-i)
+        date = datetime.now(timezone.utc) - timedelta(days=6-i)
         date_start = date.replace(hour=0, minute=0, second=0, microsecond=0)
         date_end = date_start + timedelta(days=1)
 

@@ -18,6 +18,8 @@ from app.models.sql.message import ChatMessage
 from app.models.sql.calibration_log import CalibrationLog
 from app.services.profile_service import ProfileService
 from app.services.graph_service import GraphService
+from app.api.endpoints.auth import ensure_self_scope, get_current_user
+from app.models.sql.user import User
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -33,7 +35,7 @@ class ExportResponse(BaseModel):
 
 
 @router.get("/{userId}", response_model=SuccessResponse[ExportResponse])
-async def export_user_data(userId: str, db: AsyncSession = Depends(get_db)):
+async def export_user_data(userId: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     """
     导出用户所有数据（一次性获取所有内容）
 
@@ -49,12 +51,11 @@ async def export_user_data(userId: str, db: AsyncSession = Depends(get_db)):
     logger.info(f"Exporting all data for user: {userId}")
 
     try:
+        ensure_self_scope(userId, current_user)
         profile_service = ProfileService(db)
         graph_service = GraphService()
 
-        # 创建/获取用户
-        user = await profile_service.get_or_create_user(userId)
-        user_id = user.id
+        user_id = current_user.id
 
         # ========== 1. 获取画像 ==========
         profile = await profile_service.get_profile(user_id)
@@ -126,6 +127,8 @@ async def export_user_data(userId: str, db: AsyncSession = Depends(get_db)):
             )
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to export data for user {userId}: {e}", exc_info=True)
         raise HTTPException(

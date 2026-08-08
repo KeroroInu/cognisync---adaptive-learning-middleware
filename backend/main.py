@@ -38,10 +38,18 @@ async def lifespan(app: FastAPI):
     if settings.APP_ENV == "production":
         if not settings.ADMIN_KEY:
             raise RuntimeError("❌ ADMIN_KEY must be set in production environment!")
+        if not settings.JWT_SECRET or len(settings.JWT_SECRET) < 32:
+            raise RuntimeError("❌ JWT_SECRET must be a strong, unique value of at least 32 characters")
+        if len(settings.ADMIN_KEY) < 24:
+            raise RuntimeError("❌ ADMIN_KEY must be at least 24 characters in production")
+        if len(settings.POSTGRES_PASSWORD) < 12 or settings.POSTGRES_PASSWORD == "cognisync_dev_password_2024":
+            raise RuntimeError("❌ POSTGRES_PASSWORD must be replaced with a strong production password")
+        if settings.SEED_DEFAULT_ADMIN or settings.SEED_TEST_DATA:
+            raise RuntimeError("❌ Default/test account seeding must be disabled in production")
         if settings.LLM_PROVIDER == "mock":
             logger.warning("⚠️ LLM_PROVIDER is 'mock' in production - AI features will not work!")
-        if settings.CORS_ORIGINS == "*":
-            logger.warning("⚠️ CORS_ORIGINS is '*' in production - this is not recommended!")
+        if "*" in settings.cors_origins_list:
+            raise RuntimeError("❌ CORS_ORIGINS cannot contain '*' in production")
         logger.info("✅ Production config validated")
 
     # 启动时初始化数据库连接
@@ -57,6 +65,7 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         component_status["postgres"] = False
         logger.error(f"❌ PostgreSQL connection failed: {e}")
+        raise
 
     try:
         await init_neo4j()
@@ -75,7 +84,9 @@ async def lifespan(app: FastAPI):
 
     # 关闭时清理资源
     logger.info("🛑 Shutting down CogniSync Backend...")
+    await llm_config.close_providers()
     await close_neo4j()
+    await postgres_engine.dispose()
     logger.info("✅ Resources cleaned up")
 
 
@@ -83,7 +94,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="CogniSync API",
     description="Adaptive Learning Middleware - 与前端完全对齐的 MVP 后端",
-    version="0.1.0",
+    version="0.2.0",
     docs_url="/docs",
     redoc_url="/redoc",
     openapi_url="/openapi.json",
@@ -111,12 +122,14 @@ app.add_middleware(
 @app.get("/health", tags=["Health"])
 async def health_check():
     """健康检查端点 - 显示各组件状态"""
+    healthy = component_status["postgres"]
     return JSONResponse(
+        status_code=200 if healthy else 503,
         content={
             "status": "ok",
             "app": settings.APP_NAME,
             "env": settings.APP_ENV,
-            "version": "0.1.0",
+            "version": "0.2.0",
             "components": {
                 "postgres": "connected" if component_status["postgres"] else "disconnected",
                 "neo4j": "connected" if component_status["neo4j"] else "disconnected",
@@ -132,7 +145,7 @@ async def root():
     """根路径 - 返回 API 信息"""
     return {
         "message": "CogniSync API - Adaptive Learning Middleware",
-        "version": "0.1.0",
+        "version": "0.2.0",
         "docs": "/docs",
         "health": "/health",
     }

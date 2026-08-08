@@ -34,7 +34,7 @@ async def get_llm_config(db: AsyncSession = Depends(get_db)) -> SuccessResponse:
     """
     获取当前 LLM 配置（分析 + 对话两个角色）
 
-    需要 Admin Key 认证（X-ADMIN-KEY Header）
+    需要已登录管理员的 Bearer JWT。
     """
     # 确保从 DB 加载最新配置
     await llm_config.load_from_db(db)
@@ -53,7 +53,7 @@ async def save_llm_config(
     - role=analysis：用于语义分析（低温度、结构化 JSON）
     - role=chat：用于 AI 对话回复（较高温度、自然语言）
 
-    需要 Admin Key 认证（X-ADMIN-KEY Header）
+    需要已登录管理员的 Bearer JWT。
     """
     if body.role not in ("analysis", "chat"):
         from fastapi import HTTPException

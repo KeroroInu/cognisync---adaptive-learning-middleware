@@ -216,7 +216,7 @@ export const RegisterAI: React.FC<Props> = ({ language, onComplete, onBack }) =>
                     <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
                       msg.role === 'user'
                         ? 'bg-gradient-to-br from-indigo-500 to-purple-600'
-                        : 'bg-gradient-to-br from-emerald-500 to-green-600'
+                        : 'bg-gradient-to-br from-violet-500 to-fuchsia-600'
                     } text-white shadow-lg`}>
                       {msg.role === 'user' ? <User size={16} /> : <Bot size={16} />}
                     </div>
@@ -235,7 +235,7 @@ export const RegisterAI: React.FC<Props> = ({ language, onComplete, onBack }) =>
               {isThinking && (
                 <div className="flex justify-start animate-fade-in">
                   <div className="flex gap-3">
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-500 to-green-600 flex items-center justify-center shrink-0 animate-pulse text-white shadow-lg">
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-600 flex items-center justify-center shrink-0 animate-pulse text-white shadow-lg">
                       <Bot size={16} />
                     </div>
                     <div className="p-4 rounded-2xl rounded-tl-sm flex space-x-1 items-center shadow-md bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700">
@@ -336,7 +336,7 @@ export const RegisterAI: React.FC<Props> = ({ language, onComplete, onBack }) =>
                       </div>
                       <div className="h-2 bg-gray-200 dark:bg-slate-700 rounded-full overflow-hidden">
                         <div
-                          className="h-full bg-gradient-to-r from-emerald-500 to-green-600 transition-all duration-500"
+                          className="h-full bg-gradient-to-r from-violet-500 to-fuchsia-600 transition-all duration-500"
                           style={{ width: `${draftProfile.behavior}%` }}
                         ></div>
                       </div>
@@ -356,7 +356,7 @@ export const RegisterAI: React.FC<Props> = ({ language, onComplete, onBack }) =>
                 <div className="flex items-center justify-center gap-3">
                   <CheckCircle
                     size={24}
-                    className="text-emerald-600 dark:text-emerald-400 group-hover:scale-110 transition-transform"
+                    className="text-fuchsia-500 dark:text-fuchsia-300 group-hover:scale-110 transition-transform"
                   />
                   <div className="text-left">
                     <div className="font-semibold text-gray-900 dark:text-white">
@@ -376,7 +376,7 @@ export const RegisterAI: React.FC<Props> = ({ language, onComplete, onBack }) =>
                 {t.systemStatus}
               </h4>
               <div className="flex items-center space-x-2">
-                <span className="h-2 w-2 rounded-full bg-emerald-500 shadow-lg shadow-emerald-500/50 animate-pulse"></span>
+                <span className="h-2 w-2 rounded-full bg-fuchsia-500 shadow-lg shadow-fuchsia-500/50 animate-pulse"></span>
                 <span className="text-sm font-medium text-gray-900 dark:text-white">
                   {isThinking
                     ? (language === 'zh' ? 'AI 正在思考...' : 'AI is thinking...')

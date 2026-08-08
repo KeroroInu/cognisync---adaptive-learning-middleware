@@ -1,7 +1,7 @@
 """
 管理员认证端点
 """
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Any
 from fastapi import APIRouter, HTTPException, Header, Depends
 from pydantic import BaseModel
@@ -29,7 +29,7 @@ def _verify_password(plain: str, hashed: str) -> bool:
 
 def _create_admin_token(user_id: str) -> str:
     """创建包含 role='admin' 声明的 JWT"""
-    expire = datetime.utcnow() + timedelta(minutes=_EXPIRE_MINUTES)
+    expire = datetime.now(timezone.utc) + timedelta(minutes=_EXPIRE_MINUTES)
     payload = {"sub": str(user_id), "role": "admin", "exp": expire}
     return jwt.encode(payload, _SECRET_KEY, algorithm=_ALGORITHM)
 
@@ -55,8 +55,8 @@ async def get_current_admin(
 
     import uuid as _uuid
     user = await db.get(User, _uuid.UUID(user_id))
-    if not user or user.role != "admin":
-        raise HTTPException(status_code=403, detail="管理员账号不存在或已被降权")
+    if not user or user.role != "admin" or not user.is_active:
+        raise HTTPException(status_code=403, detail="管理员账号不存在、已禁用或已被降权")
 
     return user
 

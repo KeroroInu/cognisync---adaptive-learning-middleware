@@ -11,9 +11,6 @@ import {
   Activity, Network, Download, Loader,
 } from 'lucide-react';
 
-const BASE_URL = (import.meta.env.VITE_API_BASE_URL as string) || 'http://localhost:8000/api';
-const ADMIN_KEY = (import.meta.env.VITE_ADMIN_KEY as string) || '';
-
 // ── Mini SVG trend chart ──────────────────────────────────────────────────────
 const ProfileChart = ({ data }: { data: ProfileSnapshot[] }) => {
   if (data.length < 2) return null;
@@ -167,12 +164,9 @@ export const UserDetail = () => {
     setExporting(type);
     try {
       const endpoint = type === 'conversations'
-        ? `/admin/export/csv/user/${userId}`
-        : `/admin/export/csv/user/${userId}/trajectory`;
-      const url = `${BASE_URL}${endpoint}`;
-      const response = await fetch(url, { headers: { 'X-ADMIN-KEY': ADMIN_KEY } });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const blob = await response.blob();
+        ? `/export/csv/user/${userId}`
+        : `/export/csv/user/${userId}/trajectory`;
+      const blob = await adminApi.exportCsv(endpoint);
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
       const date = new Date().toISOString().split('T')[0];
@@ -234,7 +228,7 @@ export const UserDetail = () => {
     <div className="space-y-6 animate-fade-in">
       {/* Back button */}
       <button onClick={() => navigate('/users')}
-        className="flex items-center gap-2 text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 transition-colors">
+        className="flex items-center gap-2 transition-colors" style={{ color: 'var(--brand-blue)' }}>
         <ArrowLeft size={20} />返回用户列表
       </button>
 
@@ -244,7 +238,7 @@ export const UserDetail = () => {
           {/* Avatar + basic info */}
           <div className="flex items-center gap-4">
             <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-xl font-bold text-white flex-shrink-0"
-              style={{ background: 'linear-gradient(135deg, rgb(99,102,241), rgb(168,85,247))' }}>
+              style={{ background: 'var(--brand-purple)', color: 'var(--text-primary)', border: '1px solid var(--text-primary)' }}>
               {initials}
             </div>
             <div>
@@ -256,6 +250,10 @@ export const UserDetail = () => {
                 <span className="px-2 py-0.5 rounded text-xs font-medium"
                   style={{ backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--glass-border)' }}>
                   {userDetail.role}
+                </span>
+                <span className="px-2 py-0.5 rounded text-xs font-medium"
+                  style={{ backgroundColor: 'var(--surface-muted)', border: '1px solid var(--glass-border)' }}>
+                  {userDetail.class_name || '未填班级'} · {{ unassigned: '未分组', pdt: '项目解构组', ai_pbl: 'AI 项目式组', lecture: '普通讲授组' }[userDetail.experiment_group]}
                 </span>
                 <span className={`px-2 py-0.5 rounded text-xs font-medium ${
                   userDetail.is_active

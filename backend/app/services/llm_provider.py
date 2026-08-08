@@ -2,7 +2,9 @@
 LLM Provider - 统一的 LLM 接口封装
 支持 OpenAI、Ollama、LM Studio 等 OpenAI 兼容接口，以及 Mock 模式
 """
+import asyncio
 import logging
+import random
 from abc import ABC, abstractmethod
 from typing import Optional, Dict, Any, List
 import httpx
@@ -61,10 +63,15 @@ class OpenAICompatibleProvider(BaseProvider):
         self.api_key = api_key
         self.model = model
         self.timeout = timeout
+        self._semaphore = asyncio.Semaphore(settings.LLM_MAX_CONCURRENCY)
 
         # 创建 HTTP 客户端
         self.client = httpx.AsyncClient(
             timeout=httpx.Timeout(timeout),
+            limits=httpx.Limits(
+                max_connections=settings.LLM_MAX_CONCURRENCY,
+                max_keepalive_connections=max(2, settings.LLM_MAX_CONCURRENCY // 2),
+            ),
             headers={
                 "Authorization": f"Bearer {self.api_key}",
                 "Content-Type": "application/json",
@@ -93,11 +100,21 @@ class OpenAICompatibleProvider(BaseProvider):
         }
 
         try:
-            response = await self.client.post(
-                f"{self.base_url}/chat/completions",
-                json=payload,
-            )
-            response.raise_for_status()
+            async with self._semaphore:
+                response: httpx.Response | None = None
+                for attempt in range(settings.LLM_MAX_RETRIES + 1):
+                    response = await self.client.post(
+                        f"{self.base_url}/chat/completions",
+                        json=payload,
+                    )
+                    if response.status_code not in {429, 500, 502, 503, 504}:
+                        break
+                    if attempt < settings.LLM_MAX_RETRIES:
+                        retry_after = response.headers.get("Retry-After")
+                        delay = float(retry_after) if retry_after and retry_after.isdigit() else (0.5 * (2 ** attempt) + random.random() * 0.25)
+                        await asyncio.sleep(min(delay, 5.0))
+                assert response is not None
+                response.raise_for_status()
 
             data = response.json()
 
@@ -191,7 +208,7 @@ class MockProvider(BaseProvider):
         if any(word in user_prompt for word in ["不懂", "不理解", "不会", "怎么", "为什么"]):
             response["intent"] = "help-seeking"
             response["emotion"] = "confused"
-            response["delta"] = {"cognition": -5, "affect": -10, "behavior": 5}
+            response["delta"] = {"cognition": -5, "affect": -10, "behavior": 1}
             response["evidence"]["spans"] = [
                 {"text": "不懂", "label": "confusion_signal", "start": 0, "end": 2}
             ]
@@ -199,7 +216,7 @@ class MockProvider(BaseProvider):
         elif any(word in user_prompt for word in ["学习", "想学", "了解", "掌握"]):
             response["intent"] = "exploration"
             response["emotion"] = "curious"
-            response["delta"] = {"cognition": 0, "affect": 5, "behavior": 10}
+            response["delta"] = {"cognition": 0, "affect": 5, "behavior": 2}
             response["evidence"]["spans"] = [
                 {"text": "学习", "label": "learning_intent", "start": 0, "end": 2}
             ]
@@ -212,7 +229,7 @@ class MockProvider(BaseProvider):
         elif any(word in user_prompt for word in ["目标", "计划", "打算", "准备"]):
             response["intent"] = "goal-setting"
             response["emotion"] = "motivated"
-            response["delta"] = {"cognition": 2, "affect": 8, "behavior": 10}
+            response["delta"] = {"cognition": 2, "affect": 8, "behavior": 4}
 
         # 检测概念（简单的关键词匹配）
         concepts = [
@@ -259,6 +276,7 @@ def get_provider() -> BaseProvider:
             base_url=settings.OPENAI_BASE_URL,
             api_key=settings.OPENAI_API_KEY,
             model=settings.OPENAI_MODEL,
+            timeout=settings.LLM_TIMEOUT_SECONDS,
         )
 
     elif provider_type == "deepseek":
@@ -266,6 +284,7 @@ def get_provider() -> BaseProvider:
             base_url=settings.DEEPSEEK_BASE_URL,
             api_key=settings.DEEPSEEK_API_KEY,
             model=settings.DEEPSEEK_MODEL,
+            timeout=settings.LLM_TIMEOUT_SECONDS,
         )
 
     elif provider_type == "ollama":
@@ -273,6 +292,7 @@ def get_provider() -> BaseProvider:
             base_url=settings.OLLAMA_BASE_URL,
             api_key="ollama",  # Ollama 不需要真实 API key
             model=settings.OLLAMA_MODEL,
+            timeout=settings.LLM_TIMEOUT_SECONDS,
         )
 
     elif provider_type == "lmstudio":
@@ -280,6 +300,7 @@ def get_provider() -> BaseProvider:
             base_url=settings.LMSTUDIO_BASE_URL,
             api_key="lmstudio",  # LM Studio 不需要真实 API key
             model=settings.LMSTUDIO_MODEL,
+            timeout=settings.LLM_TIMEOUT_SECONDS,
         )
 
     else:

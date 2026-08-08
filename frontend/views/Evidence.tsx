@@ -100,7 +100,7 @@ export const Evidence: React.FC<Props> = ({ logs, messages, language, theme }) =
                             <span className="text-xs block" style={{
                               color: theme === 'light' ? '#404040' : '#e2e8f0'
                             }}>{t.userLabel}</span>
-                            <code className="text-xs text-emerald-600 dark:text-emerald-300 block mt-1">
+                            <code className="text-xs text-fuchsia-500 dark:text-fuchsia-300 block mt-1">
                                 {typeof log.userValue === 'object'
                                     ? JSON.stringify(log.userValue).replace(/"/g, '').replace(/,/g, ', ')
                                     : `${log.userValue}%`}
@@ -128,7 +128,7 @@ export const Evidence: React.FC<Props> = ({ logs, messages, language, theme }) =
                             }}>{t.trustScore}:</span>
                             <div className="flex space-x-1">
                                 {[1,2,3,4,5].map(n => (
-                                    <div key={n} className={`w-2 h-2 rounded-full ${n <= log.likertTrust! ? 'bg-emerald-500 shadow-sm' : ''}`} style={n > log.likertTrust! ? {
+                                    <div key={n} className={`w-2 h-2 rounded-full ${n <= log.likertTrust! ? 'bg-fuchsia-500 shadow-sm' : ''}`} style={n > log.likertTrust! ? {
                                       backgroundColor: theme === 'light' ? '#d1d5db' : '#475569'
                                     } : {}} />
                                 ))}
