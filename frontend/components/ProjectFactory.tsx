@@ -51,7 +51,7 @@ interface ObservationStageProps {
 
 interface StagePreviewProps {
   language: Language;
-  stage: Exclude<ProjectStage, 'observe' | 'build'>;
+  stage: Extract<ProjectStage, 'model' | 'plan'>;
   onBack: () => void;
   onContinue: () => void;
 }
@@ -362,15 +362,6 @@ export const ProjectObservationStage: React.FC<ObservationStageProps> = ({
 };
 
 const PREVIEW_CONTENT = {
-  decompose: {
-    code: '02 / FUNCTION CARDS',
-    zhTitle: '从自己的观察推测程序职责',
-    enTitle: 'Infer program responsibilities from your observations',
-    zhBody: '教师蓝图不会直接展示答案。每张空白卡由你填写职责、输入输出、知识和验证方式。',
-    enBody: 'The teacher blueprint stays hidden. You fill each blank card with responsibility, I/O, knowledge and verification.',
-    itemsZh: ['引用观察', '职责命名', '输入与输出', '所需知识', '验证方式'],
-    itemsEn: ['Observation', 'Responsibility', 'Input & output', 'Knowledge', 'Verification'],
-  },
   model: {
     code: '03 / RELATION MAP',
     zhTitle: '用流程图表达你推测的实现关系',

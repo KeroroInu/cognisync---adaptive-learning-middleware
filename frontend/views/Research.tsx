@@ -16,6 +16,7 @@ import {
   ProjectStagePreview,
   type ProjectStage,
 } from '../components/ProjectFactory';
+import { ProjectFunctionStage } from '../components/ProjectFunctionStage';
 import type { SnakeRuntimeEvidence } from '../data/snakeProjectBlueprint';
 
 const ResearchCodeEditor = React.lazy(() => import('../components/ResearchCodeEditor'));
@@ -459,9 +460,9 @@ export const Research: React.FC<Props> = ({
       )}
 
       {factoryStage === 'decompose' && (
-        <ProjectStagePreview
+        <ProjectFunctionStage
           language={language}
-          stage="decompose"
+          taskId={task.id}
           onBack={() => setFactoryStage('observe')}
           onContinue={() => setFactoryStage('model')}
         />
