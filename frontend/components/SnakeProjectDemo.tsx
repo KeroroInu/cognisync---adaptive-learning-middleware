@@ -14,6 +14,7 @@ import {
   X,
 } from 'lucide-react';
 import type { Language } from '../types';
+import type { SnakeRuntimeEvidence, SnakeRuntimeEvidenceType } from '../data/snakeProjectBlueprint';
 import './SnakeProjectDemo.css';
 
 interface Props {
@@ -23,6 +24,7 @@ interface Props {
   onOpenChange?: (open: boolean) => void;
   variant?: 'floating' | 'viewer';
   showLauncher?: boolean;
+  onEvidence?: (evidence: SnakeRuntimeEvidence) => void;
 }
 
 type Direction = 'up' | 'down' | 'left' | 'right';
@@ -91,6 +93,7 @@ export const SnakeProjectDemo: React.FC<Props> = ({
   onOpenChange,
   variant = 'floating',
   showLauncher = true,
+  onEvidence,
 }) => {
   const isZh = language === 'zh';
   const [internalOpen, setInternalOpen] = useState(defaultOpen);
@@ -104,12 +107,37 @@ export const SnakeProjectDemo: React.FC<Props> = ({
   const windowRef = useRef<HTMLElement>(null);
   const boardRef = useRef<HTMLDivElement>(null);
   const directionRef = useRef<Direction>('right');
+  const snakeRef = useRef<Cell[]>(INITIAL_SNAKE);
+  const foodRef = useRef<Cell>(INITIAL_FOOD);
+  const scoreRef = useRef(0);
+  const evidenceSequenceRef = useRef(0);
+  const wasOpenRef = useRef(false);
+  const capturedMoveDirectionsRef = useRef<Set<Direction>>(new Set());
   const dragRef = useRef({ pointerId: -1, offsetX: 0, offsetY: 0 });
   const open = controlledOpen ?? internalOpen;
   const setOpen = useCallback((nextOpen: boolean) => {
     if (controlledOpen === undefined) setInternalOpen(nextOpen);
     onOpenChange?.(nextOpen);
   }, [controlledOpen, onOpenChange]);
+
+  const emitEvidence = useCallback((
+    type: SnakeRuntimeEvidenceType,
+    details?: SnakeRuntimeEvidence['details'],
+  ) => {
+    if (!onEvidence) return;
+    evidenceSequenceRef.current += 1;
+    onEvidence({
+      id: `${type}-${Date.now()}-${evidenceSequenceRef.current}`,
+      type,
+      timestamp: new Date().toISOString(),
+      details,
+    });
+  }, [onEvidence]);
+
+  useEffect(() => {
+    if (open && !wasOpenRef.current) emitEvidence('opened');
+    wasOpenRef.current = open;
+  }, [emitEvidence, open]);
 
   const clampPosition = useCallback((x: number, y: number) => {
     const rect = windowRef.current?.getBoundingClientRect();
@@ -142,46 +170,77 @@ export const SnakeProjectDemo: React.FC<Props> = ({
     if (status !== 'running' || !open || minimized) return undefined;
 
     const timer = window.setInterval(() => {
-      setSnake(currentSnake => {
-        const head = currentSnake[0];
-        const delta = DIRECTION_DELTA[directionRef.current];
-        const nextHead = { x: head.x + delta.x, y: head.y + delta.y };
-        const hitBoundary =
-          nextHead.x < 0 ||
-          nextHead.x >= BOARD_COLUMNS ||
-          nextHead.y < 0 ||
-          nextHead.y >= BOARD_ROWS;
-        const bodyToCheck = currentSnake.slice(0, -1);
-        const hitSelf = bodyToCheck.some(cell => cell.x === nextHead.x && cell.y === nextHead.y);
+      const currentSnake = snakeRef.current;
+      const head = currentSnake[0];
+      const delta = DIRECTION_DELTA[directionRef.current];
+      const nextHead = { x: head.x + delta.x, y: head.y + delta.y };
+      const hitBoundary =
+        nextHead.x < 0 ||
+        nextHead.x >= BOARD_COLUMNS ||
+        nextHead.y < 0 ||
+        nextHead.y >= BOARD_ROWS;
+      const bodyToCheck = currentSnake.slice(0, -1);
+      const hitSelf = bodyToCheck.some(cell => cell.x === nextHead.x && cell.y === nextHead.y);
 
-        if (hitBoundary || hitSelf) {
-          setStatus('over');
-          return currentSnake;
-        }
+      if (hitBoundary || hitSelf) {
+        emitEvidence('collision', {
+          collisionType: hitSelf ? 'self' : 'boundary',
+          toX: nextHead.x,
+          toY: nextHead.y,
+        });
+        setStatus('over');
+        return;
+      }
 
-        const ateFood = nextHead.x === food.x && nextHead.y === food.y;
-        const nextSnake = ateFood
-          ? [nextHead, ...currentSnake]
-          : [nextHead, ...currentSnake.slice(0, -1)];
+      const currentFood = foodRef.current;
+      const ateFood = nextHead.x === currentFood.x && nextHead.y === currentFood.y;
+      const nextSnake = ateFood
+        ? [nextHead, ...currentSnake]
+        : [nextHead, ...currentSnake.slice(0, -1)];
 
-        if (ateFood) {
-          setScore(current => current + 10);
-          setFood(createFood(nextSnake));
-        }
+      if (!capturedMoveDirectionsRef.current.has(directionRef.current)) {
+        capturedMoveDirectionsRef.current.add(directionRef.current);
+        emitEvidence('moved', {
+          direction: directionRef.current,
+          fromX: head.x,
+          fromY: head.y,
+          toX: nextHead.x,
+          toY: nextHead.y,
+        });
+      }
 
-        return nextSnake;
-      });
+      if (ateFood) {
+        const nextScore = scoreRef.current + 10;
+        emitEvidence('food_eaten', {
+          scoreBefore: scoreRef.current,
+          scoreAfter: nextScore,
+          lengthBefore: currentSnake.length,
+          lengthAfter: nextSnake.length,
+        });
+        scoreRef.current = nextScore;
+        setScore(nextScore);
+        const nextFood = createFood(nextSnake);
+        foodRef.current = nextFood;
+        setFood(nextFood);
+      }
+
+      snakeRef.current = nextSnake;
+      setSnake(nextSnake);
     }, TICK_MS);
 
     return () => window.clearInterval(timer);
-  }, [food, minimized, open, status]);
+  }, [emitEvidence, minimized, open, status]);
 
   const changeDirection = useCallback((nextDirection: Direction) => {
     if (OPPOSITE_DIRECTION[directionRef.current] === nextDirection) return;
     directionRef.current = nextDirection;
-    if (status === 'idle' || status === 'paused') setStatus('running');
+    emitEvidence('direction', { direction: nextDirection });
+    if (status === 'idle' || status === 'paused') {
+      emitEvidence('started');
+      setStatus('running');
+    }
     boardRef.current?.focus({ preventScroll: true });
-  }, [status]);
+  }, [emitEvidence, status]);
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     const keyMap: Record<string, Direction | undefined> = {
@@ -205,7 +264,17 @@ export const SnakeProjectDemo: React.FC<Props> = ({
   };
 
   const resetGame = () => {
+    emitEvidence('reset', {
+      scoreBefore: scoreRef.current,
+      scoreAfter: 0,
+      lengthBefore: snakeRef.current.length,
+      lengthAfter: INITIAL_SNAKE.length,
+    });
     directionRef.current = 'right';
+    snakeRef.current = INITIAL_SNAKE;
+    foodRef.current = INITIAL_FOOD;
+    scoreRef.current = 0;
+    capturedMoveDirectionsRef.current.clear();
     setSnake(INITIAL_SNAKE);
     setFood(INITIAL_FOOD);
     setScore(0);
@@ -214,7 +283,9 @@ export const SnakeProjectDemo: React.FC<Props> = ({
   };
 
   const toggleGame = () => {
-    setStatus(current => (current === 'running' ? 'paused' : 'running'));
+    const nextStatus = status === 'running' ? 'paused' : 'running';
+    emitEvidence(nextStatus === 'running' ? 'started' : 'paused');
+    setStatus(nextStatus);
     boardRef.current?.focus({ preventScroll: true });
   };
 

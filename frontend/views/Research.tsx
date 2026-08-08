@@ -9,12 +9,14 @@ import {
   reopenResearchTask,
 } from '../services/api';
 import { SnakeProjectDemo } from '../components/SnakeProjectDemo';
+import { ProjectScaffoldAssistant, type ScaffoldCompletion } from '../components/ProjectScaffoldAssistant';
 import {
   ProjectFactoryHeader,
   ProjectObservationStage,
   ProjectStagePreview,
   type ProjectStage,
 } from '../components/ProjectFactory';
+import type { SnakeRuntimeEvidence } from '../data/snakeProjectBlueprint';
 
 const ResearchCodeEditor = React.lazy(() => import('../components/ResearchCodeEditor'));
 
@@ -56,6 +58,10 @@ export const Research: React.FC<Props> = ({
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved');
   const [factoryStage, setFactoryStage] = useState<ProjectStage>('observe');
   const [demoOpen, setDemoOpen] = useState(false);
+  const [assistantOpen, setAssistantOpen] = useState(false);
+  const [runtimeEvidence, setRuntimeEvidence] = useState<SnakeRuntimeEvidence[]>([]);
+  const [observationCardCount, setObservationCardCount] = useState(0);
+  const [scaffoldCompletion, setScaffoldCompletion] = useState<ScaffoldCompletion | null>(null);
 
   // Chat state
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -109,11 +115,40 @@ export const Research: React.FC<Props> = ({
           if (t.is_completed) {
             setCompleted(true);
           }
+          try {
+            const storedEvidence = window.localStorage.getItem(`cognisync:snake-runtime-evidence:v1:${t.id}`);
+            setRuntimeEvidence(storedEvidence ? JSON.parse(storedEvidence) : []);
+          } catch {
+            setRuntimeEvidence([]);
+          }
         }
       })
       .catch(() => setTask(null))
       .finally(() => setLoadingTask(false));
   }, []);
+
+  const handleSnakeEvidence = useCallback((event: SnakeRuntimeEvidence) => {
+    setRuntimeEvidence(current => {
+      const previous = current[current.length - 1];
+      if (
+        previous
+        && previous.type === event.type
+        && JSON.stringify(previous.details ?? {}) === JSON.stringify(event.details ?? {})
+        && Date.parse(event.timestamp) - Date.parse(previous.timestamp) < 300
+      ) {
+        return current;
+      }
+      const next = [...current, event].slice(-30);
+      if (task?.id) {
+        try {
+          window.localStorage.setItem(`cognisync:snake-runtime-evidence:v1:${task.id}`, JSON.stringify(next));
+        } catch {
+          // Runtime evidence persistence must not interrupt project operation.
+        }
+      }
+      return next;
+    });
+  }, [task?.id]);
 
   // ── Auto-scroll chat ────────────────────────────────────────────────────
 
@@ -385,6 +420,7 @@ export const Research: React.FC<Props> = ({
         activeStage={factoryStage}
         onStageChange={setFactoryStage}
         onOpenProject={() => setDemoOpen(true)}
+        onOpenAssistant={() => setAssistantOpen(true)}
         saveLabel={factorySaveLabel}
       />
 
@@ -394,14 +430,31 @@ export const Research: React.FC<Props> = ({
         onOpenChange={setDemoOpen}
         variant="viewer"
         showLauncher={false}
+        onEvidence={handleSnakeEvidence}
       />
+
+      {experimentGroup !== 'lecture' && (
+        <ProjectScaffoldAssistant
+          language={language}
+          taskId={task.id}
+          stage={factoryStage}
+          open={assistantOpen}
+          onOpenChange={setAssistantOpen}
+          evidence={runtimeEvidence}
+          observationCount={observationCardCount}
+          onApplyCompletion={setScaffoldCompletion}
+        />
+      )}
 
       {factoryStage === 'observe' && (
         <ProjectObservationStage
           language={language}
           taskId={task.id}
+          evidence={runtimeEvidence}
+          scaffoldCompletion={scaffoldCompletion}
           onOpenProject={() => setDemoOpen(true)}
           onContinue={() => setFactoryStage('decompose')}
+          onCardCountChange={setObservationCardCount}
         />
       )}
 

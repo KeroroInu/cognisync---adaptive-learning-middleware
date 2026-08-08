@@ -1,23 +1,32 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowRight,
   Blocks,
-  Check,
   CircleDot,
+  ClipboardList,
   Code2,
   Eye,
   Gamepad2,
   GitBranch,
+  Lightbulb,
   ListChecks,
   MousePointer2,
+  PencilLine,
   Play,
+  Radio,
   Save,
-  Sparkles,
+  Trash2,
 } from 'lucide-react';
 import type { Language, User } from '../types';
+import {
+  formatSnakeEvidence,
+  type ProjectStage,
+  type SnakeRuntimeEvidence,
+} from '../data/snakeProjectBlueprint';
+import type { ScaffoldCompletion } from './ProjectScaffoldAssistant';
 import './ProjectFactory.css';
 
-export type ProjectStage = 'observe' | 'decompose' | 'model' | 'plan' | 'build';
+export type { ProjectStage } from '../data/snakeProjectBlueprint';
 
 interface FactoryHeaderProps {
   language: Language;
@@ -26,14 +35,18 @@ interface FactoryHeaderProps {
   activeStage: ProjectStage;
   onStageChange: (stage: ProjectStage) => void;
   onOpenProject: () => void;
+  onOpenAssistant: () => void;
   saveLabel: string;
 }
 
 interface ObservationStageProps {
   language: Language;
   taskId: string;
+  evidence: SnakeRuntimeEvidence[];
+  scaffoldCompletion: ScaffoldCompletion | null;
   onOpenProject: () => void;
   onContinue: () => void;
+  onCardCountChange: (count: number) => void;
 }
 
 interface StagePreviewProps {
@@ -58,14 +71,14 @@ const STAGES: Array<{
   { id: 'build', zh: '编码验证', en: 'Build & verify', shortZh: '再建构', shortEn: 'Build', icon: Code2 },
 ];
 
-const OBSERVATIONS = [
-  { id: 'direction', categoryZh: '输入', categoryEn: 'INPUT', zh: '方向键会改变蛇头的移动方向', en: 'Direction keys change the head movement' },
-  { id: 'food', categoryZh: '对象', categoryEn: 'OBJECT', zh: '食物会出现在网格中的不同位置', en: 'Food appears at different grid positions' },
-  { id: 'grow', categoryZh: '状态', categoryEn: 'STATE', zh: '吃到食物后，蛇身长度会增加', en: 'The snake grows after eating food' },
-  { id: 'score', categoryZh: '反馈', categoryEn: 'FEEDBACK', zh: '吃到食物时，分数会同步变化', en: 'The score changes when food is eaten' },
-  { id: 'collision', categoryZh: '规则', categoryEn: 'RULE', zh: '碰到边界或自己，运行会结束', en: 'Boundary or self collision ends the run' },
-  { id: 'reset', categoryZh: '控制', categoryEn: 'CONTROL', zh: '重新开始会恢复初始状态', en: 'Restart restores the initial state' },
-];
+export interface StudentObservationCard {
+  id: string;
+  evidenceId: string;
+  evidenceText: string;
+  observationText: string;
+  source: 'student' | 'ai-assisted';
+  createdAt: string;
+}
 
 const GROUP_LABELS: Record<User['experimentGroup'], { zh: string; en: string }> = {
   pdt: { zh: '项目解构工作台', en: 'Project deconstruction workspace' },
@@ -81,6 +94,7 @@ export const ProjectFactoryHeader: React.FC<FactoryHeaderProps> = ({
   activeStage,
   onStageChange,
   onOpenProject,
+  onOpenAssistant,
   saveLabel,
 }) => {
   const isZh = language === 'zh';
@@ -119,6 +133,10 @@ export const ProjectFactoryHeader: React.FC<FactoryHeaderProps> = ({
 
       <div className="project-factory-tools">
         <span className="project-save-indicator"><Save size={13} />{saveLabel}</span>
+        <button type="button" className="project-hint-button" onClick={onOpenAssistant}>
+          <Lightbulb size={17} />
+          <span>{isZh ? '提示一下' : 'Hint'}</span>
+        </button>
         <button type="button" className="project-demo-button" onClick={onOpenProject}>
           <Gamepad2 size={17} />
           <span>{isZh ? '运行完整项目' : 'Run complete project'}</span>
@@ -131,13 +149,15 @@ export const ProjectFactoryHeader: React.FC<FactoryHeaderProps> = ({
 export const ProjectObservationStage: React.FC<ObservationStageProps> = ({
   language,
   taskId,
+  evidence,
+  scaffoldCompletion,
   onOpenProject,
   onContinue,
+  onCardCountChange,
 }) => {
   const isZh = language === 'zh';
-  const storageKey = `cognisync:project-observations:${taskId}`;
-  const openedStorageKey = `${storageKey}:opened`;
-  const [selected, setSelected] = useState<string[]>(() => {
+  const storageKey = `cognisync:project-observation-cards:v2:${taskId}`;
+  const [cards, setCards] = useState<StudentObservationCard[]>(() => {
     try {
       const stored = window.localStorage.getItem(storageKey);
       return stored ? JSON.parse(stored) : [];
@@ -145,36 +165,48 @@ export const ProjectObservationStage: React.FC<ObservationStageProps> = ({
       return [];
     }
   });
-  const [hasOpenedProject, setHasOpenedProject] = useState(() => {
-    try {
-      return window.localStorage.getItem(openedStorageKey) === 'true';
-    } catch {
-      return false;
-    }
-  });
+  const [selectedEvidenceId, setSelectedEvidenceId] = useState('');
+  const [draft, setDraft] = useState('');
+  const [draftSource, setDraftSource] = useState<'student' | 'ai-assisted'>('student');
+  const consumedCompletionRef = useRef<string | null>(null);
 
   useEffect(() => {
-    window.localStorage.setItem(storageKey, JSON.stringify(selected));
-  }, [selected, storageKey]);
+    window.localStorage.setItem(storageKey, JSON.stringify(cards));
+    onCardCountChange(cards.length);
+  }, [cards, onCardCountChange, storageKey]);
 
   useEffect(() => {
-    window.localStorage.setItem(openedStorageKey, String(hasOpenedProject));
-  }, [hasOpenedProject, openedStorageKey]);
+    if (!scaffoldCompletion || consumedCompletionRef.current === scaffoldCompletion.requestId) return;
+    consumedCompletionRef.current = scaffoldCompletion.requestId;
+    setSelectedEvidenceId(scaffoldCompletion.evidenceId ?? '');
+    setDraft(scaffoldCompletion.text);
+    setDraftSource('ai-assisted');
+  }, [scaffoldCompletion]);
 
-  const selectedItems = useMemo(
-    () => OBSERVATIONS.filter(item => selected.includes(item.id)),
-    [selected],
-  );
+  const hasOpenedProject = evidence.some(item => item.type === 'opened');
+  const visibleEvidence = useMemo(() => evidence.slice(-8).reverse(), [evidence]);
+  const selectedEvidence = evidence.find(item => item.id === selectedEvidenceId);
 
-  const toggleObservation = (id: string) => {
-    setSelected(current => current.includes(id)
-      ? current.filter(item => item !== id)
-      : [...current, id]);
+  const selectEvidence = (id: string) => {
+    setSelectedEvidenceId(id);
+    setDraftSource('student');
   };
 
-  const openProject = () => {
-    setHasOpenedProject(true);
-    onOpenProject();
+  const saveObservation = () => {
+    const text = draft.trim();
+    if (!selectedEvidence || !text) return;
+    const card: StudentObservationCard = {
+      id: `observation-${Date.now()}`,
+      evidenceId: selectedEvidence.id,
+      evidenceText: formatSnakeEvidence(selectedEvidence, language),
+      observationText: text,
+      source: draftSource,
+      createdAt: new Date().toISOString(),
+    };
+    setCards(current => [...current, card].slice(-8));
+    setSelectedEvidenceId('');
+    setDraft('');
+    setDraftSource('student');
   };
 
   return (
@@ -193,12 +225,12 @@ export const ProjectObservationStage: React.FC<ObservationStageProps> = ({
           <h3>{isZh ? '先让它跑起来，别急着看代码。' : 'Run it before reading the code.'}</h3>
           <span>
             {isZh
-              ? '用方向键控制贪吃蛇，尝试得分、碰撞和重新开始。你只需要点选看到的现象，系统会把它们整理成第一份解构证据。'
-              : 'Control the snake, score, collide and restart. Select what you observe and the system will form the first deconstruction record.'}
+              ? '自由操作贪吃蛇。系统只记录按键、位置和结果等客观变化，不会替你判断功能；你需要从证据中形成自己的观察。'
+              : 'Operate the snake freely. The system captures objective actions and changes without naming functions; you form the observation.'}
           </span>
         </div>
 
-        <button type="button" className="project-run-card" onClick={openProject}>
+        <button type="button" className="project-run-card" onClick={onOpenProject}>
           <span className="project-run-icon"><Play size={25} fill="currentColor" /></span>
           <span>
             <small>{isZh ? '完整项目 / 可交互' : 'COMPLETE BUILD / LIVE'}</small>
@@ -211,7 +243,7 @@ export const ProjectObservationStage: React.FC<ObservationStageProps> = ({
           <MousePointer2 size={17} />
           <p>
             <strong>{isZh ? '操作提示' : 'HOW TO OBSERVE'}</strong>
-            <span>{isZh ? '改变一次输入，观察状态、规则和反馈发生了什么。' : 'Change one input and notice the resulting state, rule and feedback.'}</span>
+            <span>{isZh ? '改变一个操作，比较前后变化；同一证据也可以产生不同解释。' : 'Change one action and compare before and after. The same evidence may support different interpretations.'}</span>
           </p>
         </div>
       </article>
@@ -219,49 +251,108 @@ export const ProjectObservationStage: React.FC<ObservationStageProps> = ({
       <article className="observation-capture-card">
         <header>
           <div>
-            <span>OBSERVATION CAPTURE</span>
-            <h3>{isZh ? '我在运行中发现了……' : 'During the run, I noticed…'}</h3>
+            <span>RUNTIME EVIDENCE → MY NOTE</span>
+            <h3>{isZh ? '从证据形成自己的观察' : 'Turn evidence into your observation'}</h3>
           </div>
-          <strong>{String(selected.length).padStart(2, '0')}<small>/06</small></strong>
+          <strong>{String(cards.length).padStart(2, '0')}<small>/02</small></strong>
         </header>
 
         <p className="observation-capture-hint">
-          {isZh ? '点击符合你观察结果的卡片，可随时取消。至少确认 3 项。' : 'Select matching observations. Confirm at least three.'}
+          {isZh ? '选择一条系统运行记录，再用一句短话写下你真正观察到的变化。至少形成 2 张卡片。' : 'Choose one runtime record, then write the change you actually observed. Create at least two cards.'}
         </p>
 
-        <div className="observation-option-grid">
-          {OBSERVATIONS.map(item => {
-            const active = selected.includes(item.id);
-            return (
+        <section className="runtime-evidence-section">
+          <div className="runtime-evidence-heading">
+            <span><Radio size={14} />{isZh ? '系统运行证据' : 'Runtime evidence'}</span>
+            <small>{isZh ? '仅记录发生了什么' : 'What happened, without interpretation'}</small>
+          </div>
+          <div className="runtime-evidence-list">
+            {visibleEvidence.length > 0 ? visibleEvidence.map(item => {
+              const active = selectedEvidenceId === item.id;
+              return (
               <button
                 key={item.id}
                 type="button"
                 className={active ? 'is-selected' : ''}
-                onClick={() => toggleObservation(item.id)}
+                onClick={() => selectEvidence(item.id)}
                 aria-pressed={active}
               >
-                <span>{isZh ? item.categoryZh : item.categoryEn}</span>
-                <p>{isZh ? item.zh : item.en}</p>
-                <i>{active ? <Check size={14} /> : <span />}</i>
+                <span>{new Date(item.timestamp).toLocaleTimeString(language === 'zh' ? 'zh-CN' : 'en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
+                <p>{formatSnakeEvidence(item, language)}</p>
               </button>
-            );
-          })}
-        </div>
+              );
+            }) : (
+              <div className="runtime-evidence-empty">
+                <Gamepad2 size={22} />
+                <span>{isZh ? '先打开项目，开始、转向、得分或碰撞后，这里会留下运行记录。' : 'Open the project and start, turn, score or collide to create runtime records.'}</span>
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section className="observation-composer">
+          <div className="observation-composer-title">
+            <span><PencilLine size={14} />{isZh ? '我的空白观察卡' : 'My blank observation card'}</span>
+            {draftSource === 'ai-assisted' && <small>{isZh ? 'AI辅助草稿' : 'AI-assisted draft'}</small>}
+          </div>
+          <div className="observation-source-line">
+            <strong>{isZh ? '引用证据' : 'Evidence'}</strong>
+            <span>{selectedEvidence ? formatSnakeEvidence(selectedEvidence, language) : (isZh ? '请先选择上方的一条运行记录' : 'Choose one runtime record above')}</span>
+          </div>
+          <label>
+            <span>{isZh ? '我观察到' : 'I observed'}</span>
+            <textarea
+              value={draft}
+              onChange={event => {
+                setDraft(event.target.value);
+                if (draftSource === 'ai-assisted') setDraftSource('ai-assisted');
+              }}
+              maxLength={100}
+              rows={2}
+              placeholder={isZh ? '用一句短话写下变化，不需要解释原因……' : 'Write the change in one short sentence; do not explain it yet…'}
+            />
+          </label>
+          <div className="observation-composer-actions">
+            <small>{draft.length}/100</small>
+            <button type="button" disabled={!selectedEvidence || !draft.trim()} onClick={saveObservation}>
+              {isZh ? '保存观察卡' : 'Save observation'}<ArrowRight size={15} />
+            </button>
+          </div>
+        </section>
+
+        {cards.length > 0 && (
+          <section className="saved-observation-list">
+            <div className="runtime-evidence-heading">
+              <span><ClipboardList size={14} />{isZh ? '已形成的观察卡' : 'Saved observations'}</span>
+              <small>{isZh ? '后续由你继续推测功能与机制' : 'You will infer functions and mechanisms next'}</small>
+            </div>
+            <div>
+              {cards.map((card, index) => (
+                <article key={card.id}>
+                  <span>{String(index + 1).padStart(2, '0')}</span>
+                  <p>{card.observationText}</p>
+                  {card.source === 'ai-assisted' && <small>{isZh ? 'AI辅助' : 'AI-assisted'}</small>}
+                  <button type="button" onClick={() => setCards(current => current.filter(item => item.id !== card.id))} aria-label={isZh ? '删除观察卡' : 'Delete observation'}>
+                    <Trash2 size={13} />
+                  </button>
+                </article>
+              ))}
+            </div>
+          </section>
+        )}
 
         <div className="observation-evidence-strip">
           <div>
-            <Sparkles size={17} />
+            <CircleDot size={17} />
             <p>
-              <strong>{isZh ? '第一份过程证据' : 'FIRST PROCESS EVIDENCE'}</strong>
+              <strong>{isZh ? '阶段完成条件' : 'STAGE COMPLETION'}</strong>
               <span>
-                {selectedItems.length === 0
-                  ? (isZh ? '等待你确认观察结果' : 'Waiting for your observations')
-                  : selectedItems.map(item => isZh ? item.categoryZh : item.categoryEn).join(' · ')}
+                {isZh ? '运行过项目，并形成至少 2 张自己的观察卡' : 'Run the project and create at least two observation cards'}
               </span>
             </p>
           </div>
-          <button type="button" disabled={!hasOpenedProject || selected.length < 3} onClick={onContinue}>
-            {isZh ? '形成观察记录' : 'Create record'}
+          <button type="button" disabled={!hasOpenedProject || cards.length < 2} onClick={onContinue}>
+            {isZh ? '进入功能拆解' : 'Continue to functions'}
             <ArrowRight size={17} />
           </button>
         </div>
@@ -273,30 +364,30 @@ export const ProjectObservationStage: React.FC<ObservationStageProps> = ({
 const PREVIEW_CONTENT = {
   decompose: {
     code: '02 / FUNCTION CARDS',
-    zhTitle: '把现象变成功能卡片',
-    enTitle: 'Turn observations into function cards',
-    zhBody: '从已确认的观察中选择功能，合并重复项并命名模块。',
-    enBody: 'Choose functions from observations, merge duplicates and name modules.',
-    itemsZh: ['移动控制', '食物生成', '身体增长', '碰撞检测', '计分反馈'],
-    itemsEn: ['Movement', 'Food spawn', 'Growth', 'Collision', 'Score'],
+    zhTitle: '从自己的观察推测程序职责',
+    enTitle: 'Infer program responsibilities from your observations',
+    zhBody: '教师蓝图不会直接展示答案。每张空白卡由你填写职责、输入输出、知识和验证方式。',
+    enBody: 'The teacher blueprint stays hidden. You fill each blank card with responsibility, I/O, knowledge and verification.',
+    itemsZh: ['引用观察', '职责命名', '输入与输出', '所需知识', '验证方式'],
+    itemsEn: ['Observation', 'Responsibility', 'Input & output', 'Knowledge', 'Verification'],
   },
   model: {
     code: '03 / RELATION MAP',
-    zhTitle: '把功能、对象和数据连起来',
-    enTitle: 'Connect functions, objects and data',
-    zhBody: '通过连线表达蛇、食物、地图与分数之间的依赖。',
-    enBody: 'Connect the snake, food, grid and score to express dependencies.',
-    itemsZh: ['蛇头位置', '方向输入', '食物坐标', '身体列表', '得分状态'],
-    itemsEn: ['Head position', 'Direction', 'Food position', 'Body list', 'Score'],
+    zhTitle: '用流程图表达你推测的实现关系',
+    enTitle: 'Express your implementation hypothesis as a flow',
+    zhBody: '只提供基础图形，不提供贪吃蛇的现成流程；由你连接处理、判断、循环和结果。',
+    enBody: 'Only primitive shapes are provided; you connect processes, decisions, loops and results.',
+    itemsZh: ['开始/结束', '输入/输出', '处理', '判断', '循环'],
+    itemsEn: ['Start/end', 'Input/output', 'Process', 'Decision', 'Loop'],
   },
   plan: {
     code: '04 / BUILD PLAN',
-    zhTitle: '为每个模块确定实现路径',
-    enTitle: 'Define an implementation path for each module',
-    zhBody: '确认输入、处理规则、输出和验证方式，再进入编码。',
-    enBody: 'Confirm inputs, rules, outputs and tests before coding.',
-    itemsZh: ['输入', '处理规则', '输出', '测试方式', '人机责任'],
-    itemsEn: ['Input', 'Rule', 'Output', 'Test', 'Responsibility'],
+    zhTitle: '把流程变成可验证的建构计划',
+    enTitle: 'Turn the flow into a verifiable build plan',
+    zhBody: '为每张功能卡确定函数契约、实现顺序和测试，AI只在你请求时逐级提示。',
+    enBody: 'Define the function contract, build order and test for each card. AI scaffolds only when requested.',
+    itemsZh: ['函数输入', '处理规则', '返回结果', '测试条件', '实现顺序'],
+    itemsEn: ['Function input', 'Rule', 'Return value', 'Test condition', 'Build order'],
   },
 };
 
@@ -328,7 +419,7 @@ export const ProjectStagePreview: React.FC<StagePreviewProps> = ({
       </div>
       <footer>
         <button type="button" onClick={onBack}>{isZh ? '返回上一步' : 'Back'}</button>
-        <span>{isZh ? '当前为界面结构预览，后续接入真实过程记录。' : 'Interface preview; process persistence comes next.'}</span>
+        <span>{isZh ? '当前展示空白任务结构，不包含教师隐藏蓝图答案。' : 'This shows the blank task structure without hidden blueprint answers.'}</span>
         <button type="button" className="is-primary" onClick={onContinue}>
           {isZh ? '进入下一阶段' : 'Next stage'}<ArrowRight size={16} />
         </button>

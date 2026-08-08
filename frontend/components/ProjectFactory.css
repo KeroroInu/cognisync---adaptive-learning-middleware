@@ -161,6 +161,24 @@
 
 .project-demo-button:hover { transform: translate(-1px, -1px); box-shadow: 3px 4px 0 var(--brand-cyan); }
 
+.project-hint-button {
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 11px;
+  border: 1.5px solid #161713;
+  border-radius: 7px;
+  background: var(--brand-cyan);
+  color: #161713;
+  font-size: .7rem;
+  font-weight: 900;
+}
+
+.project-hint-button:hover { box-shadow: 2px 3px 0 #161713; }
+.project-hint-button span { white-space: nowrap; }
+
 .project-observation-stage,
 .project-stage-preview,
 .project-build-stage {
@@ -278,15 +296,133 @@
 .observation-capture-card header > strong small { color: var(--text-tertiary); font-size: 0.68rem; }
 .observation-capture-hint { margin: 15px 0 17px; color: var(--text-secondary); font-size: 0.76rem; }
 
-.observation-option-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
-.observation-option-grid button { position: relative; min-height: 94px; display: grid; align-content: start; gap: 8px; padding: 12px 42px 12px 13px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface-muted); color: var(--text-primary); text-align: left; transition: transform 140ms ease, border-color 140ms ease, background 140ms ease; }
-.observation-option-grid button:hover { transform: translateY(-1px); border-color: #788d3b; }
-.observation-option-grid button.is-selected { border: 1.5px solid #161713; background: color-mix(in srgb, var(--brand-cyan) 56%, var(--surface-strong)); box-shadow: 3px 4px 0 #161713; }
-.observation-option-grid button > span { color: #66792f; font-family: 'Google Sans Code', ui-monospace, monospace; font-size: 0.58rem; font-weight: 900; }
-.observation-option-grid button p { margin: 0; font-size: 0.79rem; font-weight: 750; line-height: 1.45; }
-.observation-option-grid button i { position: absolute; top: 11px; right: 11px; width: 23px; height: 23px; display: grid; place-items: center; border: 1px solid var(--line-strong); border-radius: 50%; background: var(--surface-strong); color: #161713; font-style: normal; }
-.observation-option-grid button i > span { width: 7px; height: 7px; border-radius: 50%; background: var(--line-strong); }
-.observation-option-grid button.is-selected i { border-color: #161713; background: #161713; color: var(--brand-cyan); }
+.runtime-evidence-section,
+.observation-composer,
+.saved-observation-list {
+  display: grid;
+  gap: 9px;
+}
+
+.runtime-evidence-heading,
+.observation-composer-title {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.runtime-evidence-heading > span,
+.observation-composer-title > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: .66rem;
+  font-weight: 900;
+}
+
+.runtime-evidence-heading small,
+.observation-composer-title small {
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-size: .58rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.observation-composer-title small {
+  padding: 3px 6px;
+  border: 1px solid #927c49;
+  border-radius: 4px;
+  background: #ead9b5;
+  color: #554729;
+  font-weight: 850;
+}
+
+.runtime-evidence-list {
+  display: flex;
+  gap: 7px;
+  overflow-x: auto;
+  padding: 1px 1px 7px;
+  scrollbar-width: thin;
+}
+
+.runtime-evidence-list > button {
+  min-width: 190px;
+  min-height: 68px;
+  display: grid;
+  align-content: start;
+  gap: 5px;
+  padding: 9px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  background: var(--surface-muted);
+  color: var(--text-primary);
+  text-align: left;
+}
+
+.runtime-evidence-list > button:hover { border-color: #728333; }
+.runtime-evidence-list > button.is-selected { border: 1.5px solid #161713; background: color-mix(in srgb, var(--brand-cyan) 42%, var(--surface-strong)); box-shadow: 2px 3px 0 #161713; }
+.runtime-evidence-list > button span { color: #6c7d39; font-family: 'Google Sans Code', ui-monospace, monospace; font-size: .51rem; font-weight: 850; }
+.runtime-evidence-list > button p { margin: 0; font-size: .68rem; font-weight: 720; line-height: 1.4; }
+
+.runtime-evidence-empty {
+  width: 100%;
+  min-height: 76px;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 12px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 7px;
+  background: var(--surface-muted);
+  color: var(--text-tertiary);
+}
+
+.runtime-evidence-empty svg { flex: 0 0 auto; color: #738638; }
+.runtime-evidence-empty span { font-size: .68rem; line-height: 1.5; }
+
+.observation-composer {
+  margin-top: 13px;
+  padding: 12px;
+  border: 1.5px solid var(--brand-ink);
+  border-radius: 8px;
+  background:
+    linear-gradient(90deg, rgba(22, 23, 19, .045) 1px, transparent 1px),
+    linear-gradient(0deg, rgba(22, 23, 19, .045) 1px, transparent 1px),
+    var(--surface-muted);
+  background-size: 22px 22px, 22px 22px, auto;
+}
+
+.observation-source-line {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  padding: 8px 9px;
+  border-left: 3px solid var(--brand-cyan);
+  background: var(--surface-strong);
+}
+
+.observation-source-line strong { font-size: .62rem; }
+.observation-source-line span { overflow: hidden; color: var(--text-secondary); font-size: .64rem; text-overflow: ellipsis; white-space: nowrap; }
+.observation-composer label { display: grid; gap: 5px; }
+.observation-composer label > span { font-size: .63rem; font-weight: 900; }
+.observation-composer textarea { width: 100%; min-height: 58px; resize: vertical; padding: 9px 10px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface-strong); color: var(--text-primary); font: inherit; font-size: .72rem; line-height: 1.5; outline: none; }
+.observation-composer textarea:focus { border: 1.5px solid #161713; box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand-cyan) 42%, transparent); }
+.observation-composer-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.observation-composer-actions small { color: var(--text-tertiary); font-family: 'Google Sans Code', ui-monospace, monospace; font-size: .55rem; }
+.observation-composer-actions button { min-height: 34px; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; border: 1.5px solid #161713; border-radius: 6px; background: var(--brand-cyan); color: #161713; font-size: .65rem; font-weight: 900; box-shadow: 2px 3px 0 #161713; }
+.observation-composer-actions button:disabled { border-color: var(--line-strong); background: var(--surface-muted); color: var(--text-tertiary); box-shadow: none; }
+
+.saved-observation-list { margin-top: 13px; }
+.saved-observation-list > div:last-child { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+.saved-observation-list article { position: relative; min-height: 66px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: 8px; padding: 9px 33px 9px 9px; border: 1px solid var(--line-strong); border-radius: 7px; background: var(--surface-muted); }
+.saved-observation-list article > span { color: #718336; font-family: 'Google Sans Code', ui-monospace, monospace; font-size: .56rem; font-weight: 900; }
+.saved-observation-list article p { margin: 0; font-size: .68rem; font-weight: 730; line-height: 1.45; }
+.saved-observation-list article small { align-self: start; padding: 2px 4px; border: 1px solid #9d8757; border-radius: 3px; color: #6b572e; font-size: .48rem; white-space: nowrap; }
+.saved-observation-list article button { position: absolute; top: 7px; right: 7px; width: 22px; height: 22px; display: grid; place-items: center; border: 0; background: transparent; color: var(--text-tertiary); }
+.saved-observation-list article button:hover { color: #b8523f; }
 
 .observation-evidence-strip { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: auto; padding-top: 20px; }
 .observation-evidence-strip > div { min-width: 0; display: flex; align-items: flex-start; gap: 9px; }
@@ -327,11 +463,16 @@
 .project-build-stage { overflow: hidden; }
 .project-build-stage .research-workbench { height: 100%; }
 
+@media (max-width: 1366px) {
+  .project-save-indicator { display: none; }
+}
+
 @media (max-width: 1220px) {
   .project-factory-header { grid-template-columns: minmax(220px, .8fr) minmax(460px, 1.45fr) auto; }
-  .project-save-indicator { display: none; }
-  .project-demo-button span { display: none; }
-  .project-demo-button { width: 44px; padding: 0; }
+  .project-demo-button span,
+  .project-hint-button span { display: none; }
+  .project-demo-button,
+  .project-hint-button { width: 44px; padding: 0; }
   .project-observation-stage { grid-template-columns: minmax(0, .88fr) minmax(480px, 1.12fr); }
 }
 
@@ -359,7 +500,7 @@
   .observation-capture-card { padding: 20px 16px; }
   .project-brief-copy { margin-top: 38px; }
   .project-brief-copy h3 { font-size: 2.25rem; }
-  .observation-option-grid { grid-template-columns: 1fr; }
+  .saved-observation-list > div:last-child { grid-template-columns: 1fr; }
   .observation-evidence-strip { align-items: stretch; flex-direction: column; }
   .observation-evidence-strip button { width: 100%; }
   .project-preview-board { grid-template-columns: 1fr; }
