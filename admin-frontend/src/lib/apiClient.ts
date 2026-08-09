@@ -3,7 +3,18 @@
  * 用于用户认证和业务 API 调用
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
+export const resolveApiBaseUrl = (
+  isProduction: boolean,
+  configuredUrl?: string,
+): string => {
+  if (isProduction) return '/api';
+  return configuredUrl?.trim() || '/api';
+};
+
+const API_BASE_URL = resolveApiBaseUrl(
+  import.meta.env.PROD,
+  import.meta.env.VITE_API_BASE_URL,
+);
 
 interface ApiResponse<T> {
   success: boolean;
