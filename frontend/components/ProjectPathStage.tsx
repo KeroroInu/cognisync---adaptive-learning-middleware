@@ -1,24 +1,25 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ArrowDown,
-  ArrowLeft,
   ArrowRight,
-  ArrowUp,
   Check,
   CircleDot,
   GitBranch,
   Link2,
   ListChecks,
+  Move,
+  RotateCcw,
   Route,
   Unlink,
 } from 'lucide-react';
 import type { Language } from '../types';
 import {
   buildTopologicalOrder,
+  createDefaultCanvasPositions,
   createInitialPathPlan,
   inferBlueprintNode,
   readStoredList,
   readStoredObject,
+  type StudentCanvasPosition,
   type StudentPathPlan,
 } from '../data/projectPath';
 import type { StudentObservationCard } from './ProjectFactory';
@@ -33,8 +34,24 @@ interface Props {
   onContinue: () => void;
 }
 
+const CANVAS_NODE_WIDTH = 214;
+const CANVAS_NODE_HEIGHT = 126;
+const CANVAS_PADDING = 16;
+
+interface DragState {
+  cardId: string;
+  pointerId: number;
+  offsetX: number;
+  offsetY: number;
+}
+
+const isCanvasPosition = (value: StudentCanvasPosition | undefined): value is StudentCanvasPosition => (
+  Boolean(value) && Number.isFinite(value?.x) && Number.isFinite(value?.y)
+);
+
 const mergePlanWithCards = (stored: StudentPathPlan, cards: StudentFunctionCard[]): StudentPathPlan => {
   const cardIds = new Set(cards.map(card => card.id));
+  const defaultPositions = createDefaultCanvasPositions(cards);
   const orderedCardIds = stored.orderedCardIds.filter(id => cardIds.has(id));
   cards.forEach(card => {
     if (!orderedCardIds.includes(card.id)) orderedCardIds.push(card.id);
@@ -43,6 +60,12 @@ const mergePlanWithCards = (stored: StudentPathPlan, cards: StudentFunctionCard[
   return {
     ...stored,
     orderedCardIds,
+    canvasPositions: Object.fromEntries(cards.map(card => [
+      card.id,
+      isCanvasPosition(stored.canvasPositions?.[card.id])
+        ? stored.canvasPositions[card.id]
+        : defaultPositions[card.id],
+    ])),
     prerequisites: Object.fromEntries(
       Object.entries(stored.prerequisites)
         .filter(([id]) => cardIds.has(id))
@@ -69,10 +92,14 @@ export const ProjectPathStage: React.FC<Props> = ({
     return mergePlanWithCards(readStoredObject(pathKey, initial), readStoredList(functionKey));
   });
   const [selectedId, setSelectedId] = useState(() => plan.orderedCardIds[0] ?? '');
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<DragState | null>(null);
 
   useEffect(() => {
+    if (draggingId) return;
     window.localStorage.setItem(pathKey, JSON.stringify(plan));
-  }, [pathKey, plan]);
+  }, [draggingId, pathKey, plan]);
 
   const cardsById = useMemo(() => new Map(cards.map(card => [card.id, card])), [cards]);
   const orderedCards = useMemo(
@@ -81,18 +108,95 @@ export const ProjectPathStage: React.FC<Props> = ({
   );
   const selectedCard = cardsById.get(selectedId) ?? orderedCards[0];
   const topology = useMemo(() => buildTopologicalOrder(cards, plan), [cards, plan]);
-  const buildOrder = topology.orderedIds.map(id => cardsById.get(id)).filter((card): card is StudentFunctionCard => Boolean(card));
+  const buildOrder = useMemo(
+    () => topology.orderedIds.map(id => cardsById.get(id)).filter((card): card is StudentFunctionCard => Boolean(card)),
+    [cardsById, topology.orderedIds],
+  );
   const relationCount = (Object.values(plan.prerequisites) as string[][]).reduce((count, ids) => count + ids.length, 0);
+  const canvasPositions = plan.canvasPositions ?? createDefaultCanvasPositions(cards);
+  const relationEdges = useMemo(() => orderedCards.flatMap(card => (
+    (plan.prerequisites[card.id] ?? []).map(prerequisiteId => ({
+      id: `${prerequisiteId}->${card.id}`,
+      sourceId: prerequisiteId,
+      targetId: card.id,
+    }))
+  )), [orderedCards, plan.prerequisites]);
 
-  const moveCard = (id: string, offset: -1 | 1) => {
+  const updateCanvasPosition = (cardId: string, position: StudentCanvasPosition) => {
     setPlan(current => {
-      const index = current.orderedCardIds.indexOf(id);
-      const target = index + offset;
-      if (index < 0 || target < 0 || target >= current.orderedCardIds.length) return current;
-      const next = [...current.orderedCardIds];
-      [next[index], next[target]] = [next[target], next[index]];
-      return { ...current, orderedCardIds: next, confirmedAt: undefined };
+      const previous = current.canvasPositions?.[cardId];
+      if (previous?.x === position.x && previous.y === position.y) return current;
+      return {
+        ...current,
+        canvasPositions: { ...current.canvasPositions, [cardId]: position },
+        confirmedAt: undefined,
+      };
     });
+  };
+
+  const beginCardDrag = (event: React.PointerEvent<HTMLElement>, cardId: string) => {
+    if (event.button !== 0 || !canvasRef.current) return;
+    const position = canvasPositions[cardId];
+    if (!position) return;
+    const bounds = canvasRef.current.getBoundingClientRect();
+    dragRef.current = {
+      cardId,
+      pointerId: event.pointerId,
+      offsetX: event.clientX - bounds.left - position.x,
+      offsetY: event.clientY - bounds.top - position.y,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+    event.preventDefault();
+    setSelectedId(cardId);
+    setDraggingId(cardId);
+  };
+
+  const moveDraggedCard = (event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current;
+    const canvas = canvasRef.current;
+    if (!drag || drag.pointerId !== event.pointerId || !canvas) return;
+    const bounds = canvas.getBoundingClientRect();
+    const maxX = Math.max(CANVAS_PADDING, canvas.clientWidth - CANVAS_NODE_WIDTH - CANVAS_PADDING);
+    const maxY = Math.max(CANVAS_PADDING, canvas.clientHeight - CANVAS_NODE_HEIGHT - CANVAS_PADDING);
+    updateCanvasPosition(drag.cardId, {
+      x: Math.round(Math.min(maxX, Math.max(CANVAS_PADDING, event.clientX - bounds.left - drag.offsetX))),
+      y: Math.round(Math.min(maxY, Math.max(CANVAS_PADDING, event.clientY - bounds.top - drag.offsetY))),
+    });
+  };
+
+  const finishCardDrag = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (dragRef.current?.pointerId !== event.pointerId) return;
+    dragRef.current = null;
+    setDraggingId(null);
+  };
+
+  const nudgeCard = (event: React.KeyboardEvent<HTMLElement>, cardId: string) => {
+    const deltaByKey: Record<string, StudentCanvasPosition> = {
+      ArrowLeft: { x: -16, y: 0 },
+      ArrowRight: { x: 16, y: 0 },
+      ArrowUp: { x: 0, y: -16 },
+      ArrowDown: { x: 0, y: 16 },
+    };
+    const delta = deltaByKey[event.key];
+    if (!delta) return;
+    event.preventDefault();
+    const current = canvasPositions[cardId];
+    if (!current) return;
+    const canvas = canvasRef.current;
+    const maxX = canvas ? Math.max(CANVAS_PADDING, canvas.clientWidth - CANVAS_NODE_WIDTH - CANVAS_PADDING) : Number.POSITIVE_INFINITY;
+    const maxY = canvas ? Math.max(CANVAS_PADDING, canvas.clientHeight - CANVAS_NODE_HEIGHT - CANVAS_PADDING) : Number.POSITIVE_INFINITY;
+    updateCanvasPosition(cardId, {
+      x: Math.min(maxX, Math.max(CANVAS_PADDING, current.x + delta.x)),
+      y: Math.min(maxY, Math.max(CANVAS_PADDING, current.y + delta.y)),
+    });
+  };
+
+  const resetCanvasLayout = () => {
+    setPlan(current => ({
+      ...current,
+      canvasPositions: createDefaultCanvasPositions(cards),
+      confirmedAt: undefined,
+    }));
   };
 
   const togglePrerequisite = (cardId: string, prerequisiteId: string) => {
@@ -196,31 +300,72 @@ export const ProjectPathStage: React.FC<Props> = ({
 
       <div className="relation-workspace">
         <section className="relation-canvas">
-          <div className="relation-canvas-label"><GitBranch size={15} /><span>{isZh ? '我的功能关系图' : 'MY FUNCTION MAP'}</span></div>
-          <div className="relation-card-grid">
-            {orderedCards.map((card, index) => {
-              const dependencies = plan.prerequisites[card.id] ?? [];
-              const selected = selectedCard?.id === card.id;
-              return (
-                <article key={card.id} className={selected ? 'is-selected' : ''} onClick={() => setSelectedId(card.id)}>
-                  <header>
-                    <span>{String(index + 1).padStart(2, '0')}</span>
-                    <div>
-                      <button type="button" onClick={event => { event.stopPropagation(); moveCard(card.id, -1); }} disabled={index === 0} aria-label={isZh ? '前移' : 'Move left'}><ArrowLeft size={14} /></button>
-                      <button type="button" onClick={event => { event.stopPropagation(); moveCard(card.id, 1); }} disabled={index === orderedCards.length - 1} aria-label={isZh ? '后移' : 'Move right'}><ArrowRight size={14} /></button>
-                    </div>
-                  </header>
-                  <h4>{card.responsibility}</h4>
-                  <p><span>IN</span>{card.input}</p>
-                  <p><span>OUT</span>{card.output}</p>
-                  <footer>
-                    {dependencies.length === 0
-                      ? <><CircleDot size={13} />{isZh ? '起点 / 可并行' : 'Start / parallel'}</>
-                      : <><Link2 size={13} />{isZh ? `依赖 ${dependencies.length} 张卡` : `${dependencies.length} prerequisites`}</>}
-                  </footer>
-                </article>
-              );
-            })}
+          <header className="relation-canvas-toolbar">
+            <div className="relation-canvas-label"><GitBranch size={15} /><span>{isZh ? '我的功能关系画板' : 'MY FUNCTION CANVAS'}</span></div>
+            <div>
+              <span><Move size={13} />{isZh ? '拖动卡片整理关系' : 'Drag cards to arrange'}</span>
+              <button type="button" onClick={resetCanvasLayout}><RotateCcw size={13} />{isZh ? '整理画布' : 'Reset layout'}</button>
+            </div>
+          </header>
+          <div className="relation-board-scroll">
+            <div
+              ref={canvasRef}
+              className="relation-board"
+              onPointerMove={moveDraggedCard}
+              onPointerUp={finishCardDrag}
+              onPointerCancel={finishCardDrag}
+            >
+              <svg className="relation-wire-layer" aria-hidden="true">
+                <defs>
+                  <marker id="relation-arrow-head" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="strokeWidth">
+                    <path d="M0,0 L8,4 L0,8 Z" />
+                  </marker>
+                </defs>
+                {relationEdges.map(edge => {
+                  const source = canvasPositions[edge.sourceId];
+                  const target = canvasPositions[edge.targetId];
+                  if (!source || !target) return null;
+                  const movesRight = target.x >= source.x;
+                  const sourceX = movesRight ? source.x + CANVAS_NODE_WIDTH : source.x;
+                  const targetX = movesRight ? target.x : target.x + CANVAS_NODE_WIDTH;
+                  const sourceY = source.y + CANVAS_NODE_HEIGHT / 2;
+                  const targetY = target.y + CANVAS_NODE_HEIGHT / 2;
+                  const bend = Math.max(55, Math.abs(targetX - sourceX) * .46);
+                  const path = `M ${sourceX} ${sourceY} C ${sourceX + (movesRight ? bend : -bend)} ${sourceY}, ${targetX + (movesRight ? -bend : bend)} ${targetY}, ${targetX} ${targetY}`;
+                  return <path key={edge.id} d={path} className={selectedCard?.id === edge.targetId ? 'is-selected' : ''} markerEnd="url(#relation-arrow-head)" />;
+                })}
+              </svg>
+              {orderedCards.map((card, index) => {
+                const dependencies = plan.prerequisites[card.id] ?? [];
+                const selected = selectedCard?.id === card.id;
+                const position = canvasPositions[card.id] ?? { x: CANVAS_PADDING, y: CANVAS_PADDING };
+                return (
+                  <article
+                    key={card.id}
+                    className={`relation-node ${selected ? 'is-selected' : ''} ${draggingId === card.id ? 'is-dragging' : ''}`}
+                    style={{ left: position.x, top: position.y }}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`${isZh ? '功能卡' : 'Function card'} ${index + 1}: ${card.responsibility}`}
+                    onClick={() => setSelectedId(card.id)}
+                    onKeyDown={event => nudgeCard(event, card.id)}
+                    onPointerDown={event => beginCardDrag(event, card.id)}
+                  >
+                    <header><span>{String(index + 1).padStart(2, '0')}</span><Move size={14} /></header>
+                    <h4>{card.responsibility}</h4>
+                    <dl>
+                      <div><dt>IN</dt><dd>{card.input}</dd></div>
+                      <div><dt>OUT</dt><dd>{card.output}</dd></div>
+                    </dl>
+                    <footer>
+                      {dependencies.length === 0
+                        ? <><CircleDot size={13} />{isZh ? '起点 / 可并行' : 'Start / parallel'}</>
+                        : <><Link2 size={13} />{isZh ? `依赖 ${dependencies.length} 张卡` : `${dependencies.length} prerequisites`}</>}
+                    </footer>
+                  </article>
+                );
+              })}
+            </div>
           </div>
         </section>
 

@@ -1,6 +1,6 @@
 import type { StudentObservationCard } from '../components/ProjectFactory';
 import type { StudentFunctionCard } from '../components/ProjectFunctionStage';
-import type { StudentModuleProgress, StudentPathPlan } from './projectPath';
+import { createDefaultCanvasPositions, type StudentModuleProgress, type StudentPathPlan } from './projectPath';
 import type { SnakeRuntimeEvidence } from './snakeProjectBlueprint';
 
 const OBSERVATIONS: StudentObservationCard[] = [
@@ -167,6 +167,7 @@ const ORDERED_CARD_IDS = FUNCTIONS.map(card => card.id);
 
 const PATH: StudentPathPlan = {
   orderedCardIds: ORDERED_CARD_IDS,
+  canvasPositions: createDefaultCanvasPositions(FUNCTIONS),
   prerequisites: {
     'demo-function-direction': ['demo-function-initial'],
     'demo-function-movement': ['demo-function-initial', 'demo-function-direction'],
