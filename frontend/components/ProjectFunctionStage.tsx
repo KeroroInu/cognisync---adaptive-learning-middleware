@@ -25,6 +25,7 @@ interface Props {
 export interface StudentFunctionCard {
   id: string;
   observationId: string;
+  evidenceId?: string;
   observationText: string;
   responsibility: string;
   input: string;
@@ -119,6 +120,7 @@ export const ProjectFunctionStage: React.FC<Props> = ({
     const nextCard: StudentFunctionCard = {
       id: editingId ?? `function-${Date.now()}`,
       observationId: selectedObservation.id,
+      evidenceId: selectedObservation.evidenceId,
       observationText: selectedObservation.observationText,
       responsibility: responsibility.trim(),
       input: input.trim(),

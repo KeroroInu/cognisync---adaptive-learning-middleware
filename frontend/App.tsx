@@ -259,6 +259,7 @@ function App() {
             language={state.language}
             theme={theme}
             userId={state.user?.id}
+            experimentGroup={state.user.experimentGroup ?? 'unassigned'}
           />
         );
 

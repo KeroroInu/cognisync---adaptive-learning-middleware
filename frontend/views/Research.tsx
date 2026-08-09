@@ -17,6 +17,8 @@ import {
   type ProjectStage,
 } from '../components/ProjectFactory';
 import { ProjectFunctionStage } from '../components/ProjectFunctionStage';
+import { ProjectPathStage } from '../components/ProjectPathStage';
+import { ProjectBuildStage } from '../components/ProjectBuildStage';
 import type { SnakeRuntimeEvidence } from '../data/snakeProjectBlueprint';
 
 const ResearchCodeEditor = React.lazy(() => import('../components/ResearchCodeEditor'));
@@ -469,24 +471,49 @@ export const Research: React.FC<Props> = ({
       )}
 
       {factoryStage === 'model' && (
-        <ProjectStagePreview
-          language={language}
-          stage="model"
-          onBack={() => setFactoryStage('decompose')}
-          onContinue={() => setFactoryStage('plan')}
-        />
+        experimentGroup === 'pdt'
+          ? <ProjectPathStage
+              language={language}
+              taskId={task.id}
+              stage="model"
+              onBack={() => setFactoryStage('decompose')}
+              onContinue={() => setFactoryStage('plan')}
+            />
+          : <ProjectStagePreview
+              language={language}
+              stage="model"
+              onBack={() => setFactoryStage('decompose')}
+              onContinue={() => setFactoryStage('plan')}
+            />
       )}
 
       {factoryStage === 'plan' && (
-        <ProjectStagePreview
+        experimentGroup === 'pdt'
+          ? <ProjectPathStage
+              language={language}
+              taskId={task.id}
+              stage="plan"
+              onBack={() => setFactoryStage('model')}
+              onContinue={() => setFactoryStage('build')}
+            />
+          : <ProjectStagePreview
+              language={language}
+              stage="plan"
+              onBack={() => setFactoryStage('model')}
+              onContinue={() => setFactoryStage('build')}
+            />
+      )}
+
+      {factoryStage === 'build' && experimentGroup === 'pdt' && (
+        <ProjectBuildStage
           language={language}
-          stage="plan"
-          onBack={() => setFactoryStage('model')}
-          onContinue={() => setFactoryStage('build')}
+          theme={theme}
+          taskId={task.id}
+          onBack={() => setFactoryStage('plan')}
         />
       )}
 
-      {factoryStage === 'build' && (
+      {factoryStage === 'build' && experimentGroup !== 'pdt' && (
       <div className="project-build-stage">
       <div className={`research-workbench ${allowAI ? '' : 'research-workbench-solo'}`}>
 
