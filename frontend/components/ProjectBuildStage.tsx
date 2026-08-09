@@ -69,6 +69,8 @@ const FRAMEWORK_NODE_IDS = new Set(['game-loop']);
 interface SnakeBuildPreviewProps {
   language: Language;
   capabilities: Set<string>;
+  checkpointIndex: number;
+  checkpointTotal: number;
   diagnosticRun: number;
   onDiagnostic: (messages: string[]) => void;
 }
@@ -76,6 +78,8 @@ interface SnakeBuildPreviewProps {
 const SnakeBuildPreview: React.FC<SnakeBuildPreviewProps> = ({
   language,
   capabilities,
+  checkpointIndex,
+  checkpointTotal,
   diagnosticRun,
   onDiagnostic,
 }) => {
@@ -172,10 +176,13 @@ const SnakeBuildPreview: React.FC<SnakeBuildPreviewProps> = ({
     <section className="construction-preview">
       <header className="construction-titlebar">
         <div className="construction-title">
-          <span><Gamepad2 size={15} />SNAKE_BUILD / LIVE</span>
-          <h3>{isZh ? '贪吃蛇 · 当前实现' : 'Snake · Current build'}</h3>
+          <span><Gamepad2 size={15} />SNAKE_BUILD / CURRENT</span>
+          <h3>{isZh ? `贪吃蛇 · 当前版本 ${String(checkpointIndex).padStart(2, '0')}` : `Snake · Current build ${checkpointIndex}`}</h3>
         </div>
-        <span className={running ? 'is-running' : ''}><i />{over ? (isZh ? '已碰撞' : 'COLLISION') : running ? (isZh ? '运行中' : 'RUNNING') : (isZh ? '等待运行' : 'READY')}</span>
+        <div className="construction-status-stack">
+          <small>{checkpointIndex}/{checkpointTotal}</small>
+          <span className={running ? 'is-running' : ''}><i />{over ? (isZh ? '已碰撞' : 'COLLISION') : running ? (isZh ? '运行中' : 'RUNNING') : (isZh ? '当前版本' : 'CURRENT BUILD')}</span>
+        </div>
       </header>
       <div className="construction-scorebar">
         <div><small>{isZh ? '得分' : 'SCORE'}</small><strong>{String(score).padStart(3, '0')}</strong></div>
@@ -189,21 +196,22 @@ const SnakeBuildPreview: React.FC<SnakeBuildPreviewProps> = ({
           const y = Math.floor(index / BOARD_COLUMNS);
           const snakeIndex = cells.get(`${x}:${y}`);
           const isFood = has('food-spawn') && food.x === x && food.y === y;
-          return <span key={index} className={`${snakeIndex !== undefined ? 'is-snake' : ''} ${snakeIndex === 0 ? 'is-head' : ''} ${isFood ? 'is-food' : ''}`} />;
+          const hasInitialState = has('initial-state');
+          return <span key={index} className={`${hasInitialState && snakeIndex !== undefined ? 'is-snake' : ''} ${hasInitialState && snakeIndex === 0 ? 'is-head' : ''} ${isFood ? 'is-food' : ''}`} />;
         })}
         {over && <div className="construction-over"><strong>{isZh ? '碰撞检测生效' : 'Collision detected'}</strong><button type="button" onClick={reset}>{isZh ? '重新运行' : 'Reset'}</button></div>}
       </div>
       <div className="construction-controls">
         <div className="construction-dpad">
-          <button type="button" className="is-up" onClick={() => changeDirection('up')}><ArrowUp size={17} /></button>
-          <button type="button" className="is-left" onClick={() => changeDirection('left')}><ArrowLeft size={17} /></button>
-          <button type="button" className="is-right" onClick={() => changeDirection('right')}><ArrowRight size={17} /></button>
-          <button type="button" className="is-down" onClick={() => changeDirection('down')}><ArrowDown size={17} /></button>
+          <button type="button" className="is-up" onClick={() => changeDirection('up')} disabled={!has('direction-input')}><ArrowUp size={17} /></button>
+          <button type="button" className="is-left" onClick={() => changeDirection('left')} disabled={!has('direction-input')}><ArrowLeft size={17} /></button>
+          <button type="button" className="is-right" onClick={() => changeDirection('right')} disabled={!has('direction-input')}><ArrowRight size={17} /></button>
+          <button type="button" className="is-down" onClick={() => changeDirection('down')} disabled={!has('direction-input')}><ArrowDown size={17} /></button>
         </div>
         <button type="button" className="construction-run" onClick={() => setRunning(value => !value)} disabled={!has('movement') || over}>
           <Play size={16} />{running ? (isZh ? '暂停' : 'Pause') : (isZh ? '运行当前版本' : 'Run current build')}
         </button>
-        <button type="button" className="construction-reset" onClick={reset}><RotateCcw size={16} />{isZh ? '重置' : 'Reset'}</button>
+        <button type="button" className="construction-reset" onClick={reset} disabled={!has('initial-state')}><RotateCcw size={16} />{isZh ? '重置' : 'Reset'}</button>
       </div>
     </section>
   );
@@ -226,7 +234,10 @@ export const ProjectBuildStage: React.FC<Props> = ({ language, theme, taskId, on
 
   const cardsById = useMemo(() => new Map(cards.map(card => [card.id, card])), [cards]);
   const topology = useMemo(() => buildTopologicalOrder(cards, plan), [cards, plan]);
-  const orderedCards = topology.orderedIds.map(id => cardsById.get(id)).filter((card): card is StudentFunctionCard => Boolean(card));
+  const orderedCards = useMemo(
+    () => topology.orderedIds.map(id => cardsById.get(id)).filter((card): card is StudentFunctionCard => Boolean(card)),
+    [cardsById, topology.orderedIds],
+  );
   const selectedCard = cardsById.get(selectedId) ?? orderedCards[0];
   const selectedNode = selectedCard ? inferBlueprintNode(selectedCard, observations) : undefined;
 
@@ -234,13 +245,15 @@ export const ProjectBuildStage: React.FC<Props> = ({ language, theme, taskId, on
     window.localStorage.setItem(progressKey, JSON.stringify(progress));
   }, [progress, progressKey]);
 
-  const verifiedNodeIds = useMemo(() => {
+  const selectedCheckpointIndex = Math.max(0, orderedCards.findIndex(card => card.id === selectedCard?.id));
+  const checkpointCapabilities = useMemo(() => {
     const ids = new Set<string>(FRAMEWORK_NODE_IDS);
-    (Object.values(progress) as StudentModuleProgress[]).forEach(item => {
-      if (item.verified) ids.add(item.blueprintNodeId);
+    orderedCards.slice(0, selectedCheckpointIndex + 1).forEach(card => {
+      const item = progress[card.id];
+      if (item?.verified) ids.add(item.blueprintNodeId);
     });
     return ids;
-  }, [progress]);
+  }, [orderedCards, progress, selectedCheckpointIndex]);
 
   const dependencyReady = (cardId: string) => (plan.prerequisites[cardId] ?? []).every(id => progress[id]?.verified);
   const currentProgress = selectedCard ? progress[selectedCard.id] : undefined;
@@ -314,7 +327,14 @@ export const ProjectBuildStage: React.FC<Props> = ({ language, theme, taskId, on
     <section className="project-build-workspace">
       <div className="build-workspace-main">
         <div className="build-preview-column">
-          <SnakeBuildPreview language={language} capabilities={verifiedNodeIds} diagnosticRun={diagnosticRun} onDiagnostic={setDiagnostics} />
+          <SnakeBuildPreview
+            language={language}
+            capabilities={checkpointCapabilities}
+            checkpointIndex={selectedCheckpointIndex + 1}
+            checkpointTotal={orderedCards.length}
+            diagnosticRun={diagnosticRun}
+            onDiagnostic={setDiagnostics}
+          />
           <section className="integration-diagnostics">
             <header>
               <div><TestTube2 size={16} /><strong>{isZh ? '综合行为测试' : 'INTEGRATION TEST'}</strong></div>

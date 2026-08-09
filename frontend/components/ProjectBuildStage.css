@@ -51,9 +51,11 @@
 .construction-title { min-width: 0; display: grid; gap: 2px; }
 .construction-title > span { display: flex; align-items: center; gap: 6px; color: #6e8137; font-family: 'Google Sans Code', ui-monospace, monospace; font-size: .5rem; font-weight: 900; }
 .construction-title h3 { overflow: hidden; margin: 0; font-family: 'Songti SC', 'STSong', 'Noto Serif CJK SC', serif; font-size: clamp(1.05rem, 1.4vw, 1.35rem); line-height: 1.05; text-overflow: ellipsis; white-space: nowrap; }
-.construction-titlebar > span { display: inline-flex; align-items: center; gap: 6px; color: var(--text-tertiary); font-size: .58rem; font-weight: 800; white-space: nowrap; }
-.construction-titlebar > span i { width: 7px; height: 7px; border-radius: 50%; background: var(--text-tertiary); }
-.construction-titlebar > span.is-running i { background: var(--brand-cyan); box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-cyan) 22%, transparent); }
+.construction-status-stack { flex: none; display: grid; justify-items: end; gap: 3px; }
+.construction-status-stack small { color: #6e8137; font-family: 'Google Sans Code', ui-monospace, monospace; font-size: .52rem; font-weight: 900; }
+.construction-status-stack > span { display: inline-flex; align-items: center; gap: 6px; color: var(--text-tertiary); font-size: .58rem; font-weight: 800; white-space: nowrap; }
+.construction-status-stack > span i { width: 7px; height: 7px; border-radius: 50%; background: var(--text-tertiary); }
+.construction-status-stack > span.is-running i { background: var(--brand-cyan); box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-cyan) 22%, transparent); }
 
 .construction-scorebar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; margin-top: 9px; border: 1px solid #0b0e0a; border-bottom: 0; border-radius: 8px 8px 0 0; overflow: hidden; background: #344030; }
 .construction-scorebar > div { display: grid; gap: 1px; padding: 7px 10px; background: #121812; color: #e4ecd9; }
@@ -77,6 +79,8 @@
 .construction-controls { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 8px; padding-top: 10px; }
 .construction-dpad { display: grid; grid-template-columns: repeat(3, 27px); grid-template-rows: repeat(2, 27px); gap: 3px; }
 .construction-dpad button { display: grid; place-items: center; padding: 0; border: 1px solid var(--line-strong); border-radius: 5px; background: var(--surface-muted); color: var(--text-primary); }
+.construction-dpad button:disabled,
+.construction-reset:disabled { opacity: .34; cursor: not-allowed; }
 .construction-dpad .is-up { grid-column: 2; }
 .construction-dpad .is-left { grid-column: 1; grid-row: 2; }
 .construction-dpad .is-right { grid-column: 3; grid-row: 2; }

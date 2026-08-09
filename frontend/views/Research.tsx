@@ -74,7 +74,6 @@ export const Research: React.FC<Props> = ({
   const [runtimeEvidence, setRuntimeEvidence] = useState<SnakeRuntimeEvidence[]>([]);
   const [observationCardCount, setObservationCardCount] = useState(0);
   const [scaffoldCompletion, setScaffoldCompletion] = useState<ScaffoldCompletion | null>(null);
-  const [demoRevision, setDemoRevision] = useState(0);
 
   // Chat state
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -178,21 +177,6 @@ export const Research: React.FC<Props> = ({
       return next;
     });
   }, [task?.id]);
-
-  const handleLoadDemo = useCallback(async () => {
-    if (!task) return;
-    const demo = seedSnakeProjectDemo(task.id);
-    try {
-      await saveResearchWorkspace(task.id, demo.workspace);
-    } catch {
-      // 本地演示仍可使用；账号同步失败会在下一次阶段切换重试。
-    }
-    setRuntimeEvidence(demo.evidence);
-    setObservationCardCount(demo.observationCount);
-    setScaffoldCompletion(null);
-    setDemoRevision(value => value + 1);
-    setFactoryStage('build');
-  }, [task]);
 
   const handleFactoryStageChange = useCallback((stage: ProjectStage) => {
     setFactoryStage(stage);
@@ -474,8 +458,6 @@ export const Research: React.FC<Props> = ({
         onStageChange={handleFactoryStageChange}
         onOpenProject={() => setDemoOpen(true)}
         onOpenAssistant={() => setAssistantOpen(true)}
-        onLoadDemo={handleLoadDemo}
-        showDemoSeed={import.meta.env.DEV && experimentGroup === 'pdt'}
         saveLabel={factorySaveLabel}
       />
 
@@ -503,7 +485,6 @@ export const Research: React.FC<Props> = ({
 
       {factoryStage === 'observe' && (
         <ProjectObservationStage
-          key={`observe-${demoRevision}`}
           language={language}
           taskId={task.id}
           evidence={runtimeEvidence}
@@ -516,7 +497,6 @@ export const Research: React.FC<Props> = ({
 
       {factoryStage === 'decompose' && (
         <ProjectFunctionStage
-          key={`decompose-${demoRevision}`}
           language={language}
           taskId={task.id}
           onBack={() => handleFactoryStageChange('observe')}
@@ -527,7 +507,6 @@ export const Research: React.FC<Props> = ({
       {factoryStage === 'model' && (
         experimentGroup === 'pdt'
           ? <ProjectPathStage
-              key={`model-${demoRevision}`}
               language={language}
               taskId={task.id}
               stage="model"
@@ -545,7 +524,6 @@ export const Research: React.FC<Props> = ({
       {factoryStage === 'plan' && (
         experimentGroup === 'pdt'
           ? <ProjectPathStage
-              key={`plan-${demoRevision}`}
               language={language}
               taskId={task.id}
               stage="plan"
@@ -562,7 +540,6 @@ export const Research: React.FC<Props> = ({
 
       {factoryStage === 'build' && experimentGroup === 'pdt' && (
         <ProjectBuildStage
-          key={`build-${demoRevision}`}
           language={language}
           theme={theme}
           taskId={task.id}

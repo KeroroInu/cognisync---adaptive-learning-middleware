@@ -215,6 +215,7 @@ const MODULE_CODE: Record<string, { blueprintNodeId: string; code: string }> = {
 const createEvidence = (): SnakeRuntimeEvidence[] => {
   const base = Date.now();
   return [
+    { id: 'opened-demo', type: 'opened', timestamp: new Date(base - 480_000).toISOString() },
     { id: 'reset-demo', type: 'reset', timestamp: new Date(base - 420_000).toISOString() },
     { id: 'direction-demo', type: 'direction', timestamp: new Date(base - 360_000).toISOString(), details: { direction: 'up' } },
     { id: 'moved-demo', type: 'moved', timestamp: new Date(base - 300_000).toISOString(), details: { fromX: 6, fromY: 5, toX: 7, toY: 5 } },

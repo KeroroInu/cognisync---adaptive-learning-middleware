@@ -5,7 +5,6 @@ import {
   CircleDot,
   ClipboardList,
   Code2,
-  DatabaseZap,
   Eye,
   Gamepad2,
   GitBranch,
@@ -37,8 +36,6 @@ interface FactoryHeaderProps {
   onStageChange: (stage: ProjectStage) => void;
   onOpenProject: () => void;
   onOpenAssistant: () => void;
-  onLoadDemo?: () => void;
-  showDemoSeed?: boolean;
   saveLabel: string;
 }
 
@@ -98,8 +95,6 @@ export const ProjectFactoryHeader: React.FC<FactoryHeaderProps> = ({
   onStageChange,
   onOpenProject,
   onOpenAssistant,
-  onLoadDemo,
-  showDemoSeed = false,
   saveLabel,
 }) => {
   const isZh = language === 'zh';
@@ -138,12 +133,6 @@ export const ProjectFactoryHeader: React.FC<FactoryHeaderProps> = ({
 
       <div className="project-factory-tools">
         <span className="project-save-indicator"><Save size={13} />{saveLabel}</span>
-        {showDemoSeed && onLoadDemo ? (
-          <button type="button" className="project-seed-button" onClick={onLoadDemo} title={isZh ? '载入完整贪吃蛇演示数据' : 'Load complete Snake demo data'}>
-            <DatabaseZap size={17} />
-            <span>{isZh ? '载入演示' : 'Load demo'}</span>
-          </button>
-        ) : null}
         <button type="button" className="project-hint-button" onClick={onOpenAssistant}>
           <Lightbulb size={17} />
           <span>{isZh ? '提示一下' : 'Hint'}</span>
@@ -177,6 +166,7 @@ export const ProjectObservationStage: React.FC<ObservationStageProps> = ({
     }
   });
   const [selectedEvidenceId, setSelectedEvidenceId] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const [draftSource, setDraftSource] = useState<'student' | 'ai-assisted'>('student');
   const consumedCompletionRef = useRef<string | null>(null);
@@ -203,21 +193,40 @@ export const ProjectObservationStage: React.FC<ObservationStageProps> = ({
     setDraftSource('student');
   };
 
+  const resetDraft = () => {
+    setEditingId(null);
+    setSelectedEvidenceId('');
+    setDraft('');
+    setDraftSource('student');
+  };
+
+  const editObservation = (card: StudentObservationCard) => {
+    setEditingId(card.id);
+    setSelectedEvidenceId(card.evidenceId);
+    setDraft(card.observationText);
+    setDraftSource(card.source);
+    window.requestAnimationFrame(() => {
+      document.querySelector('.observation-composer')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  };
+
   const saveObservation = () => {
     const text = draft.trim();
     if (!selectedEvidence || !text) return;
     const card: StudentObservationCard = {
-      id: `observation-${Date.now()}`,
+      id: editingId ?? `observation-${Date.now()}`,
       evidenceId: selectedEvidence.id,
       evidenceText: formatSnakeEvidence(selectedEvidence, language),
       observationText: text,
       source: draftSource,
-      createdAt: new Date().toISOString(),
+      createdAt: editingId
+        ? cards.find(item => item.id === editingId)?.createdAt ?? new Date().toISOString()
+        : new Date().toISOString(),
     };
-    setCards(current => [...current, card].slice(-8));
-    setSelectedEvidenceId('');
-    setDraft('');
-    setDraftSource('student');
+    setCards(current => editingId
+      ? current.map(item => item.id === editingId ? card : item)
+      : [...current, card].slice(-8));
+    resetDraft();
   };
 
   return (
@@ -325,9 +334,12 @@ export const ProjectObservationStage: React.FC<ObservationStageProps> = ({
           </label>
           <div className="observation-composer-actions">
             <small>{draft.length}/100</small>
-            <button type="button" disabled={!selectedEvidence || !draft.trim()} onClick={saveObservation}>
-              {isZh ? '保存观察卡' : 'Save observation'}<ArrowRight size={15} />
-            </button>
+            <div>
+              {editingId && <button type="button" className="is-secondary" onClick={resetDraft}>{isZh ? '取消修改' : 'Cancel'}</button>}
+              <button type="button" disabled={!selectedEvidence || !draft.trim()} onClick={saveObservation}>
+                {editingId ? (isZh ? '保存修改' : 'Save changes') : (isZh ? '保存观察卡' : 'Save observation')}<ArrowRight size={15} />
+              </button>
+            </div>
           </div>
         </section>
 
@@ -343,9 +355,10 @@ export const ProjectObservationStage: React.FC<ObservationStageProps> = ({
                   <span>{String(index + 1).padStart(2, '0')}</span>
                   <p>{card.observationText}</p>
                   {card.source === 'ai-assisted' && <small>{isZh ? 'AI辅助' : 'AI-assisted'}</small>}
-                  <button type="button" onClick={() => setCards(current => current.filter(item => item.id !== card.id))} aria-label={isZh ? '删除观察卡' : 'Delete observation'}>
-                    <Trash2 size={13} />
-                  </button>
+                  <div className="saved-observation-actions">
+                    <button type="button" onClick={() => editObservation(card)} aria-label={isZh ? '修改观察卡' : 'Edit observation'}><PencilLine size={13} /></button>
+                    <button type="button" onClick={() => setCards(current => current.filter(item => item.id !== card.id))} aria-label={isZh ? '删除观察卡' : 'Delete observation'}><Trash2 size={13} /></button>
+                  </div>
                 </article>
               ))}
             </div>

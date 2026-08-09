@@ -176,23 +176,6 @@
   font-weight: 900;
 }
 
-.project-seed-button {
-  min-height: 42px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  padding: 0 11px;
-  border: 1.5px dashed #161713;
-  border-radius: 7px;
-  background: color-mix(in srgb, var(--brand-amber) 34%, var(--surface-strong));
-  color: var(--text-primary);
-  font-size: .66rem;
-  font-weight: 900;
-}
-
-.project-seed-button:hover { border-style: solid; box-shadow: 2px 3px 0 #161713; }
-
 .project-hint-button:hover { box-shadow: 2px 3px 0 #161713; }
 .project-hint-button span { white-space: nowrap; }
 
@@ -429,7 +412,9 @@
 .observation-composer textarea:focus { border: 1.5px solid #161713; box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand-cyan) 42%, transparent); }
 .observation-composer-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .observation-composer-actions small { color: var(--text-tertiary); font-family: 'Google Sans Code', ui-monospace, monospace; font-size: .55rem; }
+.observation-composer-actions > div { display: flex; align-items: center; gap: 7px; }
 .observation-composer-actions button { min-height: 34px; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; border: 1.5px solid #161713; border-radius: 6px; background: var(--brand-cyan); color: #161713; font-size: .65rem; font-weight: 900; box-shadow: 2px 3px 0 #161713; }
+.observation-composer-actions button.is-secondary { background: var(--surface-strong); box-shadow: none; }
 .observation-composer-actions button:disabled { border-color: var(--line-strong); background: var(--surface-muted); color: var(--text-tertiary); box-shadow: none; }
 
 .saved-observation-list { margin-top: 13px; }
@@ -438,8 +423,9 @@
 .saved-observation-list article > span { color: #718336; font-family: 'Google Sans Code', ui-monospace, monospace; font-size: .56rem; font-weight: 900; }
 .saved-observation-list article p { margin: 0; font-size: .68rem; font-weight: 730; line-height: 1.45; }
 .saved-observation-list article small { align-self: start; padding: 2px 4px; border: 1px solid #9d8757; border-radius: 3px; color: #6b572e; font-size: .48rem; white-space: nowrap; }
-.saved-observation-list article button { position: absolute; top: 7px; right: 7px; width: 22px; height: 22px; display: grid; place-items: center; border: 0; background: transparent; color: var(--text-tertiary); }
-.saved-observation-list article button:hover { color: #b8523f; }
+.saved-observation-actions { position: absolute; top: 7px; right: 7px; display: flex; gap: 2px; }
+.saved-observation-list article .saved-observation-actions button { position: static; width: 22px; height: 22px; display: grid; place-items: center; border: 0; background: transparent; color: var(--text-tertiary); }
+.saved-observation-list article .saved-observation-actions button:hover { color: #161713; }
 
 .observation-evidence-strip { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: auto; padding-top: 20px; }
 .observation-evidence-strip > div { min-width: 0; display: flex; align-items: flex-start; gap: 9px; }
@@ -488,10 +474,8 @@
   .project-factory-header { grid-template-columns: minmax(220px, .8fr) minmax(460px, 1.45fr) auto; }
   .project-demo-button span,
   .project-hint-button span,
-  .project-seed-button span { display: none; }
   .project-demo-button,
   .project-hint-button,
-  .project-seed-button { width: 44px; padding: 0; }
   .project-observation-stage { grid-template-columns: minmax(0, .88fr) minmax(480px, 1.12fr); }
 }
 

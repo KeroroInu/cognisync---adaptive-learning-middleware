@@ -295,7 +295,7 @@ export const formatSnakeEvidence = (evidence: SnakeRuntimeEvidence, language: La
 
   switch (evidence.type) {
     case 'opened':
-      return isZh ? '打开了完整项目演示' : 'Opened the complete project';
+      return isZh ? '打开了完整项目' : 'Opened the complete project';
     case 'started':
       return isZh ? '点击开始后，游戏进入连续运行状态' : 'The game entered a continuous run after Start';
     case 'paused':

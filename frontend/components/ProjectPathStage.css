@@ -1,6 +1,6 @@
 .project-path-stage {
   height: calc(100% - 12px);
-  min-height: 560px;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 17px;
@@ -72,9 +72,11 @@
 
 .relation-workspace {
   min-height: 0;
+  flex: 1 1 0;
   display: grid;
   grid-template-columns: minmax(0, 1.45fr) minmax(270px, .55fr);
   gap: 14px;
+  overflow: hidden;
 }
 
 .relation-canvas,
@@ -86,7 +88,7 @@
 }
 
 .relation-canvas,
-.relation-inspector { min-height: 330px; padding: 16px; }
+.relation-inspector { min-height: 0; overflow: auto; padding: 16px; }
 .relation-canvas-label { display: flex; align-items: center; gap: 7px; }
 .relation-card-grid { display: grid; grid-template-columns: repeat(3, minmax(160px, 1fr)); gap: 11px; margin-top: 14px; }
 
@@ -155,10 +157,20 @@
 .path-stage-footer button.is-primary { background: var(--brand-cyan); box-shadow: 3px 4px 0 #161713; }
 .path-stage-footer button:disabled { border-color: var(--line-strong); background: var(--surface-muted); color: var(--text-tertiary); box-shadow: none; opacity: .55; }
 
+@media (min-width: 1500px) {
+  .relation-workspace { grid-template-columns: minmax(0, 1.65fr) minmax(330px, .35fr); }
+  .relation-card-grid { grid-template-columns: repeat(4, minmax(150px, 1fr)); }
+  .relation-card-grid article { min-height: 155px; }
+  .relation-card-grid h4 { margin-top: 10px; }
+  .prerequisite-options { gap: 5px; }
+  .prerequisite-options button { min-height: 38px; }
+}
+
 @media (max-width: 1100px) {
-  .relation-workspace { grid-template-columns: 1fr; }
+  .relation-workspace { flex: none; grid-template-columns: 1fr; overflow: visible; }
   .relation-card-grid { grid-template-columns: repeat(2, minmax(170px, 1fr)); }
-  .relation-inspector { min-height: auto; }
+  .relation-canvas,
+  .relation-inspector { min-height: auto; overflow: visible; }
   .prerequisite-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
