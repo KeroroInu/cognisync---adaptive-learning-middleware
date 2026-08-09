@@ -214,6 +214,7 @@ function App() {
             isResearchMode={state.isResearchMode}
             theme={theme}
             userId={state.user?.id}
+            studentId={state.user?.student_id}
             experimentGroup={state.user.experimentGroup ?? 'unassigned'}
             onNewConversation={handleNewConversation}
           />

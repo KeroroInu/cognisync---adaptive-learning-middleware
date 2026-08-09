@@ -5,6 +5,7 @@ import {
   sendChatMessage,
   getActiveResearchTask,
   saveResearchProgress,
+  saveResearchWorkspace,
   completeResearchTask,
   reopenResearchTask,
 } from '../services/api';
@@ -20,6 +21,12 @@ import { ProjectFunctionStage } from '../components/ProjectFunctionStage';
 import { ProjectPathStage } from '../components/ProjectPathStage';
 import { ProjectBuildStage } from '../components/ProjectBuildStage';
 import type { SnakeRuntimeEvidence } from '../data/snakeProjectBlueprint';
+import {
+  collectSnakeProjectWorkspace,
+  hydrateSnakeProjectWorkspace,
+  isSnakeProjectWorkspace,
+  seedSnakeProjectDemo,
+} from '../data/snakeProjectDemo';
 
 const ResearchCodeEditor = React.lazy(() => import('../components/ResearchCodeEditor'));
 
@@ -35,6 +42,7 @@ interface Props {
   language: Language;
   theme: 'light' | 'dark';
   userId?: string;
+  studentId?: string;
   experimentGroup: User['experimentGroup'];
 }
 
@@ -52,6 +60,7 @@ export const Research: React.FC<Props> = ({
   language,
   theme,
   userId,
+  studentId,
   experimentGroup,
 }) => {
   // Task / code state
@@ -65,6 +74,7 @@ export const Research: React.FC<Props> = ({
   const [runtimeEvidence, setRuntimeEvidence] = useState<SnakeRuntimeEvidence[]>([]);
   const [observationCardCount, setObservationCardCount] = useState(0);
   const [scaffoldCompletion, setScaffoldCompletion] = useState<ScaffoldCompletion | null>(null);
+  const [demoRevision, setDemoRevision] = useState(0);
 
   // Chat state
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -108,10 +118,21 @@ export const Research: React.FC<Props> = ({
   // ── Load task ──────────────────────────────────────────────────────────
 
   useEffect(() => {
-    getActiveResearchTask()
-      .then(t => {
+    const loadTask = async () => {
+      try {
+        const t = await getActiveResearchTask();
         setTask(t);
         if (t) {
+          let workspace = isSnakeProjectWorkspace(t.workspace_data) ? t.workspace_data : null;
+          // kero 是开发验收账号：首次进入时自动生成一套完整蓝图，并写入账号记录。
+          if (!workspace && studentId === 'kero' && experimentGroup === 'pdt') {
+            const demo = seedSnakeProjectDemo(t.id);
+            workspace = demo.workspace;
+            await saveResearchWorkspace(t.id, workspace);
+          } else if (workspace) {
+            hydrateSnakeProjectWorkspace(t.id, workspace);
+          }
+
           // 优先使用学生已保存的代码，否则用模板原始代码
           setCode(t.code_submitted || t.code_content);
           // 若已提交过，直接标记为完成（停止计时器）
@@ -119,16 +140,21 @@ export const Research: React.FC<Props> = ({
             setCompleted(true);
           }
           try {
-            const storedEvidence = window.localStorage.getItem(`cognisync:snake-runtime-evidence:v1:${t.id}`);
-            setRuntimeEvidence(storedEvidence ? JSON.parse(storedEvidence) : []);
+            const evidence = workspace?.evidence ?? [];
+            setRuntimeEvidence(evidence);
+            setObservationCardCount(workspace?.observations.length ?? 0);
           } catch {
             setRuntimeEvidence([]);
           }
         }
-      })
-      .catch(() => setTask(null))
-      .finally(() => setLoadingTask(false));
-  }, []);
+      } catch {
+        setTask(null);
+      } finally {
+        setLoadingTask(false);
+      }
+    };
+    void loadTask();
+  }, [experimentGroup, studentId]);
 
   const handleSnakeEvidence = useCallback((event: SnakeRuntimeEvidence) => {
     setRuntimeEvidence(current => {
@@ -152,6 +178,30 @@ export const Research: React.FC<Props> = ({
       return next;
     });
   }, [task?.id]);
+
+  const handleLoadDemo = useCallback(async () => {
+    if (!task) return;
+    const demo = seedSnakeProjectDemo(task.id);
+    try {
+      await saveResearchWorkspace(task.id, demo.workspace);
+    } catch {
+      // 本地演示仍可使用；账号同步失败会在下一次阶段切换重试。
+    }
+    setRuntimeEvidence(demo.evidence);
+    setObservationCardCount(demo.observationCount);
+    setScaffoldCompletion(null);
+    setDemoRevision(value => value + 1);
+    setFactoryStage('build');
+  }, [task]);
+
+  const handleFactoryStageChange = useCallback((stage: ProjectStage) => {
+    setFactoryStage(stage);
+    if (!task || experimentGroup !== 'pdt') return;
+    const workspace = collectSnakeProjectWorkspace(task.id);
+    void saveResearchWorkspace(task.id, workspace).catch(() => {
+      // 网络短暂失败不阻塞课堂操作，本地数据仍保留。
+    });
+  }, [experimentGroup, task]);
 
   // ── Auto-scroll chat ────────────────────────────────────────────────────
 
@@ -421,9 +471,11 @@ export const Research: React.FC<Props> = ({
         taskTitle={task.title}
         experimentGroup={experimentGroup}
         activeStage={factoryStage}
-        onStageChange={setFactoryStage}
+        onStageChange={handleFactoryStageChange}
         onOpenProject={() => setDemoOpen(true)}
         onOpenAssistant={() => setAssistantOpen(true)}
+        onLoadDemo={handleLoadDemo}
+        showDemoSeed={import.meta.env.DEV && experimentGroup === 'pdt'}
         saveLabel={factorySaveLabel}
       />
 
@@ -451,65 +503,70 @@ export const Research: React.FC<Props> = ({
 
       {factoryStage === 'observe' && (
         <ProjectObservationStage
+          key={`observe-${demoRevision}`}
           language={language}
           taskId={task.id}
           evidence={runtimeEvidence}
           scaffoldCompletion={scaffoldCompletion}
           onOpenProject={() => setDemoOpen(true)}
-          onContinue={() => setFactoryStage('decompose')}
+          onContinue={() => handleFactoryStageChange('decompose')}
           onCardCountChange={setObservationCardCount}
         />
       )}
 
       {factoryStage === 'decompose' && (
         <ProjectFunctionStage
+          key={`decompose-${demoRevision}`}
           language={language}
           taskId={task.id}
-          onBack={() => setFactoryStage('observe')}
-          onContinue={() => setFactoryStage('model')}
+          onBack={() => handleFactoryStageChange('observe')}
+          onContinue={() => handleFactoryStageChange('model')}
         />
       )}
 
       {factoryStage === 'model' && (
         experimentGroup === 'pdt'
           ? <ProjectPathStage
+              key={`model-${demoRevision}`}
               language={language}
               taskId={task.id}
               stage="model"
-              onBack={() => setFactoryStage('decompose')}
-              onContinue={() => setFactoryStage('plan')}
+              onBack={() => handleFactoryStageChange('decompose')}
+              onContinue={() => handleFactoryStageChange('plan')}
             />
           : <ProjectStagePreview
               language={language}
               stage="model"
-              onBack={() => setFactoryStage('decompose')}
-              onContinue={() => setFactoryStage('plan')}
+              onBack={() => handleFactoryStageChange('decompose')}
+              onContinue={() => handleFactoryStageChange('plan')}
             />
       )}
 
       {factoryStage === 'plan' && (
         experimentGroup === 'pdt'
           ? <ProjectPathStage
+              key={`plan-${demoRevision}`}
               language={language}
               taskId={task.id}
               stage="plan"
-              onBack={() => setFactoryStage('model')}
-              onContinue={() => setFactoryStage('build')}
+              onBack={() => handleFactoryStageChange('model')}
+              onContinue={() => handleFactoryStageChange('build')}
             />
           : <ProjectStagePreview
               language={language}
               stage="plan"
-              onBack={() => setFactoryStage('model')}
-              onContinue={() => setFactoryStage('build')}
+              onBack={() => handleFactoryStageChange('model')}
+              onContinue={() => handleFactoryStageChange('build')}
             />
       )}
 
       {factoryStage === 'build' && experimentGroup === 'pdt' && (
         <ProjectBuildStage
+          key={`build-${demoRevision}`}
           language={language}
           theme={theme}
           taskId={task.id}
-          onBack={() => setFactoryStage('plan')}
+          onBack={() => handleFactoryStageChange('plan')}
         />
       )}
 

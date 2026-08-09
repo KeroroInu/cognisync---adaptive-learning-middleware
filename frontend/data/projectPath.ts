@@ -37,6 +37,7 @@ const EVIDENCE_DEFAULTS: Record<string, string> = {
   paused: 'game-loop',
   direction: 'direction-input',
   moved: 'movement',
+  food_spawn: 'food-spawn',
   food_eaten: 'eat-grow-score',
   collision: 'collision',
   reset: 'initial-state',
@@ -81,10 +82,14 @@ export const inferBlueprintNode = (
     ...card.knowledge,
   ].join(' ').toLowerCase();
 
-  let bestId = '';
-  let bestScore = 0;
+  const observation = observations.find(item => item.id === card.observationId);
+  const evidenceType = evidenceTypeFromId(observation?.evidenceId ?? card.evidenceId);
+  const evidenceDefaultId = EVIDENCE_DEFAULTS[evidenceType] ?? '';
+  let bestId = evidenceDefaultId;
+  let bestScore = evidenceDefaultId ? 2 : 0;
   Object.entries(KEYWORDS).forEach(([nodeId, words]) => {
-    const score = words.reduce((total, word) => total + (text.includes(word.toLowerCase()) ? 1 : 0), 0);
+    const keywordScore = words.reduce((total, word) => total + (text.includes(word.toLowerCase()) ? 1 : 0), 0);
+    const score = keywordScore + (nodeId === evidenceDefaultId ? 2 : 0);
     if (score > bestScore) {
       bestId = nodeId;
       bestScore = score;
@@ -93,8 +98,6 @@ export const inferBlueprintNode = (
 
   if (bestId) return BLUEPRINT_BY_ID.get(bestId) ?? SNAKE_PROJECT_BLUEPRINT[0];
 
-  const observation = observations.find(item => item.id === card.observationId);
-  const evidenceType = evidenceTypeFromId(observation?.evidenceId ?? card.evidenceId);
   const fallbackId = EVIDENCE_DEFAULTS[evidenceType] ?? 'movement';
   return BLUEPRINT_BY_ID.get(fallbackId) ?? SNAKE_PROJECT_BLUEPRINT[0];
 };

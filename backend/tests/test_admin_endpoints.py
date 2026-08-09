@@ -274,6 +274,26 @@ async def test_experiment_group_assignment_and_task_isolation(
     assert active.json()["data"]["id"] == pdt_task_id
     assert active.json()["data"]["target_group"] == "pdt"
 
+    workspace = {
+        "version": 1,
+        "savedAt": "2026-01-01T00:00:00Z",
+        "evidence": [],
+        "observations": [{"id": "o1", "observationText": "蛇向右移动"}],
+        "functions": [{"id": "f1", "responsibility": "移动蛇身"}],
+        "path": {"orderedCardIds": ["f1"], "prerequisites": {}, "relationKinds": {}},
+        "progress": {},
+    }
+    workspace_save = await client.post(
+        f"/api/research/tasks/{pdt_task_id}/save-workspace",
+        json={"workspace_data": workspace},
+        headers=auth,
+    )
+    assert workspace_save.status_code == 200
+
+    restored = await client.get("/api/research/active-task", headers=auth)
+    assert restored.status_code == 200
+    assert restored.json()["data"]["workspace_data"] == workspace
+
     forbidden_save = await client.post(
         f"/api/research/tasks/{lecture_task_id}/save-progress",
         json={"code_submitted": "print('not allowed')"},

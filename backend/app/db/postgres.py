@@ -64,6 +64,9 @@ async def init_db():
         # 迁移：为 research_task_submissions 添加 started_at 列
         await _migrate_research_started_at()
 
+        # 迁移：为 research_task_submissions 添加项目解构工作台过程数据
+        await _migrate_research_workspace_data()
+
         # 迁移：为 scale_templates 添加 activated_at 列
         await _migrate_scale_activated_at()
 
@@ -234,6 +237,21 @@ async def _migrate_research_started_at():
         "ALTER TABLE research_task_submissions ADD COLUMN IF NOT EXISTS started_at TIMESTAMP WITH TIME ZONE;",
         "ADD COLUMN started_at to research_task_submissions"
     )
+
+
+async def _migrate_research_workspace_data():
+    """幂等迁移：保存项目解构工作台的结构化过程数据。"""
+    from sqlalchemy import text
+
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(text(
+                "ALTER TABLE research_task_submissions "
+                "ADD COLUMN IF NOT EXISTS workspace_data JSONB;"
+            ))
+        logger.info("  ✅ ADD COLUMN workspace_data to research_task_submissions")
+    except Exception as exc:
+        logger.warning("  ⚠️ ADD workspace_data (skipped): %s", exc)
 
 
 async def _migrate_scale_activated_at():

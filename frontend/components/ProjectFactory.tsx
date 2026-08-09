@@ -5,6 +5,7 @@ import {
   CircleDot,
   ClipboardList,
   Code2,
+  DatabaseZap,
   Eye,
   Gamepad2,
   GitBranch,
@@ -36,6 +37,8 @@ interface FactoryHeaderProps {
   onStageChange: (stage: ProjectStage) => void;
   onOpenProject: () => void;
   onOpenAssistant: () => void;
+  onLoadDemo?: () => void;
+  showDemoSeed?: boolean;
   saveLabel: string;
 }
 
@@ -95,6 +98,8 @@ export const ProjectFactoryHeader: React.FC<FactoryHeaderProps> = ({
   onStageChange,
   onOpenProject,
   onOpenAssistant,
+  onLoadDemo,
+  showDemoSeed = false,
   saveLabel,
 }) => {
   const isZh = language === 'zh';
@@ -133,6 +138,12 @@ export const ProjectFactoryHeader: React.FC<FactoryHeaderProps> = ({
 
       <div className="project-factory-tools">
         <span className="project-save-indicator"><Save size={13} />{saveLabel}</span>
+        {showDemoSeed && onLoadDemo ? (
+          <button type="button" className="project-seed-button" onClick={onLoadDemo} title={isZh ? '载入完整贪吃蛇演示数据' : 'Load complete Snake demo data'}>
+            <DatabaseZap size={17} />
+            <span>{isZh ? '载入演示' : 'Load demo'}</span>
+          </button>
+        ) : null}
         <button type="button" className="project-hint-button" onClick={onOpenAssistant}>
           <Lightbulb size={17} />
           <span>{isZh ? '提示一下' : 'Hint'}</span>

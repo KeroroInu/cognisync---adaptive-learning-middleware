@@ -8,6 +8,7 @@ export type SnakeRuntimeEvidenceType =
   | 'paused'
   | 'direction'
   | 'moved'
+  | 'food_spawn'
   | 'food_eaten'
   | 'collision'
   | 'reset';
@@ -305,6 +306,8 @@ export const formatSnakeEvidence = (evidence: SnakeRuntimeEvidence, language: La
       return isZh
         ? `蛇头从（${details.fromX}, ${details.fromY}）移动到（${details.toX}, ${details.toY}）`
         : `The head moved from (${details.fromX}, ${details.fromY}) to (${details.toX}, ${details.toY})`;
+    case 'food_spawn':
+      return isZh ? '果实出现在蛇身之外的空闲网格' : 'Food appeared on an empty cell outside the snake';
     case 'food_eaten':
       return isZh
         ? `分数从 ${details.scoreBefore} 变为 ${details.scoreAfter}，蛇身从 ${details.lengthBefore} 格变为 ${details.lengthAfter} 格`

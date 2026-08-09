@@ -252,4 +252,5 @@ export interface ResearchTask {
   // 当前用户的提交状态
   is_completed?: boolean;
   code_submitted?: string | null;
+  workspace_data?: Record<string, unknown> | null;
 }

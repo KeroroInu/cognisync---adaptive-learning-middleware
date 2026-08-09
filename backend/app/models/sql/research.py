@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from typing import Optional
 from sqlalchemy import String, Text, Boolean, ForeignKey, Enum, Index
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy.dialects.postgresql import UUID, TIMESTAMP
+from sqlalchemy.dialects.postgresql import JSONB, UUID, TIMESTAMP
 
 from app.models.sql.base import Base, UUIDMixin
 
@@ -140,6 +140,12 @@ class ResearchTaskSubmission(Base, UUIDMixin):
         nullable=False,
         default="",
         comment="学生最后提交/保存的代码",
+    )
+
+    workspace_data: Mapped[Optional[dict]] = mapped_column(
+        JSONB,
+        nullable=True,
+        comment="项目解构工作台过程数据：观察卡、功能卡、关系、路径与模块进度",
     )
 
     is_completed: Mapped[bool] = mapped_column(

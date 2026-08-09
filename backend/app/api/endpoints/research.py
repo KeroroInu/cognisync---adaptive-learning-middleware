@@ -2,6 +2,7 @@
 用户端研究任务 API 端点
 """
 import uuid
+import json
 from datetime import datetime, timezone
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
@@ -32,6 +33,7 @@ class ActiveTaskResponse(BaseModel):
     # 当前用户的提交状态（若无提交记录则为默认值）
     is_completed: bool = False
     code_submitted: Optional[str] = None
+    workspace_data: Optional[dict] = None
 
 
 class SaveProgressRequest(BaseModel):
@@ -42,6 +44,10 @@ class SaveProgressRequest(BaseModel):
 class CompleteTaskRequest(BaseModel):
     code_submitted: str
     started_at: Optional[str] = None
+
+
+class SaveWorkspaceRequest(BaseModel):
+    workspace_data: dict
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -93,7 +99,58 @@ async def get_active_task(
         target_group=task.target_group,
         is_completed=submission.is_completed if submission else False,
         code_submitted=submission.code_submitted if submission else None,
+        workspace_data=submission.workspace_data if submission else None,
     ))
+
+
+@router.post("/tasks/{task_id}/save-workspace")
+async def save_workspace(
+    task_id: str,
+    data: SaveWorkspaceRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> SuccessResponse[dict]:
+    """保存观察卡、功能卡、关系路径和模块进度（账号级 upsert）。"""
+    try:
+        tid = uuid.UUID(task_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid task_id")
+
+    # 防止异常客户端提交超大 JSON；正常完整贪吃蛇蓝图约数十 KB。
+    if len(json.dumps(data.workspace_data, ensure_ascii=False)) > 262_144:
+        raise HTTPException(status_code=413, detail="Workspace data too large")
+
+    task_result = await db.execute(
+        select(ResearchTask).where(
+            ResearchTask.id == tid,
+            or_(ResearchTask.target_group == "all", ResearchTask.target_group == current_user.experiment_group),
+        )
+    )
+    if not task_result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    result = await db.execute(
+        select(ResearchTaskSubmission).where(
+            ResearchTaskSubmission.task_id == tid,
+            ResearchTaskSubmission.user_id == current_user.id,
+        )
+    )
+    submission = result.scalar_one_or_none()
+    if submission:
+        submission.workspace_data = data.workspace_data
+        submission.updated_at = datetime.now(timezone.utc)
+    else:
+        submission = ResearchTaskSubmission(
+            task_id=tid,
+            user_id=current_user.id,
+            code_submitted="",
+            workspace_data=data.workspace_data,
+            is_completed=False,
+        )
+        db.add(submission)
+
+    await db.commit()
+    return SuccessResponse(data={"saved": True})
 
 
 @router.post("/tasks/{task_id}/save-progress")

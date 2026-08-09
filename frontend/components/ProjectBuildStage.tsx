@@ -91,6 +91,8 @@ const SnakeBuildPreview: React.FC<SnakeBuildPreviewProps> = ({
   const directionRef = useRef(direction);
 
   const has = useCallback((id: string) => capabilities.has(id), [capabilities]);
+  const tickMs = Math.max(170, 340 - Math.floor(score / 20) * 25);
+  const speedLabel = (340 / tickMs).toFixed(1);
 
   const reset = useCallback(() => {
     snakeRef.current = INITIAL_SNAKE;
@@ -142,9 +144,9 @@ const SnakeBuildPreview: React.FC<SnakeBuildPreviewProps> = ({
       }
       snakeRef.current = nextSnake;
       setSnake(nextSnake);
-    }, 310);
+    }, tickMs);
     return () => window.clearInterval(timer);
-  }, [has, over, running]);
+  }, [has, over, running, tickMs]);
 
   useEffect(() => {
     if (diagnosticRun === 0) return;
@@ -168,13 +170,17 @@ const SnakeBuildPreview: React.FC<SnakeBuildPreviewProps> = ({
 
   return (
     <section className="construction-preview">
-      <header>
-        <div><Gamepad2 size={17} /><span>{isZh ? '模块装配画面' : 'MODULE ASSEMBLY'}</span></div>
+      <header className="construction-titlebar">
+        <div className="construction-title">
+          <span><Gamepad2 size={15} />SNAKE_BUILD / LIVE</span>
+          <h3>{isZh ? '贪吃蛇 · 当前实现' : 'Snake · Current build'}</h3>
+        </div>
         <span className={running ? 'is-running' : ''}><i />{over ? (isZh ? '已碰撞' : 'COLLISION') : running ? (isZh ? '运行中' : 'RUNNING') : (isZh ? '等待运行' : 'READY')}</span>
       </header>
       <div className="construction-scorebar">
         <div><small>{isZh ? '得分' : 'SCORE'}</small><strong>{String(score).padStart(3, '0')}</strong></div>
-        <div><small>{isZh ? '已装配' : 'ASSEMBLED'}</small><strong>{capabilities.size - 1}<i>/6</i></strong></div>
+        <div><small>{isZh ? '速度' : 'SPEED'}</small><strong>{speedLabel}<i>×</i></strong></div>
+        <div><small>{isZh ? '已实现' : 'BUILT'}</small><strong>{capabilities.size - 1}<i>/6</i></strong></div>
         <div><small>{isZh ? '方向' : 'DIRECTION'}</small><strong>{direction.toUpperCase()}</strong></div>
       </div>
       <div className="construction-board" style={{ gridTemplateColumns: `repeat(${BOARD_COLUMNS}, 1fr)`, gridTemplateRows: `repeat(${BOARD_ROWS}, 1fr)` }}>
@@ -238,6 +244,10 @@ export const ProjectBuildStage: React.FC<Props> = ({ language, theme, taskId, on
 
   const dependencyReady = (cardId: string) => (plan.prerequisites[cardId] ?? []).every(id => progress[id]?.verified);
   const currentProgress = selectedCard ? progress[selectedCard.id] : undefined;
+  const completedCardCount = orderedCards.reduce((count, card) => {
+    const node = inferBlueprintNode(card, observations);
+    return count + (FRAMEWORK_NODE_IDS.has(node.id) || progress[card.id]?.verified ? 1 : 0);
+  }, 0);
   const currentCode = selectedNode && selectedCard
     ? currentProgress?.code ?? MODULE_TEMPLATES[selectedNode.id] ?? selectedNode.functionTemplate
     : '';
@@ -323,7 +333,7 @@ export const ProjectBuildStage: React.FC<Props> = ({ language, theme, taskId, on
         <div className="build-editor-column">
           <header className="build-editor-heading">
             <div><span>05 / BUILD & VERIFY</span><h3>{isZh ? '按自己的路径逐个实现' : 'Build one module at a time'}</h3></div>
-            <strong>{(Object.values(progress) as StudentModuleProgress[]).filter(item => item.verified).length}<small>/{cards.length}</small></strong>
+            <strong>{completedCardCount}<small>/{cards.length}</small></strong>
           </header>
 
           <nav className="student-module-rail" aria-label={isZh ? '学生实现路径' : 'Student build route'}>
