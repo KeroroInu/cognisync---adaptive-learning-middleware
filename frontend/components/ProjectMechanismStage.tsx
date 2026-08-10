@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ArrowLeftRight,
   ArrowRight,
   Check,
   CircleDot,
@@ -123,6 +124,7 @@ export const ProjectMechanismStage: React.FC<Props> = ({
   });
   const [activeCardId, setActiveCardId] = useState(() => plan.orderedCardIds[0] ?? cards[0]?.id ?? '');
   const [selectedNodeId, setSelectedNodeId] = useState('');
+  const [selectedEdgeId, setSelectedEdgeId] = useState('');
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [connectMode, setConnectMode] = useState(false);
   const [connectionSourceId, setConnectionSourceId] = useState<string | null>(null);
@@ -141,6 +143,7 @@ export const ProjectMechanismStage: React.FC<Props> = ({
   const activeCard = cards.find(card => card.id === activeCardId) ?? cards[0];
   const diagram = activeCard ? plan.functionMechanisms?.[activeCard.id] ?? EMPTY_MECHANISM : EMPTY_MECHANISM;
   const selectedNode = diagram.flowNodes.find(node => node.id === selectedNodeId);
+  const selectedEdge = diagram.diagramEdges.find(edge => edge.id === selectedEdgeId);
   const selectedEdges = diagram.diagramEdges.filter(edge => edge.sourceId === selectedNodeId || edge.targetId === selectedNodeId);
   const completedCount = useMemo(
     () => cards.reduce((count, card) => count + (diagramIsReady(plan.functionMechanisms?.[card.id]) ? 1 : 0), 0),
@@ -247,6 +250,7 @@ export const ProjectMechanismStage: React.FC<Props> = ({
       diagramEdges: current.diagramEdges.filter(edge => edge.sourceId !== nodeId && edge.targetId !== nodeId),
     }));
     setSelectedNodeId('');
+    if (selectedEdge && (selectedEdge.sourceId === nodeId || selectedEdge.targetId === nodeId)) setSelectedEdgeId('');
     setConnectionSourceId(source => source === nodeId ? null : source);
     if (connectionSourceId === nodeId) setConnectionSourceAnchor(null);
     setNotice(isZh ? '流程元素已删除' : 'Flow element deleted');
@@ -294,11 +298,13 @@ export const ProjectMechanismStage: React.FC<Props> = ({
         targetAnchor: sourceAnchor ? oppositeSide(sourceAnchor) : undefined,
       }],
     }));
+    setSelectedEdgeId(id);
     setNotice(isZh ? '箭头已建立' : 'Arrow created');
   };
 
   const handleNodeClick = (nodeId: string) => {
     setSelectedNodeId(nodeId);
+    setSelectedEdgeId('');
     if (!connectMode) return;
     if (!connectionSourceId) {
       setConnectionSourceId(nodeId);
@@ -314,6 +320,7 @@ export const ProjectMechanismStage: React.FC<Props> = ({
   const startConnectionFromHandle = (event: React.MouseEvent<HTMLButtonElement>, nodeId: string, side: StudentConnectorSide) => {
     event.stopPropagation();
     setSelectedNodeId(nodeId);
+    setSelectedEdgeId('');
     setConnectMode(true);
     setConnectionSourceId(nodeId);
     setConnectionSourceAnchor(side);
@@ -326,6 +333,29 @@ export const ProjectMechanismStage: React.FC<Props> = ({
       confirmedAt: undefined,
       diagramEdges: current.diagramEdges.filter(edge => edge.id !== edgeId),
     }));
+    setSelectedEdgeId(current => current === edgeId ? '' : current);
+  };
+
+  const reverseEdge = (edge: StudentDiagramEdge) => {
+    const nextId = makeEdgeId(edge.targetId, edge.sourceId);
+    if (diagram.diagramEdges.some(item => item.id === nextId && item.id !== edge.id)) {
+      setNotice(isZh ? '反向箭头已经存在' : 'The reversed arrow already exists');
+      return;
+    }
+    updateDiagram(current => ({
+      ...current,
+      confirmedAt: undefined,
+      diagramEdges: current.diagramEdges.map(item => item.id === edge.id ? {
+        ...item,
+        id: nextId,
+        sourceId: edge.targetId,
+        targetId: edge.sourceId,
+        sourceAnchor: edge.targetAnchor,
+        targetAnchor: edge.sourceAnchor,
+      } : item),
+    }));
+    setSelectedEdgeId(nextId);
+    setNotice(isZh ? '箭头方向已反转' : 'Arrow direction reversed');
   };
 
   const resetLayout = () => {
@@ -406,6 +436,7 @@ export const ProjectMechanismStage: React.FC<Props> = ({
                   onClick={() => {
                     setActiveCardId(card.id);
                     setSelectedNodeId('');
+                    setSelectedEdgeId('');
                     setConnectionSourceId(null);
                     setConnectionSourceAnchor(null);
                     setConnectMode(false);
@@ -471,7 +502,54 @@ export const ProjectMechanismStage: React.FC<Props> = ({
                     const distance = Math.hypot(targetPoint.x - sourcePoint.x, targetPoint.y - sourcePoint.y);
                     const bend = Math.max(48, distance * .32);
                     const path = `M ${sourcePoint.x} ${sourcePoint.y} C ${sourcePoint.x + sourcePoint.dx * bend} ${sourcePoint.y + sourcePoint.dy * bend}, ${targetPoint.x + targetPoint.dx * bend} ${targetPoint.y + targetPoint.dy * bend}, ${targetPoint.x} ${targetPoint.y}`;
-                    return <path key={edge.id} d={path} className={selectedNodeId === edge.sourceId || selectedNodeId === edge.targetId ? 'is-selected' : ''} markerEnd="url(#mechanism-arrow-head)" />;
+                    const selected = selectedEdgeId === edge.id || selectedNodeId === edge.sourceId || selectedNodeId === edge.targetId;
+                    const midpoint = { x: (sourcePoint.x + targetPoint.x) / 2, y: (sourcePoint.y + targetPoint.y) / 2 };
+                    const selectEdge = () => {
+                      setSelectedNodeId('');
+                      setSelectedEdgeId(edge.id);
+                    };
+                    return (
+                      <React.Fragment key={edge.id}>
+                        <path d={path} className={`mechanism-edge-path ${selected ? 'is-selected' : ''}`} markerEnd="url(#mechanism-arrow-head)" />
+                        <path
+                          d={path}
+                          className="mechanism-edge-hit"
+                          role="button"
+                          tabIndex={0}
+                          aria-label={`${isZh ? '连线' : 'Arrow'}: ${sourceNode.label} → ${targetNode.label}`}
+                          onClick={event => {
+                            event.stopPropagation();
+                            selectEdge();
+                          }}
+                          onKeyDown={event => {
+                            if (event.key === 'Delete' || event.key === 'Backspace') {
+                              event.preventDefault();
+                              removeEdge(edge.id);
+                            }
+                          }}
+                        />
+                        <circle
+                          cx={midpoint.x}
+                          cy={midpoint.y}
+                          r={7}
+                          className={`mechanism-edge-selector ${selectedEdgeId === edge.id ? 'is-selected' : ''}`}
+                          role="button"
+                          tabIndex={0}
+                          aria-label={`${isZh ? '编辑连线' : 'Edit arrow'}: ${sourceNode.label} → ${targetNode.label}`}
+                          onClick={event => { event.stopPropagation(); selectEdge(); }}
+                          onKeyDown={event => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault();
+                              selectEdge();
+                            }
+                            if (event.key === 'Delete' || event.key === 'Backspace') {
+                              event.preventDefault();
+                              removeEdge(edge.id);
+                            }
+                          }}
+                        />
+                      </React.Fragment>
+                    );
                   })}
                 </svg>
 
@@ -490,7 +568,19 @@ export const ProjectMechanismStage: React.FC<Props> = ({
                         onKeyDown={event => handleNodeKeyDown(event, node)}
                         onPointerDown={event => beginNodeDrag(event, node)}
                       >
-                        <div className="mechanism-flow-shape"><span>{node.label}</span></div>
+                        <div className="mechanism-flow-shape">
+                          {selected ? (
+                            <input
+                              autoFocus
+                              value={node.label}
+                              maxLength={40}
+                              aria-label={`${isZh ? '编辑流程元素' : 'Edit flow element'}: ${node.label}`}
+                              onPointerDown={event => event.stopPropagation()}
+                              onClick={event => event.stopPropagation()}
+                              onChange={event => updateNode(node.id, { label: event.target.value })}
+                            />
+                          ) : <span>{node.label}</span>}
+                        </div>
                       </article>
                       {selected ? CONNECTOR_SIDES.map(side => (
                         <button
@@ -546,6 +636,21 @@ export const ProjectMechanismStage: React.FC<Props> = ({
             </section>
           ) : null}
 
+          {selectedEdge ? (
+            <section className="mechanism-selection is-edge-selection">
+              <div className="mechanism-section-label"><Link2 size={15} /><span>{isZh ? '当前连线' : 'SELECTED ARROW'}</span></div>
+              <strong>
+                {diagram.flowNodes.find(node => node.id === selectedEdge.sourceId)?.label ?? ''}
+                {' → '}
+                {diagram.flowNodes.find(node => node.id === selectedEdge.targetId)?.label ?? ''}
+              </strong>
+              <div className="mechanism-edge-actions">
+                <button type="button" onClick={() => reverseEdge(selectedEdge)}><ArrowLeftRight size={14} />{isZh ? '反转方向' : 'Reverse'}</button>
+                <button type="button" className="is-danger" onClick={() => removeEdge(selectedEdge.id)}><Trash2 size={14} />{isZh ? '删除连线' : 'Delete'}</button>
+              </div>
+            </section>
+          ) : null}
+
           <section className="mechanism-toolbox-section">
             <div className="mechanism-section-label"><GitBranch size={15} /><span>{isZh ? '流程图形' : 'FLOW SHAPES'}</span></div>
             <p>{isZh ? '点击或拖入画布，再修改图形中的文字。' : 'Click or drag a shape into the canvas.'}</p>
@@ -577,7 +682,7 @@ export const ProjectMechanismStage: React.FC<Props> = ({
 
           <div className={`mechanism-notice ${connectMode ? 'is-connecting' : ''}`}>
             {connectMode ? <Link2 size={15} /> : <Move size={15} />}
-            <span>{notice || (isZh ? '拖动图形整理流程；需要箭头时点击“连接流程”。' : 'Move shapes freely; use Connect for arrows.')}</span>
+            <span>{notice || (isZh ? '点击图形可直接改字；点击连线可反向或删除。' : 'Select a shape to edit text; select an arrow to reverse or delete it.')}</span>
           </div>
 
           <button

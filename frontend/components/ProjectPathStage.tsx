@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowDown,
+  ArrowLeftRight,
   ArrowRight,
   ArrowUp,
   Check,
@@ -197,6 +198,7 @@ const ProjectSystemPathStage: React.FC<Props> = ({
     return mergePlanWithCards(readStoredObject(pathKey, initial), readStoredList(functionKey));
   });
   const [selectedId, setSelectedId] = useState(() => plan.placedCardIds?.[0] ?? '');
+  const [selectedEdgeId, setSelectedEdgeId] = useState('');
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [connectMode, setConnectMode] = useState(false);
   const [connectionSourceId, setConnectionSourceId] = useState<string | null>(null);
@@ -244,6 +246,7 @@ const ProjectSystemPathStage: React.FC<Props> = ({
     () => diagramEdges.filter(edge => canvasNodeIds.has(edge.sourceId) && canvasNodeIds.has(edge.targetId)),
     [canvasNodeIds, diagramEdges],
   );
+  const selectedEdge = relationEdges.find(edge => edge.id === selectedEdgeId);
   const selectedEdges = relationEdges.filter(edge => edge.sourceId === selectedId || edge.targetId === selectedId);
 
   const getNodeGeometry = (nodeId: string) => {
@@ -435,6 +438,7 @@ const ProjectSystemPathStage: React.FC<Props> = ({
         confirmedAt: undefined,
       };
     });
+    setSelectedEdgeId(edgeId);
     setCanvasNotice(isZh ? '连线已建立' : 'Connection created');
   };
 
@@ -449,10 +453,44 @@ const ProjectSystemPathStage: React.FC<Props> = ({
         confirmedAt: undefined,
       };
     });
+    setSelectedEdgeId(current => current === edgeId ? '' : current);
+  };
+
+  const reverseDiagramEdge = (edge: StudentDiagramEdge) => {
+    const remainingEdges = diagramEdges.filter(item => item.id !== edge.id);
+    const nextId = makeEdgeId(edge.targetId, edge.sourceId);
+    if (remainingEdges.some(item => item.id === nextId)) {
+      setCanvasNotice(isZh ? '反向关系已经存在' : 'The reversed relation already exists');
+      return;
+    }
+    if (createsDiagramCycle(remainingEdges, edge.targetId, edge.sourceId)) {
+      setCanvasNotice(isZh ? '反转后会形成循环依赖，无法保存' : 'Reversing this relation would create a cycle');
+      return;
+    }
+    setPlan(current => {
+      const nextEdges = (current.diagramEdges ?? []).map(item => item.id === edge.id ? {
+        ...item,
+        id: nextId,
+        sourceId: edge.targetId,
+        targetId: edge.sourceId,
+        sourceAnchor: edge.targetAnchor,
+        targetAnchor: edge.sourceAnchor,
+      } : item);
+      const activeIds = current.placedCardIds ?? current.orderedCardIds;
+      return {
+        ...current,
+        diagramEdges: nextEdges,
+        prerequisites: derivePrerequisites(activeIds, nextEdges),
+        confirmedAt: undefined,
+      };
+    });
+    setSelectedEdgeId(nextId);
+    setCanvasNotice(isZh ? '关系方向已反转' : 'Relation direction reversed');
   };
 
   const handleCanvasNodeClick = (nodeId: string) => {
     setSelectedId(nodeId);
+    setSelectedEdgeId('');
     if (!connectMode) return;
     if (!connectionSourceId) {
       setConnectionSourceId(nodeId);
@@ -468,6 +506,7 @@ const ProjectSystemPathStage: React.FC<Props> = ({
   const startConnectionFromHandle = (event: React.MouseEvent<HTMLButtonElement>, nodeId: string, side: StudentConnectorSide) => {
     event.stopPropagation();
     setSelectedId(nodeId);
+    setSelectedEdgeId('');
     setConnectMode(true);
     setConnectionSourceId(nodeId);
     setConnectionSourceAnchor(side);
@@ -487,6 +526,7 @@ const ProjectSystemPathStage: React.FC<Props> = ({
       };
     });
     setSelectedId('');
+    if (selectedEdge && (selectedEdge.sourceId === nodeId || selectedEdge.targetId === nodeId)) setSelectedEdgeId('');
     setConnectionSourceId(source => source === nodeId ? null : source);
     if (connectionSourceId === nodeId) setConnectionSourceAnchor(null);
     setCanvasNotice(isZh ? '功能卡已移回右侧素材区' : 'Card returned to the palette');
@@ -612,7 +652,54 @@ const ProjectSystemPathStage: React.FC<Props> = ({
                   const distance = Math.hypot(targetPoint.x - sourcePoint.x, targetPoint.y - sourcePoint.y);
                   const bend = Math.max(52, distance * .32);
                   const path = `M ${sourcePoint.x} ${sourcePoint.y} C ${sourcePoint.x + sourcePoint.dx * bend} ${sourcePoint.y + sourcePoint.dy * bend}, ${targetPoint.x + targetPoint.dx * bend} ${targetPoint.y + targetPoint.dy * bend}, ${targetPoint.x} ${targetPoint.y}`;
-                  return <path key={edge.id} d={path} className={selectedId === edge.targetId || selectedId === edge.sourceId ? 'is-selected' : ''} markerEnd="url(#relation-arrow-head)" />;
+                  const selected = selectedEdgeId === edge.id || selectedId === edge.targetId || selectedId === edge.sourceId;
+                  const midpoint = { x: (sourcePoint.x + targetPoint.x) / 2, y: (sourcePoint.y + targetPoint.y) / 2 };
+                  const selectEdge = () => {
+                    setSelectedId('');
+                    setSelectedEdgeId(edge.id);
+                  };
+                  return (
+                    <React.Fragment key={edge.id}>
+                      <path d={path} className={`relation-edge-path ${selected ? 'is-selected' : ''}`} markerEnd="url(#relation-arrow-head)" />
+                      <path
+                        d={path}
+                        className="relation-edge-hit"
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`${isZh ? '功能关系' : 'Function relation'}: ${getNodeLabel(edge.sourceId)} → ${getNodeLabel(edge.targetId)}`}
+                        onClick={event => {
+                          event.stopPropagation();
+                          selectEdge();
+                        }}
+                        onKeyDown={event => {
+                          if (event.key === 'Delete' || event.key === 'Backspace') {
+                            event.preventDefault();
+                            removeDiagramEdge(edge.id);
+                          }
+                        }}
+                      />
+                      <circle
+                        cx={midpoint.x}
+                        cy={midpoint.y}
+                        r={7}
+                        className={`relation-edge-selector ${selectedEdgeId === edge.id ? 'is-selected' : ''}`}
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`${isZh ? '编辑功能关系' : 'Edit relation'}: ${getNodeLabel(edge.sourceId)} → ${getNodeLabel(edge.targetId)}`}
+                        onClick={event => { event.stopPropagation(); selectEdge(); }}
+                        onKeyDown={event => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            selectEdge();
+                          }
+                          if (event.key === 'Delete' || event.key === 'Backspace') {
+                            event.preventDefault();
+                            removeDiagramEdge(edge.id);
+                          }
+                        }}
+                      />
+                    </React.Fragment>
+                  );
                 })}
               </svg>
               {orderedCards.map((card, index) => {
@@ -670,6 +757,17 @@ const ProjectSystemPathStage: React.FC<Props> = ({
         </section>
 
         <aside className="relation-toolbox">
+          {selectedEdge && (
+            <section className="toolbox-selection is-edge-selection">
+              <div className="relation-canvas-label"><Link2 size={15} /><span>{isZh ? '当前关系' : 'SELECTED RELATION'}</span></div>
+              <strong>{getNodeLabel(selectedEdge.sourceId)} → {getNodeLabel(selectedEdge.targetId)}</strong>
+              <div className="selected-edge-actions">
+                <button type="button" onClick={() => reverseDiagramEdge(selectedEdge)}><ArrowLeftRight size={14} />{isZh ? '反转方向' : 'Reverse'}</button>
+                <button type="button" className="is-danger" onClick={() => removeDiagramEdge(selectedEdge.id)}><Trash2 size={14} />{isZh ? '删除连线' : 'Delete'}</button>
+              </div>
+            </section>
+          )}
+
           <section className="toolbox-section">
             <div className="relation-canvas-label"><Route size={15} /><span>{isZh ? '我的实现顺序' : 'MY BUILD ORDER'}</span></div>
             <p>{isZh ? '这不是游戏运行顺序，而是你准备逐张编写和验证功能的顺序。' : 'This is your coding order, not the runtime sequence.'}</p>
@@ -737,7 +835,7 @@ const ProjectSystemPathStage: React.FC<Props> = ({
 
           <div className={`toolbox-notice ${connectMode ? 'is-connecting' : ''}`}>
             {connectMode ? <Link2 size={15} /> : <Move size={15} />}
-            <span>{canvasNotice || (isZh ? '先用箭头表达功能依赖，再调整上方的个人实现顺序。' : 'Connect dependencies, then adjust your personal build order.')}</span>
+            <span>{canvasNotice || (isZh ? '点击功能卡建立关系；点击连线可反转或删除。' : 'Connect function cards; select an arrow to reverse or delete it.')}</span>
           </div>
         </aside>
       </div>
