@@ -850,6 +850,17 @@ const ProjectSystemPathStage: React.FC<Props> = ({
                           : <><Link2 size={13} />{isZh ? `依赖 ${dependencies.length} 张卡` : `${dependencies.length} prerequisites`}</>}
                       </footer>
                     </article>
+                    {selected ? (
+                      <button
+                        type="button"
+                        className="relation-node-delete"
+                        style={{ left: position.x + CANVAS_NODE_WIDTH - 13, top: position.y - 13 }}
+                        aria-label={`${isZh ? '从画布移除功能卡' : 'Remove function card from canvas'}: ${card.responsibility}`}
+                        title={isZh ? '移回右侧功能卡区' : 'Return to the function card palette'}
+                        onPointerDown={event => event.stopPropagation()}
+                        onClick={event => { event.stopPropagation(); removeNodeFromCanvas(card.id); }}
+                      ><X size={14} /></button>
+                    ) : null}
                     {(selected || connectionTarget?.nodeId === card.id) ? CONNECTOR_SIDES.map(side => (
                       <button
                         key={side}

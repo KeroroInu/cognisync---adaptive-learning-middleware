@@ -181,6 +181,24 @@
 }
 .relation-node.is-dragging { z-index: 4; cursor: grabbing; box-shadow: 7px 9px 0 color-mix(in srgb, #161713 27%, transparent); }
 .relation-node:focus-visible { outline: 3px solid color-mix(in srgb, var(--brand-cyan) 72%, #161713); outline-offset: 3px; }
+.relation-node-delete {
+  position: absolute;
+  z-index: 10;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1.6px solid #161713;
+  border-radius: 50%;
+  background: color-mix(in srgb, #fff 76%, #ffd7c8);
+  color: #8f3f2f;
+  box-shadow: 2px 3px 0 #161713;
+  cursor: pointer;
+}
+.relation-node-delete:hover { background: #ffd7c8; transform: translateY(-1px); }
+.relation-node-delete:active { box-shadow: 1px 1px 0 #161713; transform: translate(1px, 1px); }
+.relation-node-delete:focus-visible { outline: 3px solid color-mix(in srgb, var(--brand-cyan) 72%, #161713); outline-offset: 3px; }
 .relation-connection-handle {
   position: absolute;
   z-index: 9;

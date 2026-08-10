@@ -563,11 +563,16 @@ export async function saveResearchProgress(taskId: string, code: string, started
 /**
  * 保存项目解构工作台：观察、功能、关系、路径与模块代码。
  */
-export async function saveResearchWorkspace(taskId: string, workspaceData: Record<string, unknown>): Promise<void> {
+export async function saveResearchWorkspace(
+  taskId: string,
+  workspaceData: Record<string, unknown>,
+  options?: { keepalive?: boolean },
+): Promise<void> {
   const response = await fetch(`${API_BASE_URL}/api/research/tasks/${taskId}/save-workspace`, {
     method: 'POST',
     headers: getHeaders(true),
     body: JSON.stringify({ workspace_data: workspaceData }),
+    keepalive: options?.keepalive,
   });
   if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 }

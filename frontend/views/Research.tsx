@@ -27,6 +27,7 @@ import {
   hydrateSnakeProjectWorkspace,
   isSnakeProjectWorkspace,
   seedSnakeProjectDemo,
+  type SnakeProjectWorkspace,
 } from '../data/snakeProjectDemo';
 
 const ResearchCodeEditor = React.lazy(() => import('../components/ResearchCodeEditor'));
@@ -47,6 +48,21 @@ interface Props {
   studentId?: string;
   experimentGroup: User['experimentGroup'];
 }
+
+type WorkspaceSaveStatus = 'saved' | 'saving' | 'unsaved' | 'error';
+
+const workspaceSignature = (workspace: SnakeProjectWorkspace) => JSON.stringify({
+  version: workspace.version,
+  evidence: workspace.evidence,
+  observations: workspace.observations,
+  functions: workspace.functions,
+  path: workspace.path,
+  progress: workspace.progress,
+});
+
+const WORKSPACE_CHECK_INTERVAL_MS = 400;
+const WORKSPACE_SAVE_DEBOUNCE_MS = 900;
+const WORKSPACE_RETRY_DELAY_MS = 4000;
 
 // Extend Window so TS knows about Pyodide on CDN
 declare global {
@@ -71,6 +87,7 @@ export const Research: React.FC<Props> = ({
   const [loadingTask, setLoadingTask] = useState(true);
   const [code, setCode] = useState('');
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved');
+  const [workspaceSaveStatus, setWorkspaceSaveStatus] = useState<WorkspaceSaveStatus>('saved');
   const [factoryStage, setFactoryStage] = useState<ProjectStage>('observe');
   const [demoOpen, setDemoOpen] = useState(false);
   const [assistantOpen, setAssistantOpen] = useState(false);
@@ -100,6 +117,12 @@ export const Research: React.FC<Props> = ({
 
   // Refs
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const workspaceSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const workspaceRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const workspaceSaveRunningRef = useRef(false);
+  const workspacePendingRef = useRef<SnakeProjectWorkspace | null>(null);
+  const workspaceLastSavedSignatureRef = useRef('');
+  const flushWorkspaceRef = useRef<(keepalive?: boolean) => Promise<void>>(async () => {});
   const chatScrollRef = useRef<HTMLDivElement>(null);
 
   // Elapsed timer
@@ -109,13 +132,76 @@ export const Research: React.FC<Props> = ({
   const isZh = language === 'zh';
   const isPython = task?.language?.toLowerCase() === 'python';
   const allowAI = experimentGroup === 'pdt' || experimentGroup === 'ai_pbl';
-  const factorySaveLabel = factoryStage === 'build'
-    ? (saveStatus === 'saving'
+  const factorySaveLabel = experimentGroup === 'pdt'
+    ? (workspaceSaveStatus === 'saving'
       ? (isZh ? '保存中' : 'Saving')
-      : saveStatus === 'unsaved'
+      : workspaceSaveStatus === 'unsaved'
         ? (isZh ? '待保存' : 'Unsaved')
-        : (isZh ? '已保存' : 'Saved'))
-    : (isZh ? '过程已暂存' : 'Progress saved');
+        : workspaceSaveStatus === 'error'
+          ? (isZh ? '同步失败 · 已存本机' : 'Sync failed · saved locally')
+          : (isZh ? '已同步' : 'Synced'))
+    : factoryStage === 'build'
+      ? (saveStatus === 'saving'
+        ? (isZh ? '保存中' : 'Saving')
+        : saveStatus === 'unsaved'
+          ? (isZh ? '待保存' : 'Unsaved')
+          : (isZh ? '已保存' : 'Saved'))
+      : (isZh ? '过程已暂存' : 'Progress saved');
+
+  const flushWorkspaceQueue = useCallback(async (keepalive = false) => {
+    if (!task || experimentGroup !== 'pdt' || workspaceSaveRunningRef.current) return;
+    workspaceSaveRunningRef.current = true;
+    try {
+      while (workspacePendingRef.current) {
+        const snapshot = workspacePendingRef.current;
+        const signature = workspaceSignature(snapshot);
+        workspacePendingRef.current = null;
+        if (signature === workspaceLastSavedSignatureRef.current) continue;
+        setWorkspaceSaveStatus('saving');
+        try {
+          await saveResearchWorkspace(task.id, snapshot, { keepalive });
+          workspaceLastSavedSignatureRef.current = signature;
+        } catch {
+          workspacePendingRef.current ??= snapshot;
+          setWorkspaceSaveStatus('error');
+          if (workspaceRetryTimerRef.current) clearTimeout(workspaceRetryTimerRef.current);
+          workspaceRetryTimerRef.current = setTimeout(() => {
+            workspaceRetryTimerRef.current = null;
+            void flushWorkspaceRef.current();
+          }, WORKSPACE_RETRY_DELAY_MS);
+          return;
+        }
+      }
+      setWorkspaceSaveStatus('saved');
+    } finally {
+      workspaceSaveRunningRef.current = false;
+    }
+  }, [experimentGroup, task]);
+
+  useEffect(() => {
+    flushWorkspaceRef.current = flushWorkspaceQueue;
+  }, [flushWorkspaceQueue]);
+
+  const queueWorkspaceSave = useCallback((delay = WORKSPACE_SAVE_DEBOUNCE_MS) => {
+    if (!task || experimentGroup !== 'pdt') return;
+    const snapshot = collectSnakeProjectWorkspace(task.id);
+    const signature = workspaceSignature(snapshot);
+    const pendingSignature = workspacePendingRef.current
+      ? workspaceSignature(workspacePendingRef.current)
+      : '';
+    if (signature === workspaceLastSavedSignatureRef.current || signature === pendingSignature) return;
+    workspacePendingRef.current = snapshot;
+    setWorkspaceSaveStatus('unsaved');
+    if (workspaceSaveTimerRef.current) clearTimeout(workspaceSaveTimerRef.current);
+    if (workspaceRetryTimerRef.current) {
+      clearTimeout(workspaceRetryTimerRef.current);
+      workspaceRetryTimerRef.current = null;
+    }
+    workspaceSaveTimerRef.current = setTimeout(() => {
+      workspaceSaveTimerRef.current = null;
+      void flushWorkspaceRef.current();
+    }, delay);
+  }, [experimentGroup, task]);
 
   // ── Load task ──────────────────────────────────────────────────────────
 
@@ -143,6 +229,10 @@ export const Research: React.FC<Props> = ({
             hydrateSnakeProjectWorkspace(t.id, workspace);
           }
 
+          workspaceLastSavedSignatureRef.current = workspace ? workspaceSignature(workspace) : '';
+          workspacePendingRef.current = null;
+          setWorkspaceSaveStatus('saved');
+
           // 优先使用学生已保存的代码，否则用模板原始代码
           setCode(t.code_submitted || t.code_content);
           // 若已提交过，直接标记为完成（停止计时器）
@@ -165,6 +255,30 @@ export const Research: React.FC<Props> = ({
     };
     void loadTask();
   }, [experimentGroup, studentId]);
+
+  useEffect(() => {
+    if (!task || experimentGroup !== 'pdt') return;
+    const interval = window.setInterval(() => queueWorkspaceSave(), WORKSPACE_CHECK_INTERVAL_MS);
+    const flushBeforeLeaving = () => {
+      queueWorkspaceSave(0);
+      void flushWorkspaceRef.current(true);
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') flushBeforeLeaving();
+    };
+    window.addEventListener('pagehide', flushBeforeLeaving);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('pagehide', flushBeforeLeaving);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [experimentGroup, queueWorkspaceSave, task]);
+
+  useEffect(() => () => {
+    if (workspaceSaveTimerRef.current) clearTimeout(workspaceSaveTimerRef.current);
+    if (workspaceRetryTimerRef.current) clearTimeout(workspaceRetryTimerRef.current);
+  }, []);
 
   const handleSnakeEvidence = useCallback((event: SnakeRuntimeEvidence) => {
     setRuntimeEvidence(current => {
@@ -190,13 +304,9 @@ export const Research: React.FC<Props> = ({
   }, [task?.id]);
 
   const handleFactoryStageChange = useCallback((stage: ProjectStage) => {
+    queueWorkspaceSave(0);
     setFactoryStage(stage);
-    if (!task || experimentGroup !== 'pdt') return;
-    const workspace = collectSnakeProjectWorkspace(task.id);
-    void saveResearchWorkspace(task.id, workspace).catch(() => {
-      // 网络短暂失败不阻塞课堂操作，本地数据仍保留。
-    });
-  }, [experimentGroup, task]);
+  }, [queueWorkspaceSave]);
 
   // ── Auto-scroll chat ────────────────────────────────────────────────────
 
