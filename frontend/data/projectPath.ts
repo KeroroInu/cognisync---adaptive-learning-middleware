@@ -3,6 +3,7 @@ import type { StudentFunctionCard } from '../components/ProjectFunctionStage';
 import { SNAKE_PROJECT_BLUEPRINT, type BlueprintNode } from './snakeProjectBlueprint';
 
 export type StudentRelationKind = 'prerequisite' | 'parallel';
+export type StudentFlowNodeKind = 'start' | 'process' | 'decision' | 'input-output' | 'end';
 export const STUDENT_CANVAS_LAYOUT_VERSION = 2;
 
 export interface StudentCanvasPosition {
@@ -10,10 +11,26 @@ export interface StudentCanvasPosition {
   y: number;
 }
 
+export interface StudentFlowNode {
+  id: string;
+  kind: StudentFlowNodeKind;
+  label: string;
+  position: StudentCanvasPosition;
+}
+
+export interface StudentDiagramEdge {
+  id: string;
+  sourceId: string;
+  targetId: string;
+}
+
 export interface StudentPathPlan {
   orderedCardIds: string[];
+  placedCardIds?: string[];
   prerequisites: Record<string, string[]>;
   relationKinds: Record<string, StudentRelationKind>;
+  flowNodes?: StudentFlowNode[];
+  diagramEdges?: StudentDiagramEdge[];
   canvasLayoutVersion?: number;
   canvasPositions?: Record<string, StudentCanvasPosition>;
   confirmedAt?: string;
@@ -95,8 +112,11 @@ export const createDefaultCanvasPositions = (cards: StudentFunctionCard[]) => Ob
 
 export const createInitialPathPlan = (cards: StudentFunctionCard[]): StudentPathPlan => ({
   orderedCardIds: cards.map(card => card.id),
+  placedCardIds: [],
   prerequisites: {},
   relationKinds: {},
+  flowNodes: [],
+  diagramEdges: [],
   canvasLayoutVersion: STUDENT_CANVAS_LAYOUT_VERSION,
   canvasPositions: createDefaultCanvasPositions(cards),
 });
