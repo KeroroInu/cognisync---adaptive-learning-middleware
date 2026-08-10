@@ -47,6 +47,15 @@ interface DragState {
   height: number;
 }
 
+interface ConnectionDragState {
+  pointerId: number;
+  sourceId: string;
+  sourceAnchor: StudentConnectorSide;
+  startClientX: number;
+  startClientY: number;
+  moved: boolean;
+}
+
 const CANVAS_WIDTH = 1280;
 const CANVAS_HEIGHT = 620;
 const CANVAS_PADDING = 24;
@@ -129,11 +138,13 @@ export const ProjectMechanismStage: React.FC<Props> = ({
   const [connectMode, setConnectMode] = useState(false);
   const [connectionSourceId, setConnectionSourceId] = useState<string | null>(null);
   const [connectionSourceAnchor, setConnectionSourceAnchor] = useState<StudentConnectorSide | null>(null);
+  const [connectionPreview, setConnectionPreview] = useState<StudentCanvasPosition | null>(null);
   const [notice, setNotice] = useState('');
   const [zoom, setZoom] = useState(1);
   const canvasRef = useRef<HTMLDivElement>(null);
   const canvasScrollRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<DragState | null>(null);
+  const connectionDragRef = useRef<ConnectionDragState | null>(null);
 
   useEffect(() => {
     if (draggingId) return;
@@ -317,14 +328,65 @@ export const ProjectMechanismStage: React.FC<Props> = ({
     setConnectionSourceAnchor(null);
   };
 
-  const startConnectionFromHandle = (event: React.MouseEvent<HTMLButtonElement>, nodeId: string, side: StudentConnectorSide) => {
+  const beginConnectionDrag = (event: React.PointerEvent<HTMLButtonElement>, nodeId: string, side: StudentConnectorSide) => {
+    if (event.button !== 0 || !canvasRef.current) return;
     event.stopPropagation();
+    event.preventDefault();
+    const bounds = canvasRef.current.getBoundingClientRect();
+    connectionDragRef.current = {
+      pointerId: event.pointerId,
+      sourceId: nodeId,
+      sourceAnchor: side,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      moved: false,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
     setSelectedNodeId(nodeId);
     setSelectedEdgeId('');
     setConnectMode(true);
     setConnectionSourceId(nodeId);
     setConnectionSourceAnchor(side);
-    setNotice(isZh ? '已选择连接点，请点击要连接到的流程元素' : 'Connector selected; click the target element');
+    setConnectionPreview({ x: (event.clientX - bounds.left) / zoom, y: (event.clientY - bounds.top) / zoom });
+    setNotice(isZh ? '拖到另一个流程元素上松开' : 'Drag onto another flow element and release');
+  };
+
+  const moveConnectionDrag = (event: React.PointerEvent<HTMLButtonElement>) => {
+    const current = connectionDragRef.current;
+    const canvas = canvasRef.current;
+    if (!current || current.pointerId !== event.pointerId || !canvas) return;
+    if (Math.hypot(event.clientX - current.startClientX, event.clientY - current.startClientY) > 4) current.moved = true;
+    const bounds = canvas.getBoundingClientRect();
+    setConnectionPreview({
+      x: Math.max(0, Math.min(CANVAS_WIDTH, (event.clientX - bounds.left) / zoom)),
+      y: Math.max(0, Math.min(CANVAS_HEIGHT, (event.clientY - bounds.top) / zoom)),
+    });
+  };
+
+  const finishConnectionDrag = (event: React.PointerEvent<HTMLButtonElement>) => {
+    const current = connectionDragRef.current;
+    if (!current || current.pointerId !== event.pointerId) return;
+    const target = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>('[data-mechanism-node-id]');
+    const targetId = target?.dataset.mechanismNodeId;
+    connectionDragRef.current = null;
+    setConnectionPreview(null);
+    setConnectMode(false);
+    setConnectionSourceId(null);
+    setConnectionSourceAnchor(null);
+    if (current.moved && targetId && targetId !== current.sourceId) {
+      addEdge(current.sourceId, targetId, current.sourceAnchor);
+      return;
+    }
+    setNotice(isZh ? '未连接；请按住圆点拖到另一个图形' : 'Not connected; drag the handle onto another shape');
+  };
+
+  const cancelConnectionDrag = (event: React.PointerEvent<HTMLButtonElement>) => {
+    if (connectionDragRef.current?.pointerId !== event.pointerId) return;
+    connectionDragRef.current = null;
+    setConnectionPreview(null);
+    setConnectMode(false);
+    setConnectionSourceId(null);
+    setConnectionSourceAnchor(null);
   };
 
   const removeEdge = (edgeId: string) => {
@@ -439,6 +501,8 @@ export const ProjectMechanismStage: React.FC<Props> = ({
                     setSelectedEdgeId('');
                     setConnectionSourceId(null);
                     setConnectionSourceAnchor(null);
+                    setConnectionPreview(null);
+                    connectionDragRef.current = null;
                     setConnectMode(false);
                     setNotice('');
                   }}
@@ -461,7 +525,7 @@ export const ProjectMechanismStage: React.FC<Props> = ({
                 <span>{Math.round(zoom * 100)}%</span>
                 <button type="button" aria-label={isZh ? '放大画板' : 'Zoom in'} disabled={zoom >= MAX_ZOOM} onClick={() => setZoom(value => Math.min(MAX_ZOOM, Math.round((value + .1) * 10) / 10))}><Plus size={13} /></button>
               </div>
-              <button type="button" className={connectMode ? 'is-active' : ''} onClick={() => { setConnectMode(value => !value); setConnectionSourceId(null); setConnectionSourceAnchor(null); }}>
+              <button type="button" className={connectMode && !connectionPreview ? 'is-active' : ''} onClick={() => { setConnectMode(value => !value); setConnectionSourceId(null); setConnectionSourceAnchor(null); setConnectionPreview(null); connectionDragRef.current = null; }}>
                 {connectMode ? <X size={13} /> : <Link2 size={13} />}{connectMode ? (isZh ? '退出连线' : 'Exit connect') : (isZh ? '连接流程' : 'Connect')}
               </button>
               <button type="button" onClick={resetLayout}><RotateCcw size={13} />{isZh ? '整理' : 'Arrange'}</button>
@@ -551,6 +615,15 @@ export const ProjectMechanismStage: React.FC<Props> = ({
                       </React.Fragment>
                     );
                   })}
+                  {connectionPreview && connectionSourceId && connectionSourceAnchor ? (() => {
+                    const sourceNode = diagram.flowNodes.find(node => node.id === connectionSourceId);
+                    if (!sourceNode) return null;
+                    const sourcePoint = getAnchorPoint(sourceNode.position, getFlowNodeSize(sourceNode.kind), connectionSourceAnchor);
+                    const distance = Math.hypot(connectionPreview.x - sourcePoint.x, connectionPreview.y - sourcePoint.y);
+                    const bend = Math.max(42, distance * .28);
+                    const previewPath = `M ${sourcePoint.x} ${sourcePoint.y} C ${sourcePoint.x + sourcePoint.dx * bend} ${sourcePoint.y + sourcePoint.dy * bend}, ${connectionPreview.x} ${connectionPreview.y}, ${connectionPreview.x} ${connectionPreview.y}`;
+                    return <path d={previewPath} className="mechanism-connection-preview" markerEnd="url(#mechanism-arrow-head)" />;
+                  })() : null}
                 </svg>
 
                 {diagram.flowNodes.map(node => {
@@ -563,6 +636,7 @@ export const ProjectMechanismStage: React.FC<Props> = ({
                         style={{ left: node.position.x, top: node.position.y, width: size.width, height: size.height }}
                         role="button"
                         tabIndex={0}
+                        data-mechanism-node-id={node.id}
                         aria-label={`${isZh ? '流程元素' : 'Flow element'}: ${node.label}`}
                         onClick={() => handleNodeClick(node.id)}
                         onKeyDown={event => handleNodeKeyDown(event, node)}
@@ -588,9 +662,12 @@ export const ProjectMechanismStage: React.FC<Props> = ({
                           type="button"
                           className={`mechanism-connection-handle is-${side}`}
                           style={getHandlePosition(node.position, size, side)}
-                          aria-label={`${isZh ? '从此方向连接' : 'Connect from'} ${side}: ${node.label}`}
-                          onPointerDown={event => event.stopPropagation()}
-                          onClick={event => startConnectionFromHandle(event, node.id, side)}
+                          aria-label={`${isZh ? '从此方向拖出连线' : 'Drag a connection from'} ${side}: ${node.label}`}
+                          title={isZh ? '按住并拖到另一个流程元素' : 'Hold and drag onto another flow element'}
+                          onPointerDown={event => beginConnectionDrag(event, node.id, side)}
+                          onPointerMove={moveConnectionDrag}
+                          onPointerUp={finishConnectionDrag}
+                          onPointerCancel={cancelConnectionDrag}
                         />
                       )) : null}
                       {selected ? (
@@ -682,7 +759,7 @@ export const ProjectMechanismStage: React.FC<Props> = ({
 
           <div className={`mechanism-notice ${connectMode ? 'is-connecting' : ''}`}>
             {connectMode ? <Link2 size={15} /> : <Move size={15} />}
-            <span>{notice || (isZh ? '点击图形可直接改字；点击连线可反向或删除。' : 'Select a shape to edit text; select an arrow to reverse or delete it.')}</span>
+            <span>{notice || (isZh ? '拖图形本体可移动；按住蓝色圆点拖出连线；点击图形可直接改字。' : 'Drag shapes to move them; drag a blue handle to connect; select a shape to edit text.')}</span>
           </div>
 
           <button

@@ -149,6 +149,7 @@
 .relation-wire-layer .relation-edge-selector:hover,
 .relation-wire-layer .relation-edge-selector.is-selected { fill: #28aee8; stroke: #161713; opacity: 1; }
 .relation-wire-layer .relation-edge-selector:focus-visible { outline: none; stroke: #161713; stroke-width: 4; }
+.relation-wire-layer .relation-connection-preview { fill: none; stroke: #28aee8; stroke-width: 3; stroke-dasharray: 8 6; opacity: .95; vector-effect: non-scaling-stroke; pointer-events: none; }
 .relation-wire-layer marker path { fill: #7b835f; stroke: none; opacity: 1; }
 
 .relation-node {
@@ -184,6 +185,7 @@
   background: #28aee8;
   box-shadow: 0 0 0 1px #168dc2;
   cursor: crosshair;
+  touch-action: none;
 }
 .relation-connection-handle:hover { width: 18px; height: 18px; margin: -2px 0 0 -2px; background: var(--brand-cyan); box-shadow: 0 0 0 2px #161713; }
 .relation-connection-handle:focus-visible { outline: 3px solid #161713; outline-offset: 3px; }

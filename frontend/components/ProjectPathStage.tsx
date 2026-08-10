@@ -61,6 +61,15 @@ interface DragState {
   height: number;
 }
 
+interface ConnectionDragState {
+  pointerId: number;
+  sourceId: string;
+  sourceAnchor: StudentConnectorSide;
+  startClientX: number;
+  startClientY: number;
+  moved: boolean;
+}
+
 interface PaletteDragPayload {
   type: 'card';
   id: string;
@@ -203,11 +212,13 @@ const ProjectSystemPathStage: React.FC<Props> = ({
   const [connectMode, setConnectMode] = useState(false);
   const [connectionSourceId, setConnectionSourceId] = useState<string | null>(null);
   const [connectionSourceAnchor, setConnectionSourceAnchor] = useState<StudentConnectorSide | null>(null);
+  const [connectionPreview, setConnectionPreview] = useState<StudentCanvasPosition | null>(null);
   const [canvasNotice, setCanvasNotice] = useState('');
   const [canvasZoom, setCanvasZoom] = useState(1);
   const canvasRef = useRef<HTMLDivElement>(null);
   const canvasScrollRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<DragState | null>(null);
+  const connectionDragRef = useRef<ConnectionDragState | null>(null);
 
   useEffect(() => {
     if (draggingId) return;
@@ -503,14 +514,65 @@ const ProjectSystemPathStage: React.FC<Props> = ({
     setConnectionSourceAnchor(null);
   };
 
-  const startConnectionFromHandle = (event: React.MouseEvent<HTMLButtonElement>, nodeId: string, side: StudentConnectorSide) => {
+  const beginConnectionDrag = (event: React.PointerEvent<HTMLButtonElement>, nodeId: string, side: StudentConnectorSide) => {
+    if (event.button !== 0 || !canvasRef.current) return;
     event.stopPropagation();
+    event.preventDefault();
+    const bounds = canvasRef.current.getBoundingClientRect();
+    connectionDragRef.current = {
+      pointerId: event.pointerId,
+      sourceId: nodeId,
+      sourceAnchor: side,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      moved: false,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
     setSelectedId(nodeId);
     setSelectedEdgeId('');
     setConnectMode(true);
     setConnectionSourceId(nodeId);
     setConnectionSourceAnchor(side);
-    setCanvasNotice(isZh ? '已选择连接点，请点击要连接到的功能卡' : 'Connector selected; click the target card');
+    setConnectionPreview({ x: (event.clientX - bounds.left) / canvasZoom, y: (event.clientY - bounds.top) / canvasZoom });
+    setCanvasNotice(isZh ? '拖到另一张功能卡上松开' : 'Drag onto another function card and release');
+  };
+
+  const moveConnectionDrag = (event: React.PointerEvent<HTMLButtonElement>) => {
+    const current = connectionDragRef.current;
+    const canvas = canvasRef.current;
+    if (!current || current.pointerId !== event.pointerId || !canvas) return;
+    if (Math.hypot(event.clientX - current.startClientX, event.clientY - current.startClientY) > 4) current.moved = true;
+    const bounds = canvas.getBoundingClientRect();
+    setConnectionPreview({
+      x: Math.max(0, Math.min(CANVAS_WIDTH, (event.clientX - bounds.left) / canvasZoom)),
+      y: Math.max(0, Math.min(CANVAS_HEIGHT, (event.clientY - bounds.top) / canvasZoom)),
+    });
+  };
+
+  const finishConnectionDrag = (event: React.PointerEvent<HTMLButtonElement>) => {
+    const current = connectionDragRef.current;
+    if (!current || current.pointerId !== event.pointerId) return;
+    const target = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>('[data-relation-node-id]');
+    const targetId = target?.dataset.relationNodeId;
+    connectionDragRef.current = null;
+    setConnectionPreview(null);
+    setConnectMode(false);
+    setConnectionSourceId(null);
+    setConnectionSourceAnchor(null);
+    if (current.moved && targetId && targetId !== current.sourceId) {
+      addDiagramEdge(current.sourceId, targetId, current.sourceAnchor);
+      return;
+    }
+    setCanvasNotice(isZh ? '未连接；请按住圆点拖到另一张功能卡' : 'Not connected; drag the handle onto another card');
+  };
+
+  const cancelConnectionDrag = (event: React.PointerEvent<HTMLButtonElement>) => {
+    if (connectionDragRef.current?.pointerId !== event.pointerId) return;
+    connectionDragRef.current = null;
+    setConnectionPreview(null);
+    setConnectMode(false);
+    setConnectionSourceId(null);
+    setConnectionSourceAnchor(null);
   };
 
   const removeNodeFromCanvas = (nodeId: string) => {
@@ -603,11 +665,13 @@ const ProjectSystemPathStage: React.FC<Props> = ({
               </div>
               <button
                 type="button"
-                className={connectMode ? 'is-active' : ''}
+                className={connectMode && !connectionPreview ? 'is-active' : ''}
                 onClick={() => {
                   setConnectMode(active => !active);
                   setConnectionSourceId(null);
                   setConnectionSourceAnchor(null);
+                  setConnectionPreview(null);
+                  connectionDragRef.current = null;
                   setCanvasNotice(isZh ? '连线模式：依次点击起点和终点' : 'Connect mode: click source, then destination');
                 }}
               >
@@ -701,6 +765,15 @@ const ProjectSystemPathStage: React.FC<Props> = ({
                     </React.Fragment>
                   );
                 })}
+                {connectionPreview && connectionSourceId && connectionSourceAnchor ? (() => {
+                  const source = getNodeGeometry(connectionSourceId);
+                  if (!source) return null;
+                  const sourcePoint = getConnectorPoint(source, connectionSourceAnchor);
+                  const distance = Math.hypot(connectionPreview.x - sourcePoint.x, connectionPreview.y - sourcePoint.y);
+                  const bend = Math.max(46, distance * .28);
+                  const previewPath = `M ${sourcePoint.x} ${sourcePoint.y} C ${sourcePoint.x + sourcePoint.dx * bend} ${sourcePoint.y + sourcePoint.dy * bend}, ${connectionPreview.x} ${connectionPreview.y}, ${connectionPreview.x} ${connectionPreview.y}`;
+                  return <path d={previewPath} className="relation-connection-preview" markerEnd="url(#relation-arrow-head)" />;
+                })() : null}
               </svg>
               {orderedCards.map((card, index) => {
                 const dependencies = plan.prerequisites[card.id] ?? [];
@@ -713,6 +786,7 @@ const ProjectSystemPathStage: React.FC<Props> = ({
                       style={{ left: position.x, top: position.y }}
                       role="button"
                       tabIndex={0}
+                      data-relation-node-id={card.id}
                       aria-label={`${isZh ? '功能卡' : 'Function card'} ${index + 1}: ${card.responsibility}`}
                       onClick={() => handleCanvasNodeClick(card.id)}
                       onKeyDown={event => nudgeNode(event, card.id, position, { width: CANVAS_NODE_WIDTH, height: CANVAS_NODE_HEIGHT })}
@@ -736,9 +810,12 @@ const ProjectSystemPathStage: React.FC<Props> = ({
                         type="button"
                         className={`relation-connection-handle is-${side}`}
                         style={getCardHandlePosition(position, side)}
-                        aria-label={`${isZh ? '从此方向连接' : 'Connect from'} ${side}: ${card.responsibility}`}
-                        onPointerDown={event => event.stopPropagation()}
-                        onClick={event => startConnectionFromHandle(event, card.id, side)}
+                        aria-label={`${isZh ? '从此方向拖出连线' : 'Drag a connection from'} ${side}: ${card.responsibility}`}
+                        title={isZh ? '按住并拖到另一张功能卡' : 'Hold and drag onto another function card'}
+                        onPointerDown={event => beginConnectionDrag(event, card.id, side)}
+                        onPointerMove={moveConnectionDrag}
+                        onPointerUp={finishConnectionDrag}
+                        onPointerCancel={cancelConnectionDrag}
                       />
                     )) : null}
                   </React.Fragment>
@@ -835,7 +912,7 @@ const ProjectSystemPathStage: React.FC<Props> = ({
 
           <div className={`toolbox-notice ${connectMode ? 'is-connecting' : ''}`}>
             {connectMode ? <Link2 size={15} /> : <Move size={15} />}
-            <span>{canvasNotice || (isZh ? '点击功能卡建立关系；点击连线可反转或删除。' : 'Connect function cards; select an arrow to reverse or delete it.')}</span>
+            <span>{canvasNotice || (isZh ? '拖功能卡本体可移动；按住蓝色圆点拖出关系；点击线中间圆点可编辑。' : 'Drag cards to move them; drag a blue handle to connect; select the midpoint to edit a relation.')}</span>
           </div>
         </aside>
       </div>
