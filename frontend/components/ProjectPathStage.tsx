@@ -19,6 +19,7 @@ import {
   inferBlueprintNode,
   readStoredList,
   readStoredObject,
+  STUDENT_CANVAS_LAYOUT_VERSION,
   type StudentCanvasPosition,
   type StudentPathPlan,
 } from '../data/projectPath';
@@ -34,9 +35,9 @@ interface Props {
   onContinue: () => void;
 }
 
-const CANVAS_NODE_WIDTH = 214;
-const CANVAS_NODE_HEIGHT = 126;
-const CANVAS_PADDING = 16;
+const CANVAS_NODE_WIDTH = 270;
+const CANVAS_NODE_HEIGHT = 158;
+const CANVAS_PADDING = 20;
 
 interface DragState {
   cardId: string;
@@ -52,6 +53,7 @@ const isCanvasPosition = (value: StudentCanvasPosition | undefined): value is St
 const mergePlanWithCards = (stored: StudentPathPlan, cards: StudentFunctionCard[]): StudentPathPlan => {
   const cardIds = new Set(cards.map(card => card.id));
   const defaultPositions = createDefaultCanvasPositions(cards);
+  const useStoredPositions = stored.canvasLayoutVersion === STUDENT_CANVAS_LAYOUT_VERSION;
   const orderedCardIds = stored.orderedCardIds.filter(id => cardIds.has(id));
   cards.forEach(card => {
     if (!orderedCardIds.includes(card.id)) orderedCardIds.push(card.id);
@@ -60,9 +62,10 @@ const mergePlanWithCards = (stored: StudentPathPlan, cards: StudentFunctionCard[
   return {
     ...stored,
     orderedCardIds,
+    canvasLayoutVersion: STUDENT_CANVAS_LAYOUT_VERSION,
     canvasPositions: Object.fromEntries(cards.map(card => [
       card.id,
-      isCanvasPosition(stored.canvasPositions?.[card.id])
+      useStoredPositions && isCanvasPosition(stored.canvasPositions?.[card.id])
         ? stored.canvasPositions[card.id]
         : defaultPositions[card.id],
     ])),

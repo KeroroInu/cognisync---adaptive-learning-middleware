@@ -3371,6 +3371,23 @@ button:disabled {
   padding: 14px;
 }
 
+/* Project work is a dedicated learning environment. Once a learner enters the
+   studio, the general workspace chrome yields all available space to the task. */
+.app-shell-fullscreen.is-project-mode {
+  padding: 0;
+}
+
+.is-project-mode .app-main-fullscreen {
+  height: 100dvh;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.is-project-mode .app-content-fullscreen.is-project-content {
+  padding: 0;
+}
+
 /* The shared landing view keeps identity and project entry above the fold.
    Group-specific learning stages live inside their assigned workspaces. */
 .dashboard-hero {
@@ -4170,4 +4187,19 @@ button:disabled {
 
 .app-main.app-main-fullscreen {
   height: calc(100dvh - 20px);
+}
+
+.app-shell.app-shell-fullscreen.is-project-mode {
+  padding: 0;
+}
+
+.app-shell.is-project-mode .app-main.app-main-fullscreen {
+  height: 100dvh;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.app-shell.is-project-mode .app-content.app-content-fullscreen.is-project-content {
+  padding: 0;
 }

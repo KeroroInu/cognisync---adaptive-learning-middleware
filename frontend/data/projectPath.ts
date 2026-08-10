@@ -3,6 +3,7 @@ import type { StudentFunctionCard } from '../components/ProjectFunctionStage';
 import { SNAKE_PROJECT_BLUEPRINT, type BlueprintNode } from './snakeProjectBlueprint';
 
 export type StudentRelationKind = 'prerequisite' | 'parallel';
+export const STUDENT_CANVAS_LAYOUT_VERSION = 2;
 
 export interface StudentCanvasPosition {
   x: number;
@@ -13,6 +14,7 @@ export interface StudentPathPlan {
   orderedCardIds: string[];
   prerequisites: Record<string, string[]>;
   relationKinds: Record<string, StudentRelationKind>;
+  canvasLayoutVersion?: number;
   canvasPositions?: Record<string, StudentCanvasPosition>;
   confirmedAt?: string;
 }
@@ -69,24 +71,24 @@ export const readStoredObject = <T,>(key: string, fallback: T): T => {
 };
 
 const DEFAULT_CANVAS_POSITIONS: StudentCanvasPosition[] = [
-  { x: 30, y: 26 },
-  { x: 280, y: 26 },
-  { x: 530, y: 26 },
-  { x: 280, y: 190 },
-  { x: 530, y: 190 },
-  { x: 780, y: 26 },
-  { x: 1030, y: 108 },
-  { x: 780, y: 190 },
-  { x: 1030, y: 26 },
-  { x: 1030, y: 190 },
+  { x: 40, y: 36 },
+  { x: 350, y: 36 },
+  { x: 660, y: 36 },
+  { x: 350, y: 246 },
+  { x: 660, y: 246 },
+  { x: 970, y: 36 },
+  { x: 1280, y: 138 },
+  { x: 970, y: 246 },
+  { x: 1280, y: 36 },
+  { x: 1280, y: 246 },
 ];
 
 export const createDefaultCanvasPositions = (cards: StudentFunctionCard[]) => Object.fromEntries(
   cards.map((card, index) => [
     card.id,
     DEFAULT_CANVAS_POSITIONS[index] ?? {
-      x: 30 + (index % 5) * 250,
-      y: 26 + Math.floor(index / 5) * 164,
+      x: 40 + (index % 5) * 310,
+      y: 36 + Math.floor(index / 5) * 210,
     },
   ]),
 );
@@ -95,6 +97,7 @@ export const createInitialPathPlan = (cards: StudentFunctionCard[]): StudentPath
   orderedCardIds: cards.map(card => card.id),
   prerequisites: {},
   relationKinds: {},
+  canvasLayoutVersion: STUDENT_CANVAS_LAYOUT_VERSION,
   canvasPositions: createDefaultCanvasPositions(cards),
 });
 

@@ -39,6 +39,7 @@ interface TerminalLine {
 
 interface Props {
   onUpdateProfile: (profile: UserProfile) => void;
+  onExit: () => void;
   language: Language;
   theme: 'light' | 'dark';
   userId?: string;
@@ -57,6 +58,7 @@ declare global {
 
 export const Research: React.FC<Props> = ({
   onUpdateProfile,
+  onExit,
   language,
   theme,
   userId,
@@ -455,6 +457,7 @@ export const Research: React.FC<Props> = ({
         taskTitle={task.title}
         experimentGroup={experimentGroup}
         activeStage={factoryStage}
+        onExit={onExit}
         onStageChange={handleFactoryStageChange}
         onOpenProject={() => setDemoOpen(true)}
         onOpenAssistant={() => setAssistantOpen(true)}

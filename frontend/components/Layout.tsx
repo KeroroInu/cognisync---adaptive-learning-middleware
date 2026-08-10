@@ -114,6 +114,7 @@ export const Layout: React.FC<Props> = ({
   const primaryItems = navItems.filter(item => primaryViews.includes(item.id));
   const currentItem = navItems.find(item => item.id === currentView) ?? navItems[0];
   const userMeta = user?.email || user?.student_id || user?.id;
+  const isProjectMode = currentView === 'research';
 
   useEffect(() => {
     setMenuOpen(false);
@@ -136,9 +137,9 @@ export const Layout: React.FC<Props> = ({
   };
 
   return (
-    <div className="app-shell app-shell-fullscreen">
+    <div className={`app-shell app-shell-fullscreen ${isProjectMode ? 'is-project-mode' : ''}`}>
       <main className="app-main app-main-fullscreen animate-fade-in">
-        <header className="app-header workspace-header">
+        {!isProjectMode && <header className="app-header workspace-header">
           <div className="workspace-identity">
             <button
               type="button"
@@ -197,9 +198,9 @@ export const Layout: React.FC<Props> = ({
               <span>{language === 'zh' ? '更多' : 'More'}</span>
             </button>
           </div>
-        </header>
+        </header>}
 
-        {menuOpen && (
+        {!isProjectMode && menuOpen && (
           <>
             <button
               type="button"
@@ -276,7 +277,7 @@ export const Layout: React.FC<Props> = ({
           </>
         )}
 
-        <section className="app-content app-content-fullscreen">{children}</section>
+        <section className={`app-content app-content-fullscreen ${isProjectMode ? 'is-project-content' : ''}`}>{children}</section>
       </main>
     </div>
   );

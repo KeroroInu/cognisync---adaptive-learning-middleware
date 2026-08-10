@@ -257,6 +257,7 @@ function App() {
         return (
           <Research
             onUpdateProfile={updateProfile}
+            onExit={() => setCurrentView('dashboard')}
             language={state.language}
             theme={theme}
             userId={state.user?.id}

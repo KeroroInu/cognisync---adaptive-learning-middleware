@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ArrowLeft,
   ArrowRight,
   Blocks,
   CircleDot,
@@ -33,6 +34,7 @@ interface FactoryHeaderProps {
   taskTitle: string;
   experimentGroup: User['experimentGroup'];
   activeStage: ProjectStage;
+  onExit: () => void;
   onStageChange: (stage: ProjectStage) => void;
   onOpenProject: () => void;
   onOpenAssistant: () => void;
@@ -92,6 +94,7 @@ export const ProjectFactoryHeader: React.FC<FactoryHeaderProps> = ({
   taskTitle,
   experimentGroup,
   activeStage,
+  onExit,
   onStageChange,
   onOpenProject,
   onOpenAssistant,
@@ -102,6 +105,16 @@ export const ProjectFactoryHeader: React.FC<FactoryHeaderProps> = ({
 
   return (
     <header className="project-factory-header">
+      <button
+        type="button"
+        className="project-factory-back"
+        onClick={onExit}
+        aria-label={isZh ? '返回学习首页' : 'Back to learning home'}
+      >
+        <ArrowLeft size={20} />
+        <span>{isZh ? '返回' : 'Back'}</span>
+      </button>
+
       <div className="project-factory-heading">
         <span className="project-factory-index">PROJECT_001</span>
         <div>
