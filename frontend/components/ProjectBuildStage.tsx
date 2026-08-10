@@ -11,6 +11,7 @@ import {
   Code2,
   Gamepad2,
   Layers3,
+  LoaderCircle,
   LockKeyhole,
   Play,
   RotateCcw,
@@ -18,14 +19,21 @@ import {
 } from 'lucide-react';
 import type { Language } from '../types';
 import {
-  buildTopologicalOrder,
   createInitialPathPlan,
+  getImplementationOrderIds,
   inferBlueprintNode,
   readStoredList,
   readStoredObject,
   type StudentModuleProgress,
   type StudentPathPlan,
 } from '../data/projectPath';
+import {
+  disposePythonModuleRunner,
+  formatPythonModuleTestResult,
+  formatPythonRunnerError,
+  runPythonModuleTest,
+  type PythonModulePreview,
+} from '../services/pythonModuleRunner';
 import type { StudentObservationCard } from './ProjectFactory';
 import type { StudentFunctionCard } from './ProjectFunctionStage';
 import './ProjectBuildStage.css';
@@ -72,6 +80,7 @@ interface SnakeBuildPreviewProps {
   checkpointIndex: number;
   checkpointTotal: number;
   diagnosticRun: number;
+  demonstration: { nodeId: string; run: number; label: string; preview?: PythonModulePreview } | null;
   onDiagnostic: (messages: string[]) => void;
 }
 
@@ -81,6 +90,7 @@ const SnakeBuildPreview: React.FC<SnakeBuildPreviewProps> = ({
   checkpointIndex,
   checkpointTotal,
   diagnosticRun,
+  demonstration,
   onDiagnostic,
 }) => {
   const isZh = language === 'zh';
@@ -113,6 +123,33 @@ const SnakeBuildPreview: React.FC<SnakeBuildPreviewProps> = ({
   useEffect(() => {
     reset();
   }, [capabilities, reset]);
+
+  useEffect(() => {
+    if (!demonstration) return;
+    reset();
+    const preview = demonstration.preview;
+    if (!preview) return;
+    if (preview.snake?.length) {
+      const nextSnake = preview.snake
+        .filter(point => point.length === 2 && Number.isFinite(point[0]) && Number.isFinite(point[1]))
+        .map(([x, y]) => ({ x, y }));
+      if (nextSnake.length) {
+        snakeRef.current = nextSnake;
+        setSnake(nextSnake);
+      }
+    }
+    if (preview.food?.length === 2 && Number.isFinite(preview.food[0]) && Number.isFinite(preview.food[1])) {
+      const nextFood = { x: preview.food[0], y: preview.food[1] };
+      foodRef.current = nextFood;
+      setFood(nextFood);
+    }
+    if (preview.direction) {
+      directionRef.current = preview.direction;
+      setDirection(preview.direction);
+    }
+    if (Number.isFinite(preview.score)) setScore(preview.score ?? 0);
+    if (preview.over) setOver(true);
+  }, [demonstration, reset]);
 
   useEffect(() => {
     if (!running || over || !has('movement')) return undefined;
@@ -190,6 +227,13 @@ const SnakeBuildPreview: React.FC<SnakeBuildPreviewProps> = ({
         <div><small>{isZh ? '已实现' : 'BUILT'}</small><strong>{capabilities.size - 1}<i>/6</i></strong></div>
         <div><small>{isZh ? '方向' : 'DIRECTION'}</small><strong>{direction.toUpperCase()}</strong></div>
       </div>
+      {demonstration && (
+        <div className="construction-behavior-feedback" key={`${demonstration.nodeId}-${demonstration.run}`}>
+          <CheckCircle2 size={14} />
+          <span>{isZh ? '刚刚通过代码测试并装配' : 'Just tested and assembled'}</span>
+          <strong>{demonstration.label}</strong>
+        </div>
+      )}
       <div className="construction-board" style={{ gridTemplateColumns: `repeat(${BOARD_COLUMNS}, 1fr)`, gridTemplateRows: `repeat(${BOARD_ROWS}, 1fr)` }}>
         {Array.from({ length: BOARD_COLUMNS * BOARD_ROWS }, (_, index) => {
           const x = index % BOARD_COLUMNS;
@@ -227,16 +271,18 @@ export const ProjectBuildStage: React.FC<Props> = ({ language, theme, taskId, on
   const [observations] = useState<StudentObservationCard[]>(() => readStoredList(observationKey));
   const [plan] = useState<StudentPathPlan>(() => readStoredObject(pathKey, createInitialPathPlan(readStoredList(functionKey))));
   const [progress, setProgress] = useState<Record<string, StudentModuleProgress>>(() => readStoredObject(progressKey, {}));
-  const [selectedId, setSelectedId] = useState(() => plan.orderedCardIds[0] ?? cards[0]?.id ?? '');
+  const plannedCardIds = useMemo(() => getImplementationOrderIds(cards, plan), [cards, plan]);
+  const [selectedId, setSelectedId] = useState(() => plannedCardIds[0] ?? '');
   const [testMessage, setTestMessage] = useState('');
+  const [testRunning, setTestRunning] = useState(false);
   const [diagnosticRun, setDiagnosticRun] = useState(0);
   const [diagnostics, setDiagnostics] = useState<string[]>([]);
+  const [demonstration, setDemonstration] = useState<{ nodeId: string; run: number; label: string; preview?: PythonModulePreview } | null>(null);
 
   const cardsById = useMemo(() => new Map(cards.map(card => [card.id, card])), [cards]);
-  const topology = useMemo(() => buildTopologicalOrder(cards, plan), [cards, plan]);
   const orderedCards = useMemo(
-    () => topology.orderedIds.map(id => cardsById.get(id)).filter((card): card is StudentFunctionCard => Boolean(card)),
-    [cardsById, topology.orderedIds],
+    () => plannedCardIds.map(id => cardsById.get(id)).filter((card): card is StudentFunctionCard => Boolean(card)),
+    [cardsById, plannedCardIds],
   );
   const selectedCard = cardsById.get(selectedId) ?? orderedCards[0];
   const selectedNode = selectedCard ? inferBlueprintNode(selectedCard, observations) : undefined;
@@ -244,6 +290,12 @@ export const ProjectBuildStage: React.FC<Props> = ({ language, theme, taskId, on
   useEffect(() => {
     window.localStorage.setItem(progressKey, JSON.stringify(progress));
   }, [progress, progressKey]);
+
+  useEffect(() => () => disposePythonModuleRunner(), []);
+
+  useEffect(() => {
+    if (!plannedCardIds.includes(selectedId)) setSelectedId(plannedCardIds[0] ?? '');
+  }, [plannedCardIds, selectedId]);
 
   const selectedCheckpointIndex = Math.max(0, orderedCards.findIndex(card => card.id === selectedCard?.id));
   const checkpointCapabilities = useMemo(() => {
@@ -265,23 +317,45 @@ export const ProjectBuildStage: React.FC<Props> = ({ language, theme, taskId, on
     ? currentProgress?.code ?? MODULE_TEMPLATES[selectedNode.id] ?? selectedNode.functionTemplate
     : '';
 
+  const dependentCardIds = (cardId: string) => {
+    const dependents = new Set<string>();
+    const queue = [cardId];
+    while (queue.length > 0) {
+      const dependencyId = queue.shift();
+      if (!dependencyId) continue;
+      orderedCards.forEach(card => {
+        if (dependents.has(card.id) || !(plan.prerequisites[card.id] ?? []).includes(dependencyId)) return;
+        dependents.add(card.id);
+        queue.push(card.id);
+      });
+    }
+    return dependents;
+  };
+
   const updateCode = (code: string) => {
     if (!selectedCard || !selectedNode || FRAMEWORK_NODE_IDS.has(selectedNode.id)) return;
-    setProgress(current => ({
-      ...current,
-      [selectedCard.id]: {
+    const invalidatedIds = dependentCardIds(selectedCard.id);
+    setProgress(current => {
+      const next = { ...current };
+      invalidatedIds.forEach(cardId => {
+        if (next[cardId]) next[cardId] = { ...next[cardId], verified: false };
+      });
+      next[selectedCard.id] = {
+        ...current[selectedCard.id],
         cardId: selectedCard.id,
         blueprintNodeId: selectedNode.id,
         code,
         verified: false,
         updatedAt: new Date().toISOString(),
-      },
-    }));
+      };
+      return next;
+    });
     setTestMessage('');
+    setDemonstration(null);
   };
 
-  const verifyCurrentModule = () => {
-    if (!selectedCard || !selectedNode) return;
+  const verifyCurrentModule = async () => {
+    if (!selectedCard || !selectedNode || testRunning) return;
     if (!dependencyReady(selectedCard.id)) {
       setTestMessage(isZh ? '前置功能还没有通过测试，请先按你的路径完成它们。' : 'Complete the prerequisites in your route first.');
       return;
@@ -290,29 +364,55 @@ export const ProjectBuildStage: React.FC<Props> = ({ language, theme, taskId, on
       setTestMessage(isZh ? '该部分由平台提供，已接入装配器。' : 'This part is provided by the platform and already connected.');
       return;
     }
-    const normalized = currentCode.replace(/#.*$/gm, '').trim();
-    if (!normalized || /\bpass\b/.test(normalized) || currentCode.includes('TODO')) {
-      setTestMessage(isZh ? '函数里还留着空步骤。先按你的功能卡完成最小实现，再运行模块测试。' : 'The function still contains an empty step. Complete the minimum implementation first.');
-      return;
+    setTestRunning(true);
+    setTestMessage(isZh ? '正在真实运行当前 Python 函数；首次使用需要加载测试环境。' : 'Running the Python function. The first test needs to load the runtime.');
+    try {
+      const result = await runPythonModuleTest(selectedNode.id, currentCode);
+      const now = new Date().toISOString();
+      setProgress(current => {
+        const previous = current[selectedCard.id];
+        return {
+          ...current,
+          [selectedCard.id]: {
+            ...previous,
+            cardId: selectedCard.id,
+            blueprintNodeId: selectedNode.id,
+            code: currentCode,
+            verified: result.passed,
+            updatedAt: now,
+            testAttempts: [...(previous?.testAttempts ?? []).slice(-11), {
+              id: `attempt-${Date.now()}`,
+              passed: result.passed,
+              resultCode: result.resultCode,
+              durationMs: result.durationMs,
+              createdAt: now,
+            }],
+          },
+        };
+      });
+      setTestMessage(formatPythonModuleTestResult(result, language));
+      if (result.passed) {
+        setDemonstration(current => ({
+          nodeId: selectedNode.id,
+          run: (current?.run ?? 0) + 1,
+          label: isZh ? selectedNode.visualizationUnlockZh : selectedNode.visualizationUnlockEn,
+          preview: result.preview,
+        }));
+      } else {
+        setDemonstration(null);
+      }
+    } catch (error) {
+      setTestMessage(formatPythonRunnerError(error, language));
+    } finally {
+      setTestRunning(false);
     }
-    setProgress(current => ({
-      ...current,
-      [selectedCard.id]: {
-        cardId: selectedCard.id,
-        blueprintNodeId: selectedNode.id,
-        code: currentCode,
-        verified: true,
-        updatedAt: new Date().toISOString(),
-      },
-    }));
-    setTestMessage(isZh ? `“${selectedCard.responsibility}”已通过当前接口检查，左侧画面已装配该行为。` : `“${selectedCard.responsibility}” passed the current contract check and is now assembled.`);
   };
 
   const runIntegration = () => {
     setDiagnosticRun(value => value + 1);
   };
 
-  if (cards.length === 0) {
+  if (orderedCards.length === 0) {
     return (
       <section className="project-build-workspace is-empty">
         <Layers3 size={35} />
@@ -333,6 +433,7 @@ export const ProjectBuildStage: React.FC<Props> = ({ language, theme, taskId, on
             checkpointIndex={selectedCheckpointIndex + 1}
             checkpointTotal={orderedCards.length}
             diagnosticRun={diagnosticRun}
+            demonstration={demonstration}
             onDiagnostic={setDiagnostics}
           />
           <section className="integration-diagnostics">
@@ -353,7 +454,7 @@ export const ProjectBuildStage: React.FC<Props> = ({ language, theme, taskId, on
         <div className="build-editor-column">
           <header className="build-editor-heading">
             <div><span>05 / BUILD & VERIFY</span><h3>{isZh ? '按自己的路径逐个实现' : 'Build one module at a time'}</h3></div>
-            <strong>{completedCardCount}<small>/{cards.length}</small></strong>
+            <strong>{completedCardCount}<small>/{orderedCards.length}</small></strong>
           </header>
 
           <nav className="student-module-rail" aria-label={isZh ? '学生实现路径' : 'Student build route'}>
@@ -404,8 +505,9 @@ export const ProjectBuildStage: React.FC<Props> = ({ language, theme, taskId, on
 
               <footer className="module-test-bar">
                 <span>{testMessage || (dependencyReady(selectedCard.id) ? (isZh ? '只需完成这张卡对应的函数，其他项目代码已由平台锁定。' : 'Complete only this function; the rest of the project is locked.') : (isZh ? '它依赖的前置卡还没有通过测试。' : 'Its prerequisite cards are not verified yet.'))}</span>
-                <button type="button" onClick={verifyCurrentModule} disabled={!dependencyReady(selectedCard.id)}>
-                  <Play size={15} />{isZh ? '运行模块测试' : 'Run module test'}
+                <button type="button" onClick={() => void verifyCurrentModule()} disabled={!dependencyReady(selectedCard.id) || testRunning}>
+                  {testRunning ? <LoaderCircle size={15} className="is-spinning" /> : <Play size={15} />}
+                  {testRunning ? (isZh ? '正在运行' : 'Running') : (isZh ? '运行模块测试' : 'Run module test')}
                 </button>
               </footer>
             </article>

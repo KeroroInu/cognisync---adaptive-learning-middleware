@@ -53,6 +53,15 @@ export interface StudentModuleProgress {
   code: string;
   verified: boolean;
   updatedAt: string;
+  testAttempts?: StudentModuleTestAttempt[];
+}
+
+export interface StudentModuleTestAttempt {
+  id: string;
+  passed: boolean;
+  resultCode: string;
+  durationMs: number;
+  createdAt: string;
 }
 
 const BLUEPRINT_BY_ID = new Map(SNAKE_PROJECT_BLUEPRINT.map(node => [node.id, node]));
@@ -208,6 +217,20 @@ export const buildTopologicalOrder = (
     orderedIds: result.length === preferred.length ? result : preferred,
     hasCycle: result.length !== preferred.length,
   };
+};
+
+export const getImplementationOrderIds = (
+  cards: StudentFunctionCard[],
+  plan: StudentPathPlan,
+): string[] => {
+  const cardIds = new Set(cards.map(card => card.id));
+  const activeIds = (plan.placedCardIds ?? cards.map(card => card.id)).filter(id => cardIds.has(id));
+  const activeIdSet = new Set(activeIds);
+  const orderedIds = plan.orderedCardIds.filter(id => activeIdSet.has(id));
+  activeIds.forEach(id => {
+    if (!orderedIds.includes(id)) orderedIds.push(id);
+  });
+  return orderedIds;
 };
 
 export const getBlueprintNode = (id: string) => BLUEPRINT_BY_ID.get(id);

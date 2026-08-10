@@ -23,6 +23,7 @@ import {
   buildTopologicalOrder,
   createDefaultCanvasPositions,
   createInitialPathPlan,
+  getImplementationOrderIds,
   readStoredList,
   readStoredObject,
   STUDENT_CANVAS_LAYOUT_VERSION,
@@ -243,12 +244,10 @@ const ProjectSystemPathStage: React.FC<Props> = ({
   const diagramEdges = plan.diagramEdges ?? prerequisitesToEdges(plan.prerequisites);
   const topology = useMemo(() => buildTopologicalOrder(orderedCards, plan), [orderedCards, plan]);
   const implementationCards = useMemo(() => {
-    const preferredIds = plan.orderedCardIds.filter(id => placedCardIds.includes(id));
-    placedCardIds.forEach(id => {
-      if (!preferredIds.includes(id)) preferredIds.push(id);
-    });
-    return preferredIds.map(id => cardsById.get(id)).filter((card): card is StudentFunctionCard => Boolean(card));
-  }, [cardsById, placedCardIds, plan.orderedCardIds]);
+    return getImplementationOrderIds(cards, plan)
+      .map(id => cardsById.get(id))
+      .filter((card): card is StudentFunctionCard => Boolean(card));
+  }, [cards, cardsById, plan]);
   const routeIssues = useMemo(() => {
     const orderIndex = new Map(implementationCards.map((card, index) => [card.id, index]));
     return implementationCards.flatMap(card => (plan.prerequisites[card.id] ?? []).flatMap(dependencyId => {
@@ -635,10 +634,12 @@ const ProjectSystemPathStage: React.FC<Props> = ({
   };
 
   const continueFromPlan = () => {
-    setPlan(current => ({
-      ...current,
+    const confirmedPlan = {
+      ...plan,
       confirmedAt: new Date().toISOString(),
-    }));
+    };
+    window.localStorage.setItem(pathKey, JSON.stringify(confirmedPlan));
+    setPlan(confirmedPlan);
     onContinue();
   };
 

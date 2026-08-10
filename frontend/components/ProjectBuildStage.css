@@ -65,6 +65,9 @@
 .construction-scorebar small { color: #899584; font-family: 'Google Sans Code', ui-monospace, monospace; font-size: .6rem; font-weight: 800; }
 .construction-scorebar strong { color: var(--brand-cyan); font-family: 'Google Sans Code', ui-monospace, monospace; font-size: 1rem; }
 .construction-scorebar strong i { color: #899584; font-size: .55rem; font-style: normal; }
+.construction-behavior-feedback { display: flex; align-items: center; gap: 6px; min-height: 32px; padding: 6px 9px; border: 1px solid #0b0e0a; border-top: 0; background: color-mix(in srgb, var(--brand-cyan) 24%, var(--surface)); color: var(--text-secondary); font-size: .64rem; animation: construction-feedback-in .24s ease-out; }
+.construction-behavior-feedback svg { flex: none; color: #667c2f; }
+.construction-behavior-feedback strong { overflow: hidden; color: var(--text-primary); text-overflow: ellipsis; white-space: nowrap; }
 
 .construction-board { position: relative; aspect-ratio: 14 / 10; display: grid; overflow: hidden; border: 1px solid #0b0e0a; background: radial-gradient(circle at 52% 50%, rgba(189,245,47,.08), transparent 58%), #101610; }
 .construction-board > span { position: relative; border-right: 1px solid rgba(189,245,47,.055); border-bottom: 1px solid rgba(189,245,47,.055); }
@@ -142,6 +145,14 @@
 .module-test-bar > span { color: var(--text-secondary); font-size: .67rem; line-height: 1.4; }
 .module-test-bar button { min-height: 38px; display: inline-flex; align-items: center; gap: 6px; padding: 0 12px; border: 1.5px solid #161713; border-radius: 6px; background: var(--brand-cyan); color: #161713; font-size: .68rem; font-weight: 900; box-shadow: 2px 3px 0 #161713; }
 .module-test-bar button:disabled { border-color: var(--line-strong); background: var(--surface-muted); color: var(--text-tertiary); box-shadow: none; }
+.module-test-bar .is-spinning { animation: module-test-spin .8s linear infinite; }
+
+@keyframes construction-feedback-in {
+  from { opacity: 0; transform: translateY(-3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes module-test-spin { to { transform: rotate(360deg); } }
 
 .build-workspace-footer { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 3px 1px 1px; }
 .build-workspace-footer span { color: var(--text-tertiary); font-size: .68rem; }
