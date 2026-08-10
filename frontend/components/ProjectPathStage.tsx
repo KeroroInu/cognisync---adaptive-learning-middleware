@@ -319,6 +319,11 @@ export const ProjectPathStage: React.FC<Props> = ({
     current: StudentCanvasPosition,
     size: { width: number; height: number },
   ) => {
+    if (event.key === 'Delete' || event.key === 'Backspace') {
+      event.preventDefault();
+      removeNodeFromCanvas(nodeId, nodeType);
+      return;
+    }
     const deltaByKey: Record<string, StudentCanvasPosition> = {
       ArrowLeft: { x: -16, y: 0 },
       ArrowRight: { x: 16, y: 0 },
@@ -702,19 +707,33 @@ export const ProjectPathStage: React.FC<Props> = ({
                 const size = getFlowNodeSize(node.kind);
                 const selected = selectedFlowNode?.id === node.id;
                 return (
-                  <article
-                    key={node.id}
-                    className={`flowchart-node is-${node.kind} ${selected ? 'is-selected' : ''} ${draggingId === node.id ? 'is-dragging' : ''} ${connectionSourceId === node.id ? 'is-connection-source' : ''}`}
-                    style={{ left: node.position.x, top: node.position.y, width: size.width, height: size.height }}
-                    role="button"
-                    tabIndex={0}
-                    aria-label={`${isZh ? '流程节点' : 'Flow node'}: ${node.label}`}
-                    onClick={() => handleCanvasNodeClick(node.id)}
-                    onKeyDown={event => nudgeNode(event, node.id, 'flow', node.position, size)}
-                    onPointerDown={event => beginNodeDrag(event, node.id, 'flow', node.position, size)}
-                  >
-                    <div className="flowchart-node-shape"><span>{node.label}</span></div>
-                  </article>
+                  <React.Fragment key={node.id}>
+                    <article
+                      className={`flowchart-node is-${node.kind} ${selected ? 'is-selected' : ''} ${draggingId === node.id ? 'is-dragging' : ''} ${connectionSourceId === node.id ? 'is-connection-source' : ''}`}
+                      style={{ left: node.position.x, top: node.position.y, width: size.width, height: size.height }}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`${isZh ? '流程节点' : 'Flow node'}: ${node.label}`}
+                      onClick={() => handleCanvasNodeClick(node.id)}
+                      onKeyDown={event => nudgeNode(event, node.id, 'flow', node.position, size)}
+                      onPointerDown={event => beginNodeDrag(event, node.id, 'flow', node.position, size)}
+                    >
+                      <div className="flowchart-node-shape"><span>{node.label}</span></div>
+                    </article>
+                    {selected && (
+                      <button
+                        type="button"
+                        className="flowchart-node-delete"
+                        style={{ left: node.position.x + size.width - 13, top: node.position.y - 13 }}
+                        aria-label={`${isZh ? '删除流程元素' : 'Delete flow element'}: ${node.label}`}
+                        onPointerDown={event => event.stopPropagation()}
+                        onClick={event => {
+                          event.stopPropagation();
+                          removeNodeFromCanvas(node.id, 'flow');
+                        }}
+                      ><X size={14} /></button>
+                    )}
+                  </React.Fragment>
                 );
               })}
               {orderedCards.length === 0 && flowNodes.length === 0 && (
