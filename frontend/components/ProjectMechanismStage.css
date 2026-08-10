@@ -220,6 +220,11 @@
 .mechanism-flow-node.is-end .mechanism-flow-shape { background: color-mix(in srgb, var(--brand-sand) 58%, var(--surface-strong)); }
 .mechanism-flow-node.is-selected .mechanism-flow-shape { background: color-mix(in srgb, var(--brand-cyan) 58%, var(--surface-strong)); box-shadow: 4px 5px 0 #161713; }
 .mechanism-flow-node.is-connection-source .mechanism-flow-shape { outline: 3px solid #f0a21c; outline-offset: 3px; }
+.mechanism-flow-node.is-connection-target .mechanism-flow-shape {
+  outline: 2px dashed #28aee8;
+  outline-offset: 5px;
+  background: color-mix(in srgb, #dff7ff 36%, var(--surface-strong));
+}
 .mechanism-flow-node.is-dragging { z-index: 5; cursor: grabbing; }
 .mechanism-flow-node:focus-visible { outline: 3px solid color-mix(in srgb, var(--brand-cyan) 72%, #161713); outline-offset: 4px; }
 
@@ -237,7 +242,21 @@
   touch-action: none;
 }
 .mechanism-connection-handle:hover { width: 18px; height: 18px; margin: -2px 0 0 -2px; background: var(--brand-cyan); box-shadow: 0 0 0 2px #161713; }
+.mechanism-connection-handle.is-target-handle { pointer-events: none; animation: mechanism-target-handle-in 120ms ease-out both; }
+.mechanism-connection-handle.is-snap-active {
+  width: 20px;
+  height: 20px;
+  margin: -3px 0 0 -3px;
+  border-width: 3px;
+  background: #28aee8;
+  box-shadow: 0 0 0 3px color-mix(in srgb, #28aee8 26%, transparent), 0 0 0 1px #161713;
+}
 .mechanism-connection-handle:focus-visible { outline: 3px solid #161713; outline-offset: 3px; }
+
+@keyframes mechanism-target-handle-in {
+  from { opacity: 0; transform: scale(.55); }
+  to { opacity: 1; transform: scale(1); }
+}
 
 .mechanism-node-delete {
   position: absolute;

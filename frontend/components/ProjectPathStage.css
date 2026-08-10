@@ -172,6 +172,13 @@
 
 .relation-node:hover { border-color: #161713; box-shadow: 4px 5px 0 color-mix(in srgb, #161713 22%, transparent); }
 .relation-node.is-selected { z-index: 2; border-color: #161713; background: color-mix(in srgb, var(--brand-cyan) 40%, var(--surface-strong)); box-shadow: 4px 5px 0 #161713; }
+.relation-node.is-connection-target {
+  z-index: 3;
+  border-color: #28aee8;
+  outline: 2px dashed #28aee8;
+  outline-offset: 5px;
+  background: color-mix(in srgb, #dff7ff 34%, var(--surface-muted));
+}
 .relation-node.is-dragging { z-index: 4; cursor: grabbing; box-shadow: 7px 9px 0 color-mix(in srgb, #161713 27%, transparent); }
 .relation-node:focus-visible { outline: 3px solid color-mix(in srgb, var(--brand-cyan) 72%, #161713); outline-offset: 3px; }
 .relation-connection-handle {
@@ -188,7 +195,21 @@
   touch-action: none;
 }
 .relation-connection-handle:hover { width: 18px; height: 18px; margin: -2px 0 0 -2px; background: var(--brand-cyan); box-shadow: 0 0 0 2px #161713; }
+.relation-connection-handle.is-target-handle { pointer-events: none; animation: relation-target-handle-in 120ms ease-out both; }
+.relation-connection-handle.is-snap-active {
+  width: 20px;
+  height: 20px;
+  margin: -3px 0 0 -3px;
+  border-width: 3px;
+  background: #28aee8;
+  box-shadow: 0 0 0 3px color-mix(in srgb, #28aee8 26%, transparent), 0 0 0 1px #161713;
+}
 .relation-connection-handle:focus-visible { outline: 3px solid #161713; outline-offset: 3px; }
+
+@keyframes relation-target-handle-in {
+  from { opacity: 0; transform: scale(.55); }
+  to { opacity: 1; transform: scale(1); }
+}
 .relation-node header { display: flex; align-items: center; justify-content: space-between; color: #6e8137; }
 .relation-node header span { font-family: 'Google Sans Code', ui-monospace, monospace; font-size: .68rem; font-weight: 900; }
 .relation-node h4 { overflow: hidden; margin: 11px 0 9px; font-size: .9rem; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }

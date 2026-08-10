@@ -50,6 +50,7 @@ const CANVAS_WIDTH = 1600;
 const CANVAS_HEIGHT = 720;
 const MIN_CANVAS_ZOOM = .7;
 const MAX_CANVAS_ZOOM = 1.4;
+const CONNECTION_SNAP_HALO = 52;
 const CONNECTOR_SIDES: StudentConnectorSide[] = ['top', 'right', 'bottom', 'left'];
 
 interface DragState {
@@ -68,6 +69,11 @@ interface ConnectionDragState {
   startClientX: number;
   startClientY: number;
   moved: boolean;
+}
+
+interface ConnectionSnapTarget {
+  nodeId: string;
+  anchor: StudentConnectorSide;
 }
 
 interface PaletteDragPayload {
@@ -213,12 +219,14 @@ const ProjectSystemPathStage: React.FC<Props> = ({
   const [connectionSourceId, setConnectionSourceId] = useState<string | null>(null);
   const [connectionSourceAnchor, setConnectionSourceAnchor] = useState<StudentConnectorSide | null>(null);
   const [connectionPreview, setConnectionPreview] = useState<StudentCanvasPosition | null>(null);
+  const [connectionTarget, setConnectionTarget] = useState<ConnectionSnapTarget | null>(null);
   const [canvasNotice, setCanvasNotice] = useState('');
   const [canvasZoom, setCanvasZoom] = useState(1);
   const canvasRef = useRef<HTMLDivElement>(null);
   const canvasScrollRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<DragState | null>(null);
   const connectionDragRef = useRef<ConnectionDragState | null>(null);
+  const connectionTargetRef = useRef<ConnectionSnapTarget | null>(null);
 
   useEffect(() => {
     if (draggingId) return;
@@ -422,7 +430,12 @@ const ProjectSystemPathStage: React.FC<Props> = ({
     }
   };
 
-  const addDiagramEdge = (sourceId: string, targetId: string, sourceAnchor?: StudentConnectorSide) => {
+  const addDiagramEdge = (
+    sourceId: string,
+    targetId: string,
+    sourceAnchor?: StudentConnectorSide,
+    targetAnchor?: StudentConnectorSide,
+  ) => {
     if (sourceId === targetId) return;
     const edgeId = makeEdgeId(sourceId, targetId);
     if (diagramEdges.some(edge => edge.id === edgeId)) {
@@ -439,7 +452,7 @@ const ProjectSystemPathStage: React.FC<Props> = ({
         sourceId,
         targetId,
         sourceAnchor,
-        targetAnchor: sourceAnchor ? oppositeConnectorSide(sourceAnchor) : undefined,
+        targetAnchor: targetAnchor ?? (sourceAnchor ? oppositeConnectorSide(sourceAnchor) : undefined),
       }];
       const activeIds = current.placedCardIds ?? current.orderedCardIds;
       return {
@@ -533,6 +546,8 @@ const ProjectSystemPathStage: React.FC<Props> = ({
     setConnectMode(true);
     setConnectionSourceId(nodeId);
     setConnectionSourceAnchor(side);
+    setConnectionTarget(null);
+    connectionTargetRef.current = null;
     setConnectionPreview({ x: (event.clientX - bounds.left) / canvasZoom, y: (event.clientY - bounds.top) / canvasZoom });
     setCanvasNotice(isZh ? '拖到另一张功能卡上松开' : 'Drag onto another function card and release');
   };
@@ -543,24 +558,47 @@ const ProjectSystemPathStage: React.FC<Props> = ({
     if (!current || current.pointerId !== event.pointerId || !canvas) return;
     if (Math.hypot(event.clientX - current.startClientX, event.clientY - current.startClientY) > 4) current.moved = true;
     const bounds = canvas.getBoundingClientRect();
-    setConnectionPreview({
+    const pointer = {
       x: Math.max(0, Math.min(CANVAS_WIDTH, (event.clientX - bounds.left) / canvasZoom)),
       y: Math.max(0, Math.min(CANVAS_HEIGHT, (event.clientY - bounds.top) / canvasZoom)),
+    };
+    let nearest: { target: ConnectionSnapTarget; distance: number } | null = null;
+    placedCardIds.forEach(nodeId => {
+      if (nodeId === current.sourceId) return;
+      const geometry = getNodeGeometry(nodeId);
+      if (!geometry) return;
+      const insideHalo = pointer.x >= geometry.x - CONNECTION_SNAP_HALO
+        && pointer.x <= geometry.x + geometry.width + CONNECTION_SNAP_HALO
+        && pointer.y >= geometry.y - CONNECTION_SNAP_HALO
+        && pointer.y <= geometry.y + geometry.height + CONNECTION_SNAP_HALO;
+      if (!insideHalo) return;
+      CONNECTOR_SIDES.forEach(anchor => {
+        const point = getConnectorPoint(geometry, anchor);
+        const distance = Math.hypot(pointer.x - point.x, pointer.y - point.y);
+        if (!nearest || distance < nearest.distance) nearest = { target: { nodeId, anchor }, distance };
+      });
     });
+    const nextTarget = nearest?.target ?? null;
+    connectionTargetRef.current = nextTarget;
+    setConnectionTarget(previous => (
+      previous?.nodeId === nextTarget?.nodeId && previous?.anchor === nextTarget?.anchor ? previous : nextTarget
+    ));
+    setConnectionPreview(pointer);
   };
 
   const finishConnectionDrag = (event: React.PointerEvent<HTMLButtonElement>) => {
     const current = connectionDragRef.current;
     if (!current || current.pointerId !== event.pointerId) return;
-    const target = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>('[data-relation-node-id]');
-    const targetId = target?.dataset.relationNodeId;
+    const target = connectionTargetRef.current;
     connectionDragRef.current = null;
+    connectionTargetRef.current = null;
     setConnectionPreview(null);
+    setConnectionTarget(null);
     setConnectMode(false);
     setConnectionSourceId(null);
     setConnectionSourceAnchor(null);
-    if (current.moved && targetId && targetId !== current.sourceId) {
-      addDiagramEdge(current.sourceId, targetId, current.sourceAnchor);
+    if (current.moved && target && target.nodeId !== current.sourceId) {
+      addDiagramEdge(current.sourceId, target.nodeId, current.sourceAnchor, target.anchor);
       return;
     }
     setCanvasNotice(isZh ? '未连接；请按住圆点拖到另一张功能卡' : 'Not connected; drag the handle onto another card');
@@ -569,7 +607,9 @@ const ProjectSystemPathStage: React.FC<Props> = ({
   const cancelConnectionDrag = (event: React.PointerEvent<HTMLButtonElement>) => {
     if (connectionDragRef.current?.pointerId !== event.pointerId) return;
     connectionDragRef.current = null;
+    connectionTargetRef.current = null;
     setConnectionPreview(null);
+    setConnectionTarget(null);
     setConnectMode(false);
     setConnectionSourceId(null);
     setConnectionSourceAnchor(null);
@@ -671,7 +711,9 @@ const ProjectSystemPathStage: React.FC<Props> = ({
                   setConnectionSourceId(null);
                   setConnectionSourceAnchor(null);
                   setConnectionPreview(null);
+                  setConnectionTarget(null);
                   connectionDragRef.current = null;
+                  connectionTargetRef.current = null;
                   setCanvasNotice(isZh ? '连线模式：依次点击起点和终点' : 'Connect mode: click source, then destination');
                 }}
               >
@@ -769,9 +811,13 @@ const ProjectSystemPathStage: React.FC<Props> = ({
                   const source = getNodeGeometry(connectionSourceId);
                   if (!source) return null;
                   const sourcePoint = getConnectorPoint(source, connectionSourceAnchor);
-                  const distance = Math.hypot(connectionPreview.x - sourcePoint.x, connectionPreview.y - sourcePoint.y);
+                  const targetGeometry = connectionTarget ? getNodeGeometry(connectionTarget.nodeId) : undefined;
+                  const targetPoint = targetGeometry && connectionTarget
+                    ? getConnectorPoint(targetGeometry, connectionTarget.anchor)
+                    : { ...connectionPreview, dx: 0, dy: 0 };
+                  const distance = Math.hypot(targetPoint.x - sourcePoint.x, targetPoint.y - sourcePoint.y);
                   const bend = Math.max(46, distance * .28);
-                  const previewPath = `M ${sourcePoint.x} ${sourcePoint.y} C ${sourcePoint.x + sourcePoint.dx * bend} ${sourcePoint.y + sourcePoint.dy * bend}, ${connectionPreview.x} ${connectionPreview.y}, ${connectionPreview.x} ${connectionPreview.y}`;
+                  const previewPath = `M ${sourcePoint.x} ${sourcePoint.y} C ${sourcePoint.x + sourcePoint.dx * bend} ${sourcePoint.y + sourcePoint.dy * bend}, ${targetPoint.x + targetPoint.dx * bend} ${targetPoint.y + targetPoint.dy * bend}, ${targetPoint.x} ${targetPoint.y}`;
                   return <path d={previewPath} className="relation-connection-preview" markerEnd="url(#relation-arrow-head)" />;
                 })() : null}
               </svg>
@@ -782,7 +828,7 @@ const ProjectSystemPathStage: React.FC<Props> = ({
                 return (
                   <React.Fragment key={card.id}>
                     <article
-                      className={`relation-node ${selected ? 'is-selected' : ''} ${draggingId === card.id ? 'is-dragging' : ''}`}
+                      className={`relation-node ${selected ? 'is-selected' : ''} ${draggingId === card.id ? 'is-dragging' : ''} ${connectionTarget?.nodeId === card.id ? 'is-connection-target' : ''}`}
                       style={{ left: position.x, top: position.y }}
                       role="button"
                       tabIndex={0}
@@ -804,15 +850,21 @@ const ProjectSystemPathStage: React.FC<Props> = ({
                           : <><Link2 size={13} />{isZh ? `依赖 ${dependencies.length} 张卡` : `${dependencies.length} prerequisites`}</>}
                       </footer>
                     </article>
-                    {selected ? CONNECTOR_SIDES.map(side => (
+                    {(selected || connectionTarget?.nodeId === card.id) ? CONNECTOR_SIDES.map(side => (
                       <button
                         key={side}
                         type="button"
-                        className={`relation-connection-handle is-${side}`}
+                        className={`relation-connection-handle is-${side} ${connectionTarget?.nodeId === card.id ? 'is-target-handle' : ''} ${connectionTarget?.nodeId === card.id && connectionTarget.anchor === side ? 'is-snap-active' : ''}`}
                         style={getCardHandlePosition(position, side)}
                         aria-label={`${isZh ? '从此方向拖出连线' : 'Drag a connection from'} ${side}: ${card.responsibility}`}
                         title={isZh ? '按住并拖到另一张功能卡' : 'Hold and drag onto another function card'}
-                        onPointerDown={event => beginConnectionDrag(event, card.id, side)}
+                        onPointerDown={event => {
+                          if (connectionTarget?.nodeId === card.id) {
+                            event.preventDefault();
+                            return;
+                          }
+                          beginConnectionDrag(event, card.id, side);
+                        }}
                         onPointerMove={moveConnectionDrag}
                         onPointerUp={finishConnectionDrag}
                         onPointerCancel={cancelConnectionDrag}
