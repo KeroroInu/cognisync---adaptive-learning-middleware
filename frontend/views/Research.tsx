@@ -23,6 +23,7 @@ import { ProjectBuildStage } from '../components/ProjectBuildStage';
 import type { SnakeRuntimeEvidence } from '../data/snakeProjectBlueprint';
 import {
   collectSnakeProjectWorkspace,
+  createSnakeProjectMechanisms,
   hydrateSnakeProjectWorkspace,
   isSnakeProjectWorkspace,
   seedSnakeProjectDemo,
@@ -130,6 +131,14 @@ export const Research: React.FC<Props> = ({
             const demo = seedSnakeProjectDemo(t.id);
             workspace = demo.workspace;
             await saveResearchWorkspace(t.id, workspace);
+          } else if (workspace && studentId === 'kero' && experimentGroup === 'pdt' && !workspace.path.functionMechanisms) {
+            workspace = {
+              ...workspace,
+              path: { ...workspace.path, functionMechanisms: createSnakeProjectMechanisms() },
+              savedAt: new Date().toISOString(),
+            };
+            await saveResearchWorkspace(t.id, workspace);
+            hydrateSnakeProjectWorkspace(t.id, workspace);
           } else if (workspace) {
             hydrateSnakeProjectWorkspace(t.id, workspace);
           }

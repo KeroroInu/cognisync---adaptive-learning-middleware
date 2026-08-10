@@ -3,6 +3,7 @@ import type { StudentFunctionCard } from '../components/ProjectFunctionStage';
 import {
   createDefaultCanvasPositions,
   STUDENT_CANVAS_LAYOUT_VERSION,
+  type StudentFunctionMechanism,
   type StudentModuleProgress,
   type StudentPathPlan,
 } from './projectPath';
@@ -170,6 +171,45 @@ const FUNCTIONS: StudentFunctionCard[] = [
 
 const ORDERED_CARD_IDS = FUNCTIONS.map(card => card.id);
 
+const DECISION_LABELS: Record<string, string> = {
+  'demo-function-direction': '目标方向是否安全？',
+  'demo-function-food': '候选位置是否空闲？',
+  'demo-function-eat': '蛇头是否碰到食物？',
+  'demo-function-collision': '是否越界或碰到自身？',
+  'demo-function-loop': '游戏是否继续运行？',
+};
+
+export const createSnakeProjectMechanisms = (): Record<string, StudentFunctionMechanism> => Object.fromEntries(
+  FUNCTIONS.map(card => {
+    const baseId = `mechanism-${card.id}`;
+    const decisionLabel = DECISION_LABELS[card.id];
+    const flowNodes = [
+      { id: `${baseId}-start`, kind: 'start' as const, label: '开始', position: { x: 30, y: 245 } },
+      { id: `${baseId}-input`, kind: 'input-output' as const, label: `读取：${card.input}`, position: { x: 240, y: 245 } },
+      ...(decisionLabel
+        ? [{ id: `${baseId}-decision`, kind: 'decision' as const, label: decisionLabel, position: { x: 460, y: 225 } }]
+        : []),
+      { id: `${baseId}-process`, kind: 'process' as const, label: card.responsibility, position: { x: decisionLabel ? 660 : 480, y: 245 } },
+      { id: `${baseId}-output`, kind: 'input-output' as const, label: `输出：${card.output}`, position: { x: decisionLabel ? 870 : 700, y: 245 } },
+      { id: `${baseId}-end`, kind: 'end' as const, label: '结束', position: { x: decisionLabel ? 1080 : 920, y: 245 } },
+    ];
+    const orderedIds = flowNodes.map(node => node.id);
+    const diagramEdges = orderedIds.slice(0, -1).map((sourceId, index) => ({
+      id: `${sourceId}->${orderedIds[index + 1]}`,
+      sourceId,
+      targetId: orderedIds[index + 1],
+    }));
+    if (decisionLabel) {
+      diagramEdges.push({
+        id: `${baseId}-decision->${baseId}-output`,
+        sourceId: `${baseId}-decision`,
+        targetId: `${baseId}-output`,
+      });
+    }
+    return [card.id, { flowNodes, diagramEdges, confirmedAt: '2026-01-01T08:19:00.000Z' }];
+  }),
+);
+
 const PATH: StudentPathPlan = {
   orderedCardIds: ORDERED_CARD_IDS,
   canvasLayoutVersion: STUDENT_CANVAS_LAYOUT_VERSION,
@@ -189,6 +229,7 @@ const PATH: StudentPathPlan = {
     ],
   },
   relationKinds: {},
+  functionMechanisms: createSnakeProjectMechanisms(),
   confirmedAt: '2026-01-01T08:20:00.000Z',
 };
 

@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ArrowDown,
   ArrowRight,
+  ArrowUp,
   Check,
   CircleDot,
   GitBranch,
@@ -20,18 +22,16 @@ import {
   buildTopologicalOrder,
   createDefaultCanvasPositions,
   createInitialPathPlan,
-  inferBlueprintNode,
   readStoredList,
   readStoredObject,
   STUDENT_CANVAS_LAYOUT_VERSION,
   type StudentCanvasPosition,
+  type StudentConnectorSide,
   type StudentDiagramEdge,
-  type StudentFlowNode,
-  type StudentFlowNodeKind,
   type StudentPathPlan,
 } from '../data/projectPath';
-import type { StudentObservationCard } from './ProjectFactory';
 import type { StudentFunctionCard } from './ProjectFunctionStage';
+import { ProjectMechanismStage } from './ProjectMechanismStage';
 import './ProjectPathStage.css';
 
 interface Props {
@@ -44,28 +44,15 @@ interface Props {
 
 const CANVAS_NODE_WIDTH = 270;
 const CANVAS_NODE_HEIGHT = 158;
-const FLOW_NODE_WIDTH = 164;
-const FLOW_NODE_HEIGHT = 76;
-const DECISION_NODE_SIZE = 116;
 const CANVAS_PADDING = 20;
 const CANVAS_WIDTH = 1600;
 const CANVAS_HEIGHT = 720;
 const MIN_CANVAS_ZOOM = .7;
 const MAX_CANVAS_ZOOM = 1.4;
-
-const FLOW_NODE_LIBRARY: Array<{ kind: StudentFlowNodeKind; labelZh: string; labelEn: string }> = [
-  { kind: 'start', labelZh: '开始', labelEn: 'Start' },
-  { kind: 'process', labelZh: '处理步骤', labelEn: 'Process' },
-  { kind: 'decision', labelZh: '条件成立？', labelEn: 'Decision?' },
-  { kind: 'input-output', labelZh: '输入 / 输出', labelEn: 'Input / output' },
-  { kind: 'end', labelZh: '结束', labelEn: 'End' },
-];
-
-type CanvasNodeType = 'card' | 'flow';
+const CONNECTOR_SIDES: StudentConnectorSide[] = ['top', 'right', 'bottom', 'left'];
 
 interface DragState {
   nodeId: string;
-  nodeType: CanvasNodeType;
   pointerId: number;
   offsetX: number;
   offsetY: number;
@@ -74,20 +61,37 @@ interface DragState {
 }
 
 interface PaletteDragPayload {
-  type: 'card' | 'shape';
-  id?: string;
-  kind?: StudentFlowNodeKind;
+  type: 'card';
+  id: string;
 }
 
 const isCanvasPosition = (value: StudentCanvasPosition | undefined): value is StudentCanvasPosition => (
   Boolean(value) && Number.isFinite(value?.x) && Number.isFinite(value?.y)
 );
 
-const getFlowNodeSize = (kind: StudentFlowNodeKind) => (
-  kind === 'decision'
-    ? { width: DECISION_NODE_SIZE, height: DECISION_NODE_SIZE }
-    : { width: FLOW_NODE_WIDTH, height: FLOW_NODE_HEIGHT }
-);
+const oppositeConnectorSide = (side: StudentConnectorSide): StudentConnectorSide => ({
+  top: 'bottom',
+  right: 'left',
+  bottom: 'top',
+  left: 'right',
+})[side] as StudentConnectorSide;
+
+const getConnectorPoint = (
+  geometry: { x: number; y: number; width: number; height: number },
+  side: StudentConnectorSide,
+) => {
+  if (side === 'top') return { x: geometry.x + geometry.width / 2, y: geometry.y, dx: 0, dy: -1 };
+  if (side === 'bottom') return { x: geometry.x + geometry.width / 2, y: geometry.y + geometry.height, dx: 0, dy: 1 };
+  if (side === 'left') return { x: geometry.x, y: geometry.y + geometry.height / 2, dx: -1, dy: 0 };
+  return { x: geometry.x + geometry.width, y: geometry.y + geometry.height / 2, dx: 1, dy: 0 };
+};
+
+const getCardHandlePosition = (position: StudentCanvasPosition, side: StudentConnectorSide) => {
+  if (side === 'top') return { left: position.x + CANVAS_NODE_WIDTH / 2 - 7, top: position.y - 7 };
+  if (side === 'bottom') return { left: position.x + CANVAS_NODE_WIDTH / 2 - 7, top: position.y + CANVAS_NODE_HEIGHT - 7 };
+  if (side === 'left') return { left: position.x - 7, top: position.y + CANVAS_NODE_HEIGHT / 2 - 7 };
+  return { left: position.x + CANVAS_NODE_WIDTH - 7, top: position.y + CANVAS_NODE_HEIGHT / 2 - 7 };
+};
 
 const makeEdgeId = (sourceId: string, targetId: string) => `${sourceId}->${targetId}`;
 
@@ -146,8 +150,7 @@ const mergePlanWithCards = (stored: StudentPathPlan, cards: StudentFunctionCard[
   const cardIds = new Set(cards.map(card => card.id));
   const defaultPositions = createDefaultCanvasPositions(cards);
   const useStoredPositions = stored.canvasLayoutVersion === STUDENT_CANVAS_LAYOUT_VERSION;
-  const flowNodes = (stored.flowNodes ?? []).filter(node => isCanvasPosition(node.position));
-  const validNodeIds = new Set([...cardIds, ...flowNodes.map(node => node.id)]);
+  const validNodeIds = new Set(cardIds);
   const orderedCardIds = stored.orderedCardIds.filter(id => cardIds.has(id));
   cards.forEach(card => {
     if (!orderedCardIds.includes(card.id)) orderedCardIds.push(card.id);
@@ -155,14 +158,18 @@ const mergePlanWithCards = (stored: StudentPathPlan, cards: StudentFunctionCard[
   const placedCardIds = stored.placedCardIds
     ? stored.placedCardIds.filter(id => cardIds.has(id))
     : orderedCardIds;
-  const diagramEdges = (stored.diagramEdges ?? prerequisitesToEdges(stored.prerequisites))
+  const storedCardEdges = (stored.diagramEdges ?? [])
     .filter(edge => validNodeIds.has(edge.sourceId) && validNodeIds.has(edge.targetId) && edge.sourceId !== edge.targetId);
+  const diagramEdges = storedCardEdges.length > 0
+    ? storedCardEdges
+    : prerequisitesToEdges(stored.prerequisites)
+      .filter(edge => validNodeIds.has(edge.sourceId) && validNodeIds.has(edge.targetId) && edge.sourceId !== edge.targetId);
 
   return {
     ...stored,
     orderedCardIds,
     placedCardIds,
-    flowNodes,
+    flowNodes: [],
     diagramEdges,
     canvasLayoutVersion: STUDENT_CANVAS_LAYOUT_VERSION,
     canvasPositions: Object.fromEntries(cards.map(card => [
@@ -175,19 +182,16 @@ const mergePlanWithCards = (stored: StudentPathPlan, cards: StudentFunctionCard[
   };
 };
 
-export const ProjectPathStage: React.FC<Props> = ({
+const ProjectSystemPathStage: React.FC<Props> = ({
   language,
   taskId,
-  stage,
   onBack,
   onContinue,
 }) => {
   const isZh = language === 'zh';
   const functionKey = `cognisync:project-function-cards:v1:${taskId}`;
-  const observationKey = `cognisync:project-observation-cards:v2:${taskId}`;
   const pathKey = `cognisync:project-path-plan:v1:${taskId}`;
   const [cards] = useState<StudentFunctionCard[]>(() => readStoredList(functionKey));
-  const [observations] = useState<StudentObservationCard[]>(() => readStoredList(observationKey));
   const [plan, setPlan] = useState<StudentPathPlan>(() => {
     const initial = createInitialPathPlan(readStoredList<StudentFunctionCard>(functionKey));
     return mergePlanWithCards(readStoredObject(pathKey, initial), readStoredList(functionKey));
@@ -196,6 +200,7 @@ export const ProjectPathStage: React.FC<Props> = ({
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [connectMode, setConnectMode] = useState(false);
   const [connectionSourceId, setConnectionSourceId] = useState<string | null>(null);
+  const [connectionSourceAnchor, setConnectionSourceAnchor] = useState<StudentConnectorSide | null>(null);
   const [canvasNotice, setCanvasNotice] = useState('');
   const [canvasZoom, setCanvasZoom] = useState(1);
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -214,17 +219,27 @@ export const ProjectPathStage: React.FC<Props> = ({
     [cardsById, placedCardIds],
   );
   const selectedCard = placedCardIds.includes(selectedId) ? cardsById.get(selectedId) : undefined;
-  const flowNodes = plan.flowNodes ?? [];
-  const selectedFlowNode = flowNodes.find(node => node.id === selectedId);
   const diagramEdges = plan.diagramEdges ?? prerequisitesToEdges(plan.prerequisites);
   const topology = useMemo(() => buildTopologicalOrder(orderedCards, plan), [orderedCards, plan]);
-  const buildOrder = useMemo(
-    () => topology.orderedIds.map(id => cardsById.get(id)).filter((card): card is StudentFunctionCard => Boolean(card)),
-    [cardsById, topology.orderedIds],
-  );
+  const implementationCards = useMemo(() => {
+    const preferredIds = plan.orderedCardIds.filter(id => placedCardIds.includes(id));
+    placedCardIds.forEach(id => {
+      if (!preferredIds.includes(id)) preferredIds.push(id);
+    });
+    return preferredIds.map(id => cardsById.get(id)).filter((card): card is StudentFunctionCard => Boolean(card));
+  }, [cardsById, placedCardIds, plan.orderedCardIds]);
+  const routeIssues = useMemo(() => {
+    const orderIndex = new Map(implementationCards.map((card, index) => [card.id, index]));
+    return implementationCards.flatMap(card => (plan.prerequisites[card.id] ?? []).flatMap(dependencyId => {
+      const dependencyIndex = orderIndex.get(dependencyId);
+      const cardIndex = orderIndex.get(card.id);
+      if (dependencyIndex === undefined || cardIndex === undefined || dependencyIndex < cardIndex) return [];
+      return [{ cardId: card.id, dependencyId }];
+    }));
+  }, [implementationCards, plan.prerequisites]);
   const relationCount = diagramEdges.length;
   const canvasPositions = plan.canvasPositions ?? createDefaultCanvasPositions(cards);
-  const canvasNodeIds = useMemo(() => new Set([...placedCardIds, ...flowNodes.map(node => node.id)]), [flowNodes, placedCardIds]);
+  const canvasNodeIds = useMemo(() => new Set(placedCardIds), [placedCardIds]);
   const relationEdges = useMemo(
     () => diagramEdges.filter(edge => canvasNodeIds.has(edge.sourceId) && canvasNodeIds.has(edge.targetId)),
     [canvasNodeIds, diagramEdges],
@@ -237,13 +252,10 @@ export const ProjectPathStage: React.FC<Props> = ({
       const position = canvasPositions[nodeId] ?? { x: CANVAS_PADDING, y: CANVAS_PADDING };
       return { ...position, width: CANVAS_NODE_WIDTH, height: CANVAS_NODE_HEIGHT };
     }
-    const flowNode = flowNodes.find(node => node.id === nodeId);
-    if (!flowNode) return undefined;
-    return { ...flowNode.position, ...getFlowNodeSize(flowNode.kind) };
+    return undefined;
   };
   const getNodeLabel = (nodeId: string) => (
     cardsById.get(nodeId)?.responsibility
-    ?? flowNodes.find(node => node.id === nodeId)?.label
     ?? (isZh ? '未命名节点' : 'Untitled node')
   );
 
@@ -259,18 +271,9 @@ export const ProjectPathStage: React.FC<Props> = ({
     });
   };
 
-  const updateFlowNode = (nodeId: string, patch: Partial<StudentFlowNode>) => {
-    setPlan(current => ({
-      ...current,
-      flowNodes: (current.flowNodes ?? []).map(node => node.id === nodeId ? { ...node, ...patch } : node),
-      confirmedAt: undefined,
-    }));
-  };
-
   const beginNodeDrag = (
     event: React.PointerEvent<HTMLElement>,
     nodeId: string,
-    nodeType: CanvasNodeType,
     position: StudentCanvasPosition,
     size: { width: number; height: number },
   ) => {
@@ -279,7 +282,6 @@ export const ProjectPathStage: React.FC<Props> = ({
     const bounds = canvasRef.current.getBoundingClientRect();
     dragRef.current = {
       nodeId,
-      nodeType,
       pointerId: event.pointerId,
       offsetX: (event.clientX - bounds.left) / canvasZoom - position.x,
       offsetY: (event.clientY - bounds.top) / canvasZoom - position.y,
@@ -302,8 +304,7 @@ export const ProjectPathStage: React.FC<Props> = ({
       x: Math.round(Math.min(maxX, Math.max(CANVAS_PADDING, (event.clientX - bounds.left) / canvasZoom - drag.offsetX))),
       y: Math.round(Math.min(maxY, Math.max(CANVAS_PADDING, (event.clientY - bounds.top) / canvasZoom - drag.offsetY))),
     };
-    if (drag.nodeType === 'card') updateCanvasPosition(drag.nodeId, position);
-    else updateFlowNode(drag.nodeId, { position });
+    updateCanvasPosition(drag.nodeId, position);
   };
 
   const finishCardDrag = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -315,13 +316,12 @@ export const ProjectPathStage: React.FC<Props> = ({
   const nudgeNode = (
     event: React.KeyboardEvent<HTMLElement>,
     nodeId: string,
-    nodeType: CanvasNodeType,
     current: StudentCanvasPosition,
     size: { width: number; height: number },
   ) => {
     if (event.key === 'Delete' || event.key === 'Backspace') {
       event.preventDefault();
-      removeNodeFromCanvas(nodeId, nodeType);
+      removeNodeFromCanvas(nodeId);
       return;
     }
     const deltaByKey: Record<string, StudentCanvasPosition> = {
@@ -341,18 +341,14 @@ export const ProjectPathStage: React.FC<Props> = ({
       x: Math.min(maxX, Math.max(CANVAS_PADDING, current.x + delta.x)),
       y: Math.min(maxY, Math.max(CANVAS_PADDING, current.y + delta.y)),
     };
-    if (nodeType === 'card') updateCanvasPosition(nodeId, position);
-    else updateFlowNode(nodeId, { position });
+    updateCanvasPosition(nodeId, position);
   };
 
   const resetCanvasLayout = () => {
     setPlan(current => ({
       ...current,
       canvasPositions: createDefaultCanvasPositions(orderedCards),
-      flowNodes: (current.flowNodes ?? []).map((node, index) => ({
-        ...node,
-        position: { x: 60 + index * 205, y: 500 },
-      })),
+      flowNodes: [],
       confirmedAt: undefined,
     }));
   };
@@ -387,27 +383,10 @@ export const ProjectPathStage: React.FC<Props> = ({
     setCanvasNotice(isZh ? '功能卡已放入画布' : 'Function card added');
   };
 
-  const addFlowNode = (
-    kind: StudentFlowNodeKind,
-    position = getCenteredCanvasPosition(getFlowNodeSize(kind)),
-  ) => {
-    const definition = FLOW_NODE_LIBRARY.find(item => item.kind === kind) ?? FLOW_NODE_LIBRARY[1];
-    const id = `flow-${kind}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-    const node: StudentFlowNode = {
-      id,
-      kind,
-      label: isZh ? definition.labelZh : definition.labelEn,
-      position,
-    };
-    setPlan(current => ({ ...current, flowNodes: [...(current.flowNodes ?? []), node], confirmedAt: undefined }));
-    setSelectedId(id);
-    setCanvasNotice(isZh ? '流程图形已放入画布，可在右侧改名' : 'Flow shape added; rename it in the panel');
-  };
-
   const startPaletteDrag = (event: React.DragEvent<HTMLElement>, payload: PaletteDragPayload) => {
     event.dataTransfer.effectAllowed = 'copy';
     event.dataTransfer.setData('application/x-cognisync-node', JSON.stringify(payload));
-    event.dataTransfer.setData('text/plain', payload.id ?? payload.kind ?? 'node');
+    event.dataTransfer.setData('text/plain', payload.id);
   };
 
   const dropPaletteNode = (event: React.DragEvent<HTMLDivElement>) => {
@@ -423,20 +402,13 @@ export const ProjectPathStage: React.FC<Props> = ({
           y: Math.round(Math.max(CANVAS_PADDING, Math.min(canvas.clientHeight - CANVAS_NODE_HEIGHT - CANVAS_PADDING, (event.clientY - bounds.top) / canvasZoom - CANVAS_NODE_HEIGHT / 2))),
         };
         placeCardOnCanvas(payload.id, position);
-      } else if (payload.type === 'shape' && payload.kind) {
-        const size = getFlowNodeSize(payload.kind);
-        const position = {
-          x: Math.round(Math.max(CANVAS_PADDING, Math.min(canvas.clientWidth - size.width - CANVAS_PADDING, (event.clientX - bounds.left) / canvasZoom - size.width / 2))),
-          y: Math.round(Math.max(CANVAS_PADDING, Math.min(canvas.clientHeight - size.height - CANVAS_PADDING, (event.clientY - bounds.top) / canvasZoom - size.height / 2))),
-        };
-        addFlowNode(payload.kind, position);
       }
     } catch {
       setCanvasNotice(isZh ? '没有识别到可放入的素材' : 'The dropped item could not be read');
     }
   };
 
-  const addDiagramEdge = (sourceId: string, targetId: string) => {
+  const addDiagramEdge = (sourceId: string, targetId: string, sourceAnchor?: StudentConnectorSide) => {
     if (sourceId === targetId) return;
     const edgeId = makeEdgeId(sourceId, targetId);
     if (diagramEdges.some(edge => edge.id === edgeId)) {
@@ -448,7 +420,13 @@ export const ProjectPathStage: React.FC<Props> = ({
       return;
     }
     setPlan(current => {
-      const nextEdges = [...(current.diagramEdges ?? []), { id: edgeId, sourceId, targetId }];
+      const nextEdges = [...(current.diagramEdges ?? []), {
+        id: edgeId,
+        sourceId,
+        targetId,
+        sourceAnchor,
+        targetAnchor: sourceAnchor ? oppositeConnectorSide(sourceAnchor) : undefined,
+      }];
       const activeIds = current.placedCardIds ?? current.orderedCardIds;
       return {
         ...current,
@@ -478,23 +456,31 @@ export const ProjectPathStage: React.FC<Props> = ({
     if (!connectMode) return;
     if (!connectionSourceId) {
       setConnectionSourceId(nodeId);
+      setConnectionSourceAnchor(null);
       setCanvasNotice(isZh ? '已选起点，请点击要连接到的节点' : 'Start selected; choose the destination');
       return;
     }
-    addDiagramEdge(connectionSourceId, nodeId);
+    addDiagramEdge(connectionSourceId, nodeId, connectionSourceAnchor ?? undefined);
     setConnectionSourceId(null);
+    setConnectionSourceAnchor(null);
   };
 
-  const removeNodeFromCanvas = (nodeId: string, nodeType: CanvasNodeType) => {
+  const startConnectionFromHandle = (event: React.MouseEvent<HTMLButtonElement>, nodeId: string, side: StudentConnectorSide) => {
+    event.stopPropagation();
+    setSelectedId(nodeId);
+    setConnectMode(true);
+    setConnectionSourceId(nodeId);
+    setConnectionSourceAnchor(side);
+    setCanvasNotice(isZh ? '已选择连接点，请点击要连接到的功能卡' : 'Connector selected; click the target card');
+  };
+
+  const removeNodeFromCanvas = (nodeId: string) => {
     setPlan(current => {
       const nextEdges = (current.diagramEdges ?? []).filter(edge => edge.sourceId !== nodeId && edge.targetId !== nodeId);
-      const nextPlacedIds = nodeType === 'card'
-        ? (current.placedCardIds ?? current.orderedCardIds).filter(id => id !== nodeId)
-        : (current.placedCardIds ?? current.orderedCardIds);
+      const nextPlacedIds = (current.placedCardIds ?? current.orderedCardIds).filter(id => id !== nodeId);
       return {
         ...current,
         placedCardIds: nextPlacedIds,
-        flowNodes: nodeType === 'flow' ? (current.flowNodes ?? []).filter(node => node.id !== nodeId) : current.flowNodes,
         diagramEdges: nextEdges,
         prerequisites: derivePrerequisites(nextPlacedIds, nextEdges),
         confirmedAt: undefined,
@@ -502,18 +488,32 @@ export const ProjectPathStage: React.FC<Props> = ({
     });
     setSelectedId('');
     setConnectionSourceId(source => source === nodeId ? null : source);
-    setCanvasNotice(nodeType === 'card'
-      ? (isZh ? '功能卡已移回右侧素材区' : 'Card returned to the palette')
-      : (isZh ? '流程图形已删除' : 'Flow shape deleted'));
+    if (connectionSourceId === nodeId) setConnectionSourceAnchor(null);
+    setCanvasNotice(isZh ? '功能卡已移回右侧素材区' : 'Card returned to the palette');
   };
 
   const continueFromPlan = () => {
     setPlan(current => ({
       ...current,
-      orderedCardIds: topology.orderedIds,
       confirmedAt: new Date().toISOString(),
     }));
     onContinue();
+  };
+
+  const moveImplementationCard = (cardId: string, direction: -1 | 1) => {
+    setPlan(current => {
+      const activeIds = current.placedCardIds ?? current.orderedCardIds;
+      const orderedIds = current.orderedCardIds.filter(id => activeIds.includes(id));
+      activeIds.forEach(id => {
+        if (!orderedIds.includes(id)) orderedIds.push(id);
+      });
+      const currentIndex = orderedIds.indexOf(cardId);
+      const targetIndex = currentIndex + direction;
+      if (currentIndex < 0 || targetIndex < 0 || targetIndex >= orderedIds.length) return current;
+      const nextIds = [...orderedIds];
+      [nextIds[currentIndex], nextIds[targetIndex]] = [nextIds[targetIndex], nextIds[currentIndex]];
+      return { ...current, orderedCardIds: nextIds, confirmedAt: undefined };
+    });
   };
 
   if (cards.length === 0) {
@@ -527,75 +527,13 @@ export const ProjectPathStage: React.FC<Props> = ({
     );
   }
 
-  if (stage === 'plan') {
-    return (
-      <section className="project-path-stage is-plan">
-        <header className="path-stage-heading">
-          <div>
-            <span>04 / BUILD ROUTE</span>
-            <h3>{isZh ? '把关系图变成自己的建构路径' : 'Turn relations into your build route'}</h3>
-            <p>{isZh ? '系统只为你已提出的功能卡准备安全函数接口；没有提出的功能不会被自动补齐。' : 'Only your own cards receive safe function contracts. Missing functions are not added automatically.'}</p>
-          </div>
-          <div className={`path-validity ${topology.hasCycle ? 'has-error' : orderedCards.length > 0 ? 'is-valid' : ''}`}>
-            {topology.hasCycle ? <GitBranch size={18} /> : orderedCards.length > 0 ? <Check size={18} /> : <CircleDot size={18} />}
-            <span>{topology.hasCycle
-              ? (isZh ? '关系中出现了循环' : 'Cycle detected')
-              : orderedCards.length > 0
-                ? (isZh ? '路径可执行' : 'Route executable')
-                : (isZh ? '尚未放入功能卡' : 'No function cards placed')}</span>
-          </div>
-        </header>
-
-        <div className="build-route-strip">
-          {buildOrder.length === 0 && (
-            <div className="build-route-empty">
-              <Route size={28} />
-              <strong>{isZh ? '画布中还没有参与建构的功能卡' : 'No function cards are participating yet'}</strong>
-              <span>{isZh ? '返回关系画板，从右侧把需要的功能卡拖入画布。' : 'Return to the relation canvas and add cards from the palette.'}</span>
-            </div>
-          )}
-          {buildOrder.map((card, index) => {
-            const node = inferBlueprintNode(card, observations);
-            return (
-              <React.Fragment key={card.id}>
-                <article>
-                  <header><span>{String(index + 1).padStart(2, '0')}</span><Route size={16} /></header>
-                  <p>{card.responsibility}</p>
-                  <div><small>{isZh ? '接入函数' : 'FUNCTION CONTRACT'}</small><code>{node.functionTemplate}</code></div>
-                  <footer>{(isZh ? node.knowledgeZh : node.knowledgeEn).slice(0, 3).map(item => <span key={item}>{item}</span>)}</footer>
-                </article>
-                {index < buildOrder.length - 1 && <ArrowRight className="build-route-arrow" size={22} />}
-              </React.Fragment>
-            );
-          })}
-        </div>
-
-        <section className="route-boundary-note">
-          <CircleDot size={18} />
-          <div>
-            <strong>{isZh ? '平台负责的部分' : 'Provided by the platform'}</strong>
-            <span>{isZh ? '画面绘制、键盘监听、定时运行和模块装配已锁定，学生只实现自己规划的功能。' : 'Rendering, keyboard events, timing and module assembly are locked; students implement only their planned functions.'}</span>
-          </div>
-        </section>
-
-        <footer className="path-stage-footer">
-          <button type="button" onClick={onBack}>{isZh ? '返回关系图' : 'Back to relations'}</button>
-          <span>{isZh ? '缺失的功能将在综合运行中表现为可观察的问题' : 'Missing functions become observable problems during integration.'}</span>
-          <button type="button" className="is-primary" disabled={topology.hasCycle || orderedCards.length === 0} onClick={continueFromPlan}>
-            {isZh ? '按此路径开始建构' : 'Build this route'}<ArrowRight size={17} />
-          </button>
-        </footer>
-      </section>
-    );
-  }
-
   return (
-    <section className="project-path-stage is-model">
+    <section className="project-path-stage is-model is-system-plan">
       <header className="path-stage-heading">
         <div>
-          <span>03 / RELATION MAP</span>
-          <h3>{isZh ? '把功能卡连成你理解的系统' : 'Connect your cards into a system'}</h3>
-          <p>{isZh ? '从右侧拖入功能卡与流程图形，自由排列后用箭头表达先后、判断和分支。' : 'Drag in cards and flow shapes, then connect them to express order, decisions and branches.'}</p>
+          <span>04 / SYSTEM & BUILD ROUTE</span>
+          <h3>{isZh ? '先连清系统如何协作，再排出自己的实现顺序' : 'Connect the system, then choose your build order'}</h3>
+          <p>{isZh ? '画布表达功能之间的数据与前置关系；右侧顺序表达你准备先实现哪一张、后实现哪一张。' : 'The canvas shows dependencies; the list shows the order you will implement them.'}</p>
         </div>
         <div className={`path-validity ${topology.hasCycle ? 'has-error' : relationCount > 0 ? 'is-valid' : ''}`}>
           <Link2 size={18} />
@@ -629,6 +567,7 @@ export const ProjectPathStage: React.FC<Props> = ({
                 onClick={() => {
                   setConnectMode(active => !active);
                   setConnectionSourceId(null);
+                  setConnectionSourceAnchor(null);
                   setCanvasNotice(isZh ? '连线模式：依次点击起点和终点' : 'Connect mode: click source, then destination');
                 }}
               >
@@ -663,13 +602,16 @@ export const ProjectPathStage: React.FC<Props> = ({
                   const source = getNodeGeometry(edge.sourceId);
                   const target = getNodeGeometry(edge.targetId);
                   if (!source || !target) return null;
-                  const movesRight = target.x >= source.x;
-                  const sourceX = movesRight ? source.x + source.width : source.x;
-                  const targetX = movesRight ? target.x : target.x + target.width;
-                  const sourceY = source.y + source.height / 2;
-                  const targetY = target.y + target.height / 2;
-                  const bend = Math.max(55, Math.abs(targetX - sourceX) * .46);
-                  const path = `M ${sourceX} ${sourceY} C ${sourceX + (movesRight ? bend : -bend)} ${sourceY}, ${targetX + (movesRight ? -bend : bend)} ${targetY}, ${targetX} ${targetY}`;
+                  const deltaX = target.x + target.width / 2 - source.x - source.width / 2;
+                  const deltaY = target.y + target.height / 2 - source.y - source.height / 2;
+                  const fallbackSourceSide: StudentConnectorSide = Math.abs(deltaX) >= Math.abs(deltaY)
+                    ? (deltaX >= 0 ? 'right' : 'left')
+                    : (deltaY >= 0 ? 'bottom' : 'top');
+                  const sourcePoint = getConnectorPoint(source, edge.sourceAnchor ?? fallbackSourceSide);
+                  const targetPoint = getConnectorPoint(target, edge.targetAnchor ?? oppositeConnectorSide(edge.sourceAnchor ?? fallbackSourceSide));
+                  const distance = Math.hypot(targetPoint.x - sourcePoint.x, targetPoint.y - sourcePoint.y);
+                  const bend = Math.max(52, distance * .32);
+                  const path = `M ${sourcePoint.x} ${sourcePoint.y} C ${sourcePoint.x + sourcePoint.dx * bend} ${sourcePoint.y + sourcePoint.dy * bend}, ${targetPoint.x + targetPoint.dx * bend} ${targetPoint.y + targetPoint.dy * bend}, ${targetPoint.x} ${targetPoint.y}`;
                   return <path key={edge.id} d={path} className={selectedId === edge.targetId || selectedId === edge.sourceId ? 'is-selected' : ''} markerEnd="url(#relation-arrow-head)" />;
                 })}
               </svg>
@@ -678,69 +620,48 @@ export const ProjectPathStage: React.FC<Props> = ({
                 const selected = selectedCard?.id === card.id;
                 const position = canvasPositions[card.id] ?? { x: CANVAS_PADDING, y: CANVAS_PADDING };
                 return (
-                  <article
-                    key={card.id}
-                    className={`relation-node ${selected ? 'is-selected' : ''} ${draggingId === card.id ? 'is-dragging' : ''}`}
-                    style={{ left: position.x, top: position.y }}
-                    role="button"
-                    tabIndex={0}
-                    aria-label={`${isZh ? '功能卡' : 'Function card'} ${index + 1}: ${card.responsibility}`}
-                    onClick={() => handleCanvasNodeClick(card.id)}
-                    onKeyDown={event => nudgeNode(event, card.id, 'card', position, { width: CANVAS_NODE_WIDTH, height: CANVAS_NODE_HEIGHT })}
-                    onPointerDown={event => beginNodeDrag(event, card.id, 'card', position, { width: CANVAS_NODE_WIDTH, height: CANVAS_NODE_HEIGHT })}
-                  >
-                    <header><span>{String(index + 1).padStart(2, '0')}</span>{connectionSourceId === card.id ? <Link2 size={14} /> : <Move size={14} />}</header>
-                    <h4>{card.responsibility}</h4>
-                    <dl>
-                      <div><dt>IN</dt><dd>{card.input}</dd></div>
-                      <div><dt>OUT</dt><dd>{card.output}</dd></div>
-                    </dl>
-                    <footer>
-                      {dependencies.length === 0
-                        ? <><CircleDot size={13} />{isZh ? '起点 / 可并行' : 'Start / parallel'}</>
-                        : <><Link2 size={13} />{isZh ? `依赖 ${dependencies.length} 张卡` : `${dependencies.length} prerequisites`}</>}
-                    </footer>
-                  </article>
-                );
-              })}
-              {flowNodes.map(node => {
-                const size = getFlowNodeSize(node.kind);
-                const selected = selectedFlowNode?.id === node.id;
-                return (
-                  <React.Fragment key={node.id}>
+                  <React.Fragment key={card.id}>
                     <article
-                      className={`flowchart-node is-${node.kind} ${selected ? 'is-selected' : ''} ${draggingId === node.id ? 'is-dragging' : ''} ${connectionSourceId === node.id ? 'is-connection-source' : ''}`}
-                      style={{ left: node.position.x, top: node.position.y, width: size.width, height: size.height }}
+                      className={`relation-node ${selected ? 'is-selected' : ''} ${draggingId === card.id ? 'is-dragging' : ''}`}
+                      style={{ left: position.x, top: position.y }}
                       role="button"
                       tabIndex={0}
-                      aria-label={`${isZh ? '流程节点' : 'Flow node'}: ${node.label}`}
-                      onClick={() => handleCanvasNodeClick(node.id)}
-                      onKeyDown={event => nudgeNode(event, node.id, 'flow', node.position, size)}
-                      onPointerDown={event => beginNodeDrag(event, node.id, 'flow', node.position, size)}
+                      aria-label={`${isZh ? '功能卡' : 'Function card'} ${index + 1}: ${card.responsibility}`}
+                      onClick={() => handleCanvasNodeClick(card.id)}
+                      onKeyDown={event => nudgeNode(event, card.id, position, { width: CANVAS_NODE_WIDTH, height: CANVAS_NODE_HEIGHT })}
+                      onPointerDown={event => beginNodeDrag(event, card.id, position, { width: CANVAS_NODE_WIDTH, height: CANVAS_NODE_HEIGHT })}
                     >
-                      <div className="flowchart-node-shape"><span>{node.label}</span></div>
+                      <header><span>{String(index + 1).padStart(2, '0')}</span>{connectionSourceId === card.id ? <Link2 size={14} /> : <Move size={14} />}</header>
+                      <h4>{card.responsibility}</h4>
+                      <dl>
+                        <div><dt>IN</dt><dd>{card.input}</dd></div>
+                        <div><dt>OUT</dt><dd>{card.output}</dd></div>
+                      </dl>
+                      <footer>
+                        {dependencies.length === 0
+                          ? <><CircleDot size={13} />{isZh ? '起点 / 可并行' : 'Start / parallel'}</>
+                          : <><Link2 size={13} />{isZh ? `依赖 ${dependencies.length} 张卡` : `${dependencies.length} prerequisites`}</>}
+                      </footer>
                     </article>
-                    {selected && (
+                    {selected ? CONNECTOR_SIDES.map(side => (
                       <button
+                        key={side}
                         type="button"
-                        className="flowchart-node-delete"
-                        style={{ left: node.position.x + size.width - 13, top: node.position.y - 13 }}
-                        aria-label={`${isZh ? '删除流程元素' : 'Delete flow element'}: ${node.label}`}
+                        className={`relation-connection-handle is-${side}`}
+                        style={getCardHandlePosition(position, side)}
+                        aria-label={`${isZh ? '从此方向连接' : 'Connect from'} ${side}: ${card.responsibility}`}
                         onPointerDown={event => event.stopPropagation()}
-                        onClick={event => {
-                          event.stopPropagation();
-                          removeNodeFromCanvas(node.id, 'flow');
-                        }}
-                      ><X size={14} /></button>
-                    )}
+                        onClick={event => startConnectionFromHandle(event, card.id, side)}
+                      />
+                    )) : null}
                   </React.Fragment>
                 );
               })}
-              {orderedCards.length === 0 && flowNodes.length === 0 && (
+              {orderedCards.length === 0 && (
                 <div className="relation-board-empty">
                   <MousePointer2 size={28} />
-                  <strong>{isZh ? '从右侧拖入功能卡或流程图形' : 'Drag a card or flow shape from the right'}</strong>
-                  <span>{isZh ? '也可以直接点击素材，将它放到画布中央。' : 'You can also click an item to place it in the center.'}</span>
+                  <strong>{isZh ? '从右侧放入需要参与项目的功能卡' : 'Add the function cards used by the project'}</strong>
+                  <span>{isZh ? '画布只表达功能之间的数据和前置关系。' : 'This canvas only expresses dependencies between functions.'}</span>
                 </div>
               )}
               </div>
@@ -750,22 +671,21 @@ export const ProjectPathStage: React.FC<Props> = ({
 
         <aside className="relation-toolbox">
           <section className="toolbox-section">
-            <div className="relation-canvas-label"><GitBranch size={15} /><span>{isZh ? '流程图形' : 'FLOW SHAPES'}</span></div>
-            <p>{isZh ? '拖入画布，补充开始、处理和判断逻辑。' : 'Drag shapes in to express process logic.'}</p>
-            <div className="flow-shape-palette">
-              {FLOW_NODE_LIBRARY.map(item => (
-                <button
-                  key={item.kind}
-                  type="button"
-                  draggable
-                  onDragStart={event => startPaletteDrag(event, { type: 'shape', kind: item.kind })}
-                  onClick={() => addFlowNode(item.kind)}
-                >
-                  <i className={`palette-flow-icon is-${item.kind}`}><span /></i>
-                  <span>{isZh ? item.labelZh : item.labelEn}</span>
-                </button>
+            <div className="relation-canvas-label"><Route size={15} /><span>{isZh ? '我的实现顺序' : 'MY BUILD ORDER'}</span></div>
+            <p>{isZh ? '这不是游戏运行顺序，而是你准备逐张编写和验证功能的顺序。' : 'This is your coding order, not the runtime sequence.'}</p>
+            <div className="implementation-order-list">
+              {implementationCards.map((card, index) => (
+                <article key={card.id} className={routeIssues.some(issue => issue.cardId === card.id) ? 'has-issue' : ''}>
+                  <span>{String(index + 1).padStart(2, '0')}</span>
+                  <strong>{card.responsibility}</strong>
+                  <div>
+                    <button type="button" aria-label={`${isZh ? '提前实现' : 'Move earlier'}: ${card.responsibility}`} disabled={index === 0} onClick={() => moveImplementationCard(card.id, -1)}><ArrowUp size={13} /></button>
+                    <button type="button" aria-label={`${isZh ? '稍后实现' : 'Move later'}: ${card.responsibility}`} disabled={index === implementationCards.length - 1} onClick={() => moveImplementationCard(card.id, 1)}><ArrowDown size={13} /></button>
+                  </div>
+                </article>
               ))}
             </div>
+            {routeIssues.length > 0 ? <small className="implementation-order-warning">{isZh ? '有功能排在它所依赖的结果之前，请调整右侧顺序。' : 'A function appears before one of its dependencies.'}</small> : null}
           </section>
 
           <section className="toolbox-section is-cards">
@@ -792,21 +712,14 @@ export const ProjectPathStage: React.FC<Props> = ({
             </div>
           </section>
 
-          {(selectedCard || selectedFlowNode) && (
+          {selectedCard && (
             <section className="toolbox-selection">
               <div className="relation-canvas-label"><MousePointer2 size={15} /><span>{isZh ? '当前选中' : 'SELECTED'}</span></div>
-              {selectedFlowNode ? (
-                <label>
-                  <span>{isZh ? '节点文字' : 'Node label'}</span>
-                  <input value={selectedFlowNode.label} maxLength={28} onChange={event => updateFlowNode(selectedFlowNode.id, { label: event.target.value })} />
-                </label>
-              ) : (
-                <div className="selected-card-summary">
-                  <strong>{selectedCard?.responsibility}</strong>
-                  <span>IN · {selectedCard?.input}</span>
-                  <span>OUT · {selectedCard?.output}</span>
-                </div>
-              )}
+              <div className="selected-card-summary">
+                <strong>{selectedCard.responsibility}</strong>
+                <span>IN · {selectedCard.input}</span>
+                <span>OUT · {selectedCard.output}</span>
+              </div>
               <div className="selected-edge-list">
                 {selectedEdges.map(edge => (
                   <div key={edge.id}>
@@ -816,15 +729,15 @@ export const ProjectPathStage: React.FC<Props> = ({
                 ))}
                 {selectedEdges.length === 0 && <small>{isZh ? '还没有与该节点相连的箭头' : 'No arrows connected yet'}</small>}
               </div>
-              <button type="button" className="remove-canvas-node" onClick={() => removeNodeFromCanvas(selectedId, selectedFlowNode ? 'flow' : 'card')}>
-                <Trash2 size={13} />{selectedFlowNode ? (isZh ? '删除图形' : 'Delete shape') : (isZh ? '移回素材区' : 'Return to palette')}
+              <button type="button" className="remove-canvas-node" onClick={() => removeNodeFromCanvas(selectedId)}>
+                <Trash2 size={13} />{isZh ? '移回素材区' : 'Return to palette'}
               </button>
             </section>
           )}
 
           <div className={`toolbox-notice ${connectMode ? 'is-connecting' : ''}`}>
             {connectMode ? <Link2 size={15} /> : <Move size={15} />}
-            <span>{canvasNotice || (isZh ? '拖动素材到画布；需要连线时点击上方“连接节点”。' : 'Drag items to the canvas; use Connect nodes for arrows.')}</span>
+            <span>{canvasNotice || (isZh ? '先用箭头表达功能依赖，再调整上方的个人实现顺序。' : 'Connect dependencies, then adjust your personal build order.')}</span>
           </div>
         </aside>
       </div>
@@ -832,12 +745,20 @@ export const ProjectPathStage: React.FC<Props> = ({
       {topology.hasCycle && <div className="relation-cycle-warning"><GitBranch size={17} />{isZh ? '出现了循环依赖：A 等 B，B 又等 A。请取消其中一条关系。' : 'Circular dependency detected. Remove one of the links.'}</div>}
 
       <footer className="path-stage-footer">
-        <button type="button" onClick={onBack}>{isZh ? '返回功能卡' : 'Back to functions'}</button>
-        <span>{isZh ? '这里保留的是你的关系判断，不会自动改成教师答案' : 'Your relations are preserved; they are not replaced by the teacher answer.'}</span>
-        <button type="button" className="is-primary" disabled={topology.hasCycle || orderedCards.length === 0} onClick={onContinue}>
-          {isZh ? '生成实现路径' : 'Generate build route'}<ArrowRight size={17} />
+        <button type="button" onClick={onBack}>{isZh ? '返回功能流程' : 'Back to function flows'}</button>
+        <span>{routeIssues.length > 0
+          ? (isZh ? '实现顺序与功能依赖冲突，请先调整右侧顺序' : 'Build order conflicts with dependencies.')
+          : (isZh ? '缺失功能会在后续综合运行中表现为可观察的问题' : 'Missing functions become observable problems later.')}</span>
+        <button type="button" className="is-primary" disabled={topology.hasCycle || orderedCards.length === 0 || routeIssues.length > 0} onClick={continueFromPlan}>
+          {isZh ? '按此路径开始建构' : 'Build this route'}<ArrowRight size={17} />
         </button>
       </footer>
     </section>
   );
 };
+
+export const ProjectPathStage: React.FC<Props> = props => (
+  props.stage === 'model'
+    ? <ProjectMechanismStage language={props.language} taskId={props.taskId} onBack={props.onBack} onContinue={props.onContinue} />
+    : <ProjectSystemPathStage {...props} />
+);

@@ -22,6 +22,16 @@ export interface StudentDiagramEdge {
   id: string;
   sourceId: string;
   targetId: string;
+  sourceAnchor?: StudentConnectorSide;
+  targetAnchor?: StudentConnectorSide;
+}
+
+export type StudentConnectorSide = 'top' | 'right' | 'bottom' | 'left';
+
+export interface StudentFunctionMechanism {
+  flowNodes: StudentFlowNode[];
+  diagramEdges: StudentDiagramEdge[];
+  confirmedAt?: string;
 }
 
 export interface StudentPathPlan {
@@ -31,6 +41,7 @@ export interface StudentPathPlan {
   relationKinds: Record<string, StudentRelationKind>;
   flowNodes?: StudentFlowNode[];
   diagramEdges?: StudentDiagramEdge[];
+  functionMechanisms?: Record<string, StudentFunctionMechanism>;
   canvasLayoutVersion?: number;
   canvasPositions?: Record<string, StudentCanvasPosition>;
   confirmedAt?: string;
@@ -117,6 +128,7 @@ export const createInitialPathPlan = (cards: StudentFunctionCard[]): StudentPath
   relationKinds: {},
   flowNodes: [],
   diagramEdges: [],
+  functionMechanisms: {},
   canvasLayoutVersion: STUDENT_CANVAS_LAYOUT_VERSION,
   canvasPositions: createDefaultCanvasPositions(cards),
 });
