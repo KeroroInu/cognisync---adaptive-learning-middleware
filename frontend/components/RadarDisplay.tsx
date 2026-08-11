@@ -20,7 +20,14 @@ export const RadarDisplay: React.FC<Props> = ({ data, compareData, showLegend = 
   ];
 
   return (
-    <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0} debounce={80}>
+    <ResponsiveContainer
+      width="100%"
+      height="100%"
+      minWidth={0}
+      minHeight={0}
+      initialDimension={{ width: 640, height: 360 }}
+      debounce={80}
+    >
       <RadarChart cx="50%" cy="50%" outerRadius="70%" data={chartData}>
         <PolarGrid stroke="var(--line-strong)" />
         <PolarAngleAxis dataKey="subject" tick={{ fill: 'var(--text-tertiary)', fontSize: 12 }} />
