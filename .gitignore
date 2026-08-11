@@ -64,6 +64,7 @@ frontend/dist/
 # Local agent / IDE workspace files
 .trae/
 .claude/
+.gstack/
 skills-lock.json
 
 # Local planning / development docs
