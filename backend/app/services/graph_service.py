@@ -227,34 +227,35 @@ class GraphService:
             for row in (co_edges_result or [])
         ]
 
-        # 3. 获取用户手动创建的 REL 边
-        rel_edges_query = """
+        # 3. 一次获取可选的手动关系与前置关系。
+        # 使用 type(r) 动态过滤，避免关系类型尚未创建时 Neo4j 为每次请求打印告警。
+        semantic_edges_query = """
         MATCH (s:Student {id: $user_id})-[:INTERACTED_WITH]->(c1:Concept)
         MATCH (s)-[:INTERACTED_WITH]->(c2:Concept)
-        MATCH (c1)-[:REL]->(c2)
-        RETURN DISTINCT c1.uid as source, c2.uid as target
+        MATCH (c1)-[r]->(c2)
+        WHERE type(r) IN $relationship_types
+        RETURN DISTINCT c1.uid as source, c2.uid as target, type(r) as relationship_type
         """
 
-        rel_edges_result = await execute_query(rel_edges_query, {"user_id": user_id})
+        semantic_edges_result = await execute_query(
+            semantic_edges_query,
+            {
+                "user_id": user_id,
+                "relationship_types": ["REL", "PREREQUISITE_OF"],
+            },
+        )
 
         edges += [
-            Edge(source=row["source"], target=row["target"], relType="related")
-            for row in (rel_edges_result or [])
-        ]
-
-        # 4. 获取前置关系边（PREREQUISITE_OF）
-        prereq_edges_query = """
-        MATCH (s:Student {id: $user_id})-[:INTERACTED_WITH]->(c1:Concept)
-        MATCH (s)-[:INTERACTED_WITH]->(c2:Concept)
-        MATCH (c1)-[:PREREQUISITE_OF]->(c2)
-        RETURN DISTINCT c1.uid as source, c2.uid as target
-        """
-
-        prereq_edges_result = await execute_query(prereq_edges_query, {"user_id": user_id})
-
-        edges += [
-            Edge(source=row["source"], target=row["target"], relType="prerequisite")
-            for row in (prereq_edges_result or [])
+            Edge(
+                source=row["source"],
+                target=row["target"],
+                relType=(
+                    "prerequisite"
+                    if row["relationship_type"] == "PREREQUISITE_OF"
+                    else "related"
+                ),
+            )
+            for row in (semantic_edges_result or [])
         ]
 
         logger.info(f"Retrieved graph for user {user_id}: {len(nodes)} nodes, {len(edges)} edges")
