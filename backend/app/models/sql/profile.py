@@ -70,7 +70,7 @@ class ProfileSnapshot(Base, UUIDMixin):
     user: Mapped["User"] = relationship(
         "User",
         back_populates="profile_snapshots",
-        lazy="selectin"
+        lazy="raise"
     )
 
     def __repr__(self) -> str:

@@ -102,20 +102,50 @@ async def init_db():
         raise
 
 
+async def _run_migration_sql(sql: str, label: str, critical: bool = True) -> bool:
+    """
+    执行单条幂等 DDL，独立事务提交，避免单步失败导致整体回滚。
+
+    Args:
+        sql: 要执行的 SQL
+        label: 日志标签
+        critical: 是否为启动所需的迁移。默认为 True，失败时中断启动；
+                  只有确认不影响 schema 一致性的可选步骤才应显式传 False。
+
+    关于 critical 的取舍：
+    历史实现把所有 DDL 异常都吞成 warning，服务仍继续启动。
+    `IF NOT EXISTS` 语句在对象已存在时会正常成功，不需要靠吞异常实现幂等。
+    因此当建表、加列、索引或约束真正失败时，默认应拒绝带着不一致
+    schema 启动，避免运行期写入脏数据或持续返回 500。
+
+    Returns:
+        True 表示执行成功，False 表示失败但被容忍。
+    """
+    from sqlalchemy import text
+
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(text(sql))
+        logger.info(f"  ✅ {label}")
+        return True
+    except Exception as e:
+        if critical:
+            logger.error(f"  ❌ {label} FAILED (critical): {e}")
+            raise RuntimeError(
+                f"Critical migration step failed: {label}. "
+                f"Database schema is inconsistent with the ORM models; refusing to start. "
+                f"Original error: {e}"
+            ) from e
+        logger.warning(f"  ⚠️ {label} (skipped): {e}")
+        return False
+
+
 async def _migrate_student_id():
     """
     幂等迁移：为 users 表添加 student_id 列，email 改为可空。
     每条 DDL 独立事务执行，避免单步失败导致整体回滚。
     """
-    from sqlalchemy import text
-
-    async def run_sql(sql: str, label: str):
-        try:
-            async with engine.begin() as conn:
-                await conn.execute(text(sql))
-            logger.info(f"  ✅ {label}")
-        except Exception as e:
-            logger.warning(f"  ⚠️ {label} (skipped): {e}")
+    run_sql = _run_migration_sql
 
     # 1. 添加 student_id 列
     await run_sql(
@@ -176,44 +206,31 @@ async def _migrate_student_id():
         "ALTER email DROP NOT NULL"
     )
 
-
-async def _migrate_scale_started_at():
-    """幂等迁移：为 scale_responses 添加 started_at 列"""
-    from sqlalchemy import text
-
-    async def run_sql(sql: str, label: str):
-        try:
-            async with engine.begin() as conn:
-                await conn.execute(text(sql))
-            logger.info(f"  ✅ {label}")
-        except Exception as e:
-            logger.warning(f"  ⚠️ {label} (skipped): {e}")
-
-    await run_sql(
-        "ALTER TABLE scale_responses ADD COLUMN IF NOT EXISTS started_at TIMESTAMP WITH TIME ZONE;",
-        "ADD COLUMN started_at to scale_responses"
-    )
-
     # 9. name 设为非空
+    #    必须紧跟步骤 7（补全 NULL 值）之后执行——若存量数据仍有 NULL，
+    #    该语句会失败。此前这两条语句被误放在 _migrate_scale_started_at() 中，
+    #    跨函数拆散了顺序依赖，一旦失败会让 DB 与 user.py 的 nullable=False
+    #    声明永久不一致，直到运行期某次 INSERT 才暴露。
     await run_sql(
         "ALTER TABLE users ALTER COLUMN name SET NOT NULL;",
-        "ALTER name SET NOT NULL"
+        "ALTER name SET NOT NULL",
+        critical=True,
     )
 
     logger.info("✅ student_id migration completed")
 
 
+async def _migrate_scale_started_at():
+    """幂等迁移：为 scale_responses 添加 started_at 列"""
+    await _run_migration_sql(
+        "ALTER TABLE scale_responses ADD COLUMN IF NOT EXISTS started_at TIMESTAMP WITH TIME ZONE;",
+        "ADD COLUMN started_at to scale_responses"
+    )
+
+
 async def _migrate_research_ai_prompt():
     """幂等迁移：为 research_tasks 添加 ai_prompt 列"""
-    from sqlalchemy import text
-
-    async def run_sql(sql: str, label: str):
-        try:
-            async with engine.begin() as conn:
-                await conn.execute(text(sql))
-            logger.info(f"  ✅ {label}")
-        except Exception as e:
-            logger.warning(f"  ⚠️ {label} (skipped): {e}")
+    run_sql = _run_migration_sql
 
     await run_sql(
         "ALTER TABLE research_tasks ADD COLUMN IF NOT EXISTS ai_prompt TEXT;",
@@ -223,15 +240,7 @@ async def _migrate_research_ai_prompt():
 
 async def _migrate_research_started_at():
     """幂等迁移：为 research_task_submissions 添加 started_at 列"""
-    from sqlalchemy import text
-
-    async def run_sql(sql: str, label: str):
-        try:
-            async with engine.begin() as conn:
-                await conn.execute(text(sql))
-            logger.info(f"  ✅ {label}")
-        except Exception as e:
-            logger.warning(f"  ⚠️ {label} (skipped): {e}")
+    run_sql = _run_migration_sql
 
     await run_sql(
         "ALTER TABLE research_task_submissions ADD COLUMN IF NOT EXISTS started_at TIMESTAMP WITH TIME ZONE;",
@@ -241,30 +250,16 @@ async def _migrate_research_started_at():
 
 async def _migrate_research_workspace_data():
     """幂等迁移：保存项目解构工作台的结构化过程数据。"""
-    from sqlalchemy import text
-
-    try:
-        async with engine.begin() as conn:
-            await conn.execute(text(
-                "ALTER TABLE research_task_submissions "
-                "ADD COLUMN IF NOT EXISTS workspace_data JSONB;"
-            ))
-        logger.info("  ✅ ADD COLUMN workspace_data to research_task_submissions")
-    except Exception as exc:
-        logger.warning("  ⚠️ ADD workspace_data (skipped): %s", exc)
+    await _run_migration_sql(
+        "ALTER TABLE research_task_submissions "
+        "ADD COLUMN IF NOT EXISTS workspace_data JSONB;",
+        "ADD COLUMN workspace_data to research_task_submissions"
+    )
 
 
 async def _migrate_scale_activated_at():
     """幂等迁移：为 scale_templates 添加 activated_at 列（支持前测/后测轮次判断）"""
-    from sqlalchemy import text
-
-    async def run_sql(sql: str, label: str):
-        try:
-            async with engine.begin() as conn:
-                await conn.execute(text(sql))
-            logger.info(f"  ✅ {label}")
-        except Exception as e:
-            logger.warning(f"  ⚠️ {label} (skipped): {e}")
+    run_sql = _run_migration_sql
 
     await run_sql(
         "ALTER TABLE scale_templates ADD COLUMN IF NOT EXISTS activated_at TIMESTAMP WITH TIME ZONE;",
@@ -274,15 +269,7 @@ async def _migrate_scale_activated_at():
 
 async def _migrate_chat_message_session_link():
     """幂等迁移：为 chat_messages 添加 session_id 列与索引"""
-    from sqlalchemy import text
-
-    async def run_sql(sql: str, label: str):
-        try:
-            async with engine.begin() as conn:
-                await conn.execute(text(sql))
-            logger.info(f"  ✅ {label}")
-        except Exception as e:
-            logger.warning(f"  ⚠️ {label} (skipped): {e}")
+    run_sql = _run_migration_sql
 
     await run_sql(
         "ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS session_id UUID;",
@@ -304,7 +291,10 @@ async def _migrate_chat_message_session_link():
             END IF;
         END $$;
         """,
-        "ADD FOREIGN KEY chat_messages.session_id -> chat_sessions.id"
+        "ADD FOREIGN KEY chat_messages.session_id -> chat_sessions.id",
+        # 关键：外键缺失会让 chat_messages.session_id 静默产生孤儿引用，
+        # 而管理后台的会话详情依赖该关联，失败必须立即暴露。
+        critical=True,
     )
 
     await run_sql(
@@ -315,15 +305,7 @@ async def _migrate_chat_message_session_link():
 
 async def _migrate_emotion_log_created_index():
     """幂等迁移：为 emotion_logs.created_at 添加索引"""
-    from sqlalchemy import text
-
-    async def run_sql(sql: str, label: str):
-        try:
-            async with engine.begin() as conn:
-                await conn.execute(text(sql))
-            logger.info(f"  ✅ {label}")
-        except Exception as e:
-            logger.warning(f"  ⚠️ {label} (skipped): {e}")
+    run_sql = _run_migration_sql
 
     await run_sql(
         "CREATE INDEX IF NOT EXISTS ix_emotion_logs_created_at ON emotion_logs (created_at);",
@@ -333,8 +315,6 @@ async def _migrate_emotion_log_created_index():
 
 async def _migrate_experiment_groups():
     """幂等迁移：增加实验班级/条件，并允许研究任务按条件投放。"""
-    from sqlalchemy import text
-
     statements = (
         ("ALTER TABLE users ADD COLUMN IF NOT EXISTS class_name VARCHAR(100);", "ADD users.class_name"),
         ("ALTER TABLE users ADD COLUMN IF NOT EXISTS experiment_group VARCHAR(20) NOT NULL DEFAULT 'unassigned';", "ADD users.experiment_group"),
@@ -344,12 +324,7 @@ async def _migrate_experiment_groups():
         ("CREATE INDEX IF NOT EXISTS ix_research_tasks_target_group_status ON research_tasks (target_group, status);", "INDEX research task target/status"),
     )
     for sql, label in statements:
-        try:
-            async with engine.begin() as conn:
-                await conn.execute(text(sql))
-            logger.info("  ✅ %s", label)
-        except Exception as exc:
-            logger.warning("  ⚠️ %s (skipped): %s", label, exc)
+        await _run_migration_sql(sql, label)
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:

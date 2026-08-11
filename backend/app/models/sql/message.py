@@ -82,20 +82,20 @@ class ChatMessage(Base, UUIDMixin):
     user: Mapped[User] = relationship(
         "User",
         back_populates="messages",
-        lazy="selectin"
+        lazy="raise"
     )
 
     session: Mapped[Optional[ChatSession]] = relationship(
         "ChatSession",
         back_populates="messages",
-        lazy="selectin"
+        lazy="raise"
     )
 
     emotion_logs: Mapped[list[EmotionLog]] = relationship(
         "EmotionLog",
         back_populates="message",
         cascade="all, delete-orphan",
-        lazy="selectin"
+        lazy="raise"
     )
 
     def __repr__(self) -> str:

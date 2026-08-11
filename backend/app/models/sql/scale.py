@@ -158,13 +158,13 @@ class ScaleResponse(Base, UUIDMixin):
     user: Mapped["User"] = relationship(
         "User",
         back_populates="scale_responses",
-        lazy="selectin"
+        lazy="raise"
     )
 
     template: Mapped["ScaleTemplate"] = relationship(
         "ScaleTemplate",
         back_populates="responses",
-        lazy="selectin"
+        lazy="raise"
     )
 
     def __repr__(self) -> str:

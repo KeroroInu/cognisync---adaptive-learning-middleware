@@ -377,77 +377,82 @@ class PersonalizationService:
     async def update_graph_from_conversation(
         self,
         user_id: str,
-        message: str,
+        detected_concepts: List,
         current_graph: List[Dict],
         user_profile: UserProfile
     ) -> List[Dict]:
         """
-        根据对话内容更新知识图谱
+        根据本轮对话已识别的概念更新知识图谱
+
+        注意：本方法不再自行调用 LLM 分析消息。调用方（如 chat 接口）在同一轮
+        请求中已经执行过 TextAnalyzer.analyze()，此处直接复用其 detectedConcepts，
+        避免对同一条消息重复分析（既浪费 token，又因缺少上下文而得到更差的结果）。
 
         Args:
             user_id: 用户 ID
-            message: 用户消息
+            detected_concepts: 本轮已识别的概念（字符串或 {"name": ...} 字典）
             current_graph: 当前知识图谱
             user_profile: 用户画像
 
         Returns:
             更新后的知识图谱
         """
-        # 1. 分析消息中的概念
-        from app.services.text_analyzer import TextAnalyzer
-        analyzer = TextAnalyzer()
+        # 1. 没有识别到概念时，直接返回当前图谱
+        if not detected_concepts:
+            return current_graph
 
-        analysis = await analyzer.analyze(
-            user_message=message,
-            recent_messages=[]
+        # 2. 计算概念重要性，构建本轮概念列表
+        new_concepts = []
+        for concept in detected_concepts:
+            # detectedConcepts 可能是字符串或字典，统一处理
+            if isinstance(concept, str):
+                concept_name = concept
+                concept_obj = {"name": concept_name, "category": "general", "importance": 0.5}
+            else:
+                concept_name = concept.get("name", "")
+                concept_obj = concept
+
+            # 去除首尾空白后再判空：LLM 偶尔会返回 " " 这类纯空白概念名，
+            # 直接用 `if not concept_name` 无法过滤，会在图谱中留下空节点。
+            concept_name = str(concept_name).strip()
+            if not concept_name:
+                continue
+
+            # 计算重要性（基于用户画像）
+            importance = self._calculate_concept_importance(concept_obj, user_profile)
+
+            # 查找相关概念
+            related = self._find_related_concepts(concept_name, current_graph)
+
+            new_concepts.append({
+                "name": concept_name,
+                "category": concept_obj.get("category", "general"),
+                "importance": importance,
+                "relatedConcepts": related
+            })
+
+        if not new_concepts:
+            return current_graph
+
+        # 3. 合并新旧概念（去重），返回给前端展示
+        #
+        # 注意：此处刻意「不」再次调用 upsert_concepts。
+        # upsert_concepts 的 Cypher 是 ON MATCH SET r.count = r.count + 1，
+        # 而调用方（chat 接口）在识别到概念后已经写过一次图谱。若这里再写一次，
+        # 同一轮对话会让相同概念的交互次数 +2；早前的实现更是把合并后的整张图
+        # 传进去，导致用户历史上每一个概念在每轮对话中都被 +1，频次数据被系统性
+        # 污染（frequency 用于计算 importance，几轮后即饱和）。
+        # 本方法现在只负责计算展示用的图谱视图，持久化由调用方统一负责。
+        updated_graph = self._merge_concepts(current_graph, new_concepts)
+
+        logger.debug(
+            "Composed knowledge graph view for user %s: %d concepts from this turn, %d total",
+            user_id,
+            len(new_concepts),
+            len(updated_graph),
         )
 
-        # 2. 如果有检测到新概念，添加到图谱
-        if analysis.detectedConcepts:
-            # 计算概念重要性
-            new_concepts = []
-            for concept in analysis.detectedConcepts:
-                # detectedConcepts 可能是字符串或字典，统一处理
-                if isinstance(concept, str):
-                    concept_name = concept
-                    concept_obj = {"name": concept_name, "category": "general", "importance": 0.5}
-                else:
-                    concept_name = concept.get("name", "")
-                    concept_obj = concept
-
-                if not concept_name:
-                    continue
-
-                # 计算重要性（基于用户画像）
-                importance = self._calculate_concept_importance(concept_obj, user_profile)
-
-                # 查找相关概念
-                related = self._find_related_concepts(concept_name, current_graph)
-
-                new_concepts.append({
-                    "name": concept_name,
-                    "category": concept_obj.get("category", "general"),
-                    "importance": importance,
-                    "relatedConcepts": related
-                })
-
-            # 合并新旧概念（去重）
-            updated_graph = self._merge_concepts(current_graph, new_concepts)
-
-            # 保存到数据库
-            try:
-                await self.graph_service.upsert_concepts(
-                    user_id=user_id,
-                    concepts=updated_graph
-                )
-                logger.info(f"Updated knowledge graph for user {user_id} with {len(new_concepts)} new concepts")
-            except Exception as e:
-                logger.warning(f"Failed to update knowledge graph: {e}")
-
-            return updated_graph
-
-        # 3. 如果没有新概念，返回当前图谱
-        return current_graph
+        return updated_graph
 
     def _calculate_concept_importance(
         self,

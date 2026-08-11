@@ -105,12 +105,12 @@ class BehaviorLog(Base, UUIDMixin):
     user: Mapped[User] = relationship(
         "User",
         back_populates="behavior_logs",
-        lazy="selectin"
+        lazy="raise"
     )
 
     session: Mapped[ChatSession] = relationship(
         "ChatSession",
-        lazy="selectin"
+        lazy="raise"
     )
 
     def __repr__(self) -> str:

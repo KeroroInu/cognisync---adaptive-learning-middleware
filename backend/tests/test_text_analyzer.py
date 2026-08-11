@@ -195,3 +195,20 @@ def test_invalid_llm_response_falls_back_and_keeps_emotion_detail():
     assert result.emotionDetail is not None
     assert result.emotionDetail.code == "E08"
     assert result.delta.behavior > 0
+
+
+def test_detected_concepts_are_trimmed_before_graph_persistence():
+    analyzer = TextAnalyzer(
+        provider=StaticProvider(
+            {
+                "intent": "exploration",
+                "emotion": "curious",
+                "detectedConcepts": ["  Python  ", "   ", "Python"],
+                "delta": {"cognition": 0, "affect": 1, "behavior": 1},
+            }
+        )
+    )
+
+    result = run_async(analyzer.analyze("我想了解 Python"))
+
+    assert result.detectedConcepts == ["Python"]

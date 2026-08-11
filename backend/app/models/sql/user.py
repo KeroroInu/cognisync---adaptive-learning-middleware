@@ -114,60 +114,70 @@ class User(Base, UUIDMixin):
     )
 
     # 关系
+    #
+    # ⚠️ 加载策略说明：
+    # User 位于 get_current_user() 依赖链上，几乎每个受保护接口都会加载一次。
+    # 若这些集合使用 lazy="selectin"，每次鉴权都会把该用户的全部历史消息、
+    # 情感日志、画像快照等拉进内存（并因下游模型同样使用 selectin 产生二级扇出）。
+    #
+    # 因此统一改为 lazy="raise"：关系默认不加载，且任何隐式访问会立即抛出
+    # InvalidRequestError，而不是静默产生 N+1 查询。确实需要关联数据的地方，
+    # 请在查询处显式声明 selectinload(User.xxx)。
+    # 注意：cascade 删除不受影响，由数据库侧 ON DELETE CASCADE 保证。
     messages: Mapped[list[ChatMessage]] = relationship(
         "ChatMessage",
         back_populates="user",
         cascade="all, delete-orphan",
-        lazy="selectin"
+        lazy="raise"
     )
 
     profile_snapshots: Mapped[list[ProfileSnapshot]] = relationship(
         "ProfileSnapshot",
         back_populates="user",
         cascade="all, delete-orphan",
-        lazy="selectin"
+        lazy="raise"
     )
 
     calibration_logs: Mapped[list[CalibrationLog]] = relationship(
         "CalibrationLog",
         back_populates="user",
         cascade="all, delete-orphan",
-        lazy="selectin"
+        lazy="raise"
     )
 
     sessions: Mapped[list[ChatSession]] = relationship(
         "ChatSession",
         back_populates="user",
         cascade="all, delete-orphan",
-        lazy="selectin"
+        lazy="raise"
     )
 
     emotion_logs: Mapped[list[EmotionLog]] = relationship(
         "EmotionLog",
         back_populates="user",
         cascade="all, delete-orphan",
-        lazy="selectin"
+        lazy="raise"
     )
 
     scale_responses: Mapped[list[ScaleResponse]] = relationship(
         "ScaleResponse",
         back_populates="user",
         cascade="all, delete-orphan",
-        lazy="selectin"
+        lazy="raise"
     )
 
     onboarding_sessions: Mapped[list[OnboardingSession]] = relationship(
         "OnboardingSession",
         back_populates="user",
         cascade="all, delete-orphan",
-        lazy="selectin"
+        lazy="raise"
     )
 
     behavior_logs: Mapped[list[BehaviorLog]] = relationship(
         "BehaviorLog",
         back_populates="user",
         cascade="all, delete-orphan",
-        lazy="selectin"
+        lazy="raise"
     )
 
     def __repr__(self) -> str:

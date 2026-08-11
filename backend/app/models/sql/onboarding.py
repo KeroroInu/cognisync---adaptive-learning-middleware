@@ -60,7 +60,7 @@ class OnboardingSession(Base, UUIDMixin):
     user: Mapped["User"] = relationship(
         "User",
         back_populates="onboarding_sessions",
-        lazy="selectin"
+        lazy="raise"
     )
 
     def __repr__(self) -> str:

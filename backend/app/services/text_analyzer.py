@@ -232,7 +232,15 @@ class TextAnalyzer:
 
         if not isinstance(data["detectedConcepts"], list):
             data["detectedConcepts"] = []
-        data["detectedConcepts"] = [str(item) for item in data["detectedConcepts"] if str(item).strip()]
+        cleaned_concepts = []
+        seen_concepts = set()
+        for item in data["detectedConcepts"]:
+            concept_name = str(item).strip()
+            if not concept_name or concept_name in seen_concepts:
+                continue
+            seen_concepts.add(concept_name)
+            cleaned_concepts.append(concept_name)
+        data["detectedConcepts"] = cleaned_concepts
 
         delta = data["delta"] if isinstance(data["delta"], dict) else {}
         for dim in ["cognition", "affect", "behavior"]:

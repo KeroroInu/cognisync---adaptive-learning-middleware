@@ -91,7 +91,7 @@ class CalibrationLog(Base, UUIDMixin):
     user: Mapped["User"] = relationship(
         "User",
         back_populates="calibration_logs",
-        lazy="selectin"
+        lazy="raise"
     )
 
     def __repr__(self) -> str:

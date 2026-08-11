@@ -165,19 +165,19 @@ class EmotionLog(Base, UUIDMixin):
     user: Mapped[User] = relationship(
         "User",
         back_populates="emotion_logs",
-        lazy="selectin",
+        lazy="raise",
     )
 
     session: Mapped[Optional[ChatSession]] = relationship(
         "ChatSession",
         back_populates="emotion_logs",
-        lazy="selectin",
+        lazy="raise",
     )
 
     message: Mapped[ChatMessage] = relationship(
         "ChatMessage",
         back_populates="emotion_logs",
-        lazy="selectin",
+        lazy="raise",
     )
 
     def __repr__(self) -> str:

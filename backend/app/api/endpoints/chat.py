@@ -680,6 +680,7 @@ async def chat(
         import asyncio
         llm_provider = get_chat_provider()
         assistant_reply = ""
+        last_llm_error: Optional[BaseException] = None
         for attempt in range(2):
             try:
                 assistant_reply = await asyncio.wait_for(
@@ -692,11 +693,19 @@ async def chat(
                     timeout=30.0,
                 )
                 break
+            except asyncio.CancelledError:
+                # 客户端断开或服务关闭：不要当作 LLM 故障重试，直接向上传播
+                raise
+            except HTTPException:
+                # 不要把上游的业务异常误判为 LLM 故障而重试
+                raise
             except (asyncio.TimeoutError, Exception) as llm_err:
+                last_llm_error = llm_err
                 logger.warning(f"LLM attempt {attempt + 1} failed: {llm_err}")
                 if attempt == 0:
                     await asyncio.sleep(1)
         if not assistant_reply:
+            logger.error(f"LLM failed after retries: {last_llm_error}")
             raise HTTPException(status_code=503, detail="AI service temporarily unavailable, please retry")
 
         logger.info(f"AI reply generated: {len(assistant_reply)} characters")
@@ -716,15 +725,16 @@ async def chat(
 
         logger.info(f"Assistant message saved: {assistant_message.id}")
 
-        # ========== 8. 更新知识图谱（基于对话内容） ==========
+        # ========== 8. 组装知识图谱响应视图 ==========
+        # 注意：不要在此处重新调用 TextAnalyzer——第 3 步已经分析过同一条消息。
         updated_graph = await personalization_service.update_graph_from_conversation(
             user_id=str(user_id),
-            message=request.message,
+            detected_concepts=analysis.detectedConcepts,
             current_graph=current_graph,
             user_profile=updated_profile
         )
 
-        logger.info(f"Knowledge graph updated: {len(updated_graph)} concepts")
+        logger.info(f"Knowledge graph response composed: {len(updated_graph)} concepts")
 
         # ========== 9. 返回响应 ==========
         response = ChatResponse(
