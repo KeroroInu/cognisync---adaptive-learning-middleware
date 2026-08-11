@@ -60,7 +60,9 @@ export const useAppStore = () => {
             token,
           }));
         } catch (error) {
-          console.error('Failed to get user info:', error);
+          if ((error as { status?: number }).status !== 401) {
+            console.error('Failed to get user info:', error);
+          }
           // Token 无效，清除
           localStorage.removeItem('cognisync-token');
           localStorage.removeItem('cognisync-profile');
