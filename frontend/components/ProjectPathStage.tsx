@@ -1,9 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ArrowDown,
   ArrowLeftRight,
   ArrowRight,
-  ArrowUp,
   Check,
   CircleDot,
   GitBranch,
@@ -20,10 +18,9 @@ import {
 } from 'lucide-react';
 import type { Language } from '../types';
 import {
-  buildTopologicalOrder,
+  buildImplementationStages,
   createDefaultCanvasPositions,
   createInitialPathPlan,
-  getImplementationOrderIds,
   readStoredList,
   readStoredObject,
   STUDENT_CANVAS_LAYOUT_VERSION,
@@ -242,21 +239,16 @@ const ProjectSystemPathStage: React.FC<Props> = ({
   );
   const selectedCard = placedCardIds.includes(selectedId) ? cardsById.get(selectedId) : undefined;
   const diagramEdges = plan.diagramEdges ?? prerequisitesToEdges(plan.prerequisites);
-  const topology = useMemo(() => buildTopologicalOrder(orderedCards, plan), [orderedCards, plan]);
-  const implementationCards = useMemo(() => {
-    return getImplementationOrderIds(cards, plan)
-      .map(id => cardsById.get(id))
-      .filter((card): card is StudentFunctionCard => Boolean(card));
-  }, [cards, cardsById, plan]);
-  const routeIssues = useMemo(() => {
-    const orderIndex = new Map(implementationCards.map((card, index) => [card.id, index]));
-    return implementationCards.flatMap(card => (plan.prerequisites[card.id] ?? []).flatMap(dependencyId => {
-      const dependencyIndex = orderIndex.get(dependencyId);
-      const cardIndex = orderIndex.get(card.id);
-      if (dependencyIndex === undefined || cardIndex === undefined || dependencyIndex < cardIndex) return [];
-      return [{ cardId: card.id, dependencyId }];
-    }));
-  }, [implementationCards, plan.prerequisites]);
+  const routeAnalysis = useMemo(() => buildImplementationStages(cards, plan), [cards, plan]);
+  const stageByCardId = useMemo(() => new Map(
+    routeAnalysis.stages.flatMap(stage => stage.cardIds.map(id => [id, stage.index] as const)),
+  ), [routeAnalysis.stages]);
+  const unplannedIdSet = useMemo(() => new Set(routeAnalysis.unplannedIds), [routeAnalysis.unplannedIds]);
+  const directPrerequisiteCount = useMemo(() => {
+    const counts = new Map<string, number>();
+    diagramEdges.forEach(edge => counts.set(edge.targetId, (counts.get(edge.targetId) ?? 0) + 1));
+    return counts;
+  }, [diagramEdges]);
   const relationCount = diagramEdges.length;
   const canvasPositions = plan.canvasPositions ?? createDefaultCanvasPositions(cards);
   const canvasNodeIds = useMemo(() => new Set(placedCardIds), [placedCardIds]);
@@ -394,7 +386,9 @@ const ProjectSystemPathStage: React.FC<Props> = ({
       return {
         ...current,
         placedCardIds: nextIds,
-        orderedCardIds: [...current.orderedCardIds.filter(id => id !== cardId), cardId],
+        orderedCardIds: current.orderedCardIds.includes(cardId)
+          ? current.orderedCardIds
+          : [...current.orderedCardIds, cardId],
         canvasPositions: { ...current.canvasPositions, [cardId]: position },
         prerequisites: derivePrerequisites(nextIds, current.diagramEdges ?? []),
         confirmedAt: undefined,
@@ -634,29 +628,18 @@ const ProjectSystemPathStage: React.FC<Props> = ({
   };
 
   const continueFromPlan = () => {
+    const routeIdSet = new Set(routeAnalysis.orderedIds);
     const confirmedPlan = {
       ...plan,
+      orderedCardIds: [
+        ...routeAnalysis.orderedIds,
+        ...plan.orderedCardIds.filter(id => !routeIdSet.has(id)),
+      ],
       confirmedAt: new Date().toISOString(),
     };
     window.localStorage.setItem(pathKey, JSON.stringify(confirmedPlan));
     setPlan(confirmedPlan);
     onContinue();
-  };
-
-  const moveImplementationCard = (cardId: string, direction: -1 | 1) => {
-    setPlan(current => {
-      const activeIds = current.placedCardIds ?? current.orderedCardIds;
-      const orderedIds = current.orderedCardIds.filter(id => activeIds.includes(id));
-      activeIds.forEach(id => {
-        if (!orderedIds.includes(id)) orderedIds.push(id);
-      });
-      const currentIndex = orderedIds.indexOf(cardId);
-      const targetIndex = currentIndex + direction;
-      if (currentIndex < 0 || targetIndex < 0 || targetIndex >= orderedIds.length) return current;
-      const nextIds = [...orderedIds];
-      [nextIds[currentIndex], nextIds[targetIndex]] = [nextIds[targetIndex], nextIds[currentIndex]];
-      return { ...current, orderedCardIds: nextIds, confirmedAt: undefined };
-    });
   };
 
   if (cards.length === 0) {
@@ -675,12 +658,14 @@ const ProjectSystemPathStage: React.FC<Props> = ({
       <header className="path-stage-heading">
         <div>
           <span>04 / SYSTEM & BUILD ROUTE</span>
-          <h3>{isZh ? '先连清系统如何协作，再排出自己的实现顺序' : 'Connect the system, then choose your build order'}</h3>
-          <p>{isZh ? '画布表达功能之间的数据与前置关系；右侧顺序表达你准备先实现哪一张、后实现哪一张。' : 'The canvas shows dependencies; the list shows the order you will implement them.'}</p>
+          <h3>{isZh ? '用连线规划功能的实现阶段' : 'Plan build stages with connections'}</h3>
+          <p>{isZh ? '把功能卡放入画布，再从前置功能连向后续功能。系统只根据连线形成阶段；同一阶段的功能可以并行。' : 'Place cards, then connect prerequisites to later functions. Stages are derived only from your arrows; cards in one stage may run in parallel.'}</p>
         </div>
-        <div className={`path-validity ${topology.hasCycle ? 'has-error' : relationCount > 0 ? 'is-valid' : ''}`}>
+        <div className={`path-validity ${routeAnalysis.hasCycle ? 'has-error' : routeAnalysis.unplannedIds.length > 0 ? 'has-pending' : relationCount > 0 ? 'is-valid' : ''}`}>
           <Link2 size={18} />
-          <span>{isZh ? `${relationCount} 条关系` : `${relationCount} relations`}</span>
+          <span>{routeAnalysis.unplannedIds.length > 0
+            ? (isZh ? `${routeAnalysis.unplannedIds.length} 张待连线` : `${routeAnalysis.unplannedIds.length} unplanned`)
+            : (isZh ? `${routeAnalysis.stages.length} 个阶段 · ${relationCount} 条连线` : `${routeAnalysis.stages.length} stages · ${relationCount} links`)}</span>
         </div>
       </header>
 
@@ -822,33 +807,37 @@ const ProjectSystemPathStage: React.FC<Props> = ({
                   return <path d={previewPath} className="relation-connection-preview" markerEnd="url(#relation-arrow-head)" />;
                 })() : null}
               </svg>
-              {orderedCards.map((card, index) => {
-                const dependencies = plan.prerequisites[card.id] ?? [];
+              {orderedCards.map(card => {
+                const stageIndex = stageByCardId.get(card.id);
+                const prerequisiteCount = directPrerequisiteCount.get(card.id) ?? 0;
+                const isUnplanned = unplannedIdSet.has(card.id);
                 const selected = selectedCard?.id === card.id;
                 const position = canvasPositions[card.id] ?? { x: CANVAS_PADDING, y: CANVAS_PADDING };
                 return (
                   <React.Fragment key={card.id}>
                     <article
-                      className={`relation-node ${selected ? 'is-selected' : ''} ${draggingId === card.id ? 'is-dragging' : ''} ${connectionTarget?.nodeId === card.id ? 'is-connection-target' : ''}`}
+                      className={`relation-node ${selected ? 'is-selected' : ''} ${isUnplanned ? 'is-unplanned' : ''} ${draggingId === card.id ? 'is-dragging' : ''} ${connectionTarget?.nodeId === card.id ? 'is-connection-target' : ''}`}
                       style={{ left: position.x, top: position.y }}
                       role="button"
                       tabIndex={0}
                       data-relation-node-id={card.id}
-                      aria-label={`${isZh ? '功能卡' : 'Function card'} ${index + 1}: ${card.responsibility}`}
+                      aria-label={`${isZh ? '功能卡' : 'Function card'} ${stageIndex ? `${isZh ? '阶段' : 'stage'} ${stageIndex}` : (isZh ? '尚未规划' : 'unplanned')}: ${card.responsibility}`}
                       onClick={() => handleCanvasNodeClick(card.id)}
                       onKeyDown={event => nudgeNode(event, card.id, position, { width: CANVAS_NODE_WIDTH, height: CANVAS_NODE_HEIGHT })}
                       onPointerDown={event => beginNodeDrag(event, card.id, position, { width: CANVAS_NODE_WIDTH, height: CANVAS_NODE_HEIGHT })}
                     >
-                      <header><span>{String(index + 1).padStart(2, '0')}</span>{connectionSourceId === card.id ? <Link2 size={14} /> : <Move size={14} />}</header>
+                      <header><span>{stageIndex ? `S${stageIndex}` : '--'}</span>{connectionSourceId === card.id ? <Link2 size={14} /> : <Move size={14} />}</header>
                       <h4>{card.responsibility}</h4>
                       <dl>
                         <div><dt>IN</dt><dd>{card.input}</dd></div>
                         <div><dt>OUT</dt><dd>{card.output}</dd></div>
                       </dl>
                       <footer>
-                        {dependencies.length === 0
-                          ? <><CircleDot size={13} />{isZh ? '起点 / 可并行' : 'Start / parallel'}</>
-                          : <><Link2 size={13} />{isZh ? `依赖 ${dependencies.length} 张卡` : `${dependencies.length} prerequisites`}</>}
+                        {isUnplanned
+                          ? <><CircleDot size={13} />{isZh ? '尚未规划 · 请连线' : 'Unplanned · connect it'}</>
+                          : prerequisiteCount === 0
+                            ? <><CircleDot size={13} />{isZh ? `阶段 ${stageIndex} · 起点 / 可并行` : `Stage ${stageIndex} · start / parallel`}</>
+                            : <><Link2 size={13} />{isZh ? `阶段 ${stageIndex} · 前置 ${prerequisiteCount} 项` : `Stage ${stageIndex} · ${prerequisiteCount} prerequisites`}</>}
                       </footer>
                     </article>
                     {selected ? (
@@ -910,21 +899,49 @@ const ProjectSystemPathStage: React.FC<Props> = ({
           )}
 
           <section className="toolbox-section">
-            <div className="relation-canvas-label"><Route size={15} /><span>{isZh ? '我的实现顺序' : 'MY BUILD ORDER'}</span></div>
-            <p>{isZh ? '这不是游戏运行顺序，而是你准备逐张编写和验证功能的顺序。' : 'This is your coding order, not the runtime sequence.'}</p>
-            <div className="implementation-order-list">
-              {implementationCards.map((card, index) => (
-                <article key={card.id} className={routeIssues.some(issue => issue.cardId === card.id) ? 'has-issue' : ''}>
-                  <span>{String(index + 1).padStart(2, '0')}</span>
-                  <strong>{card.responsibility}</strong>
+            <div className="relation-canvas-label"><Route size={15} /><span>{isZh ? '连线生成的实现阶段' : 'BUILD STAGES FROM LINKS'}</span></div>
+            <p>{isZh ? '箭头起点先实现，箭头终点后实现；没有先后依赖的功能会留在同一阶段。' : 'Arrow sources come first; targets come later. Independent functions remain in one stage.'}</p>
+            <div className="implementation-stage-list">
+              {routeAnalysis.stages.map(stage => (
+                <section key={stage.index} className="implementation-stage-group">
+                  <header>
+                    <span>{isZh ? `阶段 ${String(stage.index).padStart(2, '0')}` : `STAGE ${String(stage.index).padStart(2, '0')}`}</span>
+                    {stage.cardIds.length > 1 ? <em>{isZh ? '可并行' : 'parallel'}</em> : null}
+                  </header>
                   <div>
-                    <button type="button" aria-label={`${isZh ? '提前实现' : 'Move earlier'}: ${card.responsibility}`} disabled={index === 0} onClick={() => moveImplementationCard(card.id, -1)}><ArrowUp size={13} /></button>
-                    <button type="button" aria-label={`${isZh ? '稍后实现' : 'Move later'}: ${card.responsibility}`} disabled={index === implementationCards.length - 1} onClick={() => moveImplementationCard(card.id, 1)}><ArrowDown size={13} /></button>
+                    {stage.cardIds.map(id => {
+                      const card = cardsById.get(id);
+                      return card ? (
+                        <button key={id} type="button" onClick={() => setSelectedId(id)}>
+                          <CircleDot size={12} /><strong>{card.responsibility}</strong>
+                        </button>
+                      ) : null;
+                    })}
                   </div>
-                </article>
+                </section>
               ))}
+              {routeAnalysis.stages.length === 0 ? (
+                <div className="implementation-stage-empty">
+                  <Link2 size={18} />
+                  <span>{isZh ? '还没有实现阶段，请先在画布中连线。' : 'No stages yet. Connect cards on the canvas.'}</span>
+                </div>
+              ) : null}
+              {routeAnalysis.unplannedIds.length > 0 ? (
+                <section className="implementation-stage-group is-unplanned">
+                  <header><span>{isZh ? '尚未规划' : 'UNPLANNED'}</span><em>{routeAnalysis.unplannedIds.length}</em></header>
+                  <div>
+                    {routeAnalysis.unplannedIds.map(id => {
+                      const card = cardsById.get(id);
+                      return card ? (
+                        <button key={id} type="button" onClick={() => setSelectedId(id)}>
+                          <CircleDot size={12} /><strong>{card.responsibility}</strong>
+                        </button>
+                      ) : null;
+                    })}
+                  </div>
+                </section>
+              ) : null}
             </div>
-            {routeIssues.length > 0 ? <small className="implementation-order-warning">{isZh ? '有功能排在它所依赖的结果之前，请调整右侧顺序。' : 'A function appears before one of its dependencies.'}</small> : null}
           </section>
 
           <section className="toolbox-section is-cards">
@@ -981,14 +998,16 @@ const ProjectSystemPathStage: React.FC<Props> = ({
         </aside>
       </div>
 
-      {topology.hasCycle && <div className="relation-cycle-warning"><GitBranch size={17} />{isZh ? '出现了循环依赖：A 等 B，B 又等 A。请取消其中一条关系。' : 'Circular dependency detected. Remove one of the links.'}</div>}
+      {routeAnalysis.hasCycle && <div className="relation-cycle-warning"><GitBranch size={17} />{isZh ? '出现了循环依赖：A 等 B，B 又等 A。请取消其中一条关系。' : 'Circular dependency detected. Remove one of the links.'}</div>}
 
       <footer className="path-stage-footer">
         <button type="button" onClick={onBack}>{isZh ? '返回功能流程' : 'Back to function flows'}</button>
-        <span>{routeIssues.length > 0
-          ? (isZh ? '实现顺序与功能依赖冲突，请先调整右侧顺序' : 'Build order conflicts with dependencies.')
-          : (isZh ? '缺失功能会在后续综合运行中表现为可观察的问题' : 'Missing functions become observable problems later.')}</span>
-        <button type="button" className="is-primary" disabled={topology.hasCycle || orderedCards.length === 0 || routeIssues.length > 0} onClick={continueFromPlan}>
+        <span>{routeAnalysis.hasCycle
+          ? (isZh ? '连线存在循环，请先删除或反转一条关系' : 'The route contains a cycle. Remove or reverse a link.')
+          : routeAnalysis.unplannedIds.length > 0
+            ? (isZh ? '画布中仍有尚未规划的卡片；连入路径，或移回右侧素材区' : 'Some canvas cards are unplanned. Connect them or return them to the palette.')
+            : (isZh ? '未放入画布的功能会在后续综合运行中表现为可观察的问题' : 'Functions omitted from the canvas become observable problems later.')}</span>
+        <button type="button" className="is-primary" disabled={routeAnalysis.hasCycle || routeAnalysis.orderedIds.length === 0 || routeAnalysis.unplannedIds.length > 0} onClick={continueFromPlan}>
           {isZh ? '按此路径开始建构' : 'Build this route'}<ArrowRight size={17} />
         </button>
       </footer>

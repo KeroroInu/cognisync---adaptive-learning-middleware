@@ -47,6 +47,18 @@ export interface StudentPathPlan {
   confirmedAt?: string;
 }
 
+export interface StudentImplementationStage {
+  index: number;
+  cardIds: string[];
+}
+
+export interface StudentImplementationRoute {
+  stages: StudentImplementationStage[];
+  orderedIds: string[];
+  unplannedIds: string[];
+  hasCycle: boolean;
+}
+
 export interface StudentModuleProgress {
   cardId: string;
   blueprintNodeId: string;
@@ -219,18 +231,115 @@ export const buildTopologicalOrder = (
   };
 };
 
+/**
+ * Derive the student's build stages from the arrows they drew.
+ *
+ * Adding a card to the canvas never assigns it an order. A card only joins the
+ * route after it is connected to another card (except for a one-card route).
+ * Multiple roots or branches at the same depth remain in the same stage, so
+ * parallel work is represented without inventing a click-based sequence.
+ */
+export const buildImplementationStages = (
+  cards: StudentFunctionCard[],
+  plan: StudentPathPlan,
+): StudentImplementationRoute => {
+  const validIds = new Set(cards.map(card => card.id));
+  const activeIds = (plan.placedCardIds ?? cards.map(card => card.id)).filter(id => validIds.has(id));
+  const activeIdSet = new Set(activeIds);
+  const preferredIds = plan.orderedCardIds.filter(id => activeIdSet.has(id));
+  activeIds.forEach(id => {
+    if (!preferredIds.includes(id)) preferredIds.push(id);
+  });
+  const preferredIndex = new Map(preferredIds.map((id, index) => [id, index]));
+  const sortPreferred = (left: string, right: string) => (
+    (preferredIndex.get(left) ?? Number.MAX_SAFE_INTEGER)
+    - (preferredIndex.get(right) ?? Number.MAX_SAFE_INTEGER)
+  );
+
+  const rawEdges = plan.diagramEdges?.length
+    ? plan.diagramEdges
+    : Object.entries(plan.prerequisites).flatMap(([targetId, sourceIds]) => (
+      sourceIds.map(sourceId => ({ id: `${sourceId}->${targetId}`, sourceId, targetId }))
+    ));
+  const edgeKeys = new Set<string>();
+  const edges = rawEdges.filter(edge => {
+    const key = `${edge.sourceId}->${edge.targetId}`;
+    if (
+      edgeKeys.has(key)
+      || edge.sourceId === edge.targetId
+      || !activeIdSet.has(edge.sourceId)
+      || !activeIdSet.has(edge.targetId)
+    ) return false;
+    edgeKeys.add(key);
+    return true;
+  });
+
+  if (activeIds.length === 1) {
+    return {
+      stages: [{ index: 1, cardIds: [activeIds[0]] }],
+      orderedIds: [activeIds[0]],
+      unplannedIds: [],
+      hasCycle: false,
+    };
+  }
+
+  const connectedIds = new Set<string>();
+  edges.forEach(edge => {
+    connectedIds.add(edge.sourceId);
+    connectedIds.add(edge.targetId);
+  });
+  const routeIds = activeIds.filter(id => connectedIds.has(id));
+  const unplannedIds = activeIds.filter(id => !connectedIds.has(id));
+  const indegree = new Map(routeIds.map(id => [id, 0]));
+  const outgoing = new Map(routeIds.map(id => [id, [] as string[]]));
+  edges.forEach(edge => {
+    indegree.set(edge.targetId, (indegree.get(edge.targetId) ?? 0) + 1);
+    outgoing.get(edge.sourceId)?.push(edge.targetId);
+  });
+
+  const stageById = new Map<string, number>();
+  const queue = routeIds.filter(id => (indegree.get(id) ?? 0) === 0).sort(sortPreferred);
+  queue.forEach(id => stageById.set(id, 1));
+  const processedIds: string[] = [];
+  while (queue.length > 0) {
+    const id = queue.shift();
+    if (!id) break;
+    processedIds.push(id);
+    const nextStage = (stageById.get(id) ?? 1) + 1;
+    (outgoing.get(id) ?? []).forEach(nextId => {
+      stageById.set(nextId, Math.max(stageById.get(nextId) ?? 1, nextStage));
+      const nextIndegree = (indegree.get(nextId) ?? 0) - 1;
+      indegree.set(nextId, nextIndegree);
+      if (nextIndegree === 0) {
+        queue.push(nextId);
+        queue.sort(sortPreferred);
+      }
+    });
+  }
+
+  const hasCycle = processedIds.length !== routeIds.length;
+  const stageGroups = new Map<number, string[]>();
+  if (!hasCycle) {
+    processedIds.forEach(id => {
+      const stage = stageById.get(id) ?? 1;
+      stageGroups.set(stage, [...(stageGroups.get(stage) ?? []), id]);
+    });
+  }
+  const stages = [...stageGroups.entries()]
+    .sort(([left], [right]) => left - right)
+    .map(([index, cardIds]) => ({ index, cardIds: cardIds.sort(sortPreferred) }));
+
+  return {
+    stages,
+    orderedIds: stages.flatMap(stage => stage.cardIds),
+    unplannedIds,
+    hasCycle,
+  };
+};
+
 export const getImplementationOrderIds = (
   cards: StudentFunctionCard[],
   plan: StudentPathPlan,
-): string[] => {
-  const cardIds = new Set(cards.map(card => card.id));
-  const activeIds = (plan.placedCardIds ?? cards.map(card => card.id)).filter(id => cardIds.has(id));
-  const activeIdSet = new Set(activeIds);
-  const orderedIds = plan.orderedCardIds.filter(id => activeIdSet.has(id));
-  activeIds.forEach(id => {
-    if (!orderedIds.includes(id)) orderedIds.push(id);
-  });
-  return orderedIds;
-};
+): string[] => buildImplementationStages(cards, plan).orderedIds;
 
 export const getBlueprintNode = (id: string) => BLUEPRINT_BY_ID.get(id);

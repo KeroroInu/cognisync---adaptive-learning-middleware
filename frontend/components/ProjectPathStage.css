@@ -68,6 +68,7 @@
 }
 
 .path-validity.is-valid { border-color: #6f8432; background: color-mix(in srgb, var(--brand-cyan) 28%, var(--surface-strong)); color: var(--text-primary); }
+.path-validity.has-pending { border-color: #b48733; background: color-mix(in srgb, var(--brand-sand) 42%, var(--surface-strong)); color: var(--text-primary); }
 .path-validity.has-error { border-color: #a64c3c; background: color-mix(in srgb, var(--brand-rose) 22%, var(--surface-strong)); color: #9e3f32; }
 
 .relation-workspace {
@@ -171,6 +172,8 @@
 }
 
 .relation-node:hover { border-color: #161713; box-shadow: 4px 5px 0 color-mix(in srgb, #161713 22%, transparent); }
+.relation-node.is-unplanned { border-style: dashed; background: color-mix(in srgb, var(--brand-sand) 34%, var(--surface-muted)); }
+.relation-node.is-unplanned footer { color: #9a6614; font-weight: 800; }
 .relation-node.is-selected { z-index: 2; border-color: #161713; background: color-mix(in srgb, var(--brand-cyan) 40%, var(--surface-strong)); box-shadow: 4px 5px 0 #161713; }
 .relation-node.is-connection-target {
   z-index: 3;
@@ -351,26 +354,51 @@
 .function-card-palette button strong { overflow: hidden; font-size: .68rem; text-overflow: ellipsis; white-space: nowrap; }
 .function-card-palette button.is-on-canvas { background: color-mix(in srgb, var(--brand-cyan) 24%, var(--surface-strong)); }
 
-.implementation-order-list { display: grid; gap: 6px; margin-top: 10px; }
-.implementation-order-list article {
-  min-width: 0;
-  display: grid;
-  grid-template-columns: 25px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 7px;
-  padding: 8px;
+.implementation-stage-list { display: grid; gap: 8px; margin-top: 3px; }
+.implementation-stage-group {
+  overflow: hidden;
   border: 1px solid var(--line-strong);
-  border-radius: 6px;
+  border-radius: 7px;
   background: var(--surface-muted);
 }
-.implementation-order-list article.has-issue { border-color: #b65d49; background: color-mix(in srgb, var(--brand-rose) 17%, var(--surface-strong)); }
-.implementation-order-list article > span { color: #71843b; font-family: 'Google Sans Code', ui-monospace, monospace; font-size: .61rem; font-weight: 900; }
-.implementation-order-list article > strong { overflow: hidden; font-size: .66rem; line-height: 1.3; text-overflow: ellipsis; white-space: nowrap; }
-.implementation-order-list article > div { display: inline-flex; gap: 3px; }
-.implementation-order-list button { width: 26px; height: 26px; display: grid; place-items: center; padding: 0; border: 1px solid var(--line-strong); border-radius: 5px; background: var(--surface-strong); color: var(--text-primary); cursor: pointer; }
-.implementation-order-list button:hover:not(:disabled) { border-color: #161713; background: color-mix(in srgb, var(--brand-cyan) 28%, var(--surface-strong)); }
-.implementation-order-list button:disabled { color: var(--text-tertiary); cursor: not-allowed; opacity: .38; }
-.implementation-order-warning { display: block; margin-top: 8px; color: #9d4738; font-size: .61rem; line-height: 1.45; }
+.implementation-stage-group > header {
+  min-height: 31px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 9px;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--brand-cyan) 23%, var(--surface-strong));
+}
+.implementation-stage-group > header span { color: #66792f; font-family: 'Google Sans Code', ui-monospace, monospace; font-size: .58rem; font-weight: 900; }
+.implementation-stage-group > header em { padding: 2px 6px; border: 1px solid #81964a; border-radius: 999px; color: #66792f; font-size: .5rem; font-style: normal; font-weight: 900; }
+.implementation-stage-group > div { display: grid; }
+.implementation-stage-group button {
+  min-width: 0;
+  min-height: 35px;
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+  padding: 7px 9px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+}
+.implementation-stage-group button:last-child { border-bottom: 0; }
+.implementation-stage-group button:hover { background: color-mix(in srgb, var(--brand-cyan) 20%, var(--surface-strong)); }
+.implementation-stage-group button svg { color: #71843b; }
+.implementation-stage-group button strong { overflow: hidden; font-size: .63rem; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
+.implementation-stage-group.is-unplanned { border-style: dashed; border-color: #ae7b27; background: color-mix(in srgb, var(--brand-sand) 26%, var(--surface-strong)); }
+.implementation-stage-group.is-unplanned > header { background: color-mix(in srgb, var(--brand-sand) 48%, var(--surface-strong)); }
+.implementation-stage-group.is-unplanned > header span,
+.implementation-stage-group.is-unplanned > header em,
+.implementation-stage-group.is-unplanned button svg { color: #956315; }
+.implementation-stage-empty { min-height: 72px; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; border: 1px dashed var(--line-strong); border-radius: 7px; color: var(--text-tertiary); font-size: .61rem; line-height: 1.45; text-align: center; }
 .function-card-palette button:hover { border-color: #161713; }
 
 .toolbox-selection { display: grid; gap: 9px; padding: 12px; border: 1px solid #161713; border-radius: 7px; background: color-mix(in srgb, var(--surface-strong) 88%, var(--brand-cyan)); }
