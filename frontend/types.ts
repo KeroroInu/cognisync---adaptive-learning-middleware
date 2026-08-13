@@ -8,11 +8,23 @@ export interface UserProfile {
   lastUpdate: string;
 }
 
+export interface EmotionDetail {
+  code: string;
+  name: string;
+  intensity: 'low' | 'medium' | 'high';
+  legacyEmotion?: string;
+  confidence: number;
+  arousal: number;
+  valence: number;
+  evidence?: string[];
+}
+
 export interface ProfileChange {
   dimension: string;
   change: number;
   timestamp: string;
   trend: 'up' | 'down' | 'stable';
+  emotionDetail?: EmotionDetail;
 }
 
 export interface Node {
@@ -42,6 +54,7 @@ export interface ChatMessage {
   analysis?: {
     intent: string;
     emotion: string;
+    emotionDetail?: EmotionDetail;
     detectedConcepts: string[];
     delta: Partial<UserProfile>;
   };

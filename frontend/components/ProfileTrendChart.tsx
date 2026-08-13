@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import type { Language, ProfileChange, UserProfile } from '../types';
+import type { EmotionDetail, Language, ProfileChange, UserProfile } from '../types';
 
 type MetricKey = 'cognition' | 'affect' | 'behavior';
 
@@ -15,6 +15,7 @@ interface TrendPoint {
   cognition: number;
   affect: number;
   behavior: number;
+  emotionDetail?: EmotionDetail;
 }
 
 interface ChartSize {
@@ -42,6 +43,28 @@ const formatTimestamp = (timestamp: string, language: Language) => {
   }).format(date);
 };
 
+const emotionLabels: Record<string, { zh: string; en: string }> = {
+  confused: { zh: '困惑', en: 'Confused' },
+  curious: { zh: '好奇', en: 'Curious' },
+  frustrated: { zh: '挫败', en: 'Frustrated' },
+  anxious: { zh: '焦虑', en: 'Anxious' },
+  encouraged: { zh: '受到鼓舞', en: 'Encouraged' },
+  confident: { zh: '自信', en: 'Confident' },
+  excited: { zh: '兴奋', en: 'Excited' },
+  motivated: { zh: '有动力', en: 'Motivated' },
+  thoughtful: { zh: '思考中', en: 'Thoughtful' },
+  overwhelmed: { zh: '负荷较高', en: 'Overwhelmed' },
+  discouraged: { zh: '泄气', en: 'Discouraged' },
+  relieved: { zh: '释然', en: 'Relieved' },
+  neutral: { zh: '平稳', en: 'Neutral' },
+};
+
+const intensityLabels = {
+  low: { zh: '轻微', en: 'Low' },
+  medium: { zh: '中等', en: 'Medium' },
+  high: { zh: '较强', en: 'High' },
+};
+
 export const ProfileTrendChart: React.FC<Props> = ({ profile, changes, language, isLoading = false }) => {
   const chartRef = useRef<HTMLDivElement>(null);
   const [chartSize, setChartSize] = useState<ChartSize>({ width: 640, height: 240 });
@@ -54,14 +77,18 @@ export const ProfileTrendChart: React.FC<Props> = ({ profile, changes, language,
   }), [language]);
 
   const trendData = useMemo<TrendPoint[]>(() => {
-    const groupedChanges = new Map<string, Partial<Record<MetricKey, number>>>();
+    const groupedChanges = new Map<string, {
+      metrics: Partial<Record<MetricKey, number>>;
+      emotionDetail?: EmotionDetail;
+    }>();
 
     for (const change of changes) {
       const dimension = change.dimension.toLowerCase();
       if (!isMetricKey(dimension)) continue;
 
-      const group = groupedChanges.get(change.timestamp) ?? {};
-      group[dimension] = (group[dimension] ?? 0) + change.change;
+      const group = groupedChanges.get(change.timestamp) ?? { metrics: {} };
+      group.metrics[dimension] = (group.metrics[dimension] ?? 0) + change.change;
+      group.emotionDetail ??= change.emotionDetail;
       groupedChanges.set(change.timestamp, group);
     }
 
@@ -85,16 +112,17 @@ export const ProfileTrendChart: React.FC<Props> = ({ profile, changes, language,
     };
     const pointsFromNewest: TrendPoint[] = [];
 
-    for (const [timestamp, deltas] of groups) {
+    for (const [timestamp, group] of groups) {
       pointsFromNewest.push({
         label: formatTimestamp(timestamp, language),
         cognition: clampScore(cursor.cognition),
         affect: clampScore(cursor.affect),
         behavior: clampScore(cursor.behavior),
+        emotionDetail: group.emotionDetail,
       });
 
       for (const key of metricKeys) {
-        cursor[key] = clampScore(cursor[key] - (deltas[key] ?? 0));
+        cursor[key] = clampScore(cursor[key] - (group.metrics[key] ?? 0));
       }
     }
 
@@ -278,6 +306,15 @@ export const ProfileTrendChart: React.FC<Props> = ({ profile, changes, language,
               {item.label} {activePoint[item.key]}
             </span>
           ))}
+          {activePoint.emotionDetail && (
+            <span className="profile-trend-emotion-signal">
+              {language === 'zh' ? 'AI 推测过程信号' : 'AI-inferred process signal'}：
+              {emotionLabels[activePoint.emotionDetail.name]?.[language]
+                ?? activePoint.emotionDetail.name}
+              {' · '}
+              {intensityLabels[activePoint.emotionDetail.intensity][language]}
+            </span>
+          )}
         </div>
       )}
     </div>

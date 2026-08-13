@@ -18,6 +18,7 @@ import type {
   AIOnboardingStepResponse,
   AIOnboardingFinishResponse,
   ResearchTask,
+  EmotionDetail,
 } from '@/types';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
@@ -55,6 +56,7 @@ export interface ChatRequest {
 export interface ChatAnalysis {
   intent: string;
   emotion: string;
+  emotionDetail?: EmotionDetail;
   detectedConcepts: string[];
   delta: {
     cognition: number;

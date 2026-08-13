@@ -547,7 +547,7 @@ export const ResearchManagement = () => {
 
             <div className="flex gap-3 mt-6">
               <button
-                onClick={() => { setShowCreateModal(false); setForm({ title: '', description: '', instructions: '', ai_prompt: '', code_content: '', language: 'python' }); }}
+                onClick={() => { setShowCreateModal(false); setForm({ title: '', description: '', instructions: '', ai_prompt: '', code_content: '', language: 'python', target_group: 'all' }); }}
                 className="flex-1 px-4 py-2 rounded-lg border hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
                 style={{ borderColor: 'var(--glass-border)' }}
               >

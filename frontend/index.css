@@ -3573,6 +3573,14 @@ button:disabled {
   font-family: 'Google Sans Code', 'Noto Sans SC', monospace;
 }
 
+.profile-trend-tooltip .profile-trend-emotion-signal {
+  margin-top: 3px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+  color: var(--text-primary);
+  line-height: 1.45;
+}
+
 .profile-trend-loading {
   height: 248px;
   margin-top: 12px;

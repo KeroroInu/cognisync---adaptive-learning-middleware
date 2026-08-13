@@ -14,6 +14,7 @@ const Conversations = lazy(() => import('./pages/Conversations').then(module => 
 const ConversationDetail = lazy(() => import('./pages/ConversationDetail').then(module => ({ default: module.ConversationDetail })));
 const Exports = lazy(() => import('./pages/Exports').then(module => ({ default: module.Exports })));
 const ModelConfig = lazy(() => import('./pages/ModelConfig').then(module => ({ default: module.ModelConfig })));
+const EmotionAnalytics = lazy(() => import('./pages/EmotionAnalytics').then(module => ({ default: module.EmotionAnalytics })));
 
 const PageFallback = () => (
   <div className="admin-page-loading" role="status" aria-label="页面加载中">
@@ -56,6 +57,7 @@ function AdminApp() {
       <Route path="research" element={<AdminLayout><ResearchManagement /></AdminLayout>} />
       <Route path="conversations" element={<AdminLayout><Conversations /></AdminLayout>} />
       <Route path="conversations/:sessionId" element={<AdminLayout><ConversationDetail /></AdminLayout>} />
+      <Route path="emotions" element={<AdminLayout><EmotionAnalytics /></AdminLayout>} />
       <Route path="exports" element={<AdminLayout><Exports /></AdminLayout>} />
       <Route path="config" element={<AdminLayout><ModelConfig /></AdminLayout>} />
       <Route path="*" element={<Navigate to="/" replace />} />

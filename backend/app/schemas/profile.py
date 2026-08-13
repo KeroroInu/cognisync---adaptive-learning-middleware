@@ -51,12 +51,26 @@ class ProfileUpdateRequest(BaseModel):
     likert_trust: Optional[int] = Field(None, ge=1, le=5, description="信任度评分 [1-5]")
 
 
+class ProfileEmotionSignal(BaseModel):
+    """与画像变化点关联的过程情感信号（仅用于学习者自我回顾）。"""
+    code: str = Field(description="情感编码: E01-E13")
+    name: str = Field(description="情感名称")
+    intensity: str = Field(description="强度: low | medium | high")
+    confidence: float = Field(ge=0.0, le=1.0, description="识别置信度")
+    arousal: float = Field(ge=-1.0, le=1.0, description="唤醒度")
+    valence: float = Field(ge=-1.0, le=1.0, description="效价")
+
+
 class ProfileChange(BaseModel):
     """画像变化记录"""
     dimension: str = Field(description="维度名称: cognition | affect | behavior")
     change: int = Field(description="变化值")
     timestamp: str = Field(description="时间戳 (ISO 8601)")
     trend: str = Field(description="趋势: up | down | stable")
+    emotionDetail: Optional[ProfileEmotionSignal] = Field(
+        default=None,
+        description="该画像变化点对应的 AI 推测过程情感信号",
+    )
 
 
 class ProfileChangesResponse(BaseModel):

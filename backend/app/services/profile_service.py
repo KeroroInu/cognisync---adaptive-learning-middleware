@@ -11,11 +11,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.sql.user import User
 from app.models.sql.profile import ProfileSnapshot, ProfileSource
+from app.models.sql.emotion_log import EmotionLog
 from app.models.sql.calibration_log import CalibrationLog, Dimension, ConflictLevel
 from app.models.sql.message import ChatMessage
 from app.models.sql.chat_session import ChatSession
 from app.models.sql.scale import ScaleResponse
-from app.schemas.profile import UserProfile, ProfileChange
+from app.schemas.profile import UserProfile, ProfileChange, ProfileEmotionSignal
 from app.schemas.calibration import calculate_conflict_level
 
 logger = logging.getLogger(__name__)
@@ -366,6 +367,40 @@ class ProfileService:
         if len(snapshots) < 2:
             return []
 
+        # 情感日志在同一轮对话的画像快照之前写入。一次批量读取后按时间窗匹配，
+        # 避免为每个快照额外查询造成 N+1，同时不给前端暴露原始对话证据。
+        emotion_query = (
+            select(EmotionLog)
+            .where(
+                EmotionLog.user_id == user_id,
+                EmotionLog.created_at > snapshots[-1].created_at,
+                EmotionLog.created_at <= snapshots[0].created_at,
+            )
+            .order_by(desc(EmotionLog.created_at))
+            .limit(limit * 2 + 2)
+        )
+        emotion_result = await self.db.execute(emotion_query)
+        emotion_logs = emotion_result.scalars().all()
+
+        def emotion_for_window(current, previous) -> Optional[ProfileEmotionSignal]:
+            matched = next(
+                (
+                    log for log in emotion_logs
+                    if previous.created_at < log.created_at <= current.created_at
+                ),
+                None,
+            )
+            if matched is None:
+                return None
+            return ProfileEmotionSignal(
+                code=matched.emotion_code,
+                name=matched.emotion_name,
+                intensity=matched.intensity,
+                confidence=matched.confidence,
+                arousal=matched.arousal,
+                valence=matched.valence,
+            )
+
         # 计算相邻快照之间的变化
         changes = []
         for i in range(len(snapshots) - 1):
@@ -376,6 +411,7 @@ class ProfileService:
             delta_cog = current.cognition - previous.cognition
             delta_aff = current.affect - previous.affect
             delta_beh = current.behavior - previous.behavior
+            emotion_detail = emotion_for_window(current, previous)
 
             # 只记录有变化的维度
             if delta_cog != 0:
@@ -383,7 +419,8 @@ class ProfileService:
                     dimension="cognition",
                     change=delta_cog,
                     timestamp=current.created_at.isoformat() + "Z",
-                    trend="up" if delta_cog > 0 else "down"
+                    trend="up" if delta_cog > 0 else "down",
+                    emotionDetail=emotion_detail,
                 ))
 
             if delta_aff != 0:
@@ -391,7 +428,8 @@ class ProfileService:
                     dimension="affect",
                     change=delta_aff,
                     timestamp=current.created_at.isoformat() + "Z",
-                    trend="up" if delta_aff > 0 else "down"
+                    trend="up" if delta_aff > 0 else "down",
+                    emotionDetail=emotion_detail,
                 ))
 
             if delta_beh != 0:
@@ -399,7 +437,8 @@ class ProfileService:
                     dimension="behavior",
                     change=delta_beh,
                     timestamp=current.created_at.isoformat() + "Z",
-                    trend="up" if delta_beh > 0 else "down"
+                    trend="up" if delta_beh > 0 else "down",
+                    emotionDetail=emotion_detail,
                 ))
 
         return changes
