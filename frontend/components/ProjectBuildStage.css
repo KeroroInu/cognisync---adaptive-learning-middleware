@@ -70,6 +70,7 @@
 .construction-behavior-feedback strong { overflow: hidden; color: var(--text-primary); text-overflow: ellipsis; white-space: nowrap; }
 
 .construction-board { position: relative; aspect-ratio: 14 / 10; display: grid; overflow: hidden; border: 1px solid #0b0e0a; background: radial-gradient(circle at 52% 50%, rgba(189,245,47,.08), transparent 58%), #101610; }
+.construction-board:focus-visible { outline: 3px solid var(--brand-lime); outline-offset: 3px; }
 .construction-board > span { position: relative; border-right: 1px solid rgba(189,245,47,.055); border-bottom: 1px solid rgba(189,245,47,.055); }
 .construction-board > span.is-snake::after,
 .construction-board > span.is-food::after { content: ''; position: absolute; inset: 15%; }
@@ -88,6 +89,7 @@
 .construction-dpad .is-left { grid-column: 1; grid-row: 2; }
 .construction-dpad .is-right { grid-column: 3; grid-row: 2; }
 .construction-dpad .is-down { grid-column: 2; grid-row: 2; }
+.construction-keyboard-hint { margin: 7px 0 0; color: var(--text-muted); font: 700 11px/1.4 'Google Sans Code', 'Noto Sans SC', monospace; text-align: center; }
 .construction-run,
 .construction-reset { min-height: 42px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 0 13px; border: 1.5px solid #161713; border-radius: 7px; font-size: .74rem; font-weight: 900; }
 .construction-run { background: var(--brand-cyan); color: #161713; box-shadow: 2px 3px 0 #161713; }

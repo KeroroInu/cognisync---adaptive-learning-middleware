@@ -61,6 +61,20 @@ const DELTA: Record<Direction, Cell> = {
   right: { x: 1, y: 0 },
 };
 const OPPOSITE: Record<Direction, Direction> = { up: 'down', down: 'up', left: 'right', right: 'left' };
+const KEY_DIRECTIONS: Record<string, Direction | undefined> = {
+  ArrowUp: 'up',
+  w: 'up',
+  W: 'up',
+  ArrowDown: 'down',
+  s: 'down',
+  S: 'down',
+  ArrowLeft: 'left',
+  a: 'left',
+  A: 'left',
+  ArrowRight: 'right',
+  d: 'right',
+  D: 'right',
+};
 
 const MODULE_TEMPLATES: Record<string, string> = {
   'initial-state': `def create_initial_state():\n    # 创建蛇身列表、方向和初始得分\n    # TODO: 返回这三项初始状态\n    pass`,
@@ -103,6 +117,7 @@ const SnakeBuildPreview: React.FC<SnakeBuildPreviewProps> = ({
   const snakeRef = useRef(snake);
   const foodRef = useRef(food);
   const directionRef = useRef(direction);
+  const boardRef = useRef<HTMLDivElement>(null);
 
   const has = useCallback((id: string) => capabilities.has(id), [capabilities]);
   const tickMs = Math.max(170, 340 - Math.floor(score / 20) * 25);
@@ -201,11 +216,31 @@ const SnakeBuildPreview: React.FC<SnakeBuildPreviewProps> = ({
     onDiagnostic(missing);
   }, [diagnosticRun, has, isZh, onDiagnostic]);
 
-  const changeDirection = (next: Direction) => {
+  const changeDirection = useCallback((next: Direction) => {
     if (!has('direction-input') || OPPOSITE[directionRef.current] === next) return;
     directionRef.current = next;
     setDirection(next);
-  };
+    boardRef.current?.focus({ preventScroll: true });
+  }, [has]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const target = event.target;
+      const isEditing = target instanceof HTMLElement && (
+        target.isContentEditable
+        || Boolean(target.closest('input, textarea, select, [contenteditable="true"], .cm-editor'))
+      );
+      if (isEditing) return;
+
+      const nextDirection = KEY_DIRECTIONS[event.key];
+      if (!nextDirection || !has('direction-input')) return;
+      event.preventDefault();
+      changeDirection(nextDirection);
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [changeDirection, has]);
 
   const cells = useMemo(() => new Map(snake.map((cell, index) => [`${cell.x}:${cell.y}`, index])), [snake]);
 
@@ -234,7 +269,15 @@ const SnakeBuildPreview: React.FC<SnakeBuildPreviewProps> = ({
           <strong>{demonstration.label}</strong>
         </div>
       )}
-      <div className="construction-board" style={{ gridTemplateColumns: `repeat(${BOARD_COLUMNS}, 1fr)`, gridTemplateRows: `repeat(${BOARD_ROWS}, 1fr)` }}>
+      <div
+        ref={boardRef}
+        className="construction-board"
+        style={{ gridTemplateColumns: `repeat(${BOARD_COLUMNS}, 1fr)`, gridTemplateRows: `repeat(${BOARD_ROWS}, 1fr)` }}
+        role="application"
+        tabIndex={0}
+        onPointerDown={() => boardRef.current?.focus({ preventScroll: true })}
+        aria-label={isZh ? '贪吃蛇当前版本，点击后可使用方向键或 WASD 控制' : 'Current snake build. Click, then use arrow keys or WASD'}
+      >
         {Array.from({ length: BOARD_COLUMNS * BOARD_ROWS }, (_, index) => {
           const x = index % BOARD_COLUMNS;
           const y = Math.floor(index / BOARD_COLUMNS);
@@ -257,6 +300,9 @@ const SnakeBuildPreview: React.FC<SnakeBuildPreviewProps> = ({
         </button>
         <button type="button" className="construction-reset" onClick={reset} disabled={!has('initial-state')}><RotateCcw size={16} />{isZh ? '重置' : 'Reset'}</button>
       </div>
+      <p className="construction-keyboard-hint">
+        {isZh ? '点击棋盘后，可用方向键或 WASD 控制' : 'Click the board, then use arrow keys or WASD'}
+      </p>
     </section>
   );
 };
