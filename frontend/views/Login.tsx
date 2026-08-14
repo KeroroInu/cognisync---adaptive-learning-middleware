@@ -46,8 +46,15 @@ export const Login: React.FC<LoginProps> = ({
           response.data.initialProfile
         );
       }
-    } catch (err: any) {
-      setError(err.message || t.loginError);
+    } catch (err: unknown) {
+      const rawMessage = err instanceof Error ? err.message : '';
+      const isBrowserRequestError = /string did not match the expected pattern|failed to fetch|networkerror/i.test(rawMessage);
+
+      setError(
+        isBrowserRequestError
+          ? (language === 'zh' ? '暂时无法连接登录服务，请刷新页面后重试' : 'Unable to reach the login service. Refresh and try again.')
+          : (rawMessage || t.loginError),
+      );
     } finally {
       setIsLoading(false);
     }

@@ -3,6 +3,7 @@ Admin 数据导出 API 端点
 """
 import csv
 import io
+import json
 from typing import Optional
 from fastapi import APIRouter, Depends, Query, HTTPException
 from fastapi.responses import StreamingResponse
@@ -183,6 +184,7 @@ async def export_conversations(db: AsyncSession = Depends(get_db)):
     - 消息长度（字符数，反映学习者参与深度）
     - AI 分析结果中的提取概念（反映知识领域分布）
     - 时段分布（小时）用于学习行为时间分析
+    - 项目支架阶段、L0-L3、触发方式、画像快照与代码/测试上下文
     """
     sql = text("""
         SELECT
@@ -196,8 +198,26 @@ async def export_conversations(db: AsyncSession = Depends(get_db)):
             EXTRACT(HOUR FROM cm.timestamp)::int AS hour_of_day,
             EXTRACT(DOW FROM cm.timestamp)::int  AS day_of_week,
             LENGTH(cm.text)                     AS message_length_chars,
+            cm.text                             AS message_text,
             cm.analysis->>'detectedConcepts'    AS extracted_concepts_raw,
-            COALESCE(jsonb_array_length(cm.analysis->'detectedConcepts'), 0) AS concept_count
+            COALESCE(jsonb_array_length(cm.analysis->'detectedConcepts'), 0) AS concept_count,
+            cm.analysis->'scaffoldContext'->>'requestId'          AS scaffold_request_id,
+            cm.analysis->'scaffoldContext'->>'taskId'             AS scaffold_task_id,
+            cm.analysis->'scaffoldContext'->>'stage'              AS scaffold_stage,
+            cm.analysis->'scaffoldContext'->>'level'              AS scaffold_level,
+            cm.analysis->'scaffoldContext'->>'levelLabel'         AS scaffold_level_label,
+            cm.analysis->'scaffoldContext'->>'trigger'            AS scaffold_trigger,
+            cm.analysis->'scaffoldContext'->>'artifactSummary'    AS scaffold_artifact_summary,
+            cm.analysis->'scaffoldContext'->>'currentModule'      AS scaffold_current_module,
+            cm.analysis->'scaffoldContext'->>'testFeedback'       AS scaffold_test_feedback,
+            cm.analysis->'scaffoldContext'->>'codeLength'         AS scaffold_code_length,
+            cm.analysis->'scaffoldContext'->>'codeFingerprint'    AS scaffold_code_fingerprint,
+            cm.analysis->'scaffoldContext'->'profileSnapshot'->>'cognition' AS scaffold_profile_cognition,
+            cm.analysis->'scaffoldContext'->'profileSnapshot'->>'affect'    AS scaffold_profile_affect,
+            cm.analysis->'scaffoldContext'->'profileSnapshot'->>'behavior'  AS scaffold_profile_behavior,
+            cm.analysis->'scaffoldContext'->'profileAdaptation'->>'cognitionBand' AS scaffold_cognition_band,
+            cm.analysis->'scaffoldContext'->'profileAdaptation'->>'affectBand'    AS scaffold_affect_band,
+            cm.analysis->'scaffoldContext'->'profileAdaptation'->>'behaviorBand'  AS scaffold_behavior_band
         FROM chat_messages cm
         JOIN users u ON u.id = cm.user_id
         ORDER BY cm.timestamp DESC
@@ -283,7 +303,24 @@ async def export_single_user(user_id: str, db: AsyncSession = Depends(get_db)):
             EXTRACT(HOUR FROM cm.timestamp)::int                            AS hour_of_day,
             EXTRACT(DOW FROM cm.timestamp)::int                             AS day_of_week,
             cm.analysis->>'detectedConcepts'                                AS concepts_raw,
-            COALESCE(jsonb_array_length(cm.analysis->'detectedConcepts'), 0) AS concept_count
+            COALESCE(jsonb_array_length(cm.analysis->'detectedConcepts'), 0) AS concept_count,
+            cm.analysis->'scaffoldContext'->>'requestId'                     AS scaffold_request_id,
+            cm.analysis->'scaffoldContext'->>'taskId'                        AS scaffold_task_id,
+            cm.analysis->'scaffoldContext'->>'stage'                         AS scaffold_stage,
+            cm.analysis->'scaffoldContext'->>'level'                         AS scaffold_level,
+            cm.analysis->'scaffoldContext'->>'levelLabel'                    AS scaffold_level_label,
+            cm.analysis->'scaffoldContext'->>'trigger'                       AS scaffold_trigger,
+            cm.analysis->'scaffoldContext'->>'artifactSummary'               AS scaffold_artifact_summary,
+            cm.analysis->'scaffoldContext'->>'currentModule'                 AS scaffold_current_module,
+            cm.analysis->'scaffoldContext'->>'testFeedback'                  AS scaffold_test_feedback,
+            cm.analysis->'scaffoldContext'->>'codeLength'                    AS scaffold_code_length,
+            cm.analysis->'scaffoldContext'->>'codeFingerprint'               AS scaffold_code_fingerprint,
+            cm.analysis->'scaffoldContext'->'profileSnapshot'->>'cognition'  AS scaffold_profile_cognition,
+            cm.analysis->'scaffoldContext'->'profileSnapshot'->>'affect'     AS scaffold_profile_affect,
+            cm.analysis->'scaffoldContext'->'profileSnapshot'->>'behavior'   AS scaffold_profile_behavior,
+            cm.analysis->'scaffoldContext'->'profileAdaptation'->>'cognitionBand' AS scaffold_cognition_band,
+            cm.analysis->'scaffoldContext'->'profileAdaptation'->>'affectBand'    AS scaffold_affect_band,
+            cm.analysis->'scaffoldContext'->'profileAdaptation'->>'behaviorBand'  AS scaffold_behavior_band
         FROM chat_messages cm
         WHERE cm.user_id = :uid
         ORDER BY cm.timestamp ASC
@@ -310,7 +347,13 @@ async def export_single_user(user_id: str, db: AsyncSession = Depends(get_db)):
             "message_id", "user_id", "student_id", "user_email", "user_name",
             "role", "message_text", "message_time",
             "message_length_chars", "hour_of_day", "day_of_week",
-            "concepts_raw", "concept_count"
+            "concepts_raw", "concept_count",
+            "scaffold_request_id", "scaffold_task_id", "scaffold_stage",
+            "scaffold_level", "scaffold_level_label", "scaffold_trigger",
+            "scaffold_artifact_summary", "scaffold_current_module", "scaffold_test_feedback",
+            "scaffold_code_length", "scaffold_code_fingerprint", "scaffold_profile_cognition", "scaffold_profile_affect",
+            "scaffold_profile_behavior", "scaffold_cognition_band", "scaffold_affect_band",
+            "scaffold_behavior_band"
         ]
         output = io.StringIO()
         writer = csv.DictWriter(output, fieldnames=fieldnames)
@@ -328,7 +371,13 @@ async def export_single_user(user_id: str, db: AsyncSession = Depends(get_db)):
         "message_id", "user_id", "student_id", "user_email", "user_name",
         "role", "message_text", "message_time",
         "message_length_chars", "hour_of_day", "day_of_week",
-        "concepts_raw", "concept_count"
+        "concepts_raw", "concept_count",
+        "scaffold_request_id", "scaffold_task_id", "scaffold_stage",
+        "scaffold_level", "scaffold_level_label", "scaffold_trigger",
+        "scaffold_artifact_summary", "scaffold_current_module", "scaffold_test_feedback",
+        "scaffold_code_length", "scaffold_code_fingerprint", "scaffold_profile_cognition", "scaffold_profile_affect",
+        "scaffold_profile_behavior", "scaffold_cognition_band", "scaffold_affect_band",
+        "scaffold_behavior_band"
     ]
     # 过滤 rows 只保留已知列
     rows_clean = [{k: row.get(k, "") for k in ordered_fieldnames} for row in rows]

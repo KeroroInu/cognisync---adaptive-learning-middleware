@@ -11,6 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.postgres import get_db
 from app.schemas.base import SuccessResponse
 from app.schemas.chat import ChatRequest, ChatResponse
+from app.schemas.chat import ChatAnalysis
+from app.schemas.profile import ProfileDelta
 from app.services.profile_service import ProfileService
 from app.services.graph_service import GraphService
 from app.services.emotion_log_service import record_emotion_log
@@ -20,6 +22,7 @@ from app.models.sql.message import ChatMessage, MessageRole
 from app.models.sql.chat_session import ChatSession
 from app.models.sql.user import User
 from app.api.endpoints.auth import get_current_user
+from app.services.scaffold_service import build_scaffold_metadata, build_scaffold_prompt
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -516,6 +519,15 @@ async def chat(
         profile_service = ProfileService(db)
         active_session = await get_or_create_active_session(db, user_id)
 
+        current_profile = await profile_service.get_profile(user_id)
+        scaffold_metadata = None
+        if request.scaffoldContext:
+            scaffold_metadata = build_scaffold_metadata(
+                request.scaffoldContext,
+                current_profile,
+                request.currentCode,
+            )
+
         # ========== 2. 保存用户消息 ==========
         user_message = ChatMessage(
             user_id=user_id,
@@ -523,7 +535,7 @@ async def chat(
             role=MessageRole.USER,
             text=request.message,
             timestamp=datetime.now(timezone.utc),
-            analysis=None  # 用户消息没有分析结果
+            analysis={"scaffoldContext": scaffold_metadata} if scaffold_metadata else None,
         )
         db.add(user_message)
         await db.commit()
@@ -531,18 +543,27 @@ async def chat(
 
         logger.info(f"User message saved: {user_message.id}")
 
-        # ========== 3. 分析消息 ==========
-        analyzer = TextAnalyzer()
-
         # 获取对话历史作为上下文（增加到 20 条以保持更长的上下文）
         recent_messages = await get_recent_messages(db, user_id, limit=20)
-        current_profile = await profile_service.get_profile(user_id)
+        is_student_authored = not request.scaffoldContext or request.scaffoldContext.trigger == "student_message"
 
-        analysis = await analyzer.analyze(
-            user_message=request.message,
-            recent_messages=recent_messages,
-            current_profile=current_profile,
-        )
+        # 只有学生亲自输入的文本才参与情感/画像分析。按钮生成的固定句子只表示
+        # 求助行为，不能被误当成学生情绪或认知证据污染画像。
+        if is_student_authored:
+            analyzer = TextAnalyzer()
+            analysis = await analyzer.analyze(
+                user_message=request.message,
+                recent_messages=recent_messages,
+                current_profile=current_profile,
+            )
+        else:
+            analysis = ChatAnalysis(
+                intent="scaffold-request",
+                emotion="neutral",
+                detectedConcepts=[],
+                delta=ProfileDelta(cognition=0, affect=0, behavior=0),
+                emotionDetail=None,
+            )
 
         logger.info(
             f"Analysis complete: intent={analysis.intent}, emotion={analysis.emotion}, "
@@ -550,20 +571,21 @@ async def chat(
         )
 
         # ========== 4. 记录情感日志（使用更新前的 profile） ==========
-        emotion_log = await record_emotion_log(
-            db=db,
-            user_id=user_id,
-            session_id=active_session.id,
-            message_id=user_message.id,
-            analysis=analysis,
-            current_profile=current_profile,
-        )
-        await db.commit()
-        await db.refresh(emotion_log)
+        if is_student_authored:
+            emotion_log = await record_emotion_log(
+                db=db,
+                user_id=user_id,
+                session_id=active_session.id,
+                message_id=user_message.id,
+                analysis=analysis,
+                current_profile=current_profile,
+            )
+            await db.commit()
+            await db.refresh(emotion_log)
 
-        logger.info(
-            f"Emotion log saved: {emotion_log.id} (code={emotion_log.emotion_code}, session={active_session.id})"
-        )
+            logger.info(
+                f"Emotion log saved: {emotion_log.id} (code={emotion_log.emotion_code}, session={active_session.id})"
+            )
 
         # ========== 5. 更新知识图谱 ==========
         if analysis.detectedConcepts:
@@ -589,10 +611,14 @@ async def chat(
                 # 继续处理，不因为图谱更新失败而中断
 
         # ========== 5.2 更新画像（Cognition 从图谱计算，Affect/Behavior 用 delta） ==========
-        updated_profile = await profile_service.apply_delta_with_graph_cognition(
-            user_id=user_id,
-            delta_affect=analysis.delta.affect,
-            delta_behavior=analysis.delta.behavior
+        updated_profile = (
+            await profile_service.apply_delta_with_graph_cognition(
+                user_id=user_id,
+                delta_affect=analysis.delta.affect,
+                delta_behavior=analysis.delta.behavior,
+            )
+            if is_student_authored
+            else current_profile
         )
 
         logger.info(
@@ -628,6 +654,13 @@ async def chat(
             emotion=analysis.emotion,
             language=request.language or "zh"
         )
+
+        if request.scaffoldContext:
+            system_prompt += build_scaffold_prompt(
+                request.scaffoldContext,
+                current_profile,
+                request.language or "zh",
+            )
 
         # 注入跨会话上下文（让 AI 能自然引用上次讨论内容）
         cross_session_ctx = await get_cross_session_context(db, user_id)
@@ -711,13 +744,17 @@ async def chat(
         logger.info(f"AI reply generated: {len(assistant_reply)} characters")
 
         # ========== 7. 保存 AI 回复 ==========
+        assistant_analysis = analysis.model_dump()
+        if scaffold_metadata:
+            assistant_analysis["scaffoldContext"] = scaffold_metadata
+
         assistant_message = ChatMessage(
             user_id=user_id,
             session_id=active_session.id,
             role=MessageRole.ASSISTANT,
             text=assistant_reply,
             timestamp=datetime.now(timezone.utc),
-            analysis=analysis.model_dump()  # 保存分析结果
+            analysis=assistant_analysis,
         )
         db.add(assistant_message)
         await db.commit()

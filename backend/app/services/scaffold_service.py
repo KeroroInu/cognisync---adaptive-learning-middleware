@@ -1,0 +1,126 @@
+"""项目解构式学习的 L0-L3 阶段支架规则与研究元数据。"""
+
+from __future__ import annotations
+
+import hashlib
+from typing import Any
+
+from app.schemas.chat import ProjectScaffoldContext
+from app.schemas.profile import UserProfile
+
+
+STAGE_GOALS = {
+    "observe": "依据运行证据描述可观察变化，不急于解释原因",
+    "decompose": "从观察现象推断程序职责，并形成输入、处理、输出与验证约定",
+    "model": "围绕一张功能卡表达内部处理、判断、分支与结果",
+    "plan": "根据功能间数据和前置关系形成可执行而非唯一的实现路径",
+    "build": "结合当前模块代码和测试反馈定位最小问题，修改后重新运行与解释",
+}
+
+LEVEL_RULES = {
+    0: "L0 情境澄清：只帮助聚焦现象、目标、边界或当前卡点；不得透露概念答案、步骤或代码。结尾只问一个可操作的检查问题。",
+    1: "L1 概念提示：指出一个相关概念、变量或原理，并解释它与当前问题的关系；不得给出完整步骤或代码。",
+    2: "L2 策略提示：提供2至4个局部步骤、检查顺序或伪代码框架；关键条件、表达式和变量仍由学生完成。",
+    3: "L3 最小补全：只补足阻塞推进的一个局部判断、表达式、连线建议或短代码片段；禁止给出完整模块或整套项目答案，并要求学生重新运行、解释或修改。",
+}
+
+
+def _band(value: int) -> str:
+    if value <= 35:
+        return "low"
+    if value <= 70:
+        return "medium"
+    return "high"
+
+
+def build_profile_adaptation(profile: UserProfile) -> dict[str, str]:
+    """画像只调节表达颗粒度与节奏，不自动改变支架等级。"""
+
+    cognition = _band(profile.cognition)
+    affect = _band(profile.affect)
+    behavior = _band(profile.behavior)
+    cognition_instruction = {
+        "low": "使用具体变量、画面现象和短句，避免连续抽象术语",
+        "medium": "在具体例子和概念解释之间保持平衡",
+        "high": "允许用概念和反例追问，但不要跨越当前支架等级",
+    }[cognition]
+    affect_instruction = {
+        "low": "先承认已经完成的有效尝试，再给一个低压力的小步",
+        "medium": "保持中性、耐心，避免空泛鼓励",
+        "high": "可以用适度挑战性问题促进自我解释",
+    }[affect]
+    behavior_instruction = {
+        "low": "每轮只给一个动作，并明确完成后如何验证",
+        "medium": "给出简短有序的检查路径",
+        "high": "保留选择空间，优先要求学生说明自己的判断",
+    }[behavior]
+    return {
+        "cognitionBand": cognition,
+        "affectBand": affect,
+        "behaviorBand": behavior,
+        "cognitionInstruction": cognition_instruction,
+        "affectInstruction": affect_instruction,
+        "behaviorInstruction": behavior_instruction,
+    }
+
+
+def build_scaffold_prompt(
+    context: ProjectScaffoldContext,
+    profile: UserProfile,
+    language: str = "zh",
+) -> str:
+    adaptation = build_profile_adaptation(profile)
+    stage_goal = STAGE_GOALS[context.stage]
+    level_rule = LEVEL_RULES[context.level]
+    artifact = context.artifactSummary or "学生尚未形成可读取的阶段产物，请先帮助其说清当前尝试。"
+
+    if language == "en":
+        return f"""
+
+COGNISYNC_SCAFFOLD_MODE
+You are supporting a project-deconstruction programming task. The student is at stage `{context.stage}` and explicitly requested level L{context.level}. Never silently raise or lower this level.
+Stage goal: {stage_goal}
+Level boundary: {level_rule}
+Current artifact summary: {artifact}
+Current module: {context.currentModule or "none"}
+Latest test feedback: {context.testFeedback or "none"}
+Profile adaptation: {adaptation['cognitionInstruction']}; {adaptation['affectInstruction']}; {adaptation['behaviorInstruction']}.
+The profile may change wording and step size only. It must not be treated as ability ranking and must not change the requested L0-L3 boundary.
+Reply in natural conversation without headings. Give one focused suggestion and end with one concrete action or check. Stay under 120 words.
+"""
+
+    return f"""
+
+COGNISYNC_SCAFFOLD_MODE
+你正在支持“项目解构式编程学习”。学生当前位于【{context.stage}】阶段，本轮由学生明确请求 L{context.level}。不得擅自升降等级。
+阶段目标：{stage_goal}。
+等级边界：{level_rule}
+当前阶段产物摘要：{artifact}
+当前实现模块：{context.currentModule or '无'}
+最近测试反馈：{context.testFeedback or '无'}
+画像适配方式：{adaptation['cognitionInstruction']}；{adaptation['affectInstruction']}；{adaptation['behaviorInstruction']}。
+学生画像只能改变表达方式、支架颗粒度和互动节奏，不能被解释为能力排名，也不能突破本轮 L0-L3 边界。
+请用自然对话回复，不写标题，不堆砌鼓励。只处理当前一个卡点，结尾给一个学生马上可以完成的动作或检查。控制在180字以内。
+"""
+
+
+def build_scaffold_metadata(
+    context: ProjectScaffoldContext,
+    profile: UserProfile,
+    current_code: str | None,
+) -> dict[str, Any]:
+    adaptation = build_profile_adaptation(profile)
+    code = current_code or ""
+    return {
+        **context.model_dump(),
+        "levelLabel": f"L{context.level}",
+        "levelRule": LEVEL_RULES[context.level],
+        "profileSnapshot": {
+            "cognition": profile.cognition,
+            "affect": profile.affect,
+            "behavior": profile.behavior,
+        },
+        "profileAdaptation": adaptation,
+        "codeLength": len(code),
+        "codeFingerprint": hashlib.sha256(code.encode("utf-8")).hexdigest()[:16] if code else None,
+    }

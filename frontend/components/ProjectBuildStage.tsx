@@ -45,6 +45,14 @@ interface Props {
   theme: 'light' | 'dark';
   taskId: string;
   onBack: () => void;
+  onAssistantContextChange?: (context: ProjectBuildAssistantContext) => void;
+}
+
+export interface ProjectBuildAssistantContext {
+  currentModule?: string;
+  currentCode?: string;
+  testFeedback?: string;
+  artifactSummary: string;
 }
 
 type Direction = 'up' | 'down' | 'left' | 'right';
@@ -307,7 +315,7 @@ const SnakeBuildPreview: React.FC<SnakeBuildPreviewProps> = ({
   );
 };
 
-export const ProjectBuildStage: React.FC<Props> = ({ language, theme, taskId, onBack }) => {
+export const ProjectBuildStage: React.FC<Props> = ({ language, theme, taskId, onBack, onAssistantContextChange }) => {
   const isZh = language === 'zh';
   const functionKey = `cognisync:project-function-cards:v1:${taskId}`;
   const observationKey = `cognisync:project-observation-cards:v2:${taskId}`;
@@ -362,6 +370,23 @@ export const ProjectBuildStage: React.FC<Props> = ({ language, theme, taskId, on
   const currentCode = selectedNode && selectedCard
     ? currentProgress?.code ?? MODULE_TEMPLATES[selectedNode.id] ?? selectedNode.functionTemplate
     : '';
+
+  useEffect(() => {
+    const latestAttempt = currentProgress?.testAttempts?.[currentProgress.testAttempts.length - 1];
+    onAssistantContextChange?.({
+      currentModule: selectedCard?.responsibility,
+      currentCode,
+      testFeedback: testMessage || (latestAttempt
+        ? `${latestAttempt.passed ? 'passed' : 'failed'} · ${latestAttempt.resultCode}`
+        : undefined),
+      artifactSummary: [
+        selectedCard ? `当前功能：${selectedCard.responsibility}` : '',
+        selectedCard ? `输入：${selectedCard.input}；输出：${selectedCard.output}` : '',
+        selectedCard ? `验证方式：${selectedCard.verification}` : '',
+        `路径进度：${completedCardCount}/${orderedCards.length}`,
+      ].filter(Boolean).join('\n'),
+    });
+  }, [completedCardCount, currentCode, currentProgress?.testAttempts, onAssistantContextChange, orderedCards.length, selectedCard, testMessage]);
 
   const dependentCardIds = (cardId: string) => {
     const dependents = new Set<string>();

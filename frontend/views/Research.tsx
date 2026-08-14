@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Send, CheckCircle, FlaskConical, Loader, Save, Play, Terminal, Trash2, X } from 'lucide-react';
 import type { ChatMessage, Language, User, UserProfile, ResearchTask } from '../types';
 import {
@@ -10,7 +10,11 @@ import {
   reopenResearchTask,
 } from '../services/api';
 import { SnakeProjectDemo } from '../components/SnakeProjectDemo';
-import { ProjectScaffoldAssistant, type ScaffoldCompletion } from '../components/ProjectScaffoldAssistant';
+import {
+  ProjectScaffoldAssistant,
+  type ScaffoldArtifactContext,
+  type ScaffoldCompletion,
+} from '../components/ProjectScaffoldAssistant';
 import {
   ProjectFactoryHeader,
   ProjectObservationStage,
@@ -19,7 +23,7 @@ import {
 } from '../components/ProjectFactory';
 import { ProjectFunctionStage } from '../components/ProjectFunctionStage';
 import { ProjectPathStage } from '../components/ProjectPathStage';
-import { ProjectBuildStage } from '../components/ProjectBuildStage';
+import { ProjectBuildStage, type ProjectBuildAssistantContext } from '../components/ProjectBuildStage';
 import type { SnakeRuntimeEvidence } from '../data/snakeProjectBlueprint';
 import {
   collectSnakeProjectWorkspace,
@@ -94,6 +98,7 @@ export const Research: React.FC<Props> = ({
   const [runtimeEvidence, setRuntimeEvidence] = useState<SnakeRuntimeEvidence[]>([]);
   const [observationCardCount, setObservationCardCount] = useState(0);
   const [scaffoldCompletion, setScaffoldCompletion] = useState<ScaffoldCompletion | null>(null);
+  const [buildAssistantContext, setBuildAssistantContext] = useState<ProjectBuildAssistantContext>({ artifactSummary: '' });
 
   // Chat state
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -307,6 +312,42 @@ export const Research: React.FC<Props> = ({
     queueWorkspaceSave(0);
     setFactoryStage(stage);
   }, [queueWorkspaceSave]);
+
+  const getScaffoldArtifactContext = useCallback((): ScaffoldArtifactContext => {
+    if (!task) return { summary: '' };
+    if (factoryStage === 'build') return {
+      summary: buildAssistantContext.artifactSummary,
+      currentModule: buildAssistantContext.currentModule,
+      currentCode: buildAssistantContext.currentCode,
+      testFeedback: buildAssistantContext.testFeedback,
+    };
+    const workspace = collectSnakeProjectWorkspace(task.id);
+    if (factoryStage === 'observe') return {
+      summary: [
+        `运行证据 ${runtimeEvidence.length} 条，观察卡 ${workspace.observations.length} 张。`,
+        ...workspace.observations.slice(-5).map((item, index) => `${index + 1}. ${item.observationText}`),
+      ].join('\n'),
+    };
+    if (factoryStage === 'decompose') return {
+      summary: [
+        `已形成 ${workspace.functions.length} 张功能卡。`,
+        ...workspace.functions.slice(-8).map((item, index) => `${index + 1}. ${item.responsibility}｜IN ${item.input}｜OUT ${item.output}｜知识 ${item.knowledge.join('、')}`),
+      ].join('\n'),
+    };
+    if (factoryStage === 'model') {
+      const mechanisms = workspace.path.functionMechanisms ?? {};
+      return {
+        summary: [
+          `正在为功能卡绘制内部实现流程；已保存 ${Object.keys(mechanisms).length} 张流程图。`,
+          ...Object.entries(mechanisms).slice(-7).map(([cardId, mechanism]) => `${cardId}: ${mechanism.flowNodes.length} 个节点，${mechanism.diagramEdges.length} 条连线`),
+        ].join('\n'),
+      };
+    }
+    const relationCount = workspace.path.diagramEdges?.length ?? Object.values(workspace.path.prerequisites).reduce((sum, ids) => sum + ids.length, 0);
+    return {
+      summary: `实现路径已放置 ${workspace.path.placedCardIds?.length ?? 0} 张卡，建立 ${relationCount} 条有向关系。学生正在判断功能之间的数据与前置依赖。`,
+    };
+  }, [buildAssistantContext, factoryStage, runtimeEvidence.length, task]);
 
   // ── Auto-scroll chat ────────────────────────────────────────────────────
 
@@ -596,11 +637,16 @@ export const Research: React.FC<Props> = ({
         <ProjectScaffoldAssistant
           language={language}
           taskId={task.id}
+          taskTitle={task.title}
+          taskPrompt={task.ai_prompt ?? undefined}
+          userId={userId}
           stage={factoryStage}
           open={assistantOpen}
           onOpenChange={setAssistantOpen}
           evidence={runtimeEvidence}
           observationCount={observationCardCount}
+          getArtifactContext={getScaffoldArtifactContext}
+          onProfileUpdate={onUpdateProfile}
           onApplyCompletion={setScaffoldCompletion}
         />
       )}
@@ -666,6 +712,7 @@ export const Research: React.FC<Props> = ({
           theme={theme}
           taskId={task.id}
           onBack={() => handleFactoryStageChange('plan')}
+          onAssistantContextChange={setBuildAssistantContext}
         />
       )}
 

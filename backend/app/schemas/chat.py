@@ -67,6 +67,30 @@ class ChatAnalysis(BaseModel):
     )
 
 
+class ProjectScaffoldContext(BaseModel):
+    """项目工坊 AI 支架所需的最小阶段上下文。"""
+
+    requestId: str = Field(..., min_length=1, max_length=100, description="一次支架交互的客户端请求 ID")
+    taskId: str = Field(..., min_length=1, max_length=100, description="研究任务 ID")
+    taskTitle: Optional[str] = Field(default=None, max_length=200, description="项目名称")
+    stage: Literal["observe", "decompose", "model", "plan", "build"] = Field(
+        ...,
+        description="学生当前所在项目阶段",
+    )
+    level: int = Field(..., ge=0, le=3, description="本轮请求的支架等级 L0-L3")
+    trigger: Literal["hint_button", "student_message", "level_up", "minimum_completion"] = Field(
+        ...,
+        description="支架触发方式",
+    )
+    artifactSummary: Optional[str] = Field(
+        default=None,
+        max_length=6000,
+        description="当前阶段产物的压缩摘要，不包含无关工作区数据",
+    )
+    currentModule: Optional[str] = Field(default=None, max_length=300, description="建构阶段正在实现的模块")
+    testFeedback: Optional[str] = Field(default=None, max_length=2000, description="最近一次模块测试反馈")
+
+
 class ChatRequest(BaseModel):
     """聊天请求"""
     userId: Optional[str] = Field(
@@ -84,11 +108,16 @@ class ChatRequest(BaseModel):
     )
     currentCode: Optional[str] = Field(
         default=None,
+        max_length=12000,
         description="学生当前代码内容（研究模式下使用）"
     )
     taskPrompt: Optional[str] = Field(
         default=None,
         description="教师给 AI 的教学提示（本节课上下文与学习目标）"
+    )
+    scaffoldContext: Optional[ProjectScaffoldContext] = Field(
+        default=None,
+        description="项目工坊阶段感知支架上下文",
     )
 
     model_config = ConfigDict(

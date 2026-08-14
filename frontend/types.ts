@@ -57,7 +57,21 @@ export interface ChatMessage {
     emotionDetail?: EmotionDetail;
     detectedConcepts: string[];
     delta: Partial<UserProfile>;
+    scaffoldContext?: ProjectScaffoldMetadata;
   };
+}
+
+export interface ProjectScaffoldMetadata {
+  requestId: string;
+  taskId: string;
+  taskTitle?: string;
+  stage: 'observe' | 'decompose' | 'model' | 'plan' | 'build';
+  level: 0 | 1 | 2 | 3;
+  trigger: 'hint_button' | 'student_message' | 'level_up' | 'minimum_completion';
+  artifactSummary?: string;
+  currentModule?: string;
+  testFeedback?: string;
+  profileSnapshot?: Pick<UserProfile, 'cognition' | 'affect' | 'behavior'>;
 }
 
 export interface CalibrationLog {

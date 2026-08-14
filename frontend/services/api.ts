@@ -19,6 +19,7 @@ import type {
   AIOnboardingFinishResponse,
   ResearchTask,
   EmotionDetail,
+  ProjectScaffoldMetadata,
 } from '@/types';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
@@ -51,6 +52,7 @@ export interface ChatRequest {
   isResearchMode: boolean;
   currentCode?: string;
   taskPrompt?: string;
+  scaffoldContext?: Omit<ProjectScaffoldMetadata, 'profileSnapshot'>;
 }
 
 export interface ChatAnalysis {

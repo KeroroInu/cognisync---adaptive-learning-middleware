@@ -9,6 +9,7 @@ from abc import ABC, abstractmethod
 from typing import Optional, Dict, Any, List
 import httpx
 import json
+import re
 
 from app.core.config import settings
 
@@ -181,6 +182,18 @@ class MockProvider(BaseProvider):
         max_tokens: int = 1000,
     ) -> str:
         """返回模拟的 JSON 响应"""
+
+        # 项目支架对话在离线开发模式下也返回可读建议；文本分析仍返回 JSON。
+        if "COGNISYNC_SCAFFOLD_MODE" in system_prompt:
+            level_match = re.search(r"(?:请求|level)\s*L([0-3])", system_prompt, re.IGNORECASE)
+            level = int(level_match.group(1)) if level_match else 0
+            replies = {
+                0: "先别急着改答案。请指出当前画面、卡片或测试结果中，哪一个具体变化和你的预期不同？",
+                1: "这里先关注“状态”与“状态更新”：输入发生后，应该由哪个变量保存变化？请先圈出那个变量。",
+                2: "可以按三步检查：确认输入，再定位更新状态的判断，最后核对返回值。你先完成第一步并重新运行。",
+                3: "先只补阻塞的一步：让相关判断返回更新后的状态，不要改其他模块。运行后请解释实际结果为什么变化。",
+            }
+            return replies[level]
 
         # 根据用户消息内容生成不同的模拟响应
         mock_response = self._generate_mock_response(user_prompt)
