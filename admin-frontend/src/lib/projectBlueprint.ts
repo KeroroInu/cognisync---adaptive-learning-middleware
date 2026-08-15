@@ -64,3 +64,67 @@ export const splitBlueprintList = (value: string): string[] => value
 
 export const cloneBlueprint = (config: ProjectBlueprintConfig): ProjectBlueprintConfig =>
   JSON.parse(JSON.stringify(config)) as ProjectBlueprintConfig;
+
+export interface BlueprintRelationAnalysis {
+  layers: string[][];
+  cycleNodeIds: string[];
+  unknownReferences: Array<{ nodeId: string; prerequisiteId: string }>;
+}
+
+/**
+ * 将教师蓝图的前置关系推导为可建构层级。
+ * 同一层只表示可以并行，不代表学生必须采用固定的卡片顺序。
+ */
+export const analyzeBlueprintRelations = (nodes: BlueprintNode[]): BlueprintRelationAnalysis => {
+  const nodeIds = new Set(nodes.map(node => node.id));
+  const indegree = new Map(nodes.map(node => [node.id, 0]));
+  const dependents = new Map(nodes.map(node => [node.id, [] as string[]]));
+  const unknownReferences: BlueprintRelationAnalysis['unknownReferences'] = [];
+
+  nodes.forEach(node => {
+    const uniquePrerequisites = new Set(node.prerequisiteIds);
+    uniquePrerequisites.forEach(prerequisiteId => {
+      if (!nodeIds.has(prerequisiteId)) {
+        unknownReferences.push({ nodeId: node.id, prerequisiteId });
+        return;
+      }
+      indegree.set(node.id, (indegree.get(node.id) ?? 0) + 1);
+      dependents.get(prerequisiteId)?.push(node.id);
+    });
+  });
+
+  const order = new Map(nodes.map((node, index) => [node.id, index]));
+  let frontier = nodes.filter(node => indegree.get(node.id) === 0).map(node => node.id);
+  const layers: string[][] = [];
+  const visited = new Set<string>();
+
+  while (frontier.length) {
+    const layer = [...frontier].sort((a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0));
+    layers.push(layer);
+    layer.forEach(nodeId => visited.add(nodeId));
+
+    const next = new Set<string>();
+    layer.forEach(nodeId => {
+      dependents.get(nodeId)?.forEach(dependentId => {
+        const remaining = (indegree.get(dependentId) ?? 0) - 1;
+        indegree.set(dependentId, remaining);
+        if (remaining === 0) next.add(dependentId);
+      });
+    });
+    frontier = [...next];
+  }
+
+  return {
+    layers,
+    cycleNodeIds: nodes.filter(node => !visited.has(node.id)).map(node => node.id),
+    unknownReferences,
+  };
+};
+
+export const wouldCreateBlueprintCycle = (
+  nodes: BlueprintNode[],
+  nodeId: string,
+  prerequisiteIds: string[],
+): boolean => analyzeBlueprintRelations(nodes.map(node => (
+  node.id === nodeId ? { ...node, prerequisiteIds } : node
+))).cycleNodeIds.length > 0;

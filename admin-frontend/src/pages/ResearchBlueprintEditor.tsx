@@ -23,6 +23,7 @@ import {
   createPhenomenon,
   splitBlueprintList,
   toBlueprintKey,
+  wouldCreateBlueprintCycle,
 } from '../lib/projectBlueprint';
 import type {
   BlueprintKnowledgeResponsibility,
@@ -31,9 +32,10 @@ import type {
   ProjectBlueprintVersion,
   ResearchTask,
 } from '../types';
+import { ResearchBlueprintRelations } from './ResearchBlueprintRelations';
 import './ResearchBlueprintEditor.css';
 
-type BlueprintTab = 'phenomena' | 'modules';
+type BlueprintTab = 'phenomena' | 'modules' | 'relations';
 
 interface ResearchBlueprintEditorProps {
   task: ResearchTask;
@@ -223,6 +225,9 @@ export const ResearchBlueprintEditor = ({ task, onClose, onPublished }: Research
       draft.nodes.forEach(item => {
         item.prerequisiteIds = item.prerequisiteIds.map(id => id === oldId ? normalized : id);
       });
+      draft.alternatives.forEach(item => {
+        item.nodeIds = item.nodeIds.map(id => id === oldId ? normalized : id);
+      });
     });
     setSelectedNodeId(normalized);
   };
@@ -233,8 +238,26 @@ export const ResearchBlueprintEditor = ({ task, onClose, onPublished }: Research
       draft.nodes.forEach(node => {
         node.prerequisiteIds = node.prerequisiteIds.filter(id => id !== nodeId);
       });
+      draft.alternatives = draft.alternatives
+        .map(item => ({ ...item, nodeIds: item.nodeIds.filter(id => id !== nodeId) }))
+        .filter(item => item.nodeIds.length > 0);
     });
     setSelectedNodeId(current => current === nodeId ? null : current);
+  };
+
+  const toggleNodePrerequisite = (nodeId: string, prerequisiteId: string, checked: boolean) => {
+    if (!config) return;
+    const node = config.nodes.find(item => item.id === nodeId);
+    if (!node) return;
+    const next = checked
+      ? [...new Set([...node.prerequisiteIds, prerequisiteId])]
+      : node.prerequisiteIds.filter(id => id !== prerequisiteId);
+    if (wouldCreateBlueprintCycle(config.nodes, nodeId, next)) {
+      setError('这条前置关系会形成循环，请到第 03 部分检查整体关系图。');
+      return;
+    }
+    setError('');
+    updateNode(nodeId, current => { current.prerequisiteIds = next; });
   };
 
   const nodeDependencyCount = useMemo(() => config?.nodes.reduce(
@@ -342,6 +365,9 @@ export const ResearchBlueprintEditor = ({ task, onClose, onPublished }: Research
                   <button className={tab === 'modules' ? 'is-active' : ''} onClick={() => setTab('modules')}>
                     <Boxes /> 02 功能模块与契约 <strong>{config.nodes.length}</strong>
                   </button>
+                  <button className={tab === 'relations' ? 'is-active' : ''} onClick={() => setTab('relations')}>
+                    <GitBranch /> 03 关系与实现路径 <strong>{nodeDependencyCount}</strong>
+                  </button>
                   <span>{nodeDependencyCount} 条前置关系</span>
                 </nav>
 
@@ -396,7 +422,7 @@ export const ResearchBlueprintEditor = ({ task, onClose, onPublished }: Research
                       )}
                     </div>
                   </section>
-                ) : (
+                ) : tab === 'modules' ? (
                   <section className="blueprint-module-layout">
                     <div className="blueprint-module-list">
                       <div className="blueprint-module-list__header">
@@ -445,11 +471,7 @@ export const ResearchBlueprintEditor = ({ task, onClose, onPublished }: Research
                                   <input
                                     type="checkbox"
                                     checked={selectedNode.prerequisiteIds.includes(node.id)}
-                                    onChange={event => updateNode(selectedNode.id, current => {
-                                      current.prerequisiteIds = event.target.checked
-                                        ? [...current.prerequisiteIds, node.id]
-                                        : current.prerequisiteIds.filter(id => id !== node.id);
-                                    })}
+                                    onChange={event => toggleNodePrerequisite(selectedNode.id, node.id, event.target.checked)}
                                   />
                                   <GitBranch /> {node.titleZh}
                                 </label>
@@ -486,6 +508,13 @@ export const ResearchBlueprintEditor = ({ task, onClose, onPublished }: Research
                       )}
                     </div>
                   </section>
+                ) : (
+                  <ResearchBlueprintRelations
+                    config={config}
+                    selectedNodeId={selectedNodeId}
+                    onSelectNode={setSelectedNodeId}
+                    onMutate={mutateConfig}
+                  />
                 )}
               </>
             )}

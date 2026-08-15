@@ -119,6 +119,28 @@ def validate_blueprint_for_publish(config: ProjectBlueprintConfig) -> None:
         if len(test_ids) != len(set(test_ids)):
             raise ValueError(f"Node '{node.id}' has duplicate test ids")
 
+    # 发布版本必须是有向无环图，否则学生会遇到互相等待、永远无法解锁的模块。
+    visit_state: dict[str, int] = {node.id: 0 for node in config.nodes}
+    node_map = {node.id: node for node in config.nodes}
+    visit_path: list[str] = []
+
+    def visit(node_id: str) -> None:
+        if visit_state[node_id] == 2:
+            return
+        if visit_state[node_id] == 1:
+            cycle_start = visit_path.index(node_id)
+            cycle = visit_path[cycle_start:] + [node_id]
+            raise ValueError(f"Blueprint prerequisites contain a cycle: {' -> '.join(cycle)}")
+        visit_state[node_id] = 1
+        visit_path.append(node_id)
+        for prerequisite_id in node_map[node_id].prerequisiteIds:
+            visit(prerequisite_id)
+        visit_path.pop()
+        visit_state[node_id] = 2
+
+    for node in config.nodes:
+        visit(node.id)
+
     for alternative in config.alternatives:
         unknown = set(alternative.nodeIds) - node_ids
         if unknown:

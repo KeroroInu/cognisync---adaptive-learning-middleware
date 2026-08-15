@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import { createEmptyBlueprint, splitBlueprintList, toBlueprintKey } from './projectBlueprint';
+import {
+  analyzeBlueprintRelations,
+  createEmptyBlueprint,
+  splitBlueprintList,
+  toBlueprintKey,
+  wouldCreateBlueprintCycle,
+} from './projectBlueprint';
+import type { BlueprintNode } from '../types';
 import type { ResearchTask } from '../types';
 
 const task: ResearchTask = {
@@ -33,5 +40,30 @@ describe('project blueprint helpers', () => {
 
   it('splits compact comma and line separated teacher input', () => {
     expect(splitBlueprintList('蛇身, 方向\n当前得分，棋盘大小')).toEqual(['蛇身', '方向', '当前得分', '棋盘大小']);
+  });
+
+  it('derives parallel build layers from teacher prerequisites', () => {
+    const nodes = [
+      { id: 'init', prerequisiteIds: [] },
+      { id: 'direction', prerequisiteIds: ['init'] },
+      { id: 'food', prerequisiteIds: ['init'] },
+      { id: 'loop', prerequisiteIds: ['direction', 'food'] },
+    ] as BlueprintNode[];
+
+    expect(analyzeBlueprintRelations(nodes).layers).toEqual([
+      ['init'],
+      ['direction', 'food'],
+      ['loop'],
+    ]);
+  });
+
+  it('detects a relation that would make modules wait on each other', () => {
+    const nodes = [
+      { id: 'init', prerequisiteIds: [] },
+      { id: 'move', prerequisiteIds: ['init'] },
+    ] as BlueprintNode[];
+
+    expect(wouldCreateBlueprintCycle(nodes, 'init', ['move'])).toBe(true);
+    expect(wouldCreateBlueprintCycle(nodes, 'move', [])).toBe(false);
   });
 });

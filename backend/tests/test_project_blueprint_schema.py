@@ -100,3 +100,12 @@ def test_publish_rejects_unknown_prerequisite():
     config = ProjectBlueprintConfig.model_validate(payload)
     with pytest.raises(ValueError, match="unknown prerequisites"):
         validate_blueprint_for_publish(config)
+
+
+def test_publish_rejects_cyclic_prerequisites():
+    payload = blueprint_payload()
+    payload["nodes"][0]["prerequisiteIds"] = ["movement"]
+    config = ProjectBlueprintConfig.model_validate(payload)
+
+    with pytest.raises(ValueError, match="contain a cycle"):
+        validate_blueprint_for_publish(config)
