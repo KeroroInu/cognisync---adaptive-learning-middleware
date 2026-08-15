@@ -5,7 +5,7 @@ import uuid
 import enum
 from datetime import datetime, timezone
 from typing import Optional
-from sqlalchemy import String, Text, Boolean, ForeignKey, Enum, Index
+from sqlalchemy import String, Text, Boolean, ForeignKey, Enum, Index, Integer, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import JSONB, UUID, TIMESTAMP
 
@@ -17,6 +17,13 @@ class ResearchTaskStatus(str, enum.Enum):
     DRAFT = "draft"
     ACTIVE = "active"
     ARCHIVED = "archived"
+
+
+class ProjectBlueprintStatus(str, enum.Enum):
+    """教师项目蓝图版本状态。"""
+
+    DRAFT = "draft"
+    PUBLISHED = "published"
 
 
 class ResearchTask(Base, UUIDMixin):
@@ -80,6 +87,14 @@ class ResearchTask(Base, UUIDMixin):
         default=ResearchTaskStatus.DRAFT,
         nullable=False,
         comment="状态：draft | active | archived",
+    )
+
+    current_blueprint_version_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("project_blueprint_versions.id", ondelete="SET NULL", use_alter=True),
+        nullable=True,
+        index=True,
+        comment="当前发布的教师项目蓝图版本",
     )
 
     created_at: Mapped[datetime] = mapped_column(
@@ -148,6 +163,14 @@ class ResearchTaskSubmission(Base, UUIDMixin):
         comment="项目解构工作台过程数据：观察卡、功能卡、关系、路径与模块进度",
     )
 
+    blueprint_version_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("project_blueprint_versions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="学生首次进入/保存任务时冻结的教师蓝图版本",
+    )
+
     is_completed: Mapped[bool] = mapped_column(
         Boolean,
         default=False,
@@ -193,4 +216,68 @@ class ResearchTaskSubmission(Base, UUIDMixin):
             f"<ResearchTaskSubmission(id={self.id}, "
             f"user_id={self.user_id}, task_id={self.task_id}, "
             f"is_completed={self.is_completed})>"
+        )
+
+
+class ProjectBlueprintVersion(Base, UUIDMixin):
+    """教师项目蓝图的版本化快照；发布后不可原地修改。"""
+
+    __tablename__ = "project_blueprint_versions"
+    __table_args__ = (
+        UniqueConstraint("task_id", "version", name="uq_project_blueprint_task_version"),
+        Index("ix_project_blueprint_task_status", "task_id", "status"),
+        {"comment": "教师项目蓝图版本表"},
+    )
+
+    task_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("research_tasks.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+        comment="所属研究任务",
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False, comment="任务内递增版本号")
+    schema_version: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=1,
+        comment="蓝图 JSON 结构版本",
+    )
+    status: Mapped[ProjectBlueprintStatus] = mapped_column(
+        Enum(ProjectBlueprintStatus, name="project_blueprint_status", native_enum=False),
+        nullable=False,
+        default=ProjectBlueprintStatus.DRAFT,
+        comment="draft | published",
+    )
+    config: Mapped[dict] = mapped_column(
+        JSONB,
+        nullable=False,
+        comment="模块、契约、映射、测试与支架策略的完整版本快照",
+    )
+    content_hash: Mapped[str] = mapped_column(
+        String(64),
+        nullable=False,
+        comment="规范化 JSON 的 SHA-256，用于实验材料复现",
+    )
+    published_at: Mapped[Optional[datetime]] = mapped_column(
+        TIMESTAMP(timezone=True),
+        nullable=True,
+        comment="发布时间",
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<ProjectBlueprintVersion(task_id={self.task_id}, "
+            f"version={self.version}, status={self.status})>"
         )

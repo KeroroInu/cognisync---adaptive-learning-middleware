@@ -34,6 +34,7 @@ class ActiveTaskResponse(BaseModel):
     is_completed: bool = False
     code_submitted: Optional[str] = None
     workspace_data: Optional[dict] = None
+    blueprint_version_id: Optional[str] = None
 
 
 class SaveProgressRequest(BaseModel):
@@ -48,6 +49,16 @@ class CompleteTaskRequest(BaseModel):
 
 class SaveWorkspaceRequest(BaseModel):
     workspace_data: dict
+
+
+def _freeze_blueprint_version(
+    submission: ResearchTaskSubmission,
+    task: ResearchTask,
+) -> None:
+    """学生一旦产生任务记录，后续教师发布新蓝图也不覆盖其研究条件。"""
+
+    if submission.blueprint_version_id is None and task.current_blueprint_version_id is not None:
+        submission.blueprint_version_id = task.current_blueprint_version_id
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -87,6 +98,11 @@ async def get_active_task(
         )
     )
     submission = sub_result.scalar_one_or_none()
+    effective_blueprint_id = (
+        submission.blueprint_version_id
+        if submission and submission.blueprint_version_id
+        else task.current_blueprint_version_id
+    )
 
     return SuccessResponse(data=ActiveTaskResponse(
         id=str(task.id),
@@ -100,6 +116,9 @@ async def get_active_task(
         is_completed=submission.is_completed if submission else False,
         code_submitted=submission.code_submitted if submission else None,
         workspace_data=submission.workspace_data if submission else None,
+        blueprint_version_id=str(effective_blueprint_id) if effective_blueprint_id else None,
+        # 当前只向学生端暴露版本标识，不返回同义表达、标准前置关系、
+        # 隐藏测试和支架内部规则；后续按阶段设计专用公开视图。
     ))
 
 
@@ -126,7 +145,8 @@ async def save_workspace(
             or_(ResearchTask.target_group == "all", ResearchTask.target_group == current_user.experiment_group),
         )
     )
-    if not task_result.scalar_one_or_none():
+    task = task_result.scalar_one_or_none()
+    if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
     result = await db.execute(
@@ -138,6 +158,7 @@ async def save_workspace(
     submission = result.scalar_one_or_none()
     if submission:
         submission.workspace_data = data.workspace_data
+        _freeze_blueprint_version(submission, task)
         submission.updated_at = datetime.now(timezone.utc)
     else:
         submission = ResearchTaskSubmission(
@@ -145,6 +166,7 @@ async def save_workspace(
             user_id=current_user.id,
             code_submitted="",
             workspace_data=data.workspace_data,
+            blueprint_version_id=task.current_blueprint_version_id,
             is_completed=False,
         )
         db.add(submission)
@@ -173,7 +195,8 @@ async def save_progress(
             or_(ResearchTask.target_group == "all", ResearchTask.target_group == current_user.experiment_group),
         )
     )
-    if not task_result.scalar_one_or_none():
+    task = task_result.scalar_one_or_none()
+    if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
     # 查找或创建提交记录
@@ -188,6 +211,7 @@ async def save_progress(
 
     if submission:
         submission.code_submitted = data.code_submitted
+        _freeze_blueprint_version(submission, task)
         if data.started_at and not submission.started_at:
             try:
                 submission.started_at = datetime.fromisoformat(data.started_at.replace('Z', '+00:00'))
@@ -205,6 +229,7 @@ async def save_progress(
             task_id=tid,
             user_id=current_user.id,
             code_submitted=data.code_submitted,
+            blueprint_version_id=task.current_blueprint_version_id,
             is_completed=False,
             started_at=started,
         )
@@ -233,7 +258,8 @@ async def complete_task(
             or_(ResearchTask.target_group == "all", ResearchTask.target_group == current_user.experiment_group),
         )
     )
-    if not task_result.scalar_one_or_none():
+    task = task_result.scalar_one_or_none()
+    if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
     result = await db.execute(
@@ -255,6 +281,7 @@ async def complete_task(
 
     if submission:
         submission.code_submitted = data.code_submitted
+        _freeze_blueprint_version(submission, task)
         submission.is_completed = True
         submission.submitted_at = now
         submission.updated_at = now
@@ -265,6 +292,7 @@ async def complete_task(
             task_id=tid,
             user_id=current_user.id,
             code_submitted=data.code_submitted,
+            blueprint_version_id=task.current_blueprint_version_id,
             is_completed=True,
             submitted_at=now,
             started_at=started,

@@ -67,6 +67,9 @@ async def init_db():
         # 迁移：为 research_task_submissions 添加项目解构工作台过程数据
         await _migrate_research_workspace_data()
 
+        # 迁移：教师项目蓝图版本与学生任务版本冻结
+        await _migrate_project_blueprint_links()
+
         # 迁移：为 scale_templates 添加 activated_at 列
         await _migrate_scale_activated_at()
 
@@ -255,6 +258,71 @@ async def _migrate_research_workspace_data():
         "ADD COLUMN IF NOT EXISTS workspace_data JSONB;",
         "ADD COLUMN workspace_data to research_task_submissions"
     )
+
+
+async def _migrate_project_blueprint_links():
+    """幂等迁移：关联任务当前蓝图与学生实际使用的蓝图版本。"""
+
+    statements = (
+        (
+            "ALTER TABLE research_tasks "
+            "ADD COLUMN IF NOT EXISTS current_blueprint_version_id UUID;",
+            "ADD research_tasks.current_blueprint_version_id",
+        ),
+        (
+            "ALTER TABLE research_task_submissions "
+            "ADD COLUMN IF NOT EXISTS blueprint_version_id UUID;",
+            "ADD research_task_submissions.blueprint_version_id",
+        ),
+        (
+            """
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM pg_constraint
+                    WHERE conname = 'fk_research_tasks_current_blueprint_version'
+                ) THEN
+                    ALTER TABLE research_tasks
+                    ADD CONSTRAINT fk_research_tasks_current_blueprint_version
+                    FOREIGN KEY (current_blueprint_version_id)
+                    REFERENCES project_blueprint_versions(id)
+                    ON DELETE SET NULL;
+                END IF;
+            END $$;
+            """,
+            "FK research_tasks.current_blueprint_version_id",
+        ),
+        (
+            """
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM pg_constraint
+                    WHERE conname = 'fk_research_submissions_blueprint_version'
+                ) THEN
+                    ALTER TABLE research_task_submissions
+                    ADD CONSTRAINT fk_research_submissions_blueprint_version
+                    FOREIGN KEY (blueprint_version_id)
+                    REFERENCES project_blueprint_versions(id)
+                    ON DELETE SET NULL;
+                END IF;
+            END $$;
+            """,
+            "FK research_task_submissions.blueprint_version_id",
+        ),
+        (
+            "CREATE INDEX IF NOT EXISTS ix_research_tasks_current_blueprint_version_id "
+            "ON research_tasks (current_blueprint_version_id);",
+            "INDEX research task current blueprint",
+        ),
+        (
+            "CREATE INDEX IF NOT EXISTS ix_research_task_submissions_blueprint_version_id "
+            "ON research_task_submissions (blueprint_version_id);",
+            "INDEX research submission blueprint",
+        ),
+    )
+    for sql, label in statements:
+        await _run_migration_sql(sql, label)
 
 
 async def _migrate_scale_activated_at():

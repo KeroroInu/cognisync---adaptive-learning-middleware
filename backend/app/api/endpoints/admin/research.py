@@ -1,19 +1,29 @@
-"""
-Admin 研究任务管理 API 端点
-"""
+"""Admin 研究任务与教师项目蓝图管理 API。"""
+import hashlib
+import json
 from uuid import UUID
 from datetime import datetime, timezone
 from typing import Literal, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from sqlalchemy import select, func, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import verify_admin_key
 from app.db.postgres import get_db
 from app.schemas.base import SuccessResponse
-from app.models.sql.research import ResearchTask, ResearchTaskSubmission, ResearchTaskStatus
+from app.models.sql.research import (
+    ProjectBlueprintStatus,
+    ProjectBlueprintVersion,
+    ResearchTask,
+    ResearchTaskSubmission,
+    ResearchTaskStatus,
+)
 from app.models.sql.user import User
+from app.schemas.project_blueprint import (
+    ProjectBlueprintConfig,
+    validate_blueprint_for_publish,
+)
 
 router = APIRouter(tags=["Admin - Research Management"])
 
@@ -50,6 +60,7 @@ class ResearchTaskItem(BaseModel):
     language: str
     target_group: str
     status: str
+    current_blueprint_version_id: Optional[str]
     submissions_count: int
     created_at: str
     updated_at: str
@@ -63,10 +74,52 @@ class ResearchSubmissionItem(BaseModel):
     student_id: Optional[str]
     user_email: Optional[str]
     code_submitted: str
+    blueprint_version_id: Optional[str]
     is_completed: bool
     started_at: Optional[str]
     submitted_at: Optional[str]
     created_at: str
+
+
+class BlueprintVersionItem(BaseModel):
+    id: str
+    task_id: str
+    version: int
+    schema_version: int
+    status: str
+    config: ProjectBlueprintConfig
+    content_hash: str
+    published_at: Optional[str]
+    created_at: str
+    updated_at: str
+
+
+def _blueprint_item(blueprint: ProjectBlueprintVersion) -> BlueprintVersionItem:
+    return BlueprintVersionItem(
+        id=str(blueprint.id),
+        task_id=str(blueprint.task_id),
+        version=blueprint.version,
+        schema_version=blueprint.schema_version,
+        status=blueprint.status.value,
+        config=ProjectBlueprintConfig.model_validate(blueprint.config),
+        content_hash=blueprint.content_hash,
+        published_at=blueprint.published_at.isoformat() if blueprint.published_at else None,
+        created_at=blueprint.created_at.isoformat(),
+        updated_at=blueprint.updated_at.isoformat(),
+    )
+
+
+def _canonical_blueprint(config: ProjectBlueprintConfig) -> tuple[dict, str]:
+    payload = config.model_dump(mode="json")
+    canonical = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    if len(canonical) > 262_144:
+        raise HTTPException(status_code=413, detail="Blueprint exceeds 256 KB")
+    return payload, hashlib.sha256(canonical).hexdigest()
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -98,6 +151,11 @@ async def list_research_tasks(
             language=task.language,
             target_group=task.target_group,
             status=task.status.value,
+            current_blueprint_version_id=(
+                str(task.current_blueprint_version_id)
+                if task.current_blueprint_version_id
+                else None
+            ),
             submissions_count=submissions_count,
             created_at=task.created_at.isoformat(),
             updated_at=task.updated_at.isoformat(),
@@ -136,6 +194,7 @@ async def create_research_task(
         language=task.language,
         target_group=task.target_group,
         status=task.status.value,
+        current_blueprint_version_id=None,
         submissions_count=0,
         created_at=task.created_at.isoformat(),
         updated_at=task.updated_at.isoformat(),
@@ -189,6 +248,11 @@ async def update_research_task(
         language=task.language,
         target_group=task.target_group,
         status=task.status.value,
+        current_blueprint_version_id=(
+            str(task.current_blueprint_version_id)
+            if task.current_blueprint_version_id
+            else None
+        ),
         submissions_count=submissions_count,
         created_at=task.created_at.isoformat(),
         updated_at=task.updated_at.isoformat(),
@@ -206,6 +270,9 @@ async def delete_research_task(
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
+    # 先解除任务指向子版本的引用，再由数据库级联删除版本和学生提交。
+    task.current_blueprint_version_id = None
+    await db.flush()
     await db.delete(task)
     await db.commit()
 
@@ -303,6 +370,9 @@ async def get_task_submissions(
             student_id=sid,
             user_email=email,
             code_submitted=sub.code_submitted,
+            blueprint_version_id=(
+                str(sub.blueprint_version_id) if sub.blueprint_version_id else None
+            ),
             is_completed=sub.is_completed,
             started_at=sub.started_at.isoformat() if sub.started_at else None,
             submitted_at=sub.submitted_at.isoformat() if sub.submitted_at else None,
@@ -340,3 +410,125 @@ async def delete_research_submissions_batch(
     await db.commit()
 
     return SuccessResponse(data={"deleted": True, "count": len(deleted_ids)})
+
+
+# ── Versioned teacher blueprint endpoints ───────────────────────────────────
+
+@router.get(
+    "/research/tasks/{task_id}/blueprints",
+    dependencies=[Depends(verify_admin_key)],
+)
+async def list_project_blueprints(
+    task_id: UUID,
+    db: AsyncSession = Depends(get_db),
+) -> SuccessResponse[dict]:
+    """按版本倒序读取任务的教师蓝图（管理员可见完整配置）。"""
+
+    if not await db.scalar(select(ResearchTask.id).where(ResearchTask.id == task_id)):
+        raise HTTPException(status_code=404, detail="Task not found")
+    result = await db.execute(
+        select(ProjectBlueprintVersion)
+        .where(ProjectBlueprintVersion.task_id == task_id)
+        .order_by(ProjectBlueprintVersion.version.desc())
+    )
+    items = [_blueprint_item(item) for item in result.scalars().all()]
+    return SuccessResponse(data={"blueprints": items, "total": len(items)})
+
+
+@router.put(
+    "/research/tasks/{task_id}/blueprints/draft",
+    dependencies=[Depends(verify_admin_key)],
+)
+async def save_project_blueprint_draft(
+    task_id: UUID,
+    data: ProjectBlueprintConfig,
+    db: AsyncSession = Depends(get_db),
+) -> SuccessResponse[BlueprintVersionItem]:
+    """更新当前草稿；若只有已发布版本则创建下一个版本草稿。"""
+
+    task = await db.scalar(
+        select(ResearchTask).where(ResearchTask.id == task_id).with_for_update()
+    )
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    config, content_hash = _canonical_blueprint(data)
+    draft = await db.scalar(
+        select(ProjectBlueprintVersion)
+        .where(
+            ProjectBlueprintVersion.task_id == task_id,
+            ProjectBlueprintVersion.status == ProjectBlueprintStatus.DRAFT,
+        )
+        .order_by(ProjectBlueprintVersion.version.desc())
+        .limit(1)
+        .with_for_update()
+    )
+    now = datetime.now(timezone.utc)
+    if draft:
+        draft.config = config
+        draft.schema_version = data.schemaVersion
+        draft.content_hash = content_hash
+        draft.updated_at = now
+    else:
+        latest_version = await db.scalar(
+            select(func.max(ProjectBlueprintVersion.version)).where(
+                ProjectBlueprintVersion.task_id == task_id
+            )
+        ) or 0
+        draft = ProjectBlueprintVersion(
+            task_id=task_id,
+            version=latest_version + 1,
+            schema_version=data.schemaVersion,
+            status=ProjectBlueprintStatus.DRAFT,
+            config=config,
+            content_hash=content_hash,
+        )
+        db.add(draft)
+
+    await db.commit()
+    await db.refresh(draft)
+    return SuccessResponse(data=_blueprint_item(draft))
+
+
+@router.post(
+    "/research/tasks/{task_id}/blueprints/{blueprint_id}/publish",
+    dependencies=[Depends(verify_admin_key)],
+)
+async def publish_project_blueprint(
+    task_id: UUID,
+    blueprint_id: UUID,
+    db: AsyncSession = Depends(get_db),
+) -> SuccessResponse[BlueprintVersionItem]:
+    """发布不可覆盖的蓝图版本，并把任务当前版本指向它。"""
+
+    task = await db.scalar(
+        select(ResearchTask).where(ResearchTask.id == task_id).with_for_update()
+    )
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    blueprint = await db.scalar(
+        select(ProjectBlueprintVersion)
+        .where(
+            ProjectBlueprintVersion.id == blueprint_id,
+            ProjectBlueprintVersion.task_id == task_id,
+        )
+        .with_for_update()
+    )
+    if not blueprint:
+        raise HTTPException(status_code=404, detail="Blueprint not found")
+
+    if blueprint.status == ProjectBlueprintStatus.DRAFT:
+        try:
+            config = ProjectBlueprintConfig.model_validate(blueprint.config)
+            validate_blueprint_for_publish(config)
+        except (ValidationError, ValueError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        blueprint.status = ProjectBlueprintStatus.PUBLISHED
+        blueprint.published_at = datetime.now(timezone.utc)
+        blueprint.updated_at = blueprint.published_at
+
+    task.current_blueprint_version_id = blueprint.id
+    task.updated_at = datetime.now(timezone.utc)
+    await db.commit()
+    await db.refresh(blueprint)
+    return SuccessResponse(data=_blueprint_item(blueprint))
