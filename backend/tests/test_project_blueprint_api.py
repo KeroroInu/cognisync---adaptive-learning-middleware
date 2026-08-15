@@ -92,6 +92,27 @@ async def test_published_blueprint_is_immutable_and_frozen_per_student(
     )
     assert first_save.status_code == 200
 
+    mapping_response = await client.post(
+        f"/api/research/tasks/{task_id}/blueprint/function-mapping-suggestions",
+        headers=first_student["headers"],
+        json={
+            "observation_text": "蛇按照方向移动一格",
+            "responsibility": "移动蛇身并更新坐标",
+            "boundary_reason": "这项职责有独立的输入和输出",
+            "input_text": "蛇身和方向",
+            "output_text": "新蛇身",
+            "knowledge": ["列表添加和删除"],
+        },
+    )
+    assert mapping_response.status_code == 200
+    mapping_data = mapping_response.json()["data"]
+    assert mapping_data["blueprint_version_id"] == draft_id
+    assert mapping_data["suggestions"][0]["node_id"] == "movement"
+    # 学生端只获得安全建议，不泄露教师同义词、测试和前置答案。
+    assert "synonyms" not in mapping_data["suggestions"][0]
+    assert "tests" not in mapping_data["suggestions"][0]
+    assert "prerequisiteIds" not in mapping_data["suggestions"][0]
+
     v2_payload = blueprint_payload()
     v2_payload["titleZh"] = "贪吃蛇项目·第二版"
     save_v2 = await admin_client.put(

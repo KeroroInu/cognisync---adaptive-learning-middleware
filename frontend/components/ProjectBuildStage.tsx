@@ -20,13 +20,14 @@ import {
 import type { Language } from '../types';
 import {
   createInitialPathPlan,
+  getMappedBlueprintNodes,
   getImplementationOrderIds,
-  inferBlueprintNode,
   readStoredList,
   readStoredObject,
   type StudentModuleProgress,
   type StudentPathPlan,
 } from '../data/projectPath';
+import type { BlueprintNode } from '../data/snakeProjectBlueprint';
 import {
   disposePythonModuleRunner,
   formatPythonModuleTestResult,
@@ -315,6 +316,12 @@ const SnakeBuildPreview: React.FC<SnakeBuildPreviewProps> = ({
   );
 };
 
+interface StudentBuildUnit {
+  id: string;
+  card: StudentFunctionCard;
+  node: BlueprintNode;
+}
+
 export const ProjectBuildStage: React.FC<Props> = ({ language, theme, taskId, onBack, onAssistantContextChange }) => {
   const isZh = language === 'zh';
   const functionKey = `cognisync:project-function-cards:v1:${taskId}`;
@@ -326,20 +333,52 @@ export const ProjectBuildStage: React.FC<Props> = ({ language, theme, taskId, on
   const [plan] = useState<StudentPathPlan>(() => readStoredObject(pathKey, createInitialPathPlan(readStoredList(functionKey))));
   const [progress, setProgress] = useState<Record<string, StudentModuleProgress>>(() => readStoredObject(progressKey, {}));
   const plannedCardIds = useMemo(() => getImplementationOrderIds(cards, plan), [cards, plan]);
-  const [selectedId, setSelectedId] = useState(() => plannedCardIds[0] ?? '');
-  const [testMessage, setTestMessage] = useState('');
-  const [testRunning, setTestRunning] = useState(false);
-  const [diagnosticRun, setDiagnosticRun] = useState(0);
-  const [diagnostics, setDiagnostics] = useState<string[]>([]);
-  const [demonstration, setDemonstration] = useState<{ nodeId: string; run: number; label: string; preview?: PythonModulePreview } | null>(null);
-
   const cardsById = useMemo(() => new Map(cards.map(card => [card.id, card])), [cards]);
   const orderedCards = useMemo(
     () => plannedCardIds.map(id => cardsById.get(id)).filter((card): card is StudentFunctionCard => Boolean(card)),
     [cardsById, plannedCardIds],
   );
-  const selectedCard = cardsById.get(selectedId) ?? orderedCards[0];
-  const selectedNode = selectedCard ? inferBlueprintNode(selectedCard, observations) : undefined;
+  const buildUnits = useMemo<StudentBuildUnit[]>(() => orderedCards.flatMap(card => (
+    getMappedBlueprintNodes(card, observations).map(node => ({
+      id: `${card.id}::${node.id}`,
+      card,
+      node,
+    }))
+  )), [observations, orderedCards]);
+  const unmappedCards = useMemo(
+    () => orderedCards.filter(card => getMappedBlueprintNodes(card, observations).length === 0),
+    [observations, orderedCards],
+  );
+  const mappedCardCount = useMemo(
+    () => cards.filter(card => getMappedBlueprintNodes(card, observations).length > 0).length,
+    [cards, observations],
+  );
+  const unitsByCardId = useMemo(() => {
+    const result = new Map<string, StudentBuildUnit[]>();
+    buildUnits.forEach(unit => result.set(unit.card.id, [...(result.get(unit.card.id) ?? []), unit]));
+    return result;
+  }, [buildUnits]);
+  const [selectedId, setSelectedId] = useState(() => buildUnits[0]?.id ?? '');
+  const [testMessage, setTestMessage] = useState('');
+  const [testRunning, setTestRunning] = useState(false);
+  const [diagnosticRun, setDiagnosticRun] = useState(0);
+  const [diagnostics, setDiagnostics] = useState<string[]>([]);
+  const [demonstration, setDemonstration] = useState<{ nodeId: string; run: number; label: string; preview?: PythonModulePreview } | null>(null);
+  const selectedUnit = buildUnits.find(unit => unit.id === selectedId) ?? buildUnits[0];
+  const selectedCard = selectedUnit?.card;
+  const selectedNode = selectedUnit?.node;
+
+  const progressForUnit = (unit: StudentBuildUnit | undefined) => {
+    if (!unit) return undefined;
+    const direct = progress[unit.id];
+    if (direct) return direct;
+    const legacy = progress[unit.card.id];
+    return legacy?.blueprintNodeId === unit.node.id ? legacy : undefined;
+  };
+
+  const unitIsComplete = (unit: StudentBuildUnit) => (
+    FRAMEWORK_NODE_IDS.has(unit.node.id) || Boolean(progressForUnit(unit)?.verified)
+  );
 
   useEffect(() => {
     window.localStorage.setItem(progressKey, JSON.stringify(progress));
@@ -348,25 +387,33 @@ export const ProjectBuildStage: React.FC<Props> = ({ language, theme, taskId, on
   useEffect(() => () => disposePythonModuleRunner(), []);
 
   useEffect(() => {
-    if (!plannedCardIds.includes(selectedId)) setSelectedId(plannedCardIds[0] ?? '');
-  }, [plannedCardIds, selectedId]);
+    if (!buildUnits.some(unit => unit.id === selectedId)) setSelectedId(buildUnits[0]?.id ?? '');
+  }, [buildUnits, selectedId]);
 
-  const selectedCheckpointIndex = Math.max(0, orderedCards.findIndex(card => card.id === selectedCard?.id));
+  const selectedCheckpointIndex = Math.max(0, buildUnits.findIndex(unit => unit.id === selectedUnit?.id));
   const checkpointCapabilities = useMemo(() => {
     const ids = new Set<string>(FRAMEWORK_NODE_IDS);
-    orderedCards.slice(0, selectedCheckpointIndex + 1).forEach(card => {
-      const item = progress[card.id];
-      if (item?.verified) ids.add(item.blueprintNodeId);
+    buildUnits.slice(0, selectedCheckpointIndex + 1).forEach(unit => {
+      const direct = progress[unit.id];
+      const legacy = progress[unit.card.id];
+      const item = direct ?? (legacy?.blueprintNodeId === unit.node.id ? legacy : undefined);
+      if (item?.verified || FRAMEWORK_NODE_IDS.has(unit.node.id)) ids.add(unit.node.id);
     });
     return ids;
-  }, [orderedCards, progress, selectedCheckpointIndex]);
+  }, [buildUnits, progress, selectedCheckpointIndex]);
 
-  const dependencyReady = (cardId: string) => (plan.prerequisites[cardId] ?? []).every(id => progress[id]?.verified);
-  const currentProgress = selectedCard ? progress[selectedCard.id] : undefined;
-  const completedCardCount = orderedCards.reduce((count, card) => {
-    const node = inferBlueprintNode(card, observations);
-    return count + (FRAMEWORK_NODE_IDS.has(node.id) || progress[card.id]?.verified ? 1 : 0);
-  }, 0);
+  const dependencyReady = (unit: StudentBuildUnit) => {
+    const sameCardUnits = unitsByCardId.get(unit.card.id) ?? [];
+    const ownIndex = sameCardUnits.findIndex(item => item.id === unit.id);
+    const earlierUnitsReady = sameCardUnits.slice(0, Math.max(0, ownIndex)).every(unitIsComplete);
+    const prerequisiteCardsReady = (plan.prerequisites[unit.card.id] ?? []).every(cardId => {
+      const prerequisiteUnits = unitsByCardId.get(cardId) ?? [];
+      return prerequisiteUnits.length > 0 && prerequisiteUnits.every(unitIsComplete);
+    });
+    return earlierUnitsReady && prerequisiteCardsReady;
+  };
+  const currentProgress = progressForUnit(selectedUnit);
+  const completedCardCount = buildUnits.filter(unitIsComplete).length;
   const currentCode = selectedNode && selectedCard
     ? currentProgress?.code ?? MODULE_TEMPLATES[selectedNode.id] ?? selectedNode.functionTemplate
     : '';
@@ -381,12 +428,15 @@ export const ProjectBuildStage: React.FC<Props> = ({ language, theme, taskId, on
         : undefined),
       artifactSummary: [
         selectedCard ? `当前功能：${selectedCard.responsibility}` : '',
+        selectedNode ? `学生确认契约：${isZh ? selectedNode.titleZh : selectedNode.titleEn}` : '',
+        selectedCard?.boundaryReason ? `功能边界：${selectedCard.boundaryReason}` : '',
+        selectedCard ? `理解责任：${selectedCard.responsibilityOwner === 'ai-supported' ? 'AI 可协助、学生验证' : '学生核心责任'}` : '',
         selectedCard ? `输入：${selectedCard.input}；输出：${selectedCard.output}` : '',
         selectedCard ? `验证方式：${selectedCard.verification}` : '',
-        `路径进度：${completedCardCount}/${orderedCards.length}`,
+        `路径进度：${completedCardCount}/${buildUnits.length}`,
       ].filter(Boolean).join('\n'),
     });
-  }, [completedCardCount, currentCode, currentProgress?.testAttempts, onAssistantContextChange, orderedCards.length, selectedCard, testMessage]);
+  }, [buildUnits.length, completedCardCount, currentCode, currentProgress?.testAttempts, isZh, onAssistantContextChange, selectedCard, selectedNode, testMessage]);
 
   const dependentCardIds = (cardId: string) => {
     const dependents = new Set<string>();
@@ -404,15 +454,19 @@ export const ProjectBuildStage: React.FC<Props> = ({ language, theme, taskId, on
   };
 
   const updateCode = (code: string) => {
-    if (!selectedCard || !selectedNode || FRAMEWORK_NODE_IDS.has(selectedNode.id)) return;
+    if (!selectedCard || !selectedNode || !selectedUnit || FRAMEWORK_NODE_IDS.has(selectedNode.id)) return;
     const invalidatedIds = dependentCardIds(selectedCard.id);
     setProgress(current => {
       const next = { ...current };
-      invalidatedIds.forEach(cardId => {
-        if (next[cardId]) next[cardId] = { ...next[cardId], verified: false };
+      buildUnits.forEach(unit => {
+        const laterSameCard = unit.card.id === selectedCard.id
+          && buildUnits.indexOf(unit) > buildUnits.indexOf(selectedUnit);
+        if ((invalidatedIds.has(unit.card.id) || laterSameCard) && next[unit.id]) {
+          next[unit.id] = { ...next[unit.id], verified: false };
+        }
       });
-      next[selectedCard.id] = {
-        ...current[selectedCard.id],
+      next[selectedUnit.id] = {
+        ...current[selectedUnit.id],
         cardId: selectedCard.id,
         blueprintNodeId: selectedNode.id,
         code,
@@ -426,8 +480,8 @@ export const ProjectBuildStage: React.FC<Props> = ({ language, theme, taskId, on
   };
 
   const verifyCurrentModule = async () => {
-    if (!selectedCard || !selectedNode || testRunning) return;
-    if (!dependencyReady(selectedCard.id)) {
+    if (!selectedCard || !selectedNode || !selectedUnit || testRunning) return;
+    if (!dependencyReady(selectedUnit)) {
       setTestMessage(isZh ? '前置功能还没有通过测试，请先按你的路径完成它们。' : 'Complete the prerequisites in your route first.');
       return;
     }
@@ -441,10 +495,10 @@ export const ProjectBuildStage: React.FC<Props> = ({ language, theme, taskId, on
       const result = await runPythonModuleTest(selectedNode.id, currentCode);
       const now = new Date().toISOString();
       setProgress(current => {
-        const previous = current[selectedCard.id];
+        const previous = current[selectedUnit.id];
         return {
           ...current,
-          [selectedCard.id]: {
+          [selectedUnit.id]: {
             ...previous,
             cardId: selectedCard.id,
             blueprintNodeId: selectedNode.id,
@@ -483,12 +537,16 @@ export const ProjectBuildStage: React.FC<Props> = ({ language, theme, taskId, on
     setDiagnosticRun(value => value + 1);
   };
 
-  if (orderedCards.length === 0) {
+  if (buildUnits.length === 0) {
     return (
       <section className="project-build-workspace is-empty">
         <Layers3 size={35} />
-        <h3>{isZh ? '没有可装配的学生功能卡' : 'No student modules to assemble'}</h3>
-        <p>{isZh ? '建构区不会自动生成标准答案。请先完成观察、功能卡和关系规划。' : 'The build area does not generate the answer. Complete observations, function cards and relations first.'}</p>
+        <h3>{mappedCardCount > 0
+          ? (isZh ? '实现路径还没有形成' : 'The implementation route is not ready')
+          : (isZh ? '还没有由学生确认的功能契约' : 'No student-confirmed contracts yet')}</h3>
+        <p>{mappedCardCount > 0
+          ? (isZh ? '功能契约已经确认，但当前路径没有可执行顺序。请回到定路径阶段检查未连线卡片或循环依赖。' : 'Contracts are confirmed, but the route has no executable order. Check unconnected cards or cycles.')
+          : (isZh ? '返回功能卡阶段，为候选契约作出接受、拒绝或暂不映射的判断；平台不会暗中替你匹配。' : 'Return to function cards and decide which suggested contracts fit. The platform will not map them silently.')}</p>
         <button type="button" onClick={onBack}>{isZh ? '返回实现规划' : 'Back to plan'}</button>
       </section>
     );
@@ -502,7 +560,7 @@ export const ProjectBuildStage: React.FC<Props> = ({ language, theme, taskId, on
             language={language}
             capabilities={checkpointCapabilities}
             checkpointIndex={selectedCheckpointIndex + 1}
-            checkpointTotal={orderedCards.length}
+            checkpointTotal={buildUnits.length}
             diagnosticRun={diagnosticRun}
             demonstration={demonstration}
             onDiagnostic={setDiagnostics}
@@ -525,31 +583,41 @@ export const ProjectBuildStage: React.FC<Props> = ({ language, theme, taskId, on
         <div className="build-editor-column">
           <header className="build-editor-heading">
             <div><span>05 / BUILD & VERIFY</span><h3>{isZh ? '按自己的路径逐个实现' : 'Build one module at a time'}</h3></div>
-            <strong>{completedCardCount}<small>/{orderedCards.length}</small></strong>
+            <strong>{completedCardCount}<small>/{buildUnits.length}</small></strong>
           </header>
 
+          {unmappedCards.length > 0 && (
+            <div className="build-unmapped-notice">
+              <CircleAlert size={15} />
+              <span>{isZh
+                ? `${unmappedCards.length} 张功能卡尚未确认契约，暂不进入建构路径。`
+                : `${unmappedCards.length} function cards are not mapped and are excluded from the build route.`}</span>
+              <button type="button" onClick={onBack}>{isZh ? '返回处理' : 'Review cards'}</button>
+            </div>
+          )}
+
           <nav className="student-module-rail" aria-label={isZh ? '学生实现路径' : 'Student build route'}>
-            {orderedCards.map((card, index) => {
-              const node = inferBlueprintNode(card, observations);
-              const provided = FRAMEWORK_NODE_IDS.has(node.id);
-              const verified = provided || progress[card.id]?.verified;
-              const ready = dependencyReady(card.id);
+            {buildUnits.map((unit, index) => {
+              const provided = FRAMEWORK_NODE_IDS.has(unit.node.id);
+              const verified = unitIsComplete(unit);
+              const ready = dependencyReady(unit);
               return (
-                <button key={card.id} type="button" className={`${selectedCard?.id === card.id ? 'is-active' : ''} ${verified ? 'is-verified' : ''}`} onClick={() => { setSelectedId(card.id); setTestMessage(''); }}>
+                <button key={unit.id} type="button" className={`${selectedUnit?.id === unit.id ? 'is-active' : ''} ${verified ? 'is-verified' : ''}`} onClick={() => { setSelectedId(unit.id); setTestMessage(''); }}>
                   <span>{String(index + 1).padStart(2, '0')}</span>
-                  <p>{card.responsibility}</p>
+                  <p title={`${unit.card.responsibility} · ${isZh ? unit.node.titleZh : unit.node.titleEn}`}>{unit.card.responsibility}<small>{isZh ? unit.node.titleZh : unit.node.titleEn}</small></p>
                   <i>{verified ? <Check size={14} /> : ready ? <CircleDot size={14} /> : <LockKeyhole size={14} />}</i>
                 </button>
               );
             })}
           </nav>
 
-          {selectedCard && selectedNode && (
+          {selectedCard && selectedNode && selectedUnit && (
             <article className="module-editor-card">
               <header>
                 <div>
-                  <span>{isZh ? '来自你的功能卡' : 'FROM YOUR FUNCTION CARD'}</span>
+                  <span>{isZh ? '你的功能卡 × 你确认的契约' : 'YOUR CARD × CONFIRMED CONTRACT'}</span>
                   <h4>{selectedCard.responsibility}</h4>
+                  <small>{isZh ? selectedNode.titleZh : selectedNode.titleEn}</small>
                 </div>
                 <span className={currentProgress?.verified || FRAMEWORK_NODE_IDS.has(selectedNode.id) ? 'is-complete' : ''}>
                   {FRAMEWORK_NODE_IDS.has(selectedNode.id) ? (isZh ? '平台提供' : 'PROVIDED') : currentProgress?.verified ? (isZh ? '已验证' : 'VERIFIED') : (isZh ? '待实现' : 'TO BUILD')}
@@ -575,8 +643,8 @@ export const ProjectBuildStage: React.FC<Props> = ({ language, theme, taskId, on
               </div>
 
               <footer className="module-test-bar">
-                <span>{testMessage || (dependencyReady(selectedCard.id) ? (isZh ? '只需完成这张卡对应的函数，其他项目代码已由平台锁定。' : 'Complete only this function; the rest of the project is locked.') : (isZh ? '它依赖的前置卡还没有通过测试。' : 'Its prerequisite cards are not verified yet.'))}</span>
-                <button type="button" onClick={() => void verifyCurrentModule()} disabled={!dependencyReady(selectedCard.id) || testRunning}>
+                <span>{testMessage || (dependencyReady(selectedUnit) ? (isZh ? '只需完成这项已确认契约对应的函数，其他项目代码已由平台锁定。' : 'Complete only this confirmed contract; the rest of the project is locked.') : (isZh ? '它依赖的前置功能还没有通过测试。' : 'Its prerequisite functions are not verified yet.'))}</span>
+                <button type="button" onClick={() => void verifyCurrentModule()} disabled={!dependencyReady(selectedUnit) || testRunning}>
                   {testRunning ? <LoaderCircle size={15} className="is-spinning" /> : <Play size={15} />}
                   {testRunning ? (isZh ? '正在运行' : 'Running') : (isZh ? '运行模块测试' : 'Run module test')}
                 </button>

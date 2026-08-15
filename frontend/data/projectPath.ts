@@ -188,6 +188,29 @@ export const inferBlueprintNode = (
   return BLUEPRINT_BY_ID.get(fallbackId) ?? SNAKE_PROJECT_BLUEPRINT[0];
 };
 
+/**
+ * Resolve only the contracts that the student explicitly accepted.
+ *
+ * Cards created before open mapping existed have no mappingDecision field;
+ * those legacy records keep the former deterministic fallback so existing
+ * workspaces remain usable. A new rejected or unmapped card deliberately
+ * resolves to no build unit and is never guessed by the platform.
+ */
+export const getMappedBlueprintNodes = (
+  card: StudentFunctionCard,
+  observations: StudentObservationCard[],
+): BlueprintNode[] => {
+  if (!card.mappingDecision) return [inferBlueprintNode(card, observations)];
+  if (card.mappingDecision.status !== 'accepted') return [];
+  const seen = new Set<string>();
+  return card.mappingDecision.acceptedNodeIds.flatMap(id => {
+    if (seen.has(id)) return [];
+    seen.add(id);
+    const node = BLUEPRINT_BY_ID.get(id);
+    return node ? [node] : [];
+  });
+};
+
 export const buildTopologicalOrder = (
   cards: StudentFunctionCard[],
   plan: StudentPathPlan,

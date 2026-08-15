@@ -68,7 +68,7 @@ const OBSERVATIONS: StudentObservationCard[] = [
   },
 ];
 
-const FUNCTIONS: StudentFunctionCard[] = [
+const RAW_FUNCTIONS: StudentFunctionCard[] = [
   {
     id: 'demo-function-initial',
     observationId: 'demo-observation-initial',
@@ -168,6 +168,49 @@ const FUNCTIONS: StudentFunctionCard[] = [
     updatedAt: '2026-01-01T08:16:00.000Z',
   },
 ];
+
+const DEMO_MAPPING_META: Record<string, {
+  nodeId: string;
+  title: string;
+  boundaryReason: string;
+  responsibilityOwner: 'student-core' | 'ai-supported';
+}> = {
+  'demo-function-initial': { nodeId: 'initial-state', title: '建立与重置初始状态', boundaryReason: '它有独立的输入和输出', responsibilityOwner: 'ai-supported' },
+  'demo-function-direction': { nodeId: 'direction-input', title: '安全更新移动方向', boundaryReason: '它有单独的判断或状态变化', responsibilityOwner: 'student-core' },
+  'demo-function-movement': { nodeId: 'movement', title: '更新蛇身位置', boundaryReason: '它可以单独运行和验证', responsibilityOwner: 'student-core' },
+  'demo-function-food': { nodeId: 'food-spawn', title: '生成合法食物位置', boundaryReason: '它可以单独运行和验证', responsibilityOwner: 'ai-supported' },
+  'demo-function-eat': { nodeId: 'eat-grow-score', title: '处理进食、增长与计分', boundaryReason: '它有单独的判断或状态变化', responsibilityOwner: 'student-core' },
+  'demo-function-collision': { nodeId: 'collision', title: '判断碰撞与结束条件', boundaryReason: '它有单独的判断或状态变化', responsibilityOwner: 'student-core' },
+  'demo-function-loop': { nodeId: 'game-loop', title: '组合并驱动游戏循环', boundaryReason: '其他功能会重复使用它的调度结果', responsibilityOwner: 'ai-supported' },
+};
+
+const enrichDemoFunctionCard = (card: StudentFunctionCard): StudentFunctionCard => {
+  const meta = DEMO_MAPPING_META[card.id];
+  if (!meta) return card;
+  return {
+    ...card,
+    boundaryReason: card.boundaryReason ?? meta.boundaryReason,
+    responsibilityOwner: card.responsibilityOwner ?? meta.responsibilityOwner,
+    mappingDecision: card.mappingDecision ?? {
+      status: 'accepted',
+      suggestions: [{
+        node_id: meta.nodeId,
+        title_zh: meta.title,
+        match_reasons: ['职责相符', '输入输出相符'],
+        score: 10,
+      }],
+      acceptedNodeIds: [meta.nodeId],
+      suggestedAt: '2026-01-01T08:17:00.000Z',
+      decidedAt: '2026-01-01T08:18:00.000Z',
+    },
+  };
+};
+
+const FUNCTIONS = RAW_FUNCTIONS.map(enrichDemoFunctionCard);
+
+export const upgradeSnakeProjectFunctionCards = (cards: StudentFunctionCard[]) => (
+  cards.map(enrichDemoFunctionCard)
+);
 
 const ORDERED_CARD_IDS = FUNCTIONS.map(card => card.id);
 

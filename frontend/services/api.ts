@@ -20,6 +20,7 @@ import type {
   ResearchTask,
   EmotionDetail,
   ProjectScaffoldMetadata,
+  FunctionMappingSuggestionResponse,
 } from '@/types';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
@@ -580,6 +581,31 @@ export async function saveResearchWorkspace(
     keepalive: options?.keepalive,
   });
   if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+}
+
+/**
+ * 根据学生自己的功能卡表达，读取冻结蓝图中的安全契约建议。
+ * 教师同义词、标准依赖、隐藏测试与函数模板不下发。
+ */
+export async function suggestResearchFunctionMapping(
+  taskId: string,
+  card: {
+    observation_text: string;
+    responsibility: string;
+    boundary_reason: string;
+    input_text: string;
+    output_text: string;
+    knowledge: string[];
+  },
+): Promise<FunctionMappingSuggestionResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/research/tasks/${taskId}/blueprint/function-mapping-suggestions`, {
+    method: 'POST',
+    headers: getHeaders(true),
+    body: JSON.stringify(card),
+  });
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  const result = await response.json();
+  return (result.data ?? result) as FunctionMappingSuggestionResponse;
 }
 
 /**

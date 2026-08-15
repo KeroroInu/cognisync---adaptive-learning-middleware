@@ -280,4 +280,17 @@ export interface ResearchTask {
   is_completed?: boolean;
   code_submitted?: string | null;
   workspace_data?: Record<string, unknown> | null;
+  blueprint_version_id?: string | null;
+}
+
+export interface FunctionMappingSuggestion {
+  node_id: string;
+  title_zh: string;
+  match_reasons: string[];
+  score: number;
+}
+
+export interface FunctionMappingSuggestionResponse {
+  blueprint_version_id: string;
+  suggestions: FunctionMappingSuggestion[];
 }

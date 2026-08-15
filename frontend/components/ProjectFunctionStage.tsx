@@ -2,15 +2,21 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   ArrowRight,
   BookOpenCheck,
+  Bot,
   Boxes,
   Check,
   ClipboardList,
   Eye,
+  Link2,
   PencilLine,
+  RotateCcw,
   Save,
+  ShieldCheck,
   Trash2,
+  Unlink,
 } from 'lucide-react';
-import type { Language } from '../types';
+import type { FunctionMappingSuggestion, Language } from '../types';
+import { suggestResearchFunctionMapping } from '../services/api';
 import type { StudentObservationCard } from './ProjectFactory';
 import './ProjectFunctionStage.css';
 
@@ -32,6 +38,16 @@ export interface StudentFunctionCard {
   output: string;
   knowledge: string[];
   verification: string;
+  boundaryReason?: string;
+  responsibilityOwner?: 'student-core' | 'ai-supported';
+  mappingDecision?: {
+    status: 'pending' | 'accepted' | 'rejected' | 'unmapped';
+    blueprintVersionId?: string;
+    suggestions: FunctionMappingSuggestion[];
+    acceptedNodeIds: string[];
+    suggestedAt?: string;
+    decidedAt?: string;
+  };
   source: 'student' | 'ai-assisted';
   createdAt: string;
   updatedAt: string;
@@ -45,6 +61,21 @@ const KNOWLEDGE_OPTIONS = {
 const VERIFICATION_OPTIONS = {
   zh: ['运行后观察变化', '给定输入比较输出', '测试边界情况', '重复运行检查稳定性'],
   en: ['Observe after running', 'Compare output for a given input', 'Test edge cases', 'Repeat to check stability'],
+};
+
+const BOUNDARY_REASON_OPTIONS = {
+  zh: [
+    '它有独立的输入和输出',
+    '它有单独的判断或状态变化',
+    '它可以单独运行和验证',
+    '它会被其他功能重复使用',
+  ],
+  en: [
+    'It has independent inputs and outputs',
+    'It owns a separate decision or state change',
+    'It can be run and verified independently',
+    'Other functions reuse it',
+  ],
 };
 
 const readStoredList = <T,>(key: string): T[] => {
@@ -76,6 +107,10 @@ export const ProjectFunctionStage: React.FC<Props> = ({
   const [output, setOutput] = useState('');
   const [knowledge, setKnowledge] = useState<string[]>([]);
   const [verification, setVerification] = useState('');
+  const [boundaryReason, setBoundaryReason] = useState('');
+  const [responsibilityOwner, setResponsibilityOwner] = useState<'student-core' | 'ai-supported'>('student-core');
+  const [mappingLoadingId, setMappingLoadingId] = useState<string | null>(null);
+  const [mappingError, setMappingError] = useState('');
 
   useEffect(() => {
     window.localStorage.setItem(functionStorageKey, JSON.stringify(cards));
@@ -93,7 +128,9 @@ export const ProjectFunctionStage: React.FC<Props> = ({
     && input.trim()
     && output.trim()
     && knowledge.length
-    && verification,
+    && verification
+    && boundaryReason.trim()
+    && responsibilityOwner
   );
 
   const resetDraft = () => {
@@ -104,6 +141,8 @@ export const ProjectFunctionStage: React.FC<Props> = ({
     setOutput('');
     setKnowledge([]);
     setVerification('');
+    setBoundaryReason('');
+    setResponsibilityOwner('student-core');
   };
 
   const toggleKnowledge = (item: string) => {
@@ -112,6 +151,59 @@ export const ProjectFunctionStage: React.FC<Props> = ({
         ? current.filter(value => value !== item)
         : [...current, item].slice(-4)
     ));
+  };
+
+  const requestMapping = async (card: StudentFunctionCard) => {
+    setMappingLoadingId(card.id);
+    setMappingError('');
+    const requestedAt = new Date().toISOString();
+    setCards(current => current.map(item => item.id === card.id ? {
+      ...item,
+      mappingDecision: {
+        status: 'pending',
+        suggestions: [],
+        acceptedNodeIds: [],
+        suggestedAt: requestedAt,
+      },
+    } : item));
+    try {
+      const result = await suggestResearchFunctionMapping(taskId, {
+        observation_text: card.observationText,
+        responsibility: card.responsibility,
+        boundary_reason: card.boundaryReason ?? '',
+        input_text: card.input,
+        output_text: card.output,
+        knowledge: card.knowledge,
+      });
+      setCards(current => current.map(item => item.id === card.id ? {
+        ...item,
+        mappingDecision: {
+          status: result.suggestions.length ? 'pending' : 'unmapped',
+          blueprintVersionId: result.blueprint_version_id,
+          suggestions: result.suggestions,
+          acceptedNodeIds: [],
+          suggestedAt: requestedAt,
+        },
+        updatedAt: new Date().toISOString(),
+      } : item));
+    } catch {
+      setCards(current => current.map(item => item.id === card.id ? {
+        ...item,
+        mappingDecision: {
+          status: 'unmapped',
+          suggestions: [],
+          acceptedNodeIds: [],
+          suggestedAt: requestedAt,
+          decidedAt: new Date().toISOString(),
+        },
+        updatedAt: new Date().toISOString(),
+      } : item));
+      setMappingError(isZh
+        ? '契约建议暂时未载入，功能卡已保存，可以稍后重试。'
+        : 'Mapping suggestions are temporarily unavailable. The card is saved; retry later.');
+    } finally {
+      setMappingLoadingId(null);
+    }
   };
 
   const saveCard = () => {
@@ -127,6 +219,14 @@ export const ProjectFunctionStage: React.FC<Props> = ({
       output: output.trim(),
       knowledge,
       verification,
+      boundaryReason: boundaryReason.trim(),
+      responsibilityOwner,
+      mappingDecision: {
+        status: 'pending',
+        suggestions: [],
+        acceptedNodeIds: [],
+        suggestedAt: now,
+      },
       source: 'student',
       createdAt: editingId
         ? cards.find(item => item.id === editingId)?.createdAt ?? now
@@ -141,6 +241,7 @@ export const ProjectFunctionStage: React.FC<Props> = ({
       return [...current, nextCard].slice(-10);
     });
     resetDraft();
+    void requestMapping(nextCard);
   };
 
   const editCard = (card: StudentFunctionCard) => {
@@ -151,6 +252,8 @@ export const ProjectFunctionStage: React.FC<Props> = ({
     setOutput(card.output);
     setKnowledge(card.knowledge);
     setVerification(card.verification);
+    setBoundaryReason(card.boundaryReason ?? '');
+    setResponsibilityOwner(card.responsibilityOwner ?? 'student-core');
     window.requestAnimationFrame(() => {
       document.querySelector('.function-card-composer')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     });
@@ -161,8 +264,51 @@ export const ProjectFunctionStage: React.FC<Props> = ({
     if (editingId === id) resetDraft();
   };
 
+  const toggleMappedNode = (cardId: string, nodeId: string) => {
+    setCards(current => current.map(card => {
+      if (card.id !== cardId || !card.mappingDecision) return card;
+      const selected = card.mappingDecision.acceptedNodeIds;
+      return {
+        ...card,
+        mappingDecision: {
+          ...card.mappingDecision,
+          status: 'pending',
+          acceptedNodeIds: selected.includes(nodeId)
+            ? selected.filter(id => id !== nodeId)
+            : [...selected, nodeId],
+          decidedAt: undefined,
+        },
+        updatedAt: new Date().toISOString(),
+      };
+    }));
+  };
+
+  const decideMapping = (
+    cardId: string,
+    status: 'pending' | 'accepted' | 'rejected' | 'unmapped',
+  ) => {
+    setCards(current => current.map(card => {
+      if (card.id !== cardId || !card.mappingDecision) return card;
+      const acceptedNodeIds = status === 'accepted' || status === 'pending'
+        ? card.mappingDecision.acceptedNodeIds
+        : [];
+      if (status === 'accepted' && acceptedNodeIds.length === 0) return card;
+      return {
+        ...card,
+        mappingDecision: {
+          ...card.mappingDecision,
+          status,
+          acceptedNodeIds,
+          decidedAt: status === 'pending' ? undefined : new Date().toISOString(),
+        },
+        updatedAt: new Date().toISOString(),
+      };
+    }));
+  };
+
   const knowledgeOptions = KNOWLEDGE_OPTIONS[language];
   const verificationOptions = VERIFICATION_OPTIONS[language];
+  const boundaryReasonOptions = BOUNDARY_REASON_OPTIONS[language];
 
   return (
     <section className="project-function-stage">
@@ -237,6 +383,57 @@ export const ProjectFunctionStage: React.FC<Props> = ({
                   placeholder={isZh ? '程序需要完成什么事情？' : 'What must the program do?'}
                 />
               </label>
+
+              <fieldset className="function-choice-field is-boundary">
+                <legend>
+                  {isZh ? '为什么它应该成为一个独立功能？' : 'Why should this be a separate function?'}
+                  <small>{boundaryReason.length}/64</small>
+                </legend>
+                <div>
+                  {boundaryReasonOptions.map(item => (
+                    <button
+                      key={item}
+                      type="button"
+                      className={boundaryReason === item ? 'is-selected' : ''}
+                      onClick={() => setBoundaryReason(item)}
+                      aria-pressed={boundaryReason === item}
+                    >
+                      {item}
+                    </button>
+                  ))}
+                </div>
+                <input
+                  value={boundaryReason}
+                  onChange={event => setBoundaryReason(event.target.value)}
+                  maxLength={64}
+                  placeholder={isZh ? '也可以用一句自己的话说明功能边界' : 'Or explain the boundary in your own words'}
+                />
+              </fieldset>
+
+              <fieldset className="function-owner-field">
+                <legend>
+                  {isZh ? '这部分理解责任属于谁？' : 'Who owns the understanding?'}
+                  <small>{isZh ? 'AI 可以协助，但不能替代判断' : 'AI may assist, but not replace judgment'}</small>
+                </legend>
+                <div>
+                  <button
+                    type="button"
+                    className={responsibilityOwner === 'student-core' ? 'is-selected' : ''}
+                    onClick={() => setResponsibilityOwner('student-core')}
+                  >
+                    <ShieldCheck size={15} />
+                    <span><strong>{isZh ? '我必须理解' : 'I must understand'}</strong><small>{isZh ? '核心判断由我完成' : 'I make the core judgment'}</small></span>
+                  </button>
+                  <button
+                    type="button"
+                    className={responsibilityOwner === 'ai-supported' ? 'is-selected' : ''}
+                    onClick={() => setResponsibilityOwner('ai-supported')}
+                  >
+                    <Bot size={15} />
+                    <span><strong>{isZh ? '可以请 AI 协助' : 'AI may assist'}</strong><small>{isZh ? '我仍负责验证结果' : 'I still verify the result'}</small></span>
+                  </button>
+                </div>
+              </fieldset>
 
               <div className="function-io-grid">
                 <label className="function-field">
@@ -328,12 +525,67 @@ export const ProjectFunctionStage: React.FC<Props> = ({
                       <div><dt>{isZh ? '输入' : 'IN'}</dt><dd>{card.input}</dd></div>
                       <div><dt>{isZh ? '输出' : 'OUT'}</dt><dd>{card.output}</dd></div>
                     </dl>
+                    <div className="saved-function-boundary">
+                      <ShieldCheck size={13} />
+                      <span>{card.boundaryReason || (isZh ? '尚未说明功能边界' : 'Boundary not explained')}</span>
+                      <strong>{card.responsibilityOwner === 'ai-supported'
+                        ? (isZh ? 'AI 可协助' : 'AI assisted')
+                        : (isZh ? '学生核心责任' : 'Student owned')}</strong>
+                    </div>
                     <div className="saved-function-tags">{card.knowledge.map(item => <span key={item}>{item}</span>)}</div>
                     <footer><BookOpenCheck size={13} />{card.verification}</footer>
+                    <section className={`function-mapping-panel is-${card.mappingDecision?.status ?? 'legacy'}`}>
+                      <header>
+                        <div><Link2 size={14} /><strong>{isZh ? '对应哪项教师契约？' : 'Which teacher contract fits?'}</strong></div>
+                        {card.mappingDecision?.blueprintVersionId && <small>{card.mappingDecision.blueprintVersionId.slice(0, 8)}</small>}
+                      </header>
+
+                      {mappingLoadingId === card.id ? (
+                        <p><Bot size={14} />{isZh ? '正在生成候选，不会直接替你决定。' : 'Finding candidates without deciding for you.'}</p>
+                      ) : !card.mappingDecision || card.mappingDecision.status === 'rejected' || card.mappingDecision.status === 'unmapped' ? (
+                        <div className="mapping-empty-state">
+                          <span>{card.mappingDecision?.status === 'rejected'
+                            ? (isZh ? '你拒绝了上一组建议。' : 'You rejected the previous suggestions.')
+                            : (isZh ? '当前保持未映射，建构阶段不会自动猜测。' : 'Currently unmapped; the build stage will not guess.')}</span>
+                          <button type="button" onClick={() => void requestMapping(card)}><RotateCcw size={13} />{isZh ? '重新获取建议' : 'Retry suggestions'}</button>
+                        </div>
+                      ) : card.mappingDecision.status === 'accepted' ? (
+                        <div className="mapping-accepted-state">
+                          <p><ShieldCheck size={14} />{isZh ? '已由你确认：' : 'Confirmed by you:'}</p>
+                          <div>{card.mappingDecision.suggestions
+                            .filter(item => card.mappingDecision?.acceptedNodeIds.includes(item.node_id))
+                            .map(item => <span key={item.node_id}>{item.title_zh}</span>)}</div>
+                          <button type="button" onClick={() => decideMapping(card.id, 'pending')}><RotateCcw size={13} />{isZh ? '重新判断' : 'Reconsider'}</button>
+                        </div>
+                      ) : (
+                        <>
+                          <p><Bot size={14} />{isZh ? '这是候选，不是答案；可以多选，也可以全部拒绝。' : 'These are candidates, not answers. Select multiple or reject all.'}</p>
+                          <div className="mapping-suggestion-list">
+                            {card.mappingDecision.suggestions.map(item => {
+                              const selected = card.mappingDecision?.acceptedNodeIds.includes(item.node_id);
+                              return (
+                                <button key={item.node_id} type="button" className={selected ? 'is-selected' : ''} onClick={() => toggleMappedNode(card.id, item.node_id)}>
+                                  <i>{selected ? <Check size={13} /> : <Unlink size={13} />}</i>
+                                  <span><strong>{item.title_zh}</strong><small>{item.match_reasons.join(' · ')}</small></span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                          <div className="mapping-decision-actions">
+                            <button type="button" onClick={() => decideMapping(card.id, 'rejected')}>{isZh ? '都不符合' : 'Reject all'}</button>
+                            <button type="button" onClick={() => decideMapping(card.id, 'unmapped')}>{isZh ? '暂不映射' : 'Leave unmapped'}</button>
+                            <button type="button" className="is-primary" disabled={!card.mappingDecision.acceptedNodeIds.length} onClick={() => decideMapping(card.id, 'accepted')}>
+                              <Link2 size={13} />{isZh ? '确认我的选择' : 'Confirm selection'}
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </section>
                   </article>
                 ))}
               </div>
             )}
+            {mappingError && <p className="function-mapping-error">{mappingError}</p>}
           </section>
         </>
       )}

@@ -31,6 +31,7 @@ import {
   hydrateSnakeProjectWorkspace,
   isSnakeProjectWorkspace,
   seedSnakeProjectDemo,
+  upgradeSnakeProjectFunctionCards,
   type SnakeProjectWorkspace,
 } from '../data/snakeProjectDemo';
 
@@ -80,9 +81,17 @@ const summarizeStudentTaskWorkspace = (workspace: SnakeProjectWorkspace) => {
   if (workspace.functions.length > 0) {
     lines.push('功能卡：');
     workspace.functions.slice(-10).forEach((item, index) => {
+      const mappedTitles = item.mappingDecision?.status === 'accepted'
+        ? item.mappingDecision.suggestions
+          .filter(suggestion => item.mappingDecision?.acceptedNodeIds.includes(suggestion.node_id))
+          .map(suggestion => suggestion.title_zh)
+          .join('、')
+        : item.mappingDecision?.status ?? '旧数据未判断';
       lines.push(
         `${index + 1}. ${item.responsibility}｜IN ${item.input || '未填'}｜OUT ${item.output || '未填'}`
-        + `｜知识 ${item.knowledge.join('、') || '未填'}｜验证 ${item.verification || '未填'}`,
+        + `｜知识 ${item.knowledge.join('、') || '未填'}｜验证 ${item.verification || '未填'}`
+        + `｜边界 ${item.boundaryReason || '未说明'}｜责任 ${item.responsibilityOwner === 'ai-supported' ? 'AI协助、学生验证' : '学生核心责任'}`
+        + `｜契约判断 ${mappedTitles || '暂未选择'}`,
       );
     });
   }
@@ -108,10 +117,10 @@ const summarizeStudentTaskWorkspace = (workspace: SnakeProjectWorkspace) => {
   const progressEntries = Object.entries(workspace.progress);
   if (progressEntries.length > 0) {
     lines.push('模块建构：');
-    progressEntries.slice(-10).forEach(([cardId, item]) => {
+    progressEntries.slice(-10).forEach(([, item]) => {
       const latestAttempt = item.testAttempts?.[item.testAttempts.length - 1];
       lines.push(
-        `- ${functionById.get(cardId) ?? cardId}：${item.verified ? '已验证' : '未验证'}`
+        `- ${functionById.get(item.cardId) ?? item.cardId} / ${item.blueprintNodeId}：${item.verified ? '已验证' : '未验证'}`
         + (latestAttempt ? `；最近测试 ${latestAttempt.passed ? '通过' : '未通过'}(${latestAttempt.resultCode})` : '；尚无测试记录'),
       );
     });
@@ -278,10 +287,17 @@ export const Research: React.FC<Props> = ({
             const demo = seedSnakeProjectDemo(t.id);
             workspace = demo.workspace;
             await saveResearchWorkspace(t.id, workspace);
-          } else if (workspace && studentId === 'kero' && experimentGroup === 'pdt' && !workspace.path.functionMechanisms) {
+          } else if (workspace && studentId === 'kero' && experimentGroup === 'pdt' && (
+            !workspace.path.functionMechanisms
+            || workspace.functions.some(card => !card.boundaryReason || !card.mappingDecision)
+          )) {
             workspace = {
               ...workspace,
-              path: { ...workspace.path, functionMechanisms: createSnakeProjectMechanisms() },
+              functions: upgradeSnakeProjectFunctionCards(workspace.functions),
+              path: {
+                ...workspace.path,
+                functionMechanisms: workspace.path.functionMechanisms ?? createSnakeProjectMechanisms(),
+              },
               savedAt: new Date().toISOString(),
             };
             await saveResearchWorkspace(t.id, workspace);

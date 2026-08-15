@@ -118,13 +118,30 @@
 .student-module-rail button.is-active { border-color: #161713; background: color-mix(in srgb, var(--brand-cyan) 28%, var(--surface-strong)); box-shadow: 2px 3px 0 #161713; }
 .student-module-rail button.is-verified i { color: var(--brand-positive); }
 .student-module-rail button > span { color: #6e8137; font-family: 'Google Sans Code', ui-monospace, monospace; font-size: .53rem; font-weight: 900; }
-.student-module-rail button p { overflow: hidden; margin: 0; font-size: .7rem; font-weight: 750; text-overflow: ellipsis; white-space: nowrap; }
+.student-module-rail button p { min-width: 0; display: grid; gap: 2px; overflow: hidden; margin: 0; font-size: .7rem; font-weight: 750; text-overflow: ellipsis; white-space: nowrap; }
+.student-module-rail button p small { overflow: hidden; color: var(--text-tertiary); font-size: .52rem; font-weight: 650; text-overflow: ellipsis; }
 .student-module-rail button i { display: grid; place-items: center; font-style: normal; }
+
+.build-unmapped-notice {
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  border: 1px solid #c58e30;
+  border-radius: 6px;
+  background: color-mix(in srgb, #e7b24b 12%, var(--surface-strong));
+  color: var(--text-secondary);
+  font-size: .62rem;
+}
+.build-unmapped-notice span { flex: 1; }
+.build-unmapped-notice button { min-height: 28px; padding: 0 8px; border: 1px solid var(--line-strong); border-radius: 5px; background: var(--surface-strong); color: var(--text-primary); font-size: .58rem; font-weight: 800; cursor: pointer; }
 
 .module-editor-card { min-height: 0; flex: 1 1 auto; display: grid; grid-template-rows: auto auto auto minmax(110px, 1fr) auto; overflow: hidden; border: 1.5px solid #161713; border-radius: 8px; }
 .module-editor-card > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding: 10px 12px; border-bottom: 1px solid var(--line-strong); background: var(--surface-muted); }
 .module-editor-card > header > div > span { color: #6e8137; font-family: 'Google Sans Code', ui-monospace, monospace; font-size: .62rem; font-weight: 900; }
 .module-editor-card > header h4 { margin: 3px 0 0; font-size: .94rem; }
+.module-editor-card > header > div > small { display: block; margin-top: 3px; color: var(--text-tertiary); font-size: .6rem; }
 .module-editor-card > header > span { padding: 4px 7px; border: 1px solid var(--line-strong); border-radius: 999px; color: var(--text-tertiary); font-size: .62rem; font-weight: 850; }
 .module-editor-card > header > span.is-complete { border-color: #6f8432; background: color-mix(in srgb, var(--brand-cyan) 26%, var(--surface-strong)); color: #526623; }
 

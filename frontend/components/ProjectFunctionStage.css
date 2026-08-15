@@ -194,6 +194,75 @@
 .function-choice-field button.is-selected { background: var(--brand-cyan); box-shadow: 2px 2px 0 #161713; }
 .function-choice-field.is-verification button { border-radius: 6px; }
 
+.function-choice-field.is-boundary input {
+  width: 100%;
+  min-height: 39px;
+  margin-top: 8px;
+  padding: 0 11px;
+  border: 1.2px solid var(--line-strong);
+  border-radius: 7px;
+  background: var(--surface-strong);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: .75rem;
+  outline: none;
+}
+
+.function-choice-field.is-boundary input:focus {
+  border-color: #161713;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand-cyan) 48%, transparent);
+}
+
+.function-owner-field {
+  min-width: 0;
+  margin: 12px 0 0;
+  padding: 0;
+  border: 0;
+}
+
+.function-owner-field legend {
+  font-size: .76rem;
+  font-weight: 900;
+}
+
+.function-owner-field legend small {
+  margin-left: 8px;
+  color: var(--text-tertiary);
+  font-size: .58rem;
+  font-weight: 500;
+}
+
+.function-owner-field > div {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 7px;
+}
+
+.function-owner-field button {
+  min-height: 54px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  background: var(--surface-muted);
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.function-owner-field button.is-selected {
+  border-color: #161713;
+  background: color-mix(in srgb, var(--brand-cyan) 34%, var(--surface-strong));
+  box-shadow: 2px 2px 0 #161713;
+}
+
+.function-owner-field button > span { display: grid; gap: 2px; }
+.function-owner-field button strong { font-size: .72rem; }
+.function-owner-field button small { color: var(--text-tertiary); font-size: .58rem; }
+
 .function-composer-actions {
   display: flex;
   justify-content: flex-end;
@@ -252,6 +321,130 @@
 .saved-function-tags span { padding: 3px 7px; border: 1px solid var(--line-strong); border-radius: 999px; color: var(--text-secondary); font-size: .62rem; }
 .saved-function-grid article > footer { display: flex; align-items: center; gap: 6px; margin-top: 9px; padding-top: 8px; border-top: 1px solid var(--line-strong); color: var(--text-secondary); font-size: .58rem; }
 
+.saved-function-boundary {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 7px 8px;
+  border-left: 3px solid var(--brand-cyan);
+  background: var(--surface-muted);
+  color: var(--text-secondary);
+  font-size: .62rem;
+}
+
+.saved-function-boundary strong {
+  padding: 3px 6px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  color: var(--text-primary);
+  font-size: .54rem;
+  white-space: nowrap;
+}
+
+.function-mapping-panel {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--surface-muted) 78%, var(--brand-cyan));
+}
+
+.function-mapping-panel > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.function-mapping-panel > header > div,
+.function-mapping-panel > p,
+.mapping-accepted-state > p {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+}
+
+.function-mapping-panel > header strong { font-size: .67rem; }
+.function-mapping-panel > header small { color: var(--text-tertiary); font-family: ui-monospace, monospace; font-size: .5rem; }
+.function-mapping-panel > p { color: var(--text-secondary); font-size: .59rem; line-height: 1.45; }
+
+.mapping-suggestion-list { display: grid; gap: 5px; }
+.mapping-suggestion-list > button {
+  min-height: 45px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--surface-strong);
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.mapping-suggestion-list > button.is-selected {
+  border-color: #161713;
+  background: color-mix(in srgb, var(--brand-cyan) 38%, var(--surface-strong));
+}
+
+.mapping-suggestion-list i {
+  display: grid;
+  place-items: center;
+  width: 25px;
+  height: 25px;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  font-style: normal;
+}
+
+.mapping-suggestion-list span { display: grid; gap: 2px; min-width: 0; }
+.mapping-suggestion-list strong { font-size: .65rem; }
+.mapping-suggestion-list small { overflow: hidden; color: var(--text-tertiary); font-size: .54rem; text-overflow: ellipsis; white-space: nowrap; }
+
+.mapping-decision-actions,
+.mapping-empty-state,
+.mapping-accepted-state {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.mapping-decision-actions { justify-content: flex-end; }
+.mapping-empty-state { justify-content: space-between; color: var(--text-secondary); font-size: .59rem; }
+.mapping-accepted-state > p { color: #526525; font-size: .62rem; font-weight: 800; }
+.mapping-accepted-state > div { display: flex; flex: 1; flex-wrap: wrap; gap: 4px; }
+.mapping-accepted-state > div span { padding: 3px 7px; border: 1px solid #73863e; border-radius: 999px; font-size: .58rem; }
+
+.mapping-decision-actions button,
+.mapping-empty-state button,
+.mapping-accepted-state button {
+  min-height: 29px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 0 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 5px;
+  background: var(--surface-strong);
+  color: var(--text-primary);
+  font-size: .56rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.mapping-decision-actions button.is-primary { border-color: #161713; background: var(--brand-cyan); }
+.mapping-decision-actions button:disabled { opacity: .42; cursor: not-allowed; }
+.function-mapping-error { margin: 0; color: #b84e35; font-size: .66rem; }
+
 .saved-function-empty {
   min-height: 80px;
   display: flex;
@@ -298,7 +491,8 @@
   .function-stage-heading > strong { font-size: 2.4rem; }
   .function-observation-list,
   .saved-function-grid,
-  .function-io-grid { grid-template-columns: 1fr; }
+  .function-io-grid,
+  .function-owner-field > div { grid-template-columns: 1fr; }
   .function-stage-footer { grid-template-columns: 1fr; }
   .function-stage-footer > div { order: -1; }
   .function-stage-footer button { width: 100%; }
