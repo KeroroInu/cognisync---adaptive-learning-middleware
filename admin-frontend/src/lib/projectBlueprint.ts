@@ -1,6 +1,7 @@
 import type {
   BlueprintNode,
   BlueprintPhenomenon,
+  BlueprintTestCase,
   ProjectBlueprintConfig,
   ResearchTask,
 } from '../types';
@@ -56,6 +57,18 @@ export const createBlueprintNode = (index: number): BlueprintNode => ({
   tests: [],
   visualizationBehaviorKey: null,
 });
+
+export const createBlueprintTestCase = (index: number): BlueprintTestCase => ({
+  id: `test-${index}`,
+  labelZh: `待定义验证证据 ${index}`,
+  category: 'example',
+  inputData: {},
+  expectedData: null,
+  hidden: true,
+});
+
+export const parseBlueprintJson = (value: string): unknown =>
+  JSON.parse(value.trim() || 'null') as unknown;
 
 export const splitBlueprintList = (value: string): string[] => value
   .split(/[，,\n]/)

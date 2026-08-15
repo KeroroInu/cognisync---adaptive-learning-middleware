@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 
 import {
   analyzeBlueprintRelations,
+  createBlueprintTestCase,
   createEmptyBlueprint,
   splitBlueprintList,
+  parseBlueprintJson,
   toBlueprintKey,
   wouldCreateBlueprintCycle,
 } from './projectBlueprint';
@@ -65,5 +67,12 @@ describe('project blueprint helpers', () => {
 
     expect(wouldCreateBlueprintCycle(nodes, 'init', ['move'])).toBe(true);
     expect(wouldCreateBlueprintCycle(nodes, 'move', [])).toBe(false);
+  });
+
+  it('creates hidden test evidence and validates its JSON fields', () => {
+    expect(createBlueprintTestCase(2)).toMatchObject({ id: 'test-2', hidden: true, category: 'example' });
+    expect(parseBlueprintJson('{"direction":"right"}')).toEqual({ direction: 'right' });
+    expect(parseBlueprintJson('')).toBeNull();
+    expect(() => parseBlueprintJson('{bad json}')).toThrow();
   });
 });

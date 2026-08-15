@@ -6,6 +6,7 @@ import {
   Check,
   CircleDot,
   FileStack,
+  FlaskConical,
   GitBranch,
   Loader,
   Plus,
@@ -33,9 +34,10 @@ import type {
   ResearchTask,
 } from '../types';
 import { ResearchBlueprintRelations } from './ResearchBlueprintRelations';
+import { ResearchBlueprintTests } from './ResearchBlueprintTests';
 import './ResearchBlueprintEditor.css';
 
-type BlueprintTab = 'phenomena' | 'modules' | 'relations';
+type BlueprintTab = 'phenomena' | 'modules' | 'relations' | 'tests';
 
 interface ResearchBlueprintEditorProps {
   task: ResearchTask;
@@ -368,7 +370,9 @@ export const ResearchBlueprintEditor = ({ task, onClose, onPublished }: Research
                   <button className={tab === 'relations' ? 'is-active' : ''} onClick={() => setTab('relations')}>
                     <GitBranch /> 03 关系与实现路径 <strong>{nodeDependencyCount}</strong>
                   </button>
-                  <span>{nodeDependencyCount} 条前置关系</span>
+                  <button className={tab === 'tests' ? 'is-active' : ''} onClick={() => setTab('tests')}>
+                    <FlaskConical /> 04 测试与建构支架 <strong>{config.nodes.reduce((sum, node) => sum + node.tests.length, 0)}</strong>
+                  </button>
                 </nav>
 
                 {tab === 'phenomena' ? (
@@ -456,7 +460,6 @@ export const ResearchBlueprintEditor = ({ task, onClose, onPublished }: Research
                             <label><span>模块标识</span><input key={selectedNode.id} defaultValue={selectedNode.id} onBlur={event => updateNodeId(selectedNode.id, event.target.value)} /></label>
                             <label><span>同义表达（逗号分隔）</span><input key={`${selectedNode.id}-synonyms`} defaultValue={selectedNode.synonyms.join('，')} onBlur={event => updateNode(selectedNode.id, node => { node.synonyms = splitBlueprintList(event.target.value); })} /></label>
                             <label className="span-2"><span>出现在哪种运行情境</span><textarea value={selectedNode.scenarioZh} onChange={event => updateNode(selectedNode.id, node => { node.scenarioZh = event.target.value; })} placeholder="描述学生在什么现象或问题中需要意识到这个功能，不写实现答案" /></label>
-                            <label className="span-2"><span>函数模板（可留空）</span><textarea className="is-code" value={selectedNode.contract.functionTemplate} onChange={event => updateNode(selectedNode.id, node => { node.contract.functionTemplate = event.target.value; })} placeholder="def update_direction(current, target):" /></label>
                             <label><span>输入（逗号或换行分隔）</span><textarea key={`${selectedNode.id}-inputs`} defaultValue={selectedNode.contract.inputs.join('，')} onBlur={event => updateNode(selectedNode.id, node => { node.contract.inputs = splitBlueprintList(event.target.value); })} /></label>
                             <label><span>输出（逗号或换行分隔）</span><textarea key={`${selectedNode.id}-outputs`} defaultValue={selectedNode.contract.outputs.join('，')} onBlur={event => updateNode(selectedNode.id, node => { node.contract.outputs = splitBlueprintList(event.target.value); })} /></label>
                             <label><span>前置条件</span><textarea key={`${selectedNode.id}-pre`} defaultValue={selectedNode.contract.preconditions.join('\n')} onBlur={event => updateNode(selectedNode.id, node => { node.contract.preconditions = splitBlueprintList(event.target.value); })} /></label>
@@ -508,8 +511,15 @@ export const ResearchBlueprintEditor = ({ task, onClose, onPublished }: Research
                       )}
                     </div>
                   </section>
-                ) : (
+                ) : tab === 'relations' ? (
                   <ResearchBlueprintRelations
+                    config={config}
+                    selectedNodeId={selectedNodeId}
+                    onSelectNode={setSelectedNodeId}
+                    onMutate={mutateConfig}
+                  />
+                ) : (
+                  <ResearchBlueprintTests
                     config={config}
                     selectedNodeId={selectedNodeId}
                     onSelectNode={setSelectedNodeId}
