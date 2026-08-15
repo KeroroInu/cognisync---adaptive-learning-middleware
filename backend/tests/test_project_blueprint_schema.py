@@ -109,3 +109,13 @@ def test_publish_rejects_cyclic_prerequisites():
 
     with pytest.raises(ValueError, match="contain a cycle"):
         validate_blueprint_for_publish(config)
+
+
+def test_blueprint_rejects_duplicate_scaffold_levels_in_one_stage():
+    payload = blueprint_payload()
+    payload["scaffoldPolicy"]["stageLevels"]["decompose"].append(
+        dict(payload["scaffoldPolicy"]["stageLevels"]["decompose"][0])
+    )
+
+    with pytest.raises(ValidationError, match="Duplicate scaffold level"):
+        ProjectBlueprintConfig.model_validate(payload)

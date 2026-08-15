@@ -12,6 +12,7 @@ import {
   Plus,
   Save,
   Send,
+  ShieldCheck,
   Trash2,
   X,
 } from 'lucide-react';
@@ -29,20 +30,22 @@ import {
 import type {
   BlueprintKnowledgeResponsibility,
   BlueprintNode,
+  BlueprintStage,
   ProjectBlueprintConfig,
   ProjectBlueprintVersion,
   ResearchTask,
 } from '../types';
 import { ResearchBlueprintRelations } from './ResearchBlueprintRelations';
+import { ResearchBlueprintScaffolds } from './ResearchBlueprintScaffolds';
 import { ResearchBlueprintTests } from './ResearchBlueprintTests';
 import './ResearchBlueprintEditor.css';
 
-type BlueprintTab = 'phenomena' | 'modules' | 'relations' | 'tests';
+type BlueprintTab = 'phenomena' | 'modules' | 'relations' | 'tests' | 'scaffolds';
 
 interface ResearchBlueprintEditorProps {
   task: ResearchTask;
   onClose: () => void;
-  onPublished: () => void | Promise<void>;
+  onPublished: (blueprintVersionId: string) => void | Promise<void>;
 }
 
 const RESPONSIBILITY_LABELS: Record<BlueprintKnowledgeResponsibility, string> = {
@@ -64,6 +67,7 @@ export const ResearchBlueprintEditor = ({ task, onClose, onPublished }: Research
   const [config, setConfig] = useState<ProjectBlueprintConfig | null>(null);
   const [tab, setTab] = useState<BlueprintTab>('phenomena');
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [selectedScaffoldStage, setSelectedScaffoldStage] = useState<BlueprintStage>('observe');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
@@ -187,7 +191,7 @@ export const ResearchBlueprintEditor = ({ task, onClose, onPublished }: Research
       upsertVersion(published);
       setCurrentPublishedVersionId(published.id);
       setNotice(`蓝图 v${published.version} 已发布，学生新提交将绑定此版本`);
-      await onPublished();
+      await onPublished(published.id);
     } catch (publishError) {
       setError(publishError instanceof Error ? publishError.message : '发布失败');
     } finally {
@@ -373,6 +377,9 @@ export const ResearchBlueprintEditor = ({ task, onClose, onPublished }: Research
                   <button className={tab === 'tests' ? 'is-active' : ''} onClick={() => setTab('tests')}>
                     <FlaskConical /> 04 测试与建构支架 <strong>{config.nodes.reduce((sum, node) => sum + node.tests.length, 0)}</strong>
                   </button>
+                  <button className={tab === 'scaffolds' ? 'is-active' : ''} onClick={() => setTab('scaffolds')}>
+                    <ShieldCheck /> 05 L0–L3 辅导边界 <strong>{Object.keys(config.scaffoldPolicy.stageLevels).length}</strong>
+                  </button>
                 </nav>
 
                 {tab === 'phenomena' ? (
@@ -518,11 +525,18 @@ export const ResearchBlueprintEditor = ({ task, onClose, onPublished }: Research
                     onSelectNode={setSelectedNodeId}
                     onMutate={mutateConfig}
                   />
-                ) : (
+                ) : tab === 'tests' ? (
                   <ResearchBlueprintTests
                     config={config}
                     selectedNodeId={selectedNodeId}
                     onSelectNode={setSelectedNodeId}
+                    onMutate={mutateConfig}
+                  />
+                ) : (
+                  <ResearchBlueprintScaffolds
+                    config={config}
+                    selectedStage={selectedScaffoldStage}
+                    onSelectStage={setSelectedScaffoldStage}
                     onMutate={mutateConfig}
                   />
                 )}

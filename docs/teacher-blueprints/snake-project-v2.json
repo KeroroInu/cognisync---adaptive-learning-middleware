@@ -307,7 +307,7 @@
   ],
   "scaffoldPolicy": {
     "requireAttemptBeforeUpgrade": true,
-    "coreImplementationMaxLevel": 2,
+    "coreImplementationMaxLevel": 3,
     "stageLevels": {
       "observe": [
         {"level": 0, "goalZh": "澄清需要观察的对象", "allowedHelpZh": "追问学生改变了什么操作、画面哪个量发生变化，不提供机制解释。", "maxCodeLines": 0},

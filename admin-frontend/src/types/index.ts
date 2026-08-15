@@ -285,10 +285,12 @@ export interface BlueprintScaffoldLevel {
   maxCodeLines?: number | null;
 }
 
+export type BlueprintStage = 'observe' | 'decompose' | 'model' | 'plan' | 'build' | 'transfer';
+
 export interface BlueprintScaffoldPolicy {
   requireAttemptBeforeUpgrade: boolean;
   coreImplementationMaxLevel: number;
-  stageLevels: Partial<Record<'observe' | 'decompose' | 'model' | 'plan' | 'build' | 'transfer', BlueprintScaffoldLevel[]>>;
+  stageLevels: Partial<Record<BlueprintStage, BlueprintScaffoldLevel[]>>;
 }
 
 export interface ProjectBlueprintConfig {

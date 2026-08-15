@@ -92,16 +92,16 @@ export const ResearchManagement = () => {
   const [exportingRow, setExportingRow] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const loadTasks = async () => {
+  const loadTasks = async (showLoading = true) => {
     try {
-      setLoading(true);
+      if (showLoading) setLoading(true);
       setError('');
       const result = await adminApi.getResearchTasks();
       setTasks(result.tasks);
     } catch (e) {
       setError(e instanceof Error ? e.message : '加载失败');
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   };
 
@@ -670,7 +670,12 @@ export const ResearchManagement = () => {
         <ResearchBlueprintEditor
           task={blueprintTask}
           onClose={() => setBlueprintTask(null)}
-          onPublished={loadTasks}
+          onPublished={async blueprintVersionId => {
+            setBlueprintTask(current => current
+              ? { ...current, current_blueprint_version_id: blueprintVersionId }
+              : current);
+            await loadTasks(false);
+          }}
         />
       )}
     </div>

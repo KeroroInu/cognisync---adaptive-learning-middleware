@@ -453,6 +453,89 @@
 .blueprint-test-editor__empty strong { color: var(--text-primary); }
 .blueprint-test-editor__empty span { max-width: 330px; font-size: 0.72rem; line-height: 1.5; }
 
+.blueprint-scaffold-layout {
+  min-height: 650px;
+  display: grid;
+  grid-template-columns: 270px minmax(0, 1fr);
+  gap: 12px;
+  margin-top: 16px;
+}
+.blueprint-scaffold-rail,
+.blueprint-scaffold-workbench {
+  min-width: 0;
+  border: 1.5px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--surface-strong);
+}
+.blueprint-scaffold-rail { overflow: hidden; }
+.blueprint-scaffold-rail__summary { padding: 16px; border-bottom: 1.5px solid var(--line-strong); background: var(--surface-muted); }
+.blueprint-scaffold-rail__summary > span { display: flex; align-items: center; gap: 7px; color: var(--brand-blue); font: 800 0.68rem/1 'Google Sans Code', monospace; }
+.blueprint-scaffold-rail__summary svg { width: 16px; }
+.blueprint-scaffold-rail__summary > strong { display: block; margin-top: 13px; font: 800 2.35rem/1 'Google Sans Code', monospace; }
+.blueprint-scaffold-rail__summary > strong small { color: var(--text-tertiary); font-size: 0.82rem; }
+.blueprint-scaffold-rail__summary p { margin: 5px 0 0; color: var(--text-tertiary); font-size: 0.7rem; }
+.blueprint-scaffold-stage-list { display: grid; gap: 6px; padding: 9px; }
+.blueprint-scaffold-stage-list > button {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 27px minmax(0, 1fr) 18px;
+  align-items: center;
+  gap: 7px;
+  padding: 10px;
+  text-align: left;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-muted);
+}
+.blueprint-scaffold-stage-list > button > span { color: var(--brand-blue); font: 800 0.68rem/1 'Google Sans Code', monospace; }
+.blueprint-scaffold-stage-list > button > div { min-width: 0; display: grid; gap: 3px; }
+.blueprint-scaffold-stage-list strong { font-size: 0.75rem; }
+.blueprint-scaffold-stage-list small { overflow: hidden; color: var(--text-tertiary); font-size: 0.62rem; text-overflow: ellipsis; white-space: nowrap; }
+.blueprint-scaffold-stage-list svg { width: 15px; color: #237148; }
+.blueprint-scaffold-stage-list > button.is-active { color: #161713; border-color: #161713; background: color-mix(in srgb, var(--brand-purple) 62%, white); box-shadow: 2px 3px 0 #161713; }
+.blueprint-scaffold-global { display: grid; gap: 10px; padding: 13px; border-top: 1.5px solid var(--line-strong); background: color-mix(in srgb, var(--surface-muted) 68%, var(--surface-strong)); }
+.blueprint-scaffold-global > label:not(.blueprint-scaffold-switch) { display: grid; gap: 5px; }
+.blueprint-scaffold-global label > span { color: var(--text-secondary); font-size: 0.68rem; font-weight: 800; }
+.blueprint-scaffold-global label > small { color: var(--text-tertiary); font-size: 0.61rem; line-height: 1.45; }
+.blueprint-scaffold-switch { display: grid; grid-template-columns: 18px minmax(0, 1fr); align-items: start; gap: 7px; }
+.blueprint-scaffold-switch input { margin-top: 2px; accent-color: var(--brand-green); }
+.blueprint-scaffold-switch span { display: grid; gap: 2px; }
+.blueprint-scaffold-switch strong { font-size: 0.68rem; }
+.blueprint-scaffold-switch small { color: var(--text-tertiary); font-size: 0.6rem; line-height: 1.4; }
+
+.blueprint-scaffold-workbench { padding: 16px; }
+.blueprint-scaffold-workbench__header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.blueprint-scaffold-workbench__header h4 { margin: 5px 0 4px; font-size: 1.18rem; }
+.blueprint-scaffold-workbench__header > div > span { color: var(--text-tertiary); font-size: 0.72rem; }
+.blueprint-scaffold-workbench__header > button { display: inline-flex; align-items: center; gap: 6px; padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface-muted); font-size: 0.68rem; font-weight: 800; white-space: nowrap; }
+.blueprint-scaffold-workbench__header > button svg { width: 15px; }
+.blueprint-scaffold-default-note { display: flex; align-items: center; gap: 7px; margin-top: 12px; padding: 9px 11px; color: #795522; border: 1px solid #cfa45d; border-radius: 6px; background: #f8eed7; font-size: 0.68rem; line-height: 1.45; }
+.blueprint-scaffold-default-note svg { width: 16px; flex: 0 0 auto; }
+.blueprint-scaffold-levels { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
+.blueprint-scaffold-level { position: relative; min-width: 0; display: grid; grid-template-columns: 1fr 128px; gap: 9px; padding: 13px; border: 1.5px solid var(--line-strong); border-radius: 7px; background: var(--surface-muted); overflow: hidden; }
+.blueprint-scaffold-level::before { content: ''; position: absolute; inset: 0 auto 0 0; width: 4px; background: var(--brand-blue); }
+.blueprint-scaffold-level.is-level-1::before { background: #688137; }
+.blueprint-scaffold-level.is-level-2::before { background: #d2952c; }
+.blueprint-scaffold-level.is-level-3::before { background: var(--brand-rose); }
+.blueprint-scaffold-level__number { grid-column: 1 / -1; display: grid; grid-template-columns: 48px minmax(0, 1fr); align-items: center; gap: 9px; }
+.blueprint-scaffold-level__number > span { display: grid; place-items: center; height: 42px; color: #161713; border: 1.5px solid #161713; border-radius: 6px; background: var(--brand-green); box-shadow: 2px 3px 0 #161713; font: 900 0.86rem/1 'Google Sans Code', monospace; }
+.blueprint-scaffold-level__number > div { min-width: 0; display: grid; gap: 3px; }
+.blueprint-scaffold-level__number strong { font-size: 0.82rem; }
+.blueprint-scaffold-level__number small { color: var(--text-tertiary); font-size: 0.62rem; line-height: 1.45; }
+.blueprint-scaffold-level > label { min-width: 0; display: grid; align-content: start; gap: 4px; }
+.blueprint-scaffold-level > label:not(.blueprint-scaffold-code-limit) { grid-column: 1 / -1; }
+.blueprint-scaffold-level label > span { color: var(--text-tertiary); font-size: 0.64rem; font-weight: 800; }
+.blueprint-scaffold-level textarea { min-height: 74px; resize: vertical; }
+.blueprint-scaffold-code-limit { grid-column: 1 / -1; grid-template-columns: minmax(180px, 1fr) 72px; align-items: center; }
+.blueprint-scaffold-code-limit > span { align-self: end; }
+.blueprint-scaffold-code-limit input { grid-column: 2; grid-row: 1 / span 2; }
+.blueprint-scaffold-code-limit small { color: var(--text-tertiary); font-size: 0.61rem; }
+.blueprint-scaffold-boundary { display: grid; grid-template-columns: 28px minmax(0, 1fr); align-items: center; gap: 9px; margin-top: 12px; padding: 11px; border: 1px solid var(--line); border-radius: 7px; background: color-mix(in srgb, var(--brand-purple) 18%, var(--surface-muted)); }
+.blueprint-scaffold-boundary > svg { width: 24px; color: var(--brand-blue); }
+.blueprint-scaffold-boundary > div { display: grid; gap: 2px; }
+.blueprint-scaffold-boundary strong { font-size: 0.75rem; }
+.blueprint-scaffold-boundary span { color: var(--text-tertiary); font-size: 0.65rem; line-height: 1.45; }
+
 @media (max-width: 980px) {
   .blueprint-overlay { padding: 6px; }
   .blueprint-studio__body { grid-template-columns: 1fr; }
@@ -462,6 +545,7 @@
   .blueprint-relations { grid-template-columns: minmax(0, 1fr) 290px; }
   .blueprint-tests-layout { grid-template-columns: 205px minmax(0, 1fr); }
   .blueprint-test-workbench { grid-template-columns: 240px minmax(0, 1fr); }
+  .blueprint-scaffold-layout { grid-template-columns: 240px minmax(0, 1fr); }
 }
 
 @media (max-width: 720px) {
@@ -473,7 +557,8 @@
   .blueprint-identity-grid,
   .blueprint-module-layout,
   .blueprint-relations,
-  .blueprint-tests-layout { grid-template-columns: 1fr; }
+  .blueprint-tests-layout,
+  .blueprint-scaffold-layout { grid-template-columns: 1fr; }
   .blueprint-tests-layout { grid-template-areas: "rail" "contract" "workbench"; }
   .blueprint-tabs > span { display: none; }
   .blueprint-tabs button { flex: 1; padding: 0 8px; font-size: 0.76rem; }
@@ -489,4 +574,6 @@
   .blueprint-build-contract__trace,
   .blueprint-test-workbench { grid-template-columns: 1fr; }
   .blueprint-test-list-panel { border-right: 0; border-bottom: 1.5px solid var(--line-strong); }
+  .blueprint-scaffold-levels { grid-template-columns: 1fr; }
+  .blueprint-scaffold-stage-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

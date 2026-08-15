@@ -21,7 +21,8 @@ from app.services.text_analyzer import TextAnalyzer
 from app.services.llm_config import get_chat_provider
 from app.models.sql.message import ChatMessage, MessageRole
 from app.models.sql.chat_session import ChatSession
-from app.models.sql.research import ResearchTaskSubmission
+from app.models.sql.research import ProjectBlueprintVersion, ResearchTask, ResearchTaskSubmission
+from app.schemas.project_blueprint import BlueprintScaffoldPolicy, ProjectBlueprintConfig
 from app.models.sql.user import User
 from app.api.endpoints.auth import get_current_user
 from app.services.scaffold_service import (
@@ -53,25 +54,67 @@ async def get_or_create_active_session(db: AsyncSession, user_id: UUID) -> ChatS
     return session
 
 
-async def _load_scaffold_workspace_summary(
+async def _load_scaffold_workspace_context(
     db: AsyncSession,
     user_id: UUID,
     task_id: str,
-) -> str:
-    """只读取当前认证学生在指定任务中的工作区，防止跨学生或跨任务取数。"""
+) -> tuple[str, BlueprintScaffoldPolicy | None, str | None]:
+    """读取当前学生的任务快照和冻结蓝图支架策略。
+
+    已开始任务的学生继续使用首次绑定的蓝图版本；尚无提交记录时才
+    回退到任务当前发布版本。不向客户端返回隐藏规则。
+    """
 
     try:
         parsed_task_id = UUID(task_id)
     except ValueError:
-        return ""
+        return "", None, None
 
-    result = await db.execute(
-        select(ResearchTaskSubmission.workspace_data).where(
+    submission_result = await db.execute(
+        select(
+            ResearchTaskSubmission.workspace_data,
+            ResearchTaskSubmission.blueprint_version_id,
+        ).where(
             ResearchTaskSubmission.task_id == parsed_task_id,
             ResearchTaskSubmission.user_id == user_id,
         )
+        .order_by(ResearchTaskSubmission.updated_at.desc())
+        .limit(1)
     )
-    return summarize_project_workspace(result.scalar_one_or_none())
+    submission = submission_result.first()
+    workspace = submission.workspace_data if submission else None
+    blueprint_id = submission.blueprint_version_id if submission else None
+
+    if blueprint_id is None:
+        blueprint_id = await db.scalar(
+            select(ResearchTask.current_blueprint_version_id).where(
+                ResearchTask.id == parsed_task_id,
+            )
+        )
+
+    if blueprint_id is None:
+        return summarize_project_workspace(workspace), None, None
+
+    raw_config = await db.scalar(
+        select(ProjectBlueprintVersion.config).where(
+            ProjectBlueprintVersion.id == blueprint_id,
+            ProjectBlueprintVersion.task_id == parsed_task_id,
+        )
+    )
+    if not raw_config:
+        return summarize_project_workspace(workspace), None, str(blueprint_id)
+
+    try:
+        policy = ProjectBlueprintConfig.model_validate(raw_config).scaffoldPolicy
+    except Exception as validation_error:
+        logger.warning(
+            "Failed to validate scaffold policy for blueprint %s: %s",
+            blueprint_id,
+            validation_error,
+        )
+        policy = None
+
+    return summarize_project_workspace(workspace), policy, str(blueprint_id)
 
 
 def _calculate_mastery_delta(analysis) -> float:
@@ -548,8 +591,14 @@ async def chat(
         current_profile = await profile_service.get_profile(user_id)
         scaffold_context = request.scaffoldContext
         scaffold_metadata = None
+        scaffold_policy = None
+        scaffold_blueprint_version_id = None
         if scaffold_context:
-            database_summary = await _load_scaffold_workspace_summary(
+            (
+                database_summary,
+                scaffold_policy,
+                scaffold_blueprint_version_id,
+            ) = await _load_scaffold_workspace_context(
                 db,
                 user_id,
                 scaffold_context.taskId,
@@ -566,6 +615,8 @@ async def chat(
                 scaffold_context,
                 current_profile,
                 request.currentCode,
+                scaffold_policy,
+                scaffold_blueprint_version_id,
             )
 
         # ========== 2. 保存用户消息 ==========
@@ -700,6 +751,7 @@ async def chat(
                 scaffold_context,
                 current_profile,
                 request.language or "zh",
+                scaffold_policy,
             )
 
         # 注入跨会话上下文（让 AI 能自然引用上次讨论内容）

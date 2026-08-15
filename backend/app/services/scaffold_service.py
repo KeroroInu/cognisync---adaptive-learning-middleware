@@ -6,6 +6,7 @@ import hashlib
 from typing import Any
 
 from app.schemas.chat import ProjectScaffoldContext
+from app.schemas.project_blueprint import BlueprintScaffoldPolicy
 from app.schemas.profile import UserProfile
 
 
@@ -23,6 +24,49 @@ LEVEL_RULES = {
     2: "L2 策略提示：提供2至4个局部步骤、检查顺序或伪代码框架；关键条件、表达式和变量仍由学生完成。",
     3: "L3 最小补全：只补足阻塞推进的一个局部判断、表达式、连线建议或短代码片段；禁止给出完整模块或整套项目答案，并要求学生重新运行、解释或修改。",
 }
+
+
+def resolve_scaffold_rule(
+    context: ProjectScaffoldContext,
+    policy: BlueprintScaffoldPolicy | None = None,
+) -> dict[str, Any]:
+    """合并通用 L0–L3 边界与学生所绑定蓝图的阶段策略。
+
+    蓝图可以缩小帮助边界，但不能放宽通用规则；建构阶段超过
+    ``coreImplementationMaxLevel`` 的请求会被显式记录为降级，不会伪装成学生未请求。
+    """
+
+    requested_level = context.level
+    applied_level = requested_level
+    configured = None
+    require_attempt = True
+    max_implementation_level = 3
+
+    if policy:
+        require_attempt = policy.requireAttemptBeforeUpgrade
+        max_implementation_level = policy.coreImplementationMaxLevel
+        if context.stage == "build":
+            applied_level = min(requested_level, max_implementation_level)
+        configured = next(
+            (
+                item
+                for item in policy.stageLevels.get(context.stage, [])
+                if item.level == applied_level
+            ),
+            None,
+        )
+
+    return {
+        "requestedLevel": requested_level,
+        "appliedLevel": applied_level,
+        "wasClamped": applied_level != requested_level,
+        "goalZh": configured.goalZh if configured else STAGE_GOALS[context.stage],
+        "allowedHelpZh": configured.allowedHelpZh if configured else LEVEL_RULES[applied_level],
+        "maxCodeLines": configured.maxCodeLines if configured else 0,
+        "requireAttemptBeforeUpgrade": require_attempt,
+        "coreImplementationMaxLevel": max_implementation_level,
+        "source": "teacher_blueprint" if configured else "platform_default",
+    }
 
 
 def _safe_list(value: Any) -> list[dict[str, Any]]:
@@ -154,19 +198,32 @@ def build_scaffold_prompt(
     context: ProjectScaffoldContext,
     profile: UserProfile,
     language: str = "zh",
+    policy: BlueprintScaffoldPolicy | None = None,
 ) -> str:
     adaptation = build_profile_adaptation(profile)
-    stage_goal = STAGE_GOALS[context.stage]
-    level_rule = LEVEL_RULES[context.level]
+    resolved = resolve_scaffold_rule(context, policy)
+    applied_level = resolved["appliedLevel"]
+    stage_goal = resolved["goalZh"]
+    level_rule = LEVEL_RULES[applied_level]
+    teacher_boundary = resolved["allowedHelpZh"]
+    code_limit = resolved["maxCodeLines"] or 0
+    upgrade_rule = (
+        "Before increasing specificity, require evidence of the student's own modification, explanation, or verification attempt."
+        if resolved["requireAttemptBeforeUpgrade"]
+        else "An earlier attempt is recommended but is not a mandatory gate for this task."
+    )
     artifact = context.artifactSummary or "学生尚未形成可读取的阶段产物，请先帮助其说清当前尝试。"
 
     if language == "en":
         return f"""
 
 COGNISYNC_SCAFFOLD_MODE
-You are supporting a project-deconstruction programming task. The student is at stage `{context.stage}` and explicitly requested level L{context.level}. Never silently raise or lower this level.
+You are supporting a project-deconstruction programming task. The student is at stage `{context.stage}` and explicitly requested level L{context.level}. The applied teacher-policy boundary is L{applied_level}. Never change levels on your own; only an explicit teacher-policy limit may restrict the request, and that distinction must not be hidden.
 Stage goal: {stage_goal}
-Level boundary: {level_rule}
+Universal level boundary: {level_rule}
+Teacher blueprint boundary: {teacher_boundary}
+Maximum code lines allowed in this turn: {code_limit}. Zero means no generated code.
+Upgrade rule: {upgrade_rule}
 Current artifact summary: {artifact}
 Current module: {context.currentModule or "none"}
 Latest test feedback: {context.testFeedback or "none"}
@@ -178,9 +235,12 @@ Reply in natural conversation without headings. Give one focused suggestion and 
     return f"""
 
 COGNISYNC_SCAFFOLD_MODE
-你正在支持“项目解构式编程学习”。学生当前位于【{context.stage}】阶段，本轮由学生明确请求 L{context.level}。不得擅自升降等级。
+你正在支持“项目解构式编程学习”。学生当前位于【{context.stage}】阶段，本轮明确请求 L{context.level}，教师蓝图实际允许到 L{applied_level}。除教师蓝图的明确限制外，不得擅自升降等级；如请求被限制，不得隐瞒这一差异。
 阶段目标：{stage_goal}。
-等级边界：{level_rule}
+通用等级边界：{level_rule}
+教师蓝图边界：{teacher_boundary}
+本轮最多允许补全代码 {code_limit} 行；0 表示不允许生成代码。
+支架升级规则：{'升级前必须先核对学生自己的修改、解释或验证证据。' if resolved['requireAttemptBeforeUpgrade'] else '本任务建议先尝试，但不将尝试作为强制门槛。'}
 当前阶段产物摘要：{artifact}
 当前实现模块：{context.currentModule or '无'}
 最近测试反馈：{context.testFeedback or '无'}
@@ -194,13 +254,25 @@ def build_scaffold_metadata(
     context: ProjectScaffoldContext,
     profile: UserProfile,
     current_code: str | None,
+    policy: BlueprintScaffoldPolicy | None = None,
+    blueprint_version_id: str | None = None,
 ) -> dict[str, Any]:
     adaptation = build_profile_adaptation(profile)
+    resolved = resolve_scaffold_rule(context, policy)
     code = current_code or ""
     return {
         **context.model_dump(),
-        "levelLabel": f"L{context.level}",
-        "levelRule": LEVEL_RULES[context.level],
+        "requestedLevel": resolved["requestedLevel"],
+        "level": resolved["appliedLevel"],
+        "levelLabel": f"L{resolved['appliedLevel']}",
+        "levelRule": LEVEL_RULES[resolved["appliedLevel"]],
+        "policyGoal": resolved["goalZh"],
+        "policyAllowedHelp": resolved["allowedHelpZh"],
+        "policyMaxCodeLines": resolved["maxCodeLines"],
+        "policySource": resolved["source"],
+        "policyWasClamped": resolved["wasClamped"],
+        "requireAttemptBeforeUpgrade": resolved["requireAttemptBeforeUpgrade"],
+        "blueprintVersionId": blueprint_version_id,
         "profileSnapshot": {
             "cognition": profile.cognition,
             "affect": profile.affect,

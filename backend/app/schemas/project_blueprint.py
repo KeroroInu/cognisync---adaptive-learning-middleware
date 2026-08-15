@@ -73,6 +73,14 @@ class BlueprintScaffoldPolicy(BaseModel):
     coreImplementationMaxLevel: int = Field(default=2, ge=0, le=3)
     stageLevels: dict[BlueprintStage, list[BlueprintScaffoldLevel]] = Field(default_factory=dict)
 
+    @model_validator(mode="after")
+    def validate_unique_stage_levels(self) -> "BlueprintScaffoldPolicy":
+        for stage, levels in self.stageLevels.items():
+            values = [item.level for item in levels]
+            if len(values) != len(set(values)):
+                raise ValueError(f"Duplicate scaffold level in stage '{stage}'")
+        return self
+
 
 class ProjectBlueprintConfig(BaseModel):
     """可保存为草稿的完整教师蓝图。发布时执行更严格的关联校验。"""

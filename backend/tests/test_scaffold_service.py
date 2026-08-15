@@ -1,10 +1,12 @@
 from app.schemas.chat import ProjectScaffoldContext
+from app.schemas.project_blueprint import BlueprintScaffoldPolicy
 from app.schemas.profile import UserProfile
 from app.services.scaffold_service import (
     LEVEL_RULES,
     build_profile_adaptation,
     build_scaffold_metadata,
     build_scaffold_prompt,
+    resolve_scaffold_rule,
     summarize_project_workspace,
 )
 
@@ -47,6 +49,45 @@ def test_metadata_records_profile_and_code_fingerprint_without_code_copy():
 def test_all_four_levels_have_distinct_boundaries():
     assert list(LEVEL_RULES) == [0, 1, 2, 3]
     assert len(set(LEVEL_RULES.values())) == 4
+
+
+def test_teacher_blueprint_rule_is_applied_and_exported_with_version():
+    policy = BlueprintScaffoldPolicy.model_validate({
+        "requireAttemptBeforeUpgrade": True,
+        "coreImplementationMaxLevel": 3,
+        "stageLevels": {
+            "build": [{
+                "level": 3,
+                "goalZh": "补足当前阻塞点",
+                "allowedHelpZh": "最多补全当前函数的5行局部代码",
+                "maxCodeLines": 5,
+            }],
+        },
+    })
+    profile = UserProfile(cognition=45, affect=60, behavior=80)
+
+    prompt = build_scaffold_prompt(scaffold_context(level=3), profile, policy=policy)
+    metadata = build_scaffold_metadata(
+        scaffold_context(level=3),
+        profile,
+        "def move():\n    pass",
+        policy,
+        "blueprint-v2",
+    )
+
+    assert "教师蓝图边界：最多补全当前函数的5行局部代码" in prompt
+    assert metadata["policySource"] == "teacher_blueprint"
+    assert metadata["policyMaxCodeLines"] == 5
+    assert metadata["blueprintVersionId"] == "blueprint-v2"
+
+
+def test_build_level_above_teacher_limit_is_explicitly_clamped():
+    policy = BlueprintScaffoldPolicy(coreImplementationMaxLevel=2)
+    resolved = resolve_scaffold_rule(scaffold_context(level=3), policy)
+
+    assert resolved["requestedLevel"] == 3
+    assert resolved["appliedLevel"] == 2
+    assert resolved["wasClamped"] is True
 
 
 def test_workspace_summary_contains_every_student_stage_without_raw_code():

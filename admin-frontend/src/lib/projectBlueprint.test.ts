@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 
 import {
   analyzeBlueprintRelations,
+  createDefaultBlueprintScaffoldPolicy,
   createBlueprintTestCase,
   createEmptyBlueprint,
+  getBlueprintScaffoldLevels,
   splitBlueprintList,
   parseBlueprintJson,
   toBlueprintKey,
@@ -74,5 +76,13 @@ describe('project blueprint helpers', () => {
     expect(parseBlueprintJson('{"direction":"right"}')).toEqual({ direction: 'right' });
     expect(parseBlueprintJson('')).toBeNull();
     expect(() => parseBlueprintJson('{bad json}')).toThrow();
+  });
+
+  it('creates complete L0-L3 defaults without allowing a full code answer', () => {
+    const policy = createDefaultBlueprintScaffoldPolicy();
+    expect(Object.keys(policy.stageLevels)).toHaveLength(6);
+    expect(getBlueprintScaffoldLevels(policy, 'build').map(item => item.level)).toEqual([0, 1, 2, 3]);
+    expect(getBlueprintScaffoldLevels(policy, 'build')[3]).toMatchObject({ maxCodeLines: 5 });
+    expect(policy.coreImplementationMaxLevel).toBe(3);
   });
 });
