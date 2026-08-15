@@ -1,0 +1,350 @@
+{
+  "schemaVersion": 1,
+  "projectKey": "snake-project",
+  "demoKey": "snake-runtime-demo",
+  "titleZh": "贪吃蛇项目解构蓝图",
+  "phenomena": [
+    {
+      "id": "reset-state",
+      "labelZh": "重新开始后，蛇回到固定位置，方向恢复为右，得分变为 0",
+      "evidenceType": "runtime_event",
+      "required": true,
+      "descriptionZh": "对应学生端 reset 运行证据，只呈现状态变化，不解释初始化机制。"
+    },
+    {
+      "id": "direction-guard",
+      "labelZh": "方向键能改变前进方向，但不能立即向相反方向掉头",
+      "evidenceType": "runtime_event",
+      "required": true,
+      "descriptionZh": "通过连续输入方向键观察安全转向规则。"
+    },
+    {
+      "id": "snake-movement",
+      "labelZh": "蛇头按固定间隔前进一格，同时蛇尾减少一格",
+      "evidenceType": "visual_change",
+      "required": true,
+      "descriptionZh": "学生可比较相邻两个运行时刻的蛇身坐标或画面。"
+    },
+    {
+      "id": "food-appears",
+      "labelZh": "果实出现在网格内的空闲位置，不与当前蛇身重合",
+      "evidenceType": "visual_change",
+      "required": true,
+      "descriptionZh": "允许多次重置或进食后采集不同位置作为证据。"
+    },
+    {
+      "id": "eat-grow-score",
+      "labelZh": "蛇头碰到果实后，蛇身增加一格，得分增加 10",
+      "evidenceType": "score_change",
+      "required": true,
+      "descriptionZh": "同时观察位置、长度和分数三个状态的联动变化。"
+    },
+    {
+      "id": "collision-stop",
+      "labelZh": "蛇头越过边界或碰到自身后，游戏停止运行",
+      "evidenceType": "error_state",
+      "required": true,
+      "descriptionZh": "边界碰撞和自身碰撞均可作为该现象的有效证据。"
+    },
+    {
+      "id": "continuous-loop",
+      "labelZh": "点击开始后，移动、进食和碰撞判断按时间间隔持续组合执行",
+      "evidenceType": "runtime_event",
+      "required": true,
+      "descriptionZh": "用于引出完整项目并非单个函数，而是多个功能的循环协作。"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "initial-state",
+      "titleZh": "建立并重置游戏状态",
+      "scenarioZh": "开始游戏或重新开始时，为后续功能提供一致的初始状态。",
+      "required": true,
+      "synonyms": ["初始化与重置", "创建初始状态", "游戏重置"],
+      "contract": {
+        "functionTemplate": "def create_initial_state(board_size=12, initial_length=3):",
+        "inputs": ["棋盘大小 board_size", "初始蛇身长度 initial_length"],
+        "outputs": ["蛇身坐标列表 snake", "初始方向 direction", "初始得分 score"],
+        "preconditions": ["board_size 大于初始蛇身长度", "initial_length 至少为 2"],
+        "postconditions": ["蛇身全部位于棋盘内", "初始方向为 right", "初始得分为 0"]
+      },
+      "knowledge": [
+        {"labelZh": "变量与状态", "responsibility": "student_core"},
+        {"labelZh": "列表表示蛇身", "responsibility": "student_core"},
+        {"labelZh": "二维坐标", "responsibility": "ai_supported"}
+      ],
+      "prerequisiteIds": [],
+      "tests": [
+        {
+          "id": "initial-default",
+          "labelZh": "默认初始状态满足长度、方向、得分和边界约束",
+          "category": "rule",
+          "inputData": {"board_size": 12, "initial_length": 3},
+          "expectedData": {"snake_length": 3, "direction": "right", "score": 0, "all_in_bounds": true},
+          "hidden": true
+        }
+      ],
+      "visualizationBehaviorKey": "snake.initial-state"
+    },
+    {
+      "id": "direction-input",
+      "titleZh": "根据按键安全更新方向",
+      "scenarioZh": "玩家按下方向键时更新方向，同时阻止蛇立即反向。",
+      "required": true,
+      "synonyms": ["方向输入", "安全转向", "改变方向"],
+      "contract": {
+        "functionTemplate": "def change_direction(current_direction, next_direction):",
+        "inputs": ["当前方向 current_direction", "目标方向 next_direction"],
+        "outputs": ["可采用的新方向"],
+        "preconditions": ["两个方向均属于 up、down、left、right"],
+        "postconditions": ["相反方向输入被拒绝", "其他合法输入被采用"]
+      },
+      "knowledge": [
+        {"labelZh": "条件判断", "responsibility": "student_core"},
+        {"labelZh": "状态变量", "responsibility": "student_core"},
+        {"labelZh": "方向映射", "responsibility": "ai_supported"}
+      ],
+      "prerequisiteIds": ["initial-state"],
+      "tests": [
+        {
+          "id": "direction-reverse-guard",
+          "labelZh": "向右移动时按左键仍保持向右",
+          "category": "edge",
+          "inputData": {"current_direction": "right", "next_direction": "left"},
+          "expectedData": "right",
+          "hidden": true
+        },
+        {
+          "id": "direction-valid-turn",
+          "labelZh": "向右移动时按上键能够转向上",
+          "category": "example",
+          "inputData": {"current_direction": "right", "next_direction": "up"},
+          "expectedData": "up",
+          "hidden": true
+        }
+      ],
+      "visualizationBehaviorKey": "snake.direction-input"
+    },
+    {
+      "id": "movement",
+      "titleZh": "根据方向移动蛇身一格",
+      "scenarioZh": "每个游戏时刻根据当前方向生成新蛇头，并移除旧蛇尾。",
+      "required": true,
+      "synonyms": ["位置更新", "移动蛇身", "前进一步"],
+      "contract": {
+        "functionTemplate": "def move_snake(snake, direction):",
+        "inputs": ["蛇身坐标列表 snake", "当前方向 direction"],
+        "outputs": ["更新后的蛇身坐标列表"],
+        "preconditions": ["snake 至少包含一个坐标", "direction 为合法方向"],
+        "postconditions": ["新蛇头与旧蛇头相邻一格", "未进食时蛇身长度不变"]
+      },
+      "knowledge": [
+        {"labelZh": "列表添加与切片", "responsibility": "student_core"},
+        {"labelZh": "坐标运算", "responsibility": "student_core"},
+        {"labelZh": "方向到位移的映射", "responsibility": "ai_supported"}
+      ],
+      "prerequisiteIds": ["initial-state", "direction-input"],
+      "tests": [
+        {
+          "id": "move-right-one-cell",
+          "labelZh": "向右移动时蛇头增加一个横坐标且长度不变",
+          "category": "example",
+          "inputData": {"snake": [[6, 5], [5, 5], [4, 5]], "direction": "right"},
+          "expectedData": [[7, 5], [6, 5], [5, 5]],
+          "hidden": true
+        }
+      ],
+      "visualizationBehaviorKey": "snake.movement"
+    },
+    {
+      "id": "food-spawn",
+      "titleZh": "在空闲网格生成食物",
+      "scenarioZh": "开始游戏或食物被吃掉后，在棋盘空闲位置产生新食物。",
+      "required": true,
+      "synonyms": ["食物生成", "果实生成", "随机放置食物"],
+      "contract": {
+        "functionTemplate": "def spawn_food(snake, board_size):",
+        "inputs": ["蛇身坐标列表 snake", "棋盘大小 board_size"],
+        "outputs": ["合法食物坐标 food"],
+        "preconditions": ["棋盘中至少存在一个空闲网格"],
+        "postconditions": ["食物位于棋盘内", "食物坐标不在蛇身列表中"]
+      },
+      "knowledge": [
+        {"labelZh": "循环与成员判断", "responsibility": "student_core"},
+        {"labelZh": "随机数", "responsibility": "ai_supported"},
+        {"labelZh": "坐标合法性", "responsibility": "student_core"}
+      ],
+      "prerequisiteIds": ["initial-state"],
+      "tests": [
+        {
+          "id": "food-valid-position",
+          "labelZh": "重复生成的食物始终位于棋盘内且不与蛇身重合",
+          "category": "rule",
+          "inputData": {"snake": [[6, 5], [5, 5], [4, 5]], "board_size": 12, "repeat": 20},
+          "expectedData": {"all_in_bounds": true, "never_on_snake": true},
+          "hidden": true
+        }
+      ],
+      "visualizationBehaviorKey": "snake.food-spawn"
+    },
+    {
+      "id": "eat-grow-score",
+      "titleZh": "处理进食、增长和计分",
+      "scenarioZh": "蛇头与食物坐标重合时，保留蛇尾形成增长并增加得分。",
+      "required": true,
+      "synonyms": ["进食处理", "蛇身增长", "得分更新"],
+      "contract": {
+        "functionTemplate": "def apply_food_effect(snake, food, score):",
+        "inputs": ["蛇身坐标列表 snake", "食物坐标 food", "当前得分 score"],
+        "outputs": ["更新后的蛇身", "更新后的得分", "是否需要新食物"],
+        "preconditions": ["蛇身已经完成本时刻的位置更新"],
+        "postconditions": ["未进食时长度和得分不变", "进食时长度增加 1 且得分增加 10"]
+      },
+      "knowledge": [
+        {"labelZh": "条件判断", "responsibility": "student_core"},
+        {"labelZh": "列表状态更新", "responsibility": "student_core"},
+        {"labelZh": "多返回值", "responsibility": "ai_supported"}
+      ],
+      "prerequisiteIds": ["movement", "food-spawn"],
+      "tests": [
+        {
+          "id": "eat-grows-and-scores",
+          "labelZh": "蛇头到达食物时长度增加 1 且得分增加 10",
+          "category": "example",
+          "inputData": {"snake": [[7, 5], [6, 5], [5, 5]], "food": [7, 5], "score": 0},
+          "expectedData": {"snake_length": 4, "score": 10, "needs_food": true},
+          "hidden": true
+        },
+        {
+          "id": "no-eat-keeps-state",
+          "labelZh": "蛇头未到达食物时长度和得分保持不变",
+          "category": "edge",
+          "inputData": {"snake": [[7, 5], [6, 5], [5, 5]], "food": [10, 10], "score": 0},
+          "expectedData": {"snake_length": 3, "score": 0, "needs_food": false},
+          "hidden": true
+        }
+      ],
+      "visualizationBehaviorKey": "snake.eat-grow-score"
+    },
+    {
+      "id": "collision",
+      "titleZh": "判断边界和自身碰撞",
+      "scenarioZh": "位置更新后检查新蛇头是否越界或进入已有蛇身。",
+      "required": true,
+      "synonyms": ["碰撞判断", "边界检查", "游戏结束判断"],
+      "contract": {
+        "functionTemplate": "def check_collision(snake, board_size):",
+        "inputs": ["蛇身坐标列表 snake", "棋盘大小 board_size"],
+        "outputs": ["是否结束游戏 game_over"],
+        "preconditions": ["snake 的第一个坐标表示新蛇头"],
+        "postconditions": ["越界返回 True", "蛇头与其余身体重合返回 True", "其他情况返回 False"]
+      },
+      "knowledge": [
+        {"labelZh": "比较运算", "responsibility": "student_core"},
+        {"labelZh": "成员判断", "responsibility": "student_core"},
+        {"labelZh": "布尔表达式", "responsibility": "student_core"}
+      ],
+      "prerequisiteIds": ["movement"],
+      "tests": [
+        {
+          "id": "collision-boundary",
+          "labelZh": "蛇头越过右边界时判定游戏结束",
+          "category": "edge",
+          "inputData": {"snake": [[12, 5], [11, 5], [10, 5]], "board_size": 12},
+          "expectedData": true,
+          "hidden": true
+        },
+        {
+          "id": "collision-self",
+          "labelZh": "蛇头与身体坐标重合时判定游戏结束",
+          "category": "edge",
+          "inputData": {"snake": [[6, 5], [6, 6], [6, 5], [5, 5]], "board_size": 12},
+          "expectedData": true,
+          "hidden": true
+        }
+      ],
+      "visualizationBehaviorKey": "snake.collision"
+    },
+    {
+      "id": "game-loop",
+      "titleZh": "按时间间隔组合全部功能",
+      "scenarioZh": "每个游戏时刻读取输入，按依赖组合方向、移动、进食、碰撞和食物更新。",
+      "required": true,
+      "synonyms": ["游戏循环", "功能整合", "单步更新"],
+      "contract": {
+        "functionTemplate": "def step_game(state, user_input):",
+        "inputs": ["当前游戏状态 state", "本时刻用户输入 user_input"],
+        "outputs": ["下一时刻游戏状态"],
+        "preconditions": ["各子功能已能独立通过测试"],
+        "postconditions": ["每个时刻只推进一次状态", "失败状态不会继续移动", "进食后生成新食物"]
+      },
+      "knowledge": [
+        {"labelZh": "函数组合与调用顺序", "responsibility": "student_core"},
+        {"labelZh": "状态传递", "responsibility": "student_core"},
+        {"labelZh": "时间间隔与界面刷新", "responsibility": "generated_process"}
+      ],
+      "prerequisiteIds": ["direction-input", "movement", "food-spawn", "eat-grow-score", "collision"],
+      "tests": [
+        {
+          "id": "loop-one-tick",
+          "labelZh": "一次更新只推进一个游戏时刻并返回完整状态",
+          "category": "rule",
+          "inputData": {"state": {"snake": [[6, 5], [5, 5], [4, 5]], "direction": "right", "food": [10, 10], "score": 0, "game_over": false}, "user_input": null},
+          "expectedData": {"snake": [[7, 5], [6, 5], [5, 5]], "direction": "right", "food": [10, 10], "score": 0, "game_over": false},
+          "hidden": true
+        }
+      ],
+      "visualizationBehaviorKey": "snake.game-loop"
+    }
+  ],
+  "alternatives": [
+    {
+      "id": "collision-inside-movement",
+      "kind": "merge",
+      "nodeIds": ["movement", "collision"],
+      "descriptionZh": "允许学生把位置更新与碰撞判断合并为一个单步移动函数，但仍需分别解释位置变化和结束条件。"
+    }
+  ],
+  "scaffoldPolicy": {
+    "requireAttemptBeforeUpgrade": true,
+    "coreImplementationMaxLevel": 2,
+    "stageLevels": {
+      "observe": [
+        {"level": 0, "goalZh": "澄清需要观察的对象", "allowedHelpZh": "追问学生改变了什么操作、画面哪个量发生变化，不提供机制解释。", "maxCodeLines": 0},
+        {"level": 1, "goalZh": "提示比较维度", "allowedHelpZh": "提示从方向、位置、数量、得分或运行状态中选择一个维度。", "maxCodeLines": 0},
+        {"level": 2, "goalZh": "提供观察句式", "allowedHelpZh": "提供“当我进行____后，我观察到____”句式并引用一条运行证据。", "maxCodeLines": 0},
+        {"level": 3, "goalZh": "补全一条最小观察", "allowedHelpZh": "基于最近运行证据生成一条可修改的观察卡，并标记为 AI 辅助。", "maxCodeLines": 0}
+      ],
+      "decompose": [
+        {"level": 0, "goalZh": "由现象追问程序职责", "allowedHelpZh": "只追问程序接收什么、改变或判断什么、产生什么结果。", "maxCodeLines": 0},
+        {"level": 1, "goalZh": "提示输入处理输出", "allowedHelpZh": "指出当前功能卡缺少的一个结构字段，不给出完整卡片。", "maxCodeLines": 0},
+        {"level": 2, "goalZh": "给出局部职责建议", "allowedHelpZh": "给出一个可修改的职责短语或一个知识点候选。", "maxCodeLines": 0},
+        {"level": 3, "goalZh": "补全一个阻塞字段", "allowedHelpZh": "补全当前功能卡中一个无法继续的字段，其他判断仍由学生完成。", "maxCodeLines": 0}
+      ],
+      "model": [
+        {"level": 0, "goalZh": "检查流程完整性", "allowedHelpZh": "追问开始、输入、处理、判断、输出和结束中缺少哪一类。", "maxCodeLines": 0},
+        {"level": 1, "goalZh": "定位缺失节点", "allowedHelpZh": "指出一处缺失或连接不清的流程节点。", "maxCodeLines": 0},
+        {"level": 2, "goalZh": "建议局部连接", "allowedHelpZh": "给出一条局部节点关系或判断分支建议。", "maxCodeLines": 0},
+        {"level": 3, "goalZh": "补充一个流程节点", "allowedHelpZh": "加入一个可修改的处理或判断节点，但不代替学生完成整张图。", "maxCodeLines": 0}
+      ],
+      "plan": [
+        {"level": 0, "goalZh": "追问输入输出依赖", "allowedHelpZh": "要求学生说明一张卡的输出由哪张卡使用。", "maxCodeLines": 0},
+        {"level": 1, "goalZh": "区分系统关系与实现顺序", "allowedHelpZh": "提示画布表达功能协作，顺序列表表达个人实现计划。", "maxCodeLines": 0},
+        {"level": 2, "goalZh": "指出一处依赖冲突", "allowedHelpZh": "只指出一处阻塞当前顺序的依赖，不自动重排全部卡片。", "maxCodeLines": 0},
+        {"level": 3, "goalZh": "给出最小可执行修正", "allowedHelpZh": "移动或补连一张关键卡使路径能够继续，并要求学生解释。", "maxCodeLines": 0}
+      ],
+      "build": [
+        {"level": 0, "goalZh": "读取失败证据", "allowedHelpZh": "追问实际结果与预期结果的具体差异，不给代码。", "maxCodeLines": 0},
+        {"level": 1, "goalZh": "定位相关函数与知识", "allowedHelpZh": "结合当前模块、失败测试和学生画像提示相关函数或知识点。", "maxCodeLines": 0},
+        {"level": 2, "goalZh": "提供局部伪代码", "allowedHelpZh": "提供当前模块的局部步骤，保留关键表达式和变量由学生完成。", "maxCodeLines": 0},
+        {"level": 3, "goalZh": "补全最小阻塞片段", "allowedHelpZh": "最多补全 5 行导致测试无法推进的代码，要求学生重新运行、解释并修改。", "maxCodeLines": 5}
+      ],
+      "transfer": [
+        {"level": 0, "goalZh": "比较新旧项目结构", "allowedHelpZh": "追问哪些功能、数据或关系可以迁移。", "maxCodeLines": 0},
+        {"level": 1, "goalZh": "提示可迁移策略", "allowedHelpZh": "提示一个结构相似点，不给出新项目实现。", "maxCodeLines": 0},
+        {"level": 2, "goalZh": "提供迁移检查表", "allowedHelpZh": "给出输入、状态、规则、边界和测试的迁移检查表。", "maxCodeLines": 0},
+        {"level": 3, "goalZh": "示范一个局部迁移", "allowedHelpZh": "示范一个模块如何改写到新情境，保留其余模块由学生完成。", "maxCodeLines": 5}
+      ]
+    }
+  }
+}
