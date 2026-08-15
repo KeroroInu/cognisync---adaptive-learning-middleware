@@ -17,6 +17,9 @@ import type {
   ResearchTask,
   ResearchTasksResponse,
   ResearchSubmissionsResponse,
+  ProjectBlueprintConfig,
+  ProjectBlueprintVersion,
+  ProjectBlueprintsResponse,
   LlmConfig,
   LlmRoleConfig,
   EmotionDistributionResponse,
@@ -271,6 +274,23 @@ class AdminApiClient {
     return this.request<{ deleted: boolean; count: number }>('/research/submissions/batch', {
       method: 'DELETE',
       body: JSON.stringify(submissionIds),
+    });
+  }
+
+  async getProjectBlueprints(taskId: string): Promise<ProjectBlueprintsResponse> {
+    return this.request<ProjectBlueprintsResponse>(`/research/tasks/${taskId}/blueprints`);
+  }
+
+  async saveProjectBlueprintDraft(taskId: string, config: ProjectBlueprintConfig): Promise<ProjectBlueprintVersion> {
+    return this.request<ProjectBlueprintVersion>(`/research/tasks/${taskId}/blueprints/draft`, {
+      method: 'PUT',
+      body: JSON.stringify(config),
+    });
+  }
+
+  async publishProjectBlueprint(taskId: string, blueprintId: string): Promise<ProjectBlueprintVersion> {
+    return this.request<ProjectBlueprintVersion>(`/research/tasks/${taskId}/blueprints/${blueprintId}/publish`, {
+      method: 'POST',
     });
   }
 

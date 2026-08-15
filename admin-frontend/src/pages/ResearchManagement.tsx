@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Plus, Archive, Trash2, Users, ChevronDown, ChevronUp, Loader, Upload, X, CheckCircle, Download, Pencil } from 'lucide-react';
+import { Plus, Archive, Trash2, Users, ChevronDown, ChevronUp, Loader, Upload, X, CheckCircle, Download, Pencil, GitBranch } from 'lucide-react';
 import { adminApi } from '../lib/adminApi';
 import type { ResearchTask, ResearchTaskSubmission } from '../types';
+import { ResearchBlueprintEditor } from './ResearchBlueprintEditor';
 
 // ── CSV helpers ──────────────────────────────────────────────────────────────
 
@@ -75,6 +76,7 @@ export const ResearchManagement = () => {
   const [expandedCode, setExpandedCode] = useState<string | null>(null);
   const [selectedSubmissionIds, setSelectedSubmissionIds] = useState<Set<string>>(new Set());
   const [deletingSubmissions, setDeletingSubmissions] = useState(false);
+  const [blueprintTask, setBlueprintTask] = useState<ResearchTask | null>(null);
 
   // Create form state
   const [form, setForm] = useState({
@@ -278,7 +280,7 @@ export const ResearchManagement = () => {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold mb-2">教学研究</h1>
-          <p style={{ color: 'var(--text-secondary)' }}>管理代码填空练习任务与学生提交记录</p>
+          <p style={{ color: 'var(--text-secondary)' }}>配置项目任务、教师参考蓝图与学生过程数据</p>
         </div>
         <button
           onClick={() => setShowCreateModal(true)}
@@ -315,7 +317,7 @@ export const ResearchManagement = () => {
               {tasks.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
-                    暂无研究任务，点击「创建任务」上传代码填空练习
+                    暂无研究任务，点击「创建任务」建立第一个项目任务
                   </td>
                 </tr>
               ) : (
@@ -359,6 +361,14 @@ export const ResearchManagement = () => {
                     </td>
                     <td className="px-6 py-4 text-sm">
                       <div className="flex gap-2">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setBlueprintTask(task); }}
+                          className="p-2 rounded-lg transition-colors"
+                          style={{ color: '#161713', background: task.current_blueprint_version_id ? 'var(--brand-purple)' : 'var(--surface-muted)', border: '1px solid var(--line-strong)' }}
+                          title={task.current_blueprint_version_id ? '编辑项目蓝图（已有发布版本）' : '配置项目蓝图'}
+                        >
+                          <GitBranch size={14} />
+                        </button>
                         <button
                           onClick={(e) => { e.stopPropagation(); handleEdit(task); }}
                           className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors"
@@ -861,6 +871,14 @@ export const ResearchManagement = () => {
           </div>
         </div>,
         document.body
+      )}
+
+      {blueprintTask && (
+        <ResearchBlueprintEditor
+          task={blueprintTask}
+          onClose={() => setBlueprintTask(null)}
+          onPublished={loadTasks}
+        />
       )}
     </div>
   );

@@ -195,6 +195,7 @@ export interface ResearchTask {
   language: string;
   target_group: 'all' | 'unassigned' | 'pdt' | 'ai_pbl' | 'lecture';
   status: 'draft' | 'active' | 'archived';
+  current_blueprint_version_id: string | null;
   submissions_count?: number;
   created_at: string;
   updated_at: string;
@@ -208,6 +209,7 @@ export interface ResearchTaskSubmission {
   student_id?: string;
   user_email?: string;
   code_submitted: string;
+  blueprint_version_id?: string | null;
   is_completed: boolean;
   started_at?: string | null;
   submitted_at: string | null;
@@ -221,6 +223,100 @@ export interface ResearchTasksResponse {
 
 export interface ResearchSubmissionsResponse {
   submissions: ResearchTaskSubmission[];
+  total: number;
+}
+
+export type BlueprintKnowledgeResponsibility = 'student_core' | 'ai_supported' | 'generated_process';
+
+export interface BlueprintPhenomenon {
+  id: string;
+  labelZh: string;
+  evidenceType: string;
+  required: boolean;
+  descriptionZh?: string | null;
+}
+
+export interface BlueprintKnowledgeItem {
+  labelZh: string;
+  responsibility: BlueprintKnowledgeResponsibility;
+}
+
+export interface BlueprintContract {
+  functionTemplate: string;
+  inputs: string[];
+  outputs: string[];
+  preconditions: string[];
+  postconditions: string[];
+}
+
+export interface BlueprintTestCase {
+  id: string;
+  labelZh: string;
+  category: 'example' | 'edge' | 'rule';
+  inputData: unknown;
+  expectedData: unknown;
+  hidden: boolean;
+}
+
+export interface BlueprintNode {
+  id: string;
+  titleZh: string;
+  scenarioZh: string;
+  required: boolean;
+  synonyms: string[];
+  contract: BlueprintContract;
+  knowledge: BlueprintKnowledgeItem[];
+  prerequisiteIds: string[];
+  tests: BlueprintTestCase[];
+  visualizationBehaviorKey?: string | null;
+}
+
+export interface BlueprintAlternative {
+  id: string;
+  kind: 'split' | 'merge' | 'substitute';
+  nodeIds: string[];
+  descriptionZh: string;
+}
+
+export interface BlueprintScaffoldLevel {
+  level: number;
+  goalZh: string;
+  allowedHelpZh: string;
+  maxCodeLines?: number | null;
+}
+
+export interface BlueprintScaffoldPolicy {
+  requireAttemptBeforeUpgrade: boolean;
+  coreImplementationMaxLevel: number;
+  stageLevels: Partial<Record<'observe' | 'decompose' | 'model' | 'plan' | 'build' | 'transfer', BlueprintScaffoldLevel[]>>;
+}
+
+export interface ProjectBlueprintConfig {
+  schemaVersion: 1;
+  projectKey: string;
+  demoKey: string;
+  titleZh: string;
+  phenomena: BlueprintPhenomenon[];
+  nodes: BlueprintNode[];
+  alternatives: BlueprintAlternative[];
+  scaffoldPolicy: BlueprintScaffoldPolicy;
+}
+
+export interface ProjectBlueprintVersion {
+  id: string;
+  task_id: string;
+  version: number;
+  schema_version: number;
+  status: 'draft' | 'published';
+  config: ProjectBlueprintConfig;
+  content_hash: string;
+  published_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProjectBlueprintsResponse {
+  blueprints: ProjectBlueprintVersion[];
   total: number;
 }
 
