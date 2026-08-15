@@ -64,6 +64,62 @@ const workspaceSignature = (workspace: SnakeProjectWorkspace) => JSON.stringify(
   progress: workspace.progress,
 });
 
+const summarizeStudentTaskWorkspace = (workspace: SnakeProjectWorkspace) => {
+  const functionById = new Map(workspace.functions.map(card => [card.id, card.responsibility]));
+  const lines = [
+    `【当前任务完整过程数据】观察卡 ${workspace.observations.length} 张；功能卡 ${workspace.functions.length} 张；模块记录 ${Object.keys(workspace.progress).length} 个。`,
+  ];
+
+  if (workspace.observations.length > 0) {
+    lines.push('观察记录：');
+    workspace.observations.slice(-8).forEach((item, index) => {
+      lines.push(`${index + 1}. ${item.observationText}`);
+    });
+  }
+
+  if (workspace.functions.length > 0) {
+    lines.push('功能卡：');
+    workspace.functions.slice(-10).forEach((item, index) => {
+      lines.push(
+        `${index + 1}. ${item.responsibility}｜IN ${item.input || '未填'}｜OUT ${item.output || '未填'}`
+        + `｜知识 ${item.knowledge.join('、') || '未填'}｜验证 ${item.verification || '未填'}`,
+      );
+    });
+  }
+
+  const mechanisms = workspace.path.functionMechanisms ?? {};
+  const mechanismEntries = Object.entries(mechanisms);
+  if (mechanismEntries.length > 0) {
+    lines.push('功能内部流程图：');
+    mechanismEntries.slice(-10).forEach(([cardId, mechanism]) => {
+      const labels = mechanism.flowNodes.map(node => node.label).filter(Boolean);
+      lines.push(
+        `- ${functionById.get(cardId) ?? cardId}：${labels.slice(0, 8).join(' → ') || '尚未放置节点'}`
+        + `；${mechanism.diagramEdges.length} 条连线`,
+      );
+    });
+  }
+
+  const relationCount = Object.values(workspace.path.prerequisites)
+    .reduce((sum, ids) => sum + ids.length, 0);
+  const orderedNames = workspace.path.orderedCardIds.map(id => functionById.get(id) ?? id);
+  lines.push(`项目实现路径：${orderedNames.join(' → ') || '尚未排序'}；前置关系 ${relationCount} 条。`);
+
+  const progressEntries = Object.entries(workspace.progress);
+  if (progressEntries.length > 0) {
+    lines.push('模块建构：');
+    progressEntries.slice(-10).forEach(([cardId, item]) => {
+      const latestAttempt = item.testAttempts?.[item.testAttempts.length - 1];
+      lines.push(
+        `- ${functionById.get(cardId) ?? cardId}：${item.verified ? '已验证' : '未验证'}`
+        + (latestAttempt ? `；最近测试 ${latestAttempt.passed ? '通过' : '未通过'}(${latestAttempt.resultCode})` : '；尚无测试记录'),
+      );
+    });
+  }
+
+  return lines.join('\n').slice(0, 5200);
+};
+
 const WORKSPACE_CHECK_INTERVAL_MS = 400;
 const WORKSPACE_SAVE_DEBOUNCE_MS = 900;
 const WORKSPACE_RETRY_DELAY_MS = 4000;
@@ -315,37 +371,45 @@ export const Research: React.FC<Props> = ({
 
   const getScaffoldArtifactContext = useCallback((): ScaffoldArtifactContext => {
     if (!task) return { summary: '' };
+    const workspace = collectSnakeProjectWorkspace(task.id);
+    const taskWorkspaceSummary = summarizeStudentTaskWorkspace(workspace);
     if (factoryStage === 'build') return {
-      summary: buildAssistantContext.artifactSummary,
+      summary: [taskWorkspaceSummary, '【当前建构焦点】', buildAssistantContext.artifactSummary].filter(Boolean).join('\n'),
       currentModule: buildAssistantContext.currentModule,
       currentCode: buildAssistantContext.currentCode,
       testFeedback: buildAssistantContext.testFeedback,
     };
-    const workspace = collectSnakeProjectWorkspace(task.id);
     if (factoryStage === 'observe') return {
       summary: [
-        `运行证据 ${runtimeEvidence.length} 条，观察卡 ${workspace.observations.length} 张。`,
-        ...workspace.observations.slice(-5).map((item, index) => `${index + 1}. ${item.observationText}`),
+        taskWorkspaceSummary,
+        '【当前观察焦点】',
+        `本轮浏览器已记录运行证据 ${runtimeEvidence.length} 条。`,
       ].join('\n'),
     };
     if (factoryStage === 'decompose') return {
       summary: [
-        `已形成 ${workspace.functions.length} 张功能卡。`,
-        ...workspace.functions.slice(-8).map((item, index) => `${index + 1}. ${item.responsibility}｜IN ${item.input}｜OUT ${item.output}｜知识 ${item.knowledge.join('、')}`),
+        taskWorkspaceSummary,
+        '【当前功能拆解焦点】',
+        `学生正在检查 ${workspace.functions.length} 张功能卡的职责、输入输出、知识和验证方式。`,
       ].join('\n'),
     };
     if (factoryStage === 'model') {
       const mechanisms = workspace.path.functionMechanisms ?? {};
       return {
         summary: [
+          taskWorkspaceSummary,
+          '【当前功能流程焦点】',
           `正在为功能卡绘制内部实现流程；已保存 ${Object.keys(mechanisms).length} 张流程图。`,
-          ...Object.entries(mechanisms).slice(-7).map(([cardId, mechanism]) => `${cardId}: ${mechanism.flowNodes.length} 个节点，${mechanism.diagramEdges.length} 条连线`),
         ].join('\n'),
       };
     }
     const relationCount = workspace.path.diagramEdges?.length ?? Object.values(workspace.path.prerequisites).reduce((sum, ids) => sum + ids.length, 0);
     return {
-      summary: `实现路径已放置 ${workspace.path.placedCardIds?.length ?? 0} 张卡，建立 ${relationCount} 条有向关系。学生正在判断功能之间的数据与前置依赖。`,
+      summary: [
+        taskWorkspaceSummary,
+        '【当前实现路径焦点】',
+        `已放置 ${workspace.path.placedCardIds?.length ?? 0} 张卡，建立 ${relationCount} 条有向关系。学生正在判断功能之间的数据与前置依赖。`,
+      ].join('\n'),
     };
   }, [buildAssistantContext, factoryStage, runtimeEvidence.length, task]);
 

@@ -25,6 +25,92 @@ LEVEL_RULES = {
 }
 
 
+def _safe_list(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, dict)]
+
+
+def summarize_project_workspace(workspace: Any, max_chars: int = 4800) -> str:
+    """把当前学生在指定任务中的完整工作区压缩为可供支架读取的事实摘要。"""
+
+    if not isinstance(workspace, dict):
+        return ""
+
+    observations = _safe_list(workspace.get("observations"))
+    functions = _safe_list(workspace.get("functions"))
+    path = workspace.get("path") if isinstance(workspace.get("path"), dict) else {}
+    progress = workspace.get("progress") if isinstance(workspace.get("progress"), dict) else {}
+    function_by_id = {
+        str(item.get("id")): str(item.get("responsibility") or item.get("title") or item.get("id"))
+        for item in functions
+        if item.get("id")
+    }
+
+    lines = [
+        f"数据库任务快照：观察卡 {len(observations)} 张，功能卡 {len(functions)} 张，模块记录 {len(progress)} 个。",
+    ]
+    if workspace.get("savedAt"):
+        lines.append(f"最近同步：{workspace['savedAt']}")
+
+    if observations:
+        lines.append("学生观察：")
+        lines.extend(
+            f"- {item.get('observationText', '')}"
+            for item in observations[-8:]
+            if item.get("observationText")
+        )
+
+    if functions:
+        lines.append("学生功能卡：")
+        for item in functions[-10:]:
+            responsibility = item.get("responsibility") or item.get("title") or "未命名功能"
+            knowledge = item.get("knowledge") if isinstance(item.get("knowledge"), list) else []
+            lines.append(
+                f"- {responsibility}｜输入 {item.get('input') or '未填'}｜输出 {item.get('output') or '未填'}"
+                f"｜知识 {'、'.join(map(str, knowledge)) or '未填'}｜验证 {item.get('verification') or '未填'}"
+            )
+
+    mechanisms = path.get("functionMechanisms") if isinstance(path.get("functionMechanisms"), dict) else {}
+    if mechanisms:
+        lines.append("功能内部流程：")
+        for card_id, mechanism in list(mechanisms.items())[-10:]:
+            if not isinstance(mechanism, dict):
+                continue
+            nodes = _safe_list(mechanism.get("flowNodes"))
+            edges = _safe_list(mechanism.get("diagramEdges"))
+            labels = [str(node.get("label")) for node in nodes if node.get("label")]
+            lines.append(
+                f"- {function_by_id.get(str(card_id), str(card_id))}："
+                f"{' → '.join(labels[:8]) or '尚未放置节点'}；连线 {len(edges)} 条"
+            )
+
+    ordered_ids = path.get("orderedCardIds") if isinstance(path.get("orderedCardIds"), list) else []
+    prerequisites = path.get("prerequisites") if isinstance(path.get("prerequisites"), dict) else {}
+    relation_count = sum(len(ids) for ids in prerequisites.values() if isinstance(ids, list))
+    if ordered_ids or relation_count:
+        ordered_names = [function_by_id.get(str(card_id), str(card_id)) for card_id in ordered_ids]
+        lines.append(f"项目实现路径：{' → '.join(ordered_names) or '尚未排序'}；前置关系 {relation_count} 条。")
+
+    if progress:
+        lines.append("模块建构进度：")
+        for card_id, item in list(progress.items())[-10:]:
+            if not isinstance(item, dict):
+                continue
+            attempts = _safe_list(item.get("testAttempts"))
+            latest = attempts[-1] if attempts else None
+            latest_result = (
+                f"，最近测试 {'通过' if latest.get('passed') else '未通过'}({latest.get('resultCode', '无代码')})"
+                if latest else "，尚无测试记录"
+            )
+            lines.append(
+                f"- {function_by_id.get(str(card_id), str(card_id))}："
+                f"{'已验证' if item.get('verified') else '未验证'}{latest_result}"
+            )
+
+    return "\n".join(lines)[:max_chars]
+
+
 def _band(value: int) -> str:
     if value <= 35:
         return "low"

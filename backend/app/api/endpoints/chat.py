@@ -6,6 +6,7 @@ from uuid import UUID
 from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Optional
 from fastapi import APIRouter, HTTPException, Depends, Query
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.postgres import get_db
@@ -20,9 +21,14 @@ from app.services.text_analyzer import TextAnalyzer
 from app.services.llm_config import get_chat_provider
 from app.models.sql.message import ChatMessage, MessageRole
 from app.models.sql.chat_session import ChatSession
+from app.models.sql.research import ResearchTaskSubmission
 from app.models.sql.user import User
 from app.api.endpoints.auth import get_current_user
-from app.services.scaffold_service import build_scaffold_metadata, build_scaffold_prompt
+from app.services.scaffold_service import (
+    build_scaffold_metadata,
+    build_scaffold_prompt,
+    summarize_project_workspace,
+)
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -30,7 +36,6 @@ logger = logging.getLogger(__name__)
 
 async def get_or_create_active_session(db: AsyncSession, user_id: UUID) -> ChatSession:
     """获取最近 30 分钟内的活跃会话，不存在则创建新会话"""
-    from sqlalchemy import select
     cutoff = datetime.now(timezone.utc) - timedelta(minutes=30)
     result = await db.execute(
         select(ChatSession)
@@ -46,6 +51,27 @@ async def get_or_create_active_session(db: AsyncSession, user_id: UUID) -> ChatS
         await db.refresh(session)
         logger.info(f"Created new chat session for user {user_id}: {session.id}")
     return session
+
+
+async def _load_scaffold_workspace_summary(
+    db: AsyncSession,
+    user_id: UUID,
+    task_id: str,
+) -> str:
+    """只读取当前认证学生在指定任务中的工作区，防止跨学生或跨任务取数。"""
+
+    try:
+        parsed_task_id = UUID(task_id)
+    except ValueError:
+        return ""
+
+    result = await db.execute(
+        select(ResearchTaskSubmission.workspace_data).where(
+            ResearchTaskSubmission.task_id == parsed_task_id,
+            ResearchTaskSubmission.user_id == user_id,
+        )
+    )
+    return summarize_project_workspace(result.scalar_one_or_none())
 
 
 def _calculate_mastery_delta(analysis) -> float:
@@ -520,10 +546,24 @@ async def chat(
         active_session = await get_or_create_active_session(db, user_id)
 
         current_profile = await profile_service.get_profile(user_id)
+        scaffold_context = request.scaffoldContext
         scaffold_metadata = None
-        if request.scaffoldContext:
+        if scaffold_context:
+            database_summary = await _load_scaffold_workspace_summary(
+                db,
+                user_id,
+                scaffold_context.taskId,
+            )
+            live_summary = scaffold_context.artifactSummary or ""
+            combined_summary = "\n\n".join(filter(None, [
+                database_summary,
+                f"本轮浏览器实时产物：\n{live_summary}" if live_summary else "",
+            ]))[:6000]
+            scaffold_context = scaffold_context.model_copy(
+                update={"artifactSummary": combined_summary or None},
+            )
             scaffold_metadata = build_scaffold_metadata(
-                request.scaffoldContext,
+                scaffold_context,
                 current_profile,
                 request.currentCode,
             )
@@ -545,7 +585,7 @@ async def chat(
 
         # 获取对话历史作为上下文（增加到 20 条以保持更长的上下文）
         recent_messages = await get_recent_messages(db, user_id, limit=20)
-        is_student_authored = not request.scaffoldContext or request.scaffoldContext.trigger == "student_message"
+        is_student_authored = not scaffold_context or scaffold_context.trigger == "student_message"
 
         # 只有学生亲自输入的文本才参与情感/画像分析。按钮生成的固定句子只表示
         # 求助行为，不能被误当成学生情绪或认知证据污染画像。
@@ -655,9 +695,9 @@ async def chat(
             language=request.language or "zh"
         )
 
-        if request.scaffoldContext:
+        if scaffold_context:
             system_prompt += build_scaffold_prompt(
-                request.scaffoldContext,
+                scaffold_context,
                 current_profile,
                 request.language or "zh",
             )

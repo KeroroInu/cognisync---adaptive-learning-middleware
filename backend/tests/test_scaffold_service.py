@@ -5,6 +5,7 @@ from app.services.scaffold_service import (
     build_profile_adaptation,
     build_scaffold_metadata,
     build_scaffold_prompt,
+    summarize_project_workspace,
 )
 
 
@@ -46,3 +47,43 @@ def test_metadata_records_profile_and_code_fingerprint_without_code_copy():
 def test_all_four_levels_have_distinct_boundaries():
     assert list(LEVEL_RULES) == [0, 1, 2, 3]
     assert len(set(LEVEL_RULES.values())) == 4
+
+
+def test_workspace_summary_contains_every_student_stage_without_raw_code():
+    workspace = {
+        "savedAt": "2026-08-14T10:00:00Z",
+        "observations": [{"observationText": "蛇头每次向前移动一格"}],
+        "functions": [{
+            "id": "move",
+            "responsibility": "移动蛇身",
+            "input": "蛇身与方向",
+            "output": "新蛇身",
+            "knowledge": ["列表", "坐标"],
+            "verification": "比较移动前后坐标",
+        }],
+        "path": {
+            "orderedCardIds": ["move"],
+            "prerequisites": {"move": []},
+            "functionMechanisms": {
+                "move": {
+                    "flowNodes": [{"label": "读取方向"}, {"label": "更新蛇头"}],
+                    "diagramEdges": [{"sourceId": "a", "targetId": "b"}],
+                },
+            },
+        },
+        "progress": {
+            "move": {
+                "verified": False,
+                "code": "SECRET_RAW_CODE",
+                "testAttempts": [{"passed": False, "resultCode": "wrong_head"}],
+            },
+        },
+    }
+
+    summary = summarize_project_workspace(workspace)
+
+    assert "蛇头每次向前移动一格" in summary
+    assert "移动蛇身｜输入 蛇身与方向｜输出 新蛇身" in summary
+    assert "读取方向 → 更新蛇头" in summary
+    assert "最近测试 未通过(wrong_head)" in summary
+    assert "SECRET_RAW_CODE" not in summary

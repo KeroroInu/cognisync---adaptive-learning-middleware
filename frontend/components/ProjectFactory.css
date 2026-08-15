@@ -306,6 +306,11 @@
   min-height: 535px;
   display: flex;
   flex-direction: column;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
   padding: clamp(20px, 2.7vw, 34px);
   background:
     linear-gradient(140deg, color-mix(in srgb, var(--brand-cyan) 7%, transparent), transparent 42%),
@@ -440,7 +445,7 @@
 .observation-composer-actions button.is-secondary { background: var(--surface-strong); box-shadow: none; }
 .observation-composer-actions button:disabled { border-color: var(--line-strong); background: var(--surface-muted); color: var(--text-tertiary); box-shadow: none; }
 
-.saved-observation-list { margin-top: 13px; }
+.saved-observation-list { flex: 0 0 auto; margin-top: 13px; }
 .saved-observation-list > div:last-child { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
 .saved-observation-list article { position: relative; min-height: 66px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: 8px; padding: 9px 33px 9px 9px; border: 1px solid var(--line-strong); border-radius: 7px; background: var(--surface-muted); }
 .saved-observation-list article > span { color: #718336; font-family: 'Google Sans Code', ui-monospace, monospace; font-size: .56rem; font-weight: 900; }

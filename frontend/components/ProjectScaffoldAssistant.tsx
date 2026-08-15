@@ -234,7 +234,7 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
       <div className="project-scaffold-body">
         <header className="project-scaffold-context">
           <div><span>{isZh ? stageLabel.zh : stageLabel.en}</span><b>L{level} · {LEVEL_LABELS[language][level]}</b></div>
-          <small><Sparkles size={13} />{isZh ? '已结合当前作品与学习画像' : 'Uses your work and learner profile'}</small>
+          <small><Sparkles size={13} />{isZh ? '已读取本任务各环节产物与学习画像' : 'Uses every stage of this task and your learner profile'}</small>
         </header>
 
         <div ref={streamRef} className="project-scaffold-stream" aria-live="polite">
@@ -243,8 +243,8 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
               <MessageCircleMore size={34} />
               <h4>{isZh ? '我知道你现在正在做什么' : 'I know what you are working on'}</h4>
               <p>{isZh
-                ? `当前处于“${stageLabel.zh}”。你可以直接描述卡点，也可以先请求 L0 提示；建构阶段我会读取当前模块代码和测试反馈。`
-                : `You are at “${stageLabel.en}”. Describe the problem or request an L0 hint. During build, I can read the current module and test feedback.`}</p>
+                ? `当前处于“${stageLabel.zh}”。我会同时参考本任务已保存的观察卡、功能卡、流程图、实现路径和模块进度；建构阶段还会读取当前代码与测试反馈。`
+                : `You are at “${stageLabel.en}”. I can use this task's observations, function cards, flow diagrams, path and module progress, plus current code and tests during build.`}</p>
               <small>{isZh ? `当前证据：${observationCount} 张观察卡` : `${observationCount} observation cards`}</small>
             </div>
           ) : messages.map(message => (
