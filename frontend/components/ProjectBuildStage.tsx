@@ -37,6 +37,7 @@ import {
 } from '../services/pythonModuleRunner';
 import type { StudentObservationCard } from './ProjectFactory';
 import type { StudentFunctionCard } from './ProjectFunctionStage';
+import { createRequestId, moduleCodeArtifact, type ReportKeyMoment } from '../services/stageEvents';
 import './ProjectBuildStage.css';
 
 const ResearchCodeEditor = React.lazy(() => import('./ResearchCodeEditor'));
@@ -47,6 +48,13 @@ interface Props {
   taskId: string;
   onBack: () => void;
   onAssistantContextChange?: (context: ProjectBuildAssistantContext) => void;
+  /** 上报关键教学事件。由 Research.tsx 注入，内部已处理幂等键与重试。 */
+  onReportKeyMoment?: ReportKeyMoment;
+  /** 测试失败后回到更早阶段修订解构结果。 */
+  onReviseEarlierStage?: (stage: 'observe' | 'decompose' | 'model' | 'plan') => void;
+  onFinalSubmit?: () => void | Promise<void>;
+  completing?: boolean;
+  completed?: boolean;
 }
 
 export interface ProjectBuildAssistantContext {
@@ -322,7 +330,18 @@ interface StudentBuildUnit {
   node: BlueprintNode;
 }
 
-export const ProjectBuildStage: React.FC<Props> = ({ language, theme, taskId, onBack, onAssistantContextChange }) => {
+export const ProjectBuildStage: React.FC<Props> = ({
+  language,
+  theme,
+  taskId,
+  onBack,
+  onAssistantContextChange,
+  onReportKeyMoment,
+  onReviseEarlierStage,
+  onFinalSubmit,
+  completing = false,
+  completed = false,
+}) => {
   const isZh = language === 'zh';
   const functionKey = `cognisync:project-function-cards:v1:${taskId}`;
   const observationKey = `cognisync:project-observation-cards:v2:${taskId}`;
@@ -361,6 +380,16 @@ export const ProjectBuildStage: React.FC<Props> = ({ language, theme, taskId, on
   const [selectedId, setSelectedId] = useState(() => buildUnits[0]?.id ?? '');
   const [testMessage, setTestMessage] = useState('');
   const [testRunning, setTestRunning] = useState(false);
+  /**
+   * 最近一次失败的模块。测试失败是「回到解构结果进行修订」的触发点
+   * （见 docs/PROJECT_WORKBENCH_V02.md 第 7、30 行），此前界面只给一句
+   * 文字提示，学生没有任何入口回去改功能卡或路径。
+   */
+  const [lastFailedUnitId, setLastFailedUnitId] = useState<string | null>(null);
+  // 正在为哪个目标阶段写修订证据。非空即禁用整组按钮，避免连点产生多条事件
+  // （每次点击都会生成新的 request_id，后端幂等键拦不住）。
+  const [revisingStage, setRevisingStage] = useState<'observe' | 'decompose' | 'model' | 'plan' | null>(null);
+  const [revisionError, setRevisionError] = useState('');
   const [diagnosticRun, setDiagnosticRun] = useState(0);
   const [diagnostics, setDiagnostics] = useState<string[]>([]);
   const [demonstration, setDemonstration] = useState<{ nodeId: string; run: number; label: string; preview?: PythonModulePreview } | null>(null);
@@ -479,6 +508,75 @@ export const ProjectBuildStage: React.FC<Props> = ({ language, theme, taskId, on
     setDemonstration(null);
   };
 
+  const verifiedCount = useMemo(
+    () => Object.values(progress).filter((item: StudentModuleProgress) => item.verified).length,
+    [progress],
+  );
+
+  /**
+   * 测试失败后回到更早阶段修订。
+   *
+   * 先上报一次 `structure_change`，把「这次修订是由哪个模块的失败触发的」
+   * 记进证据链——这正是 CROSS_STAGE_REVISION 白名单要支持的教学主线。
+   * 上报用 `test_revision` 作为修改来源，与学生自发的结构调整区分开。
+   *
+   * **上报失败就不跳转。** 此前这里忽略返回值，无论成功与否都清掉
+   * `lastFailedUnitId` 并切换阶段：一旦网络失败，「测试失败 → 回头修订解构」
+   * 这条最能说明学生认知调整的链路就断了，而且失败上下文（是哪个模块、
+   * 什么错误码）随着面板消失再也拼不回来。学生也不会知道要重来一次。
+   *
+   * 各阶段组件在返回时会重新挂载并重读 localStorage，因此修订后回到建构阶段
+   * 能看到最新内容，不需要额外的同步机制。
+   */
+  const reviseEarlierStage = async (stage: 'observe' | 'decompose' | 'model' | 'plan') => {
+    if (revisingStage) return;
+    const failedUnitId = lastFailedUnitId;
+    const failed = failedUnitId ? progress[failedUnitId] : undefined;
+
+    if (failed && failedUnitId && onReportKeyMoment) {
+      setRevisingStage(stage);
+      setRevisionError('');
+      try {
+        const recorded = await onReportKeyMoment({
+          stage: 'build',
+          eventType: 'structure_change',
+          detail: {
+            trigger: 'test_failure',
+            revisingStage: stage,
+            failedUnitId,
+            failedNodeId: failed.blueprintNodeId,
+            lastResultCode: failed.testAttempts?.[failed.testAttempts.length - 1]?.resultCode,
+          },
+          artifacts: [moduleCodeArtifact(
+            failedUnitId,
+            failed,
+            'test_revision',
+            `revising ${stage} after failed test`,
+          )],
+        });
+
+        if (!recorded) {
+          // 停在原地：保留失败模块、测试上下文和学生代码，让学生能重试。
+          setRevisionError(isZh
+            ? '这次修订还没有记录成功，暂时不能切换阶段。你的代码和测试结果都还在，请检查网络后再点一次。'
+            : 'This revision was not recorded yet, so the stage was not switched. Your code and test result are kept — check your connection and try again.');
+          return;
+        }
+      } catch {
+        setRevisionError(isZh
+          ? '这次修订还没有记录成功，暂时不能切换阶段。你的代码和测试结果都还在，请检查网络后再点一次。'
+          : 'This revision was not recorded yet, so the stage was not switched. Your code and test result are kept — check your connection and try again.');
+        return;
+      } finally {
+        setRevisingStage(null);
+      }
+    }
+
+    setRevisionError('');
+    setLastFailedUnitId(null);
+    onReviseEarlierStage?.(stage);
+  };
+
   const verifyCurrentModule = async () => {
     if (!selectedCard || !selectedNode || !selectedUnit || testRunning) return;
     if (!dependencyReady(selectedUnit)) {
@@ -494,6 +592,17 @@ export const ProjectBuildStage: React.FC<Props> = ({ language, theme, taskId, on
     try {
       const result = await runPythonModuleTest(selectedNode.id, currentCode);
       const now = new Date().toISOString();
+      // 本次测试尝试。构建一次、同时用于本地进度与事件上报——
+      // 两处各自生成会得到不同的 attempt id，导出时无法把事件与工作区里的
+      // 那一次尝试对应起来。
+      const attempt = {
+        id: createRequestId(),
+        passed: result.passed,
+        resultCode: result.resultCode,
+        durationMs: result.durationMs,
+        createdAt: now,
+      };
+
       setProgress(current => {
         const previous = current[selectedUnit.id];
         return {
@@ -505,17 +614,47 @@ export const ProjectBuildStage: React.FC<Props> = ({ language, theme, taskId, on
             code: currentCode,
             verified: result.passed,
             updatedAt: now,
-            testAttempts: [...(previous?.testAttempts ?? []).slice(-11), {
-              id: `attempt-${Date.now()}`,
-              passed: result.passed,
-              resultCode: result.resultCode,
-              durationMs: result.durationMs,
-              createdAt: now,
-            }],
+            testAttempts: [...(previous?.testAttempts ?? []).slice(-11), attempt],
           },
         };
       });
       setTestMessage(formatPythonModuleTestResult(result, language));
+
+      // 模块测试是关键时刻：通过与失败都要留痕。只记结果码、耗时与本次尝试 ID，
+      // 不记录运行帧或中间输出。
+      //
+      // attemptId 放在 detail 而不是产物 content 里：它每次都不同，进了 content
+      // 就会让同一段未修改的代码每跑一次测试都多出一个版本（见 moduleCodeArtifact）。
+      // 放在 detail 里同样能把这条事件与工作区快照中的那次尝试对应起来。
+      void onReportKeyMoment?.({
+        stage: 'build',
+        eventType: 'module_test',
+        detail: {
+          unitId: selectedUnit.id,
+          cardId: selectedCard.id,
+          blueprintNodeId: selectedNode.id,
+          attemptId: attempt.id,
+          passed: result.passed,
+          resultCode: result.resultCode,
+          durationMs: result.durationMs,
+        },
+        artifacts: [moduleCodeArtifact(
+          selectedUnit.id,
+          {
+            cardId: selectedCard.id,
+            blueprintNodeId: selectedNode.id,
+            code: currentCode,
+            verified: result.passed,
+            updatedAt: now,
+            testAttempts: [attempt],
+          },
+          'structure_edit',
+          result.passed ? undefined : `test failed: ${result.resultCode}`,
+        )],
+      });
+
+      setLastFailedUnitId(result.passed ? null : selectedUnit.id);
+
       if (result.passed) {
         setDemonstration(current => ({
           nodeId: selectedNode.id,
@@ -654,9 +793,53 @@ export const ProjectBuildStage: React.FC<Props> = ({ language, theme, taskId, on
         </div>
       </div>
 
+      {lastFailedUnitId && (
+        <div className="build-revision-prompt" role="status">
+          <span>
+            {isZh
+              ? '测试没通过。如果问题出在拆解本身，可以回到更早的阶段修订你的判断，再回来继续。'
+              : 'The test did not pass. If the problem is in your decomposition, revise it and come back.'}
+          </span>
+          {revisionError ? (
+            <p className="build-revision-error" role="alert">{revisionError}</p>
+          ) : null}
+          <div className="build-revision-actions">
+            <button type="button" disabled={revisingStage !== null} onClick={() => void reviseEarlierStage('decompose')}>
+              {revisingStage === 'decompose' ? (isZh ? '正在记录…' : 'Recording…') : (isZh ? '修订功能卡' : 'Revise function cards')}
+            </button>
+            <button type="button" disabled={revisingStage !== null} onClick={() => void reviseEarlierStage('model')}>
+              {revisingStage === 'model' ? (isZh ? '正在记录…' : 'Recording…') : (isZh ? '修订功能流程' : 'Revise mechanism')}
+            </button>
+            <button type="button" disabled={revisingStage !== null} onClick={() => void reviseEarlierStage('plan')}>
+              {revisingStage === 'plan' ? (isZh ? '正在记录…' : 'Recording…') : (isZh ? '修订实现路径' : 'Revise route')}
+            </button>
+            <button type="button" disabled={revisingStage !== null} onClick={() => { setRevisionError(''); setLastFailedUnitId(null); }}>
+              {isZh ? '继续在这里改' : 'Keep editing here'}
+            </button>
+          </div>
+        </div>
+      )}
+
       <footer className="build-workspace-footer">
         <button type="button" onClick={onBack}>{isZh ? '返回实现路径' : 'Back to route'}</button>
         <span>{isZh ? '一个项目页面内完成观察、规划、建构和验证' : 'Observe, plan, build and verify in one project workspace.'}</span>
+        {onFinalSubmit && (
+          <button
+            type="button"
+            className="build-final-submit"
+            onClick={() => void onFinalSubmit()}
+            disabled={completing || completed || verifiedCount === 0}
+            title={verifiedCount === 0
+              ? (isZh ? '至少通过一个模块测试后再提交' : 'Pass at least one module test before submitting')
+              : undefined}
+          >
+            {completed
+              ? (isZh ? '已提交' : 'Submitted')
+              : completing
+                ? (isZh ? '提交中' : 'Submitting')
+                : (isZh ? '提交项目' : 'Submit project')}
+          </button>
+        )}
       </footer>
     </section>
   );

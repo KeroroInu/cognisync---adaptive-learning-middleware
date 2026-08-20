@@ -3,6 +3,7 @@ import { RadarDisplay } from '../components/RadarDisplay';
 import { UserProfile, CalibrationLog, Language } from '../types';
 import { CheckCircle2, AlertCircle, Edit3 } from 'lucide-react';
 import { translations } from '../utils/translations';
+import { postCalibration, type CalibrationDimension } from '../services/api';
 
 interface Props {
   profile: UserProfile;
@@ -17,6 +18,8 @@ export const Calibration: React.FC<Props> = ({ profile, onLogCalibration, langua
   const [reason, setReason] = useState('');
   const [likertTrust, setLikertTrust] = useState<number>(3);
   const [submitted, setSubmitted] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const calculateTotalDelta = () => {
     return Math.abs(profile.cognition - selfProfile.cognition) +
@@ -24,13 +27,45 @@ export const Calibration: React.FC<Props> = ({ profile, onLogCalibration, langua
            Math.abs(profile.behavior - selfProfile.behavior);
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    if (saving) return;
     const disagreement = calculateTotalDelta();
+    const comment = reason || 'User submitted calibration';
+
+    // 三个维度分三次上报：后端一条记录只承载一个维度，冲突等级也按维度计算。
+    // 串行而非并发——一次自我校准不赶时间，串行能在第一个失败时立刻停下，
+    // 不会把「后两个维度也写进去了」这种半截状态铺得更开。
+    const dimensions: CalibrationDimension[] = ['cognition', 'affect', 'behavior'];
+    setSaving(true);
+    setSaveError(null);
+    try {
+      for (const dimension of dimensions) {
+        await postCalibration({
+          dimension,
+          systemValue: profile[dimension],
+          userValue: selfProfile[dimension],
+          userComment: comment,
+          likertTrust,
+        });
+      }
+    } catch {
+      // 落库失败时**不**显示"已记录"。校准是元认知分析的唯一数据源，
+      // 学生不会主动做第二次；界面骗他一次，这条数据就永久缺失且无人察觉。
+      setSaveError(
+        language === 'zh'
+          ? '校准没能保存，请检查网络后再点一次提交。'
+          : 'Your calibration was not saved. Check your connection and submit again.',
+      );
+      return;
+    } finally {
+      setSaving(false);
+    }
+
     onLogCalibration({
         type: 'Profile',
         modelValue: profile,
         userValue: selfProfile,
-        reason: reason || "User submitted calibration",
+        reason: comment,
         disagreementIndex: disagreement,
         likertTrust: likertTrust
     });
@@ -158,12 +193,23 @@ export const Calibration: React.FC<Props> = ({ profile, onLogCalibration, langua
         </div>
 
         {/* Submit */}
+        {saveError && (
+            <div className="flex items-start gap-2 mb-3 p-3 rounded-lg text-sm" style={{
+              backgroundColor: theme === 'light' ? '#fef2f2' : '#7f1d1d',
+              color: theme === 'light' ? '#991b1b' : '#fecaca',
+            }}>
+                <AlertCircle size={18} className="shrink-0 mt-0.5" />
+                <span>{saveError}</span>
+            </div>
+        )}
         <button
             onClick={handleSubmit}
-            disabled={submitted}
+            disabled={submitted || saving}
             className={`w-full py-4 rounded-xl font-bold text-white shadow-lg transition-all flex items-center justify-center space-x-2 animate-slide-in-right stagger-4 ${
                 submitted
                 ? 'bg-violet-600 cursor-default'
+                : saving
+                ? 'bg-indigo-400 cursor-wait'
                 : 'bg-gradient-to-r from-indigo-500 to-purple-600 hover:shadow-indigo-500/30 hover:shadow-xl active:scale-[0.98]'
             }`}
         >
@@ -172,6 +218,8 @@ export const Calibration: React.FC<Props> = ({ profile, onLogCalibration, langua
                     <CheckCircle2 size={20} />
                     <span>{t.calibrationRecorded}</span>
                 </>
+            ) : saving ? (
+                <span>{language === 'zh' ? '保存中…' : 'Saving…'}</span>
             ) : (
                 <span>{t.confirmSubmit}</span>
             )}

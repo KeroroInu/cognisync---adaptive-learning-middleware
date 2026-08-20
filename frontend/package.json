@@ -5,9 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "predev": "bash scripts/fetch-pyodide.sh",
     "build": "vite build",
+    "prebuild": "bash scripts/fetch-pyodide.sh",
     "preview": "vite preview",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "pyodide:fetch": "bash scripts/fetch-pyodide.sh"
   },
   "dependencies": {
     "@codemirror/lang-javascript": "^6.2.4",

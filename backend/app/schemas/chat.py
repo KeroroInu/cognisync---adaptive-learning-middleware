@@ -131,6 +131,26 @@ class ChatRequest(BaseModel):
     )
 
 
+class ChatScaffoldInfo(BaseModel):
+    """本轮**实际生效**的支架边界。
+
+    学生请求 L3、教师蓝图把建构阶段封顶到 L2 时，此前响应里没有任何字段体现这次
+    降级，界面继续显示 L3。学生以为拿到了更深的支架，实际收到的是更浅的——
+    「感知支架强度」这一测量就被污染了，属于内部效度问题，所以必须回传。
+
+    可选字段：只有走项目工坊支架链路（请求带 scaffoldContext）的回合才有值，
+    普通对话为 None。旧前端忽略未知字段，不受影响。
+    """
+
+    requestedLevel: int = Field(..., ge=0, le=3, description="学生本轮请求的等级")
+    appliedLevel: int = Field(..., ge=0, le=3, description="教师策略裁定后实际生效的等级")
+    wasClamped: bool = Field(..., description="是否因教师蓝图上限而被降级")
+    policySource: str = Field(..., description="边界来源：teacher_blueprint | platform_default")
+    coreImplementationMaxLevel: int = Field(
+        ..., ge=0, le=3, description="建构阶段的核心实现封顶等级"
+    )
+
+
 class ChatResponse(BaseModel):
     """
     聊天响应（与前端契约完全一致）
@@ -140,6 +160,9 @@ class ChatResponse(BaseModel):
     analysis: ChatAnalysis = Field(..., description="对话分析结果")
     updatedProfile: UserProfile = Field(..., description="更新后的学习者画像")
     updatedGraph: Optional[List[dict]] = Field(None, alias="updatedGraph", description="更新后的知识图谱")
+    scaffold: Optional[ChatScaffoldInfo] = Field(
+        None, description="本轮实际生效的支架边界；非支架对话为空"
+    )
 
     model_config = ConfigDict(
         json_schema_extra={

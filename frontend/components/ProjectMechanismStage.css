@@ -331,10 +331,18 @@
 .mechanism-edge-actions button { min-height: 34px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface-muted); color: var(--text-primary); font-size: .62rem; font-weight: 850; cursor: pointer; }
 .mechanism-edge-actions button.is-danger { border-color: #a85a49; background: color-mix(in srgb, var(--brand-rose) 16%, var(--surface-strong)); color: #9d4738; }
 
-.mechanism-notice { display: flex; align-items: flex-start; gap: 8px; margin-top: auto; padding: 9px 10px; border: 1px dashed var(--line-strong); border-radius: 6px; color: var(--text-tertiary); font-size: .61rem; line-height: 1.45; }
+.mechanism-notice { display: flex; align-items: flex-start; gap: 8px; margin-top: auto; padding: 9px 10px; border: 1px dashed var(--line-strong); border-radius: 6px; color: var(--text-tertiary); font-size: .875rem; line-height: 1.55; }
 .mechanism-notice.is-connecting { border-style: solid; border-color: #9cb52e; background: color-mix(in srgb, var(--brand-cyan) 18%, var(--surface-strong)); color: var(--text-secondary); }
-.mechanism-confirm { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 1.5px solid #161713; border-radius: 7px; background: var(--brand-cyan); color: #161713; box-shadow: 3px 4px 0 #161713; font-size: .7rem; font-weight: 900; cursor: pointer; }
+/* 证据写入失败。实线红框 + 深色文字，与虚线的普通操作提示明确区分：
+   学生必须能一眼看出「这次没记上」，而不是当成又一条操作说明划过去。 */
+.mechanism-notice.is-error { margin-top: 8px; border-style: solid; border-color: #b42318; background: #fef3f2; color: #912018; font-weight: 700; }
+.mechanism-confirm { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 1.5px solid #161713; border-radius: 7px; background: var(--brand-cyan); color: #161713; box-shadow: 3px 4px 0 #161713; font-size: .875rem; font-weight: 900; cursor: pointer; }
 .mechanism-confirm:disabled { border-color: var(--line-strong); background: var(--surface-muted); color: var(--text-tertiary); box-shadow: none; cursor: not-allowed; opacity: .65; }
+.mechanism-confirm .is-spinning { animation: mechanism-confirm-spin .8s linear infinite; }
+@keyframes mechanism-confirm-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .mechanism-confirm .is-spinning { animation: none !important; }
+}
 
 .mechanism-stage-footer { flex: none; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 16px; padding-top: 13px; border-top: 1px solid var(--line-strong); }
 .mechanism-stage-footer > span { color: var(--text-tertiary); font-size: .68rem; text-align: center; }

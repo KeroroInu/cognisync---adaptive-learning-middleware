@@ -17,6 +17,18 @@ from app.models.sql.research import (
     ResearchTaskStatus,
     ResearchTaskSubmission,
 )
+from app.models.sql.research_event import (
+    ArtifactChangeSource,
+    ArtifactType,
+    ArtifactVersion,
+    ProjectStage,
+    ScaffoldDeliveryStatus,
+    ScaffoldEvent,
+    StageArtifact,
+    StageEvent,
+    StageEventArtifact,
+    StageEventType,
+)
 from app.models.sql.system_config import SystemConfig
 from app.models.sql.behavior_log import BehaviorLog
 
@@ -42,6 +54,16 @@ __all__ = [
     "ResearchTaskStatus",
     "ProjectBlueprintStatus",
     "ProjectBlueprintVersion",
+    "StageArtifact",
+    "ArtifactVersion",
+    "StageEvent",
+    "ScaffoldEvent",
+    "ProjectStage",
+    "ArtifactType",
+    "ArtifactChangeSource",
+    "StageEventArtifact",
+    "StageEventType",
+    "ScaffoldDeliveryStatus",
     "SystemConfig",
     "BehaviorLog",
 ]

@@ -6,7 +6,6 @@ import {
   getActiveResearchTask,
   saveResearchProgress,
   saveResearchWorkspace,
-  completeResearchTask,
   reopenResearchTask,
 } from '../services/api';
 import { SnakeProjectDemo } from '../components/SnakeProjectDemo';
@@ -34,6 +33,22 @@ import {
   upgradeSnakeProjectFunctionCards,
   type SnakeProjectWorkspace,
 } from '../data/snakeProjectDemo';
+import {
+  createRequestId,
+  functionCardArtifacts,
+  functionMappingArtifacts,
+  isFinalSubmissionPersisted,
+  isStageEventPersisted,
+  moduleCodeArtifact,
+  observationArtifacts,
+  pathArtifact,
+  reportFinalSubmission,
+  reportStageEvent,
+  type ArtifactChangeSource,
+  type BackendStage,
+  type StageArtifactPayload,
+  type StageEventType,
+} from '../services/stageEvents';
 
 const ResearchCodeEditor = React.lazy(() => import('../components/ResearchCodeEditor'));
 
@@ -133,7 +148,15 @@ const WORKSPACE_CHECK_INTERVAL_MS = 400;
 const WORKSPACE_SAVE_DEBOUNCE_MS = 900;
 const WORKSPACE_RETRY_DELAY_MS = 4000;
 
-// Extend Window so TS knows about Pyodide on CDN
+// Pyodide 运行时的同源路径。
+//
+// 不走公共 CDN：建构阶段的模块测试完全依赖它在浏览器里跑 Python，而
+// cdn.jsdelivr.net 在国内课堂环境经常极慢甚至不可达，40–50 人同时首次加载
+// 会进一步放大。运行时由 scripts/fetch-pyodide.sh 在构建期放进 public/pyodide/，
+// 随前端镜像分发。改动此常量时必须同步改 workers/pythonModuleWorker.ts。
+const PYODIDE_BASE_URL = '/pyodide/';
+
+// Extend Window so TS knows about the self-hosted Pyodide loader
 declare global {
   interface Window {
     loadPyodide: (options?: Record<string, unknown>) => Promise<any>;
@@ -164,6 +187,8 @@ export const Research: React.FC<Props> = ({
   const [observationCardCount, setObservationCardCount] = useState(0);
   const [scaffoldCompletion, setScaffoldCompletion] = useState<ScaffoldCompletion | null>(null);
   const [buildAssistantContext, setBuildAssistantContext] = useState<ProjectBuildAssistantContext>({ artifactSummary: '' });
+  /** 关键事件未能记录时给学生的提示。绝不静默失败。 */
+  const [eventNotice, setEventNotice] = useState<string | null>(null);
 
   // Chat state
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -189,11 +214,16 @@ export const Research: React.FC<Props> = ({
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const workspaceSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const workspaceRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const workspaceSaveRunningRef = useRef(false);
+  const workspaceSaveRunningRef = useRef<Promise<void> | null>(null);
   const workspacePendingRef = useRef<SnakeProjectWorkspace | null>(null);
   const workspaceLastSavedSignatureRef = useRef('');
   const flushWorkspaceRef = useRef<(keepalive?: boolean) => Promise<void>>(async () => {});
   const chatScrollRef = useRef<HTMLDivElement>(null);
+  /**
+   * 响应丢失后学生手动重试时，必须复用第一次的幂等键。
+   * 只有提交内容变化才生成新 ID。
+   */
+  const finalSubmitAttemptRef = useRef<{ signature: string; requestId: string } | null>(null);
 
   // Elapsed timer
   const startTimeRef = useRef<number | null>(null);
@@ -218,9 +248,31 @@ export const Research: React.FC<Props> = ({
           : (isZh ? '已保存' : 'Saved'))
       : (isZh ? '过程已暂存' : 'Progress saved');
 
-  const flushWorkspaceQueue = useCallback(async (keepalive = false) => {
-    if (!task || experimentGroup !== 'pdt' || workspaceSaveRunningRef.current) return;
-    workspaceSaveRunningRef.current = true;
+  const flushWorkspaceQueue = useCallback(async (keepalive = false): Promise<void> => {
+    if (!task || experimentGroup !== 'pdt') return;
+
+    // 已经有一轮在跑时**等它结束**，而不是直接返回。
+    //
+    // 直接返回会造成一个隐蔽的证据丢失：`reportKeyMoment` 先 `queueWorkspaceSave(0)`
+    // 再 flush，若此刻恰好有一轮保存在途，flush 立即空转返回，待保存标记仍在，
+    // 于是被判定为「工作区没保存成功」而丢弃这次关键事件。工作区其实会被在途的
+    // 那一轮正常保存，丢掉的只有研究证据，而且提示语还是错的（说成网络异常）。
+    const inFlight = workspaceSaveRunningRef.current;
+    if (inFlight) {
+      await inFlight;
+      // 在途的那一轮可能已经把我们刚入队的快照一并保存了。
+      if (!workspacePendingRef.current) return;
+      // 也可能另一个调用者已经抢先开了新一轮，交给它即可。
+      if (workspaceSaveRunningRef.current) {
+        await workspaceSaveRunningRef.current;
+        return;
+      }
+    }
+
+    // 闸门必须在任何 await 之前同步装好，否则「无待保存内容」时整个函数体会
+    // 同步跑完，之后再赋值就会留下一个永不清空的陈旧 Promise。
+    let release: () => void = () => {};
+    workspaceSaveRunningRef.current = new Promise<void>(resolve => { release = resolve; });
     try {
       while (workspacePendingRef.current) {
         const snapshot = workspacePendingRef.current;
@@ -244,7 +296,8 @@ export const Research: React.FC<Props> = ({
       }
       setWorkspaceSaveStatus('saved');
     } finally {
-      workspaceSaveRunningRef.current = false;
+      workspaceSaveRunningRef.current = null;
+      release();
     }
   }, [experimentGroup, task]);
 
@@ -272,6 +325,107 @@ export const Research: React.FC<Props> = ({
       void flushWorkspaceRef.current();
     }, delay);
   }, [experimentGroup, task]);
+
+  // ── 关键教学事件上报 ────────────────────────────────────────────────────
+  //
+  // 顺序是刻意的：**先把工作区快照存成功，再写事件**。
+  // 事件里的产物版本是不可覆盖的研究证据；若事件先写入而快照保存失败，
+  // 学生刷新后看到的界面状态会与证据链对不上。反过来则只是少一条事件，
+  // 下次确认还能补，代价小得多。
+  //
+  // 幂等键在这里生成一次，`reportStageEvent` 内部的重试全程复用它和同一个
+  // 请求体——后端会比对语义指纹，同键不同内容会被判 409 而不是重放。
+
+  const reportKeyMoment = useCallback(async (
+    params: {
+      stage: BackendStage;
+      eventType: StageEventType;
+      detail?: Record<string, unknown>;
+      artifacts?: StageArtifactPayload[];
+      /** 页面即将卸载时用 keepalive，保证请求仍能发出。 */
+      keepalive?: boolean;
+    },
+  ): Promise<boolean> => {
+    if (!task || experimentGroup !== 'pdt') return true;
+
+    // 先确保快照落库。失败时不写事件，并如实告知学生。
+    //
+    // 必须先主动入队一次：工作区改动是靠 400ms 轮询发现的，学生在最后一次编辑
+    // 之后立刻点确认时，待保存队列可能还是空的，只 flush 会漏掉这次改动。
+    queueWorkspaceSave(0);
+    if (workspacePendingRef.current) {
+      if (workspaceSaveTimerRef.current) {
+        clearTimeout(workspaceSaveTimerRef.current);
+        workspaceSaveTimerRef.current = null;
+      }
+      await flushWorkspaceRef.current(params.keepalive ?? false);
+      if (workspacePendingRef.current) {
+        setEventNotice(isZh
+          ? '工作区还没保存成功，这一步暂时没有记录。请检查网络后重试。'
+          : 'Your workspace has not been saved yet, so this step was not recorded. Check your connection and retry.');
+        return false;
+      }
+    }
+
+    const outcome = await reportStageEvent(
+      task.id,
+      {
+        request_id: createRequestId(),
+        stage: params.stage,
+        event_type: params.eventType,
+        detail: params.detail,
+        artifacts: params.artifacts,
+      },
+      { keepalive: params.keepalive },
+    );
+
+    if (isStageEventPersisted(outcome)) {
+      setEventNotice(null);
+      return true;
+    }
+
+    // 绝不静默失败：界面提示「已确认」而证据没写入，会让研究数据凭空缺口。
+    switch (outcome.status) {
+      case 'task-not-active':
+        setEventNotice(isZh
+          ? '这个任务已归档，无法再记录新的学习过程。请联系老师。'
+          : 'This task is archived and no longer records new progress. Please contact your teacher.');
+        break;
+      case 'idempotency-conflict':
+        // 同一个 requestId 配上不同内容。UUID 下几乎不可能，出现即为客户端缺陷。
+        setEventNotice(isZh
+          ? '这一步的记录出现冲突，请刷新页面后重新确认。'
+          : 'This step conflicted with an earlier record. Please refresh and confirm again.');
+        break;
+      case 'invalid-combination':
+        setEventNotice(isZh
+          ? '这一步的阶段与产物不匹配，已跳过记录。请把该提示反馈给老师。'
+          : 'This step did not match the expected stage; it was skipped. Please report this to your teacher.');
+        break;
+      case 'rejected-payload':
+        // 请求体本身被校验拒绝（字段超长、产物条数超限）。学生自己改不了，
+        // 但也不能让他以为是网络问题而反复重试。
+        setEventNotice(isZh
+          ? '这一步的内容不符合记录格式，没有保存成功。你的作品已存好，请把该提示反馈给老师。'
+          : 'This step could not be recorded because of its format. Your work is saved — please report this to your teacher.');
+        break;
+      case 'too-large':
+        setEventNotice(isZh
+          ? '本次内容过大，未能记录。请精简后再确认。'
+          : 'This step was too large to record. Please simplify and confirm again.');
+        break;
+      case 'not-found':
+        setEventNotice(isZh
+          ? '找不到当前任务，请刷新页面。'
+          : 'The current task could not be found. Please refresh.');
+        break;
+      default:
+        setEventNotice(isZh
+          ? '这一步没有记录成功，你的内容已保存，可稍后重新确认。'
+          : 'This step was not recorded. Your work is saved; you can confirm again later.');
+    }
+    return false;
+  }, [experimentGroup, isZh, queueWorkspaceSave, task]);
 
   // ── Load task ──────────────────────────────────────────────────────────
 
@@ -384,6 +538,88 @@ export const Research: React.FC<Props> = ({
     queueWorkspaceSave(0);
     setFactoryStage(stage);
   }, [queueWorkspaceSave]);
+
+  // 各阶段的确认动作。刻意**不**挂在 handleFactoryStageChange 上：
+  // 那个函数同时服务于「确认进入下一阶段」和「点导航条往回走」，
+  // 挂在它上面会把返回浏览也记成阶段确认，污染阶段确认次数这一研究指标。
+  //
+  // 证据写入失败时**不推进阶段**。界面显示「已进入下一阶段」而这一阶段的
+  // stage_confirm 没有落库，是最坏的情况：学生不会再确认第二次，这条证据
+  // 就永久缺失且无人察觉。停在原地并给出提示，学生再点一次即可重试
+  // （requestId 每次重新生成，不会与失败的那次冲突）。
+
+  const confirmObserveStage = useCallback(async () => {
+    if (!task) return;
+    const workspace = collectSnakeProjectWorkspace(task.id);
+    const recorded = await reportKeyMoment({
+      stage: 'observe',
+      eventType: 'stage_confirm',
+      detail: {
+        observationCount: workspace.observations.length,
+        evidenceCount: workspace.evidence.length,
+      },
+      artifacts: observationArtifacts(workspace.observations),
+    });
+    if (!recorded) return;
+    handleFactoryStageChange('decompose');
+  }, [handleFactoryStageChange, reportKeyMoment, task]);
+
+  const confirmDecomposeStage = useCallback(async () => {
+    if (!task) return;
+    const workspace = collectSnakeProjectWorkspace(task.id);
+    const recorded = await reportKeyMoment({
+      stage: 'decompose',
+      eventType: 'stage_confirm',
+      detail: {
+        functionCardCount: workspace.functions.length,
+        decidedMappingCount: workspace.functions.filter(
+          card => card.mappingDecision && card.mappingDecision.status !== 'pending',
+        ).length,
+      },
+      // 功能卡与学生对教师契约的采纳决定一并记录：两者在同一次确认中产生，
+      // 分开上报会让「学生是否参考了教师蓝图」失去时间对应关系。
+      artifacts: [
+        ...functionCardArtifacts(workspace.functions),
+        ...functionMappingArtifacts(workspace.functions),
+      ],
+    });
+    if (!recorded) return;
+    handleFactoryStageChange('model');
+  }, [handleFactoryStageChange, reportKeyMoment, task]);
+
+  const confirmModelStage = useCallback(async () => {
+    if (!task) return;
+    const workspace = collectSnakeProjectWorkspace(task.id);
+    const mechanisms = workspace.path.functionMechanisms ?? {};
+    const recorded = await reportKeyMoment({
+      stage: 'model',
+      eventType: 'stage_confirm',
+      detail: {
+        mechanismCount: Object.keys(mechanisms).length,
+        confirmedCount: Object.values(mechanisms).filter(item => item.confirmedAt).length,
+      },
+      // 逐卡机制图已在 confirmDiagram 时单独上报过；这里只记阶段确认本身，
+      // 不重复上报全部机制产物，避免同一内容在同一时刻产生两批版本。
+    });
+    if (!recorded) return;
+    handleFactoryStageChange('plan');
+  }, [handleFactoryStageChange, reportKeyMoment, task]);
+
+  const confirmPlanStage = useCallback(async () => {
+    if (!task) return;
+    const workspace = collectSnakeProjectWorkspace(task.id);
+    const recorded = await reportKeyMoment({
+      stage: 'plan',
+      eventType: 'stage_confirm',
+      detail: {
+        orderedCount: workspace.path.orderedCardIds.length,
+        prerequisiteCount: Object.keys(workspace.path.prerequisites ?? {}).length,
+      },
+      artifacts: [pathArtifact(workspace.path)],
+    });
+    if (!recorded) return;
+    handleFactoryStageChange('build');
+  }, [handleFactoryStageChange, reportKeyMoment, task]);
 
   const getScaffoldArtifactContext = useCallback((): ScaffoldArtifactContext => {
     if (!task) return { summary: '' };
@@ -531,8 +767,120 @@ export const Research: React.FC<Props> = ({
     setCompleting(true);
     setCompleteError(null);
     try {
-      await completeResearchTask(task.id, code, startTimeRef.current ? new Date(startTimeRef.current).toISOString() : undefined);
-      setCompleted(true);
+      // PDT 组的代码分散在各模块（progress[unitId].code）里，旧的整文件编辑器
+      // 缓冲区 `code` 在这条流程下始终为空。直接提交它会让最终提交记录不含
+      // 任何学生代码，因此按实现路径顺序拼装模块代码。
+      let submitted = code;
+      let workspace: SnakeProjectWorkspace | null = null;
+      if (experimentGroup === 'pdt') {
+        workspace = collectSnakeProjectWorkspace(task.id);
+        const byCard = new Map(workspace.functions.map(card => [card.id, card.responsibility]));
+        const ordered = workspace.path.orderedCardIds.length > 0
+          ? workspace.path.orderedCardIds
+          : workspace.functions.map(card => card.id);
+        const seen = new Set<string>();
+        const blocks: string[] = [];
+        ordered.forEach(cardId => {
+          Object.entries(workspace.progress).forEach(([unitId, item]) => {
+            if (item.cardId !== cardId || seen.has(unitId)) return;
+            seen.add(unitId);
+            blocks.push(`# ── ${byCard.get(cardId) ?? cardId} / ${item.blueprintNodeId}\n${item.code}`);
+          });
+        });
+        // 未进入路径的模块也要提交，否则学生写过的代码会凭空消失。
+        Object.entries(workspace.progress).forEach(([unitId, item]) => {
+          if (seen.has(unitId)) return;
+          blocks.push(`# ── ${byCard.get(item.cardId) ?? item.cardId} / ${item.blueprintNodeId}\n${item.code}`);
+        });
+        submitted = blocks.join('\n\n');
+      }
+
+      // 项目解构组的最终产物来自多个模块。提交前先强制保存工作区，
+      // 保证学生刷新后看到的界面与不可覆盖的最终产物版本一致。
+      if (workspace) {
+        queueWorkspaceSave(0);
+        if (workspaceSaveTimerRef.current) {
+          clearTimeout(workspaceSaveTimerRef.current);
+          workspaceSaveTimerRef.current = null;
+        }
+        if (workspacePendingRef.current) {
+          await flushWorkspaceRef.current();
+        }
+        if (workspacePendingRef.current) {
+          setCompleteError(isZh
+            ? '工作区还没有同步成功，暂时不能最终提交。内容已保留在本机，请检查网络后重试。'
+            : 'The workspace has not synced yet, so it cannot be submitted. Your work remains on this device; check the network and retry.');
+          return;
+        }
+      }
+
+      const artifacts: StageArtifactPayload[] = workspace
+        ? Object.entries(workspace.progress).map(([unitId, progress]) =>
+          moduleCodeArtifact(unitId, progress, 'stage_confirm'))
+        : [{
+          artifact_type: 'module_code',
+          artifact_key: 'final-code',
+          content: { code: submitted, verified: false },
+          change_source: 'stage_confirm',
+        }];
+      const detail: Record<string, unknown> = workspace
+        ? {
+          moduleCount: Object.keys(workspace.progress).length,
+          verifiedCount: Object.values(workspace.progress).filter(item => item.verified).length,
+          functionCardCount: workspace.functions.length,
+          observationCount: workspace.observations.length,
+          codeLength: submitted.length,
+        }
+        : { codeLength: submitted.length };
+      const startedAt = startTimeRef.current
+        ? new Date(startTimeRef.current).toISOString()
+        : undefined;
+      // 签名不含 request_id：响应丢失后再点提交，只要作品没改，
+      // 就会复用原 ID，后端返回第一次的事件而不会重复调用。
+      const signature = JSON.stringify({ taskId: task.id, submitted, startedAt, detail, artifacts });
+      if (!finalSubmitAttemptRef.current || finalSubmitAttemptRef.current.signature !== signature) {
+        finalSubmitAttemptRef.current = { signature, requestId: createRequestId() };
+      }
+
+      const outcome = await reportFinalSubmission(task.id, {
+        request_id: finalSubmitAttemptRef.current.requestId,
+        stage: 'build',
+        code_submitted: submitted,
+        started_at: startedAt,
+        detail,
+        artifacts,
+      });
+      if (isFinalSubmissionPersisted(outcome)) {
+        finalSubmitAttemptRef.current = null;
+        setEventNotice(null);
+        setCompleted(true);
+        return;
+      }
+
+      switch (outcome.status) {
+        case 'task-not-active':
+          setCompleteError(isZh ? '这个任务已归档，无法继续提交。请联系老师。' : 'This task is archived. Please contact your teacher.');
+          break;
+        case 'idempotency-conflict':
+          setCompleteError(isZh ? '提交记录出现冲突。请刷新页面后再提交。' : 'The submission conflicted with an earlier attempt. Refresh and submit again.');
+          break;
+        case 'invalid-combination':
+          setCompleteError(isZh ? '最终产物与当前阶段不匹配，请将此提示反馈给老师。' : 'The final artifacts do not match this stage. Please report this to your teacher.');
+          break;
+        case 'rejected-payload':
+          setCompleteError(isZh ? '最终产物格式校验未通过，请将此提示反馈给老师。' : 'The final artifacts failed validation. Please report this to your teacher.');
+          break;
+        case 'too-large':
+          setCompleteError(isZh ? '最终产物过大，暂时无法提交。' : 'The final submission is too large.');
+          break;
+        case 'not-found':
+          setCompleteError(isZh ? '找不到当前任务，请刷新页面。' : 'The current task could not be found. Refresh the page.');
+          break;
+        default:
+          setCompleteError(isZh
+            ? '提交没有完成，你的作品已保留，可以稍后再试。'
+            : 'The submission did not complete. Your work is saved; try again shortly.');
+      }
     } catch (err) {
       setCompleteError(err instanceof Error ? err.message : isZh ? '提交失败' : 'Failed to submit');
     } finally {
@@ -574,22 +922,22 @@ export const Research: React.FC<Props> = ({
       },
     ]);
 
-    // Inject the Pyodide CDN script once
+    // Inject the Pyodide script once (same-origin, self-hosted)
     if (!window.loadPyodide) {
       await new Promise<void>((resolve, reject) => {
         const existing = document.getElementById('pyodide-cdn');
         if (existing) { resolve(); return; }
         const s = document.createElement('script');
         s.id = 'pyodide-cdn';
-        s.src = 'https://cdn.jsdelivr.net/pyodide/v0.27.0/full/pyodide.js';
+        s.src = `${PYODIDE_BASE_URL}pyodide.js`;
         s.onload = () => resolve();
-        s.onerror = () => reject(new Error('Failed to fetch Pyodide CDN'));
+        s.onerror = () => reject(new Error('Failed to load the local Python runtime'));
         document.head.appendChild(s);
       });
     }
 
     const pyodide = await window.loadPyodide({
-      indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.27.0/full/',
+      indexURL: PYODIDE_BASE_URL,
       // Route Python stdout/stderr directly into terminal lines
       stdout: (text: string) =>
         setTerminalLines(prev => [...prev, { type: 'stdout', text: text.replace(/\n$/, '') }]),
@@ -704,6 +1052,19 @@ export const Research: React.FC<Props> = ({
         saveLabel={factorySaveLabel}
       />
 
+      {/*
+        关键事件未能记录时必须让学生看见。若界面提示「已确认」而证据没写入，
+        研究数据会出现无法解释的缺口，而且事后无从判断是学生没做还是没记上。
+      */}
+      {eventNotice && (
+        <div className="project-event-notice" role="status">
+          <span>{eventNotice}</span>
+          <button type="button" onClick={() => setEventNotice(null)}>
+            {isZh ? '知道了' : 'Dismiss'}
+          </button>
+        </div>
+      )}
+
       <SnakeProjectDemo
         language={language}
         open={demoOpen}
@@ -738,7 +1099,7 @@ export const Research: React.FC<Props> = ({
           evidence={runtimeEvidence}
           scaffoldCompletion={scaffoldCompletion}
           onOpenProject={() => setDemoOpen(true)}
-          onContinue={() => handleFactoryStageChange('decompose')}
+          onContinue={() => { void confirmObserveStage(); }}
           onCardCountChange={setObservationCardCount}
         />
       )}
@@ -748,7 +1109,7 @@ export const Research: React.FC<Props> = ({
           language={language}
           taskId={task.id}
           onBack={() => handleFactoryStageChange('observe')}
-          onContinue={() => handleFactoryStageChange('model')}
+          onContinue={() => { void confirmDecomposeStage(); }}
         />
       )}
 
@@ -759,7 +1120,8 @@ export const Research: React.FC<Props> = ({
               taskId={task.id}
               stage="model"
               onBack={() => handleFactoryStageChange('decompose')}
-              onContinue={() => handleFactoryStageChange('plan')}
+              onContinue={() => { void confirmModelStage(); }}
+              onReportKeyMoment={reportKeyMoment}
             />
           : <ProjectStagePreview
               language={language}
@@ -776,7 +1138,8 @@ export const Research: React.FC<Props> = ({
               taskId={task.id}
               stage="plan"
               onBack={() => handleFactoryStageChange('model')}
-              onContinue={() => handleFactoryStageChange('build')}
+              onContinue={() => { void confirmPlanStage(); }}
+              onReportKeyMoment={reportKeyMoment}
             />
           : <ProjectStagePreview
               language={language}
@@ -793,6 +1156,11 @@ export const Research: React.FC<Props> = ({
           taskId={task.id}
           onBack={() => handleFactoryStageChange('plan')}
           onAssistantContextChange={setBuildAssistantContext}
+          onReportKeyMoment={reportKeyMoment}
+          onReviseEarlierStage={handleFactoryStageChange}
+          onFinalSubmit={handleComplete}
+          completing={completing}
+          completed={completed}
         />
       )}
 

@@ -22,6 +22,11 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      # 构建期镜像源。默认空 = 走官方源，任何环境都能构建。
+      # 国内服务器把这两个设成内网镜像可把构建从「几分钟甚至挂住」降到秒级。
+      args:
+        APT_MIRROR: ${APT_MIRROR:-}
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-}
     container_name: cognisync-backend
     restart: unless-stopped
     env_file:
@@ -46,6 +51,10 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        NPM_REGISTRY: ${NPM_REGISTRY:-}
+        PYODIDE_BASE_URL: ${PYODIDE_BASE_URL:-}
+        APK_MIRROR: ${APK_MIRROR:-}
     container_name: cognisync-frontend
     restart: unless-stopped
     depends_on:
@@ -58,6 +67,8 @@ services:
     build:
       context: ./admin-frontend
       dockerfile: Dockerfile
+      args:
+        NPM_REGISTRY: ${NPM_REGISTRY:-}
     container_name: cognisync-admin
     restart: unless-stopped
     depends_on:

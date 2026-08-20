@@ -130,6 +130,11 @@ class ResearchTaskSubmission(Base, UUIDMixin):
     """
     __tablename__ = "research_task_submissions"
     __table_args__ = (
+        # 一名学生在一个任务中只应有一条提交记录：所有读取路径都使用
+        # scalar_one_or_none()，出现重复行会直接抛 MultipleResultsFound 并返回 500。
+        # 该约束同时使「首次关键事件时原子冻结教师蓝图版本」成为可能
+        # （见 research_event_service.freeze_blueprint_version 的 ON CONFLICT）。
+        UniqueConstraint("task_id", "user_id", name="uq_research_submission_task_user"),
         Index("ix_research_submissions_user_task", "user_id", "task_id"),
         {"comment": "教学研究任务提交记录表"},
     )

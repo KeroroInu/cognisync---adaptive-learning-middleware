@@ -15,6 +15,7 @@ class FakeDbSession:
     def __init__(self):
         self.added = []
         self.commit_calls = 0
+        self.flush_calls = 0
         self.rollback_calls = 0
         self.refresh_calls = 0
 
@@ -25,6 +26,13 @@ class FakeDbSession:
 
     async def commit(self):
         self.commit_calls += 1
+
+    async def flush(self):
+        """chat 链路先 flush 拿到消息 ID，再在同一事务内写事件表。"""
+        self.flush_calls += 1
+        for obj in self.added:
+            if getattr(obj, "id", None) is None:
+                obj.id = uuid4()
 
     async def refresh(self, obj):
         self.refresh_calls += 1

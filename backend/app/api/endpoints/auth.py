@@ -133,8 +133,6 @@ async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
     ).order_by(ProfileSnapshot.created_at.desc()).limit(1)
     profile_result = await db.execute(profile_stmt)
     latest_profile = profile_result.scalar_one_or_none()
-    has_profile = latest_profile is not None
-
     # 构造用户信息
     user_info = UserInfo(
         id=str(user.id),
@@ -179,9 +177,38 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
     existing_user = result.scalar_one_or_none()
 
     if existing_user:
-        # 不允许通过重复注册改写未完成账号的密码。中断后应使用原密码登录继续。
+        # 不允许通过重复注册改写未完成账号的密码：学号是可猜的，允许覆盖
+        # 等于给了账号劫持入口。中断后的正确路径是用原密码登录继续
+        # （前端 App.tsx 会依据 has_completed_onboarding 自动跳回未完成的那一步）。
+        #
+        # 但必须把「注册没做完」和「学号已被占用」区分开。二者以前都返回同一句
+        # "Student ID already registered"，学生看到后完全不知道该做什么——
+        # 实际测试中就有人卡在这里反复重填。AI 模式尤其容易触发：它为了拿到
+        # 后端 session，在选择模式时就建号，中途退出就会留下这样一个账号。
+        if not existing_user.has_completed_onboarding:
+            logger.info(
+                f"[REGISTER] Resuming hint for incomplete account: {data.student_id}"
+            )
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "REGISTRATION_INCOMPLETE",
+                    "message": (
+                        "该学号之前已经开始注册但没有完成。"
+                        "请用当时设置的密码登录，系统会自动带你回到未完成的那一步。"
+                    ),
+                    "onboardingMode": existing_user.onboarding_mode,
+                },
+            )
+
         logger.warning(f"[REGISTER] Student ID already registered: {data.student_id}")
-        raise HTTPException(status_code=400, detail="Student ID already registered")
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "STUDENT_ID_TAKEN",
+                "message": "该学号已注册完成，请直接登录。",
+            },
+        )
 
     # 如果提供了邮箱，检查邮箱唯一性
     if data.email:
@@ -205,7 +232,10 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
             created_at=datetime.now(timezone.utc),
             onboarding_mode=data.mode,  # 'scale' or 'ai'
             class_name=data.class_name,
-            experiment_group="unassigned",
+            # 试用环境可通过 DEFAULT_EXPERIMENT_GROUP 让新用户直接落进某一组，
+            # 否则未分组用户在学生端只能看到画像与量表，进不了研究任务。
+            # 正式实验必须保持 unassigned 并改用随机分配，见 config.py 中的说明。
+            experiment_group=settings.DEFAULT_EXPERIMENT_GROUP,
             has_completed_onboarding=False
         )
 
@@ -214,7 +244,7 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
         logger.info(f"[REGISTER] User created in database: {new_user.id}")
 
         await db.refresh(new_user)
-        logger.info(f"[REGISTER] User object refreshed successfully")
+        logger.info("[REGISTER] User object refreshed successfully")
 
         # 生成token
         token = create_access_token(str(new_user.id))
@@ -254,7 +284,7 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
         logger.info(f"[REGISTER] Initial profile snapshot created for user {new_user.id}")
 
         if data.mode == 'ai':
-            logger.info(f"[REGISTER] Generating initial graph for AI mode")
+            logger.info("[REGISTER] Generating initial graph for AI mode")
 
             try:
                 from app.services.personalization_service import PersonalizationService
@@ -290,13 +320,13 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
 
         try:
             await db.rollback()
-            logger.info(f"[REGISTER] Attempted database rollback")
+            logger.info("[REGISTER] Attempted database rollback")
         except Exception as rollback_error:
             logger.error(f"[REGISTER] Failed to rollback: {str(rollback_error)}")
 
         raise HTTPException(
             status_code=500,
-            detail=f"Registration failed due to server error"
+            detail="Registration failed due to server error"
         )
 
 
@@ -325,7 +355,41 @@ async def register_with_scale(data: RegisterWithScaleRequest, db: AsyncSession =
     existing_user = result.scalar_one_or_none()
 
     if existing_user and existing_user.has_completed_onboarding:
-        raise HTTPException(status_code=400, detail="Student ID already registered")
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "STUDENT_ID_TAKEN",
+                "message": "该学号已注册完成，请直接登录。",
+            },
+        )
+
+    # 未完成的账号可以改用量表模式继续（这是 AI 模式中断后的自助恢复路径，
+    # 下面 391 行起会复用该行而不是新建）。但**必须先证明是本人**。
+    #
+    # 复用逻辑会重写 password_hash。若不校验原密码，任何人拿到别人未完成的
+    # 学号就能把账号连同密码一起接管——学号在课堂场景里是公开可猜的。
+    # 后果不只是越权：接管者之后产生的全部学习数据都会挂在原学号名下，
+    # 准实验的个体归属直接失效。
+    #
+    # /register 早已拒绝覆盖未完成账号的密码，这里却没有，属于两条注册路径
+    # 的策略不一致。统一为：原密码正确才允许继续，否则给出与 /register
+    # 相同的「请用原密码登录」指引。
+    if existing_user and not verify_password(data.password, existing_user.password_hash or ""):
+        logger.warning(
+            f"[REGISTER-WITH-SCALE] Password mismatch on incomplete account: {data.student_id}"
+        )
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "REGISTRATION_INCOMPLETE",
+                "message": (
+                    "该学号之前已经开始注册但没有完成。"
+                    "请用当时设置的密码登录，系统会自动带你回到未完成的那一步；"
+                    "若要改用量表模式重新开始，请填写当时设置的密码。"
+                ),
+                "onboardingMode": existing_user.onboarding_mode,
+            },
+        )
 
     # ── 邮箱唯一性检查 ────────────────────────────────────────────────────────
     if data.email:
@@ -378,7 +442,9 @@ async def register_with_scale(data: RegisterWithScaleRequest, db: AsyncSession =
                 created_at=datetime.now(timezone.utc),
                 onboarding_mode='scale',
                 class_name=data.class_name,
-                experiment_group="unassigned",
+                # 与 /register 保持一致；两条注册路径的分组策略必须相同，
+                # 否则同一批学生会因为选了不同注册方式而落进不同实验条件。
+                experiment_group=settings.DEFAULT_EXPERIMENT_GROUP,
                 has_completed_onboarding=False,
             )
             db.add(new_user)
@@ -433,7 +499,6 @@ async def register_with_scale(data: RegisterWithScaleRequest, db: AsyncSession =
             className=new_user.class_name,
             experimentGroup=new_user.experiment_group,
         )
-        current_time = datetime.now(timezone.utc).isoformat()
         profile_data = ProfileData(cognition=cognition, affect=affect, behavior=behavior)
 
         return AuthResponse(token=token, user=user_info, initialProfile=profile_data)

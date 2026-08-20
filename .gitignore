@@ -70,6 +70,18 @@ skills-lock.json
 # Local planning / development docs
 docs/plans/
 情感计算优化.md
+项目报告配图重绘提示词.md
+
+# 比赛材料（用户的参赛提交物，不属于源码）
+#
+# 整目录忽略，不是逐个后缀忽略：里面 352 MB 会被 git 纳入，其中两个演示视频各
+# 128.7 MB，**单个就超过 GitHub 100 MB 的硬上限**——一旦被 add 进来，push 会被
+# 拒绝，而且提交历史里的大对象事后很难干净地摘掉。目录本身保留在工作区，
+# 用户的文件一个都不会删。
+#
+# 需要单独提交其中某份材料时，用 `git add -f <具体文件>` 明确豁免，
+# 不要为了方便把这条规则改宽。
+edustar比赛材料重新准备/
 
 # Local packages / deployment bundles
 *.skill
@@ -91,3 +103,7 @@ coverage/
 tmp/
 temp/
 *.pid
+
+# Pyodide 运行时：构建期由 frontend/scripts/fetch-pyodide.sh 下载（约 5.6 MB），
+# 不入库。CI/镜像构建会自动获取；本地跑 npm run dev/build 也会自动获取。
+frontend/public/pyodide/

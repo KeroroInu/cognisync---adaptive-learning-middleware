@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import type { Language, UserProfile } from '../types';
 import { sendChatMessage } from '../services/api';
+import { createRequestId } from '../services/stageEvents';
 import { formatSnakeEvidence, type ProjectStage, type SnakeRuntimeEvidence } from '../data/snakeProjectBlueprint';
 import './ProjectScaffoldAssistant.css';
 
@@ -51,7 +52,10 @@ interface ScaffoldMessage {
   role: 'user' | 'assistant';
   text: string;
   stage: ProjectStage;
+  /** 助手气泡显示的是**实际生效**等级；学生气泡显示的是他请求的等级。 */
   level: number;
+  /** 仅助手气泡：被教师蓝图降级时，记下学生原本请求的等级，用于说明差异。 */
+  clampedFrom?: number;
 }
 
 const STAGE_LABELS: Record<ProjectStage, { zh: string; en: string }> = {
@@ -95,6 +99,11 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
+  // 教师蓝图在当前阶段实际封顶到的等级。null 表示本阶段未受限或尚未问过一次。
+  // 后端只在建构阶段应用 coreImplementationMaxLevel，因此只有 build 才会有值。
+  // 仅用于界面提示，不参与任何等级计算——真正的裁定永远在后端，
+  // 前端复制一份阈值只会两处走样。
+  const [effectiveCap, setEffectiveCap] = useState<number | null>(null);
   const panelRef = useRef<HTMLElement>(null);
   const streamRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef({ pointerId: -1, offsetX: 0, offsetY: 0 });
@@ -129,6 +138,12 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
     streamRef.current?.scrollTo({ top: streamRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages, sending]);
 
+  // 封顶是按阶段生效的（只有 build 会被 coreImplementationMaxLevel 限制），
+  // 换阶段后必须清掉，否则会在不受限的阶段继续显示"已封顶"。
+  useEffect(() => {
+    setEffectiveCap(null);
+  }, [stage]);
+
   const submit = useCallback(async (
     text: string,
     trigger: 'hint_button' | 'student_message' | 'level_up',
@@ -136,7 +151,14 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
   ) => {
     const clean = text.trim();
     if (!clean || sending) return;
-    const requestId = `scaffold-${Date.now()}`;
+    // 幂等键必须是 UUID 且在同一次求助的所有重试中保持不变。
+    // 原先的 `scaffold-${Date.now()}` 有两个问题：毫秒精度在多标签页下会碰撞；
+    // 更关键的是它在每次提交时重新生成，后端的 (user_id, request_id) 幂等约束
+    // 实际从未生效——手动重试会被计成一次全新的求助。
+    //
+    // 注意：本轮只保证 ID 本身正确。「消息、LLM 调用与支架事件的完整幂等」
+    // 仍属于任务 5；当前前端不会自动重放聊天请求，因此不会产生重复记录。
+    const requestId = createRequestId();
     const artifactContext = getArtifactContext();
     setError('');
     setDraft('');
@@ -162,13 +184,19 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
           testFeedback: artifactContext.testFeedback,
         },
       });
+      // 后端可能因教师蓝图上限把等级压低。气泡按实际生效等级标注，
+      // 并把"从 L3 降到 L2"这件事明说；沿用请求等级会让学生高估自己拿到的支持。
+      const appliedLevel = response.scaffold?.appliedLevel ?? requestedLevel;
+      const wasClamped = response.scaffold?.wasClamped ?? false;
       setMessages(current => [...current, {
         id: `${requestId}-assistant`,
         role: 'assistant',
         text: response.message,
         stage,
-        level: requestedLevel,
+        level: appliedLevel,
+        clampedFrom: wasClamped ? requestedLevel : undefined,
       }]);
+      setEffectiveCap(stage === 'build' ? (response.scaffold?.coreImplementationMaxLevel ?? null) : null);
       if (response.updatedProfile) onProfileUpdate(response.updatedProfile);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : (isZh ? '暂时无法获得建议，请稍后重试。' : 'Unable to get advice. Please retry.'));
@@ -197,7 +225,7 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
     if (stage !== 'observe' || !latestEvidence) return;
     const evidenceText = formatSnakeEvidence(latestEvidence, language);
     onApplyCompletion({
-      requestId: `completion-${Date.now()}`,
+      requestId: createRequestId(),
       evidenceId: latestEvidence.id,
       text: isZh ? `我观察到：${evidenceText}。` : `I observed that ${evidenceText}.`,
     });
@@ -251,7 +279,15 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
             <article key={message.id} className={`project-scaffold-chat is-${message.role}`}>
               <span>{message.role === 'assistant' ? <Bot size={16} /> : <MessageCircleMore size={16} />}</span>
               <div>
-                <small>{message.role === 'assistant' ? `L${message.level} · ${LEVEL_LABELS[language][message.level]}` : (isZh ? '我的问题' : 'My question')}</small>
+                <small>{message.role === 'assistant'
+                  ? `L${message.level} · ${LEVEL_LABELS[language][message.level]}${
+                      message.clampedFrom !== undefined
+                        ? (isZh
+                            ? `（教师蓝图上限，已从 L${message.clampedFrom} 下调）`
+                            : ` (capped by the teacher blueprint, requested L${message.clampedFrom})`)
+                        : ''
+                    }`
+                  : (isZh ? '我的问题' : 'My question')}</small>
                 <p>{message.text}</p>
               </div>
             </article>
@@ -267,8 +303,16 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
         </form>
 
         <div className="project-scaffold-actions">
-          <button type="button" className="is-primary" onClick={requestHint} disabled={sending}><Lightbulb size={16} />{isZh ? `提示一下 · L${level}` : `Hint · L${level}`}</button>
-          {messages.some(message => message.role === 'assistant' && message.stage === stage) && level < 3 ? (
+          {/* 按钮显示的是「这一轮实际会拿到的等级」。教师蓝图封顶后仍写 L3，
+              等于让学生按一个永远兑现不了的承诺去点。 */}
+          <button type="button" className="is-primary" onClick={requestHint} disabled={sending}><Lightbulb size={16} />{
+            effectiveCap !== null && effectiveCap < level
+              ? (isZh ? `提示一下 · L${effectiveCap}（上限）` : `Hint · L${effectiveCap} (capped)`)
+              : (isZh ? `提示一下 · L${level}` : `Hint · L${level}`)
+          }</button>
+          {messages.some(message => message.role === 'assistant' && message.stage === stage)
+            && level < 3
+            && (effectiveCap === null || level < effectiveCap) ? (
             <button type="button" onClick={requestMoreSpecific} disabled={sending}>{isZh ? '再具体一级' : 'One level more'}<ArrowRight size={16} /></button>
           ) : null}
           {level === 3 && stage === 'observe' && latestEvidence ? (

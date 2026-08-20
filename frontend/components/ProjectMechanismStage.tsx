@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  AlertTriangle,
   ArrowLeftRight,
   ArrowRight,
   Check,
@@ -7,6 +8,7 @@ import {
   GitBranch,
   Link2,
   ListChecks,
+  Loader2,
   Minus,
   Move,
   MousePointer2,
@@ -29,6 +31,7 @@ import {
   type StudentPathPlan,
 } from '../data/projectPath';
 import type { StudentFunctionCard } from './ProjectFunctionStage';
+import { mechanismArtifact, type ReportKeyMoment } from '../services/stageEvents';
 import './ProjectMechanismStage.css';
 
 interface Props {
@@ -36,6 +39,8 @@ interface Props {
   taskId: string;
   onBack: () => void;
   onContinue: () => void;
+  /** 上报关键教学事件。由 Research.tsx 注入，内部已处理幂等键与重试。 */
+  onReportKeyMoment?: ReportKeyMoment;
 }
 
 interface DragState {
@@ -127,6 +132,7 @@ export const ProjectMechanismStage: React.FC<Props> = ({
   taskId,
   onBack,
   onContinue,
+  onReportKeyMoment,
 }) => {
   const isZh = language === 'zh';
   const functionKey = `cognisync:project-function-cards:v1:${taskId}`;
@@ -147,6 +153,11 @@ export const ProjectMechanismStage: React.FC<Props> = ({
   const [connectionPreview, setConnectionPreview] = useState<StudentCanvasPosition | null>(null);
   const [connectionTarget, setConnectionTarget] = useState<ConnectionSnapTarget | null>(null);
   const [notice, setNotice] = useState('');
+  // 证据写入中。既用来禁用重复确认，也用来把按钮切成「保存中」。
+  const [confirming, setConfirming] = useState(false);
+  // 写入失败的提示。与 notice 分开：notice 是操作反馈（会被下一次拖拽覆盖），
+  // 这条必须一直留到学生重试成功为止。
+  const [confirmError, setConfirmError] = useState('');
   const [zoom, setZoom] = useState(1);
   const canvasRef = useRef<HTMLDivElement>(null);
   const canvasScrollRef = useRef<HTMLDivElement>(null);
@@ -491,10 +502,66 @@ export const ProjectMechanismStage: React.FC<Props> = ({
     });
   };
 
-  const confirmDiagram = () => {
-    if (!activeCard || diagram.flowNodes.length < 3 || diagram.diagramEdges.length < 2) return;
-    updateDiagram(current => ({ ...current, confirmedAt: new Date().toISOString() }));
-    setNotice(isZh ? '这张功能卡的实现流程已记录' : 'This function flow has been recorded');
+  /**
+   * 确认单张功能卡的实现流程。
+   *
+   * 顺序刻意是「先写证据、成功后才落 confirmedAt」，而不是反过来。此前的写法
+   * 先把 confirmedAt 写进本地状态并显示「已记录」，再以 fire-and-forget 的方式
+   * 调用上报且忽略返回值：网络失败时学生看到的是成功，这张流程图的
+   * structure_change 事件与对应产物版本却从未落库。学生不会再确认第二次，
+   * 这条证据就永久缺失且无人察觉——与 Research.tsx 各阶段确认同一类缺陷。
+   *
+   * 失败时保留画布上的全部内容（节点、连线、文字都在 diagram 里，不受影响），
+   * 只是不标记为已完成，学生再点一次即可重试。
+   */
+  const confirmDiagram = async () => {
+    if (!activeCard || confirming) return;
+    if (diagram.flowNodes.length < 3 || diagram.diagramEdges.length < 2) return;
+
+    const confirmedAt = new Date().toISOString();
+    const confirmed = { ...diagram, confirmedAt };
+
+    setConfirming(true);
+    setConfirmError('');
+    try {
+      // 逐卡确认才上报。节点拖动、逐字改标签都不上报——那些不是关键时刻，
+      // 而且会在 40–50 人并发下形成大量无意义写入。
+      //
+      // change_source 用 structure_edit 而非 stage_confirm：这里确认的是**单张功能卡**
+      // 的流程图，阶段确认另有其事（Research.tsx 的 confirmModelStage）。都写
+      // stage_confirm 会让 model 阶段的所有版本来源同值，分析时无法把「学生自己改结构」
+      // 与「走到阶段末尾统一提交」区分开，change_source 这一列就失去判别力。
+      //
+      // 没有注入上报入口时（例如非 pdt 组或独立预览）视为无需证据，照常完成。
+      const recorded = onReportKeyMoment
+        ? await onReportKeyMoment({
+            stage: 'model',
+            eventType: 'structure_change',
+            detail: {
+              cardId: activeCard.id,
+              nodeCount: confirmed.flowNodes.length,
+              edgeCount: confirmed.diagramEdges.length,
+            },
+            artifacts: [mechanismArtifact(activeCard.id, confirmed, 'structure_edit')],
+          })
+        : true;
+
+      if (!recorded) {
+        setConfirmError(isZh
+          ? '这张流程图还没有记录成功，画布内容已保留。请检查网络后再点一次。'
+          : 'This flow was not recorded. Your canvas is kept — check your connection and press again.');
+        return;
+      }
+
+      updateDiagram(() => confirmed);
+      setNotice(isZh ? '这张功能卡的实现流程已记录' : 'This function flow has been recorded');
+    } catch {
+      setConfirmError(isZh
+        ? '这张流程图还没有记录成功，画布内容已保留。请检查网络后再点一次。'
+        : 'This flow was not recorded. Your canvas is kept — check your connection and press again.');
+    } finally {
+      setConfirming(false);
+    }
   };
 
   if (cards.length === 0) {
@@ -815,14 +882,25 @@ export const ProjectMechanismStage: React.FC<Props> = ({
             <span>{notice || (isZh ? '拖图形本体可移动；按住蓝色圆点拖出连线；点击图形可直接改字。' : 'Drag shapes to move them; drag a blue handle to connect; select a shape to edit text.')}</span>
           </div>
 
+          {confirmError ? (
+            <div className="mechanism-notice is-error" role="alert">
+              <AlertTriangle size={15} />
+              <span>{confirmError}</span>
+            </div>
+          ) : null}
+
           <button
             type="button"
             className="mechanism-confirm"
-            disabled={diagram.flowNodes.length < 3 || diagram.diagramEdges.length < 2}
-            onClick={confirmDiagram}
+            disabled={confirming || diagram.flowNodes.length < 3 || diagram.diagramEdges.length < 2}
+            onClick={() => void confirmDiagram()}
           >
-            {diagram.confirmedAt ? <Check size={16} /> : <CircleDot size={16} />}
-            {diagram.confirmedAt ? (isZh ? '本卡流程已记录' : 'Flow recorded') : (isZh ? '完成本卡流程' : 'Record this flow')}
+            {confirming ? <Loader2 size={16} className="is-spinning" /> : diagram.confirmedAt ? <Check size={16} /> : <CircleDot size={16} />}
+            {confirming
+              ? (isZh ? '正在记录…' : 'Recording…')
+              : diagram.confirmedAt
+                ? (isZh ? '本卡流程已记录' : 'Flow recorded')
+                : (isZh ? '完成本卡流程' : 'Record this flow')}
           </button>
         </aside>
       </div>

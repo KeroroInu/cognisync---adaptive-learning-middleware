@@ -54,34 +54,87 @@
 ## 必读文件（按顺序）
 
 1. `AGENTS.md`（若当前环境提供）
-2. `docs/PROJECT_WORKBENCH_V02.md`
-3. `docs/STUDENT_FRONTEND_DESIGN.md`
-4. `docs/teacher-blueprints/snake-project-v2.json`
-5. `backend/app/schemas/project_blueprint.py`
-6. `backend/app/models/sql/research.py`
-7. `backend/app/api/endpoints/admin/project_blueprints.py`
-8. `backend/app/api/endpoints/research.py`
-9. `backend/app/api/endpoints/chat.py`
-10. `backend/app/services/scaffold_context.py`
-11. `frontend/views/Research.tsx`
-12. `frontend/components/ProjectFactory.tsx`
-13. `frontend/components/ProjectFunctionStage.tsx`
-14. `frontend/components/ProjectMechanismStage.tsx`
-15. `frontend/components/ProjectPathStage.tsx`
-16. `frontend/components/ProjectBuildStage.tsx`
-17. `frontend/components/ProjectScaffoldAssistant.tsx`
-18. `frontend/data/projectPath.ts`
-19. `frontend/data/snakeProjectBlueprint.ts`
-20. `frontend/data/snakeProjectDemo.ts`
-21. `admin-frontend/src/pages/ResearchManagement.tsx`
-22. `admin-frontend/src/lib/projectBlueprint.ts`
+2. `docs/TASK1_REVIEW_HANDOFF.md`（研究证据链的三方滚动记录，改动前必读）
+3. `docs/PROJECT_WORKBENCH_V02.md`
+4. `docs/STUDENT_FRONTEND_DESIGN.md`
+5. `docs/teacher-blueprints/snake-project-v2.json`
+6. `backend/app/schemas/project_blueprint.py`
+7. `backend/app/models/sql/research.py`
+8. `backend/app/models/sql/research_event.py`
+9. `backend/app/services/research_event_service.py`
+10. `backend/app/services/research_task_service.py`
+11. `backend/app/api/endpoints/admin/project_blueprints.py`
+12. `backend/app/api/endpoints/research.py`
+13. `backend/app/api/endpoints/chat.py`
+14. `backend/app/services/scaffold_context.py`
+15. `frontend/services/stageEvents.ts`
+16. `frontend/views/Research.tsx`
+17. `frontend/components/ProjectFactory.tsx`
+18. `frontend/components/ProjectFunctionStage.tsx`
+19. `frontend/components/ProjectMechanismStage.tsx`
+20. `frontend/components/ProjectPathStage.tsx`
+21. `frontend/components/ProjectBuildStage.tsx`
+22. `frontend/components/ProjectScaffoldAssistant.tsx`
+23. `frontend/data/projectPath.ts`
+24. `frontend/data/snakeProjectBlueprint.ts`
+25. `frontend/data/snakeProjectDemo.ts`
+26. `admin-frontend/src/pages/ResearchManagement.tsx`
+27. `admin-frontend/src/lib/projectBlueprint.ts`
+
+## 任务 1（研究证据链）当前状态
+
+**代码已完成，未提交，等待最终测试复核。** 详见 `docs/TASK1_REVIEW_HANDOFF.md`
+第 15 节回执；那份文档是三方（Claude / Codex / 使用者）的滚动记录，改动前先读它。
+
+已落地的能力：
+
+- 五张新表：`stage_artifacts`、`artifact_versions`、`stage_events`、
+  `stage_event_artifacts`、`scaffold_events`。产物版本是**完整 JSONB 快照**，
+  追加写入、不可覆盖，与 `workspace_data` 双写（后者仍只用于跨设备恢复）；
+- 学生端上报入口 `POST /api/research/tasks/{task_id}/stage-events`；
+- 阶段—事件—产物严格组合校验，跨阶段修订走显式白名单；
+- 研究证据受数据库级 `RESTRICT` 外键保护，删除被引用的消息/会话/任务一律 409。
+
+### 前端调用契约（新增关键时刻时必须遵守）
+
+统一走 `frontend/services/stageEvents.ts`，不要直接调 `postStageEvent`：
+
+1. **只上报有明确教学含义的操作完成**。逐字输入、拖拽坐标、游戏运行帧一律不报——
+   它们不构成研究证据，还会在 40–50 人并发下形成无意义写入；
+2. **幂等键用 `createRequestId()`（UUID），且在重试循环之外生成一次**。请求体
+   构建一次后全程复用：后端比对语义指纹，同键不同内容返回 409 而非重放；
+3. **`artifact_key` 必须是工作区里的稳定 ID**（卡片/节点/模块 ID），绝不用数组下标。
+   `content` 是该产物的完整快照，但要剔除画布坐标和每次必变的字段（随机 id、
+   本地时间戳、尝试次数）——否则内容哈希每次都变，去重失效，「修订次数」被凭空抬高；
+4. **先确认工作区快照保存成功，再写事件**。走 `Research.tsx::reportKeyMoment`，
+   它已经把这个顺序和失败提示集中实现好了；
+5. **上报失败就不要推进界面**。`reportKeyMoment` 返回 `false` 时必须停在原地
+   （`if (!recorded) return;`）。界面显示「已确认」而证据没写入，学生不会再确认
+   第二次，这条证据就永久缺失且无人察觉；
+6. **求助只走 chat 链路**，前端不得重复上报 `help_request`。
+
+### 明确延后到任务 5 的事项
+
+- 聊天链路的完整幂等：消息、LLM 调用、画像分析、支架事件需要一起幂等。
+  当前前端不会自动重放聊天请求，因此暂不会产生重复记录；
+  `_record_help_request_event` 传 `request_fingerprint=None`，chat 路径的
+  幂等键复用检测目前不生效（只会重放）；
+- `scaffold_events.adopted` 保持 `NULL`，自动/人工判定属于任务 5；
+- 更复杂的 AI 依赖分析。
 
 ## 当前仍需注意的技术债
 
-- 最新工作区仍是 JSONB 整份快照，尚不是正式研究所需的细粒度不可覆盖版本链；
-- 新开放映射已由后端读取冻结蓝图，但学生确认本身仍随工作区快照保存，尚未形成独立映射事件；
+- 最新工作区仍是 JSONB 整份快照，用于跨设备恢复；正式研究分析请读
+  `artifact_versions` 版本链，两者是双写关系，本轮**没有**切换读取源；
+- 学生对教师契约的采纳决定已作为独立的 `function_mapping` 产物记录，
+  不再只随工作区快照保存；
 - 本地 `snakeProjectBlueprint.ts` 仍用于旧任务兼容和浏览器测试模板，不能把它重新当成所有任务的教师答案源；
 - 建构进度已支持 `cardId::blueprintNodeId` 单元键，并兼容旧 `cardId` 键；后续迁移必须保持读取兼容；
 - `ResearchCodeEditor` 构建块仍较大，但已按阶段懒加载；在没有性能数据前不要为了消除 Vite 警告引入复杂依赖；
 - Pyodide 仍来自公共 CDN，是正式部署前必须解决的问题；
+- 学生端**没有任何前端测试运行器**（`package.json` 只有 `dev`/`build`/`preview`/`type-check`）。
+  前端改动目前只能靠 `tsc --noEmit` 和人工核查，引入测试框架需要先确认；
+- 重复提交检测的 `RAISE EXCEPTION` 在 `init_db` 中执行，一条历史重复行会阻止后端启动。
+  不删数据是刻意的，但这个检查更适合放进一次性运维任务；处理脚本是
+  `scripts/repair_duplicate_submissions.sql`；
 - 后端测试存在 4 条 Pydantic `schema_json` 命名警告，不是当前功能回归，但可以单独提交修复，不能混入研究功能提交。

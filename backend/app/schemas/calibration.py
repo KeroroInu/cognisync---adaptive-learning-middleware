@@ -17,8 +17,15 @@ class CalibrationLogBase(BaseModel):
 
 
 class CalibrationLogCreate(CalibrationLogBase):
-    """创建校准日志请求"""
-    user_id: UUID = Field(..., alias="userId")
+    """创建校准日志请求。
+
+    ``user_id`` 保留为可选字段仅为兼容既有调用方：记录归属永远取自 JWT
+    （见 ``endpoints/calibration.py`` 的 ``current_user.id``），请求体里传什么都不生效。
+    之所以不直接删除，是避免老客户端多传一个字段就被 422 拒掉；之所以不再必填，
+    是学生端拿不到也不该拿这个值——真按请求体建档就等于开了一个越权写入口。
+    """
+
+    user_id: Optional[UUID] = Field(default=None, alias="userId")
 
     model_config = {
         "populate_by_name": True

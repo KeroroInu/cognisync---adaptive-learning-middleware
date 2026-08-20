@@ -128,3 +128,38 @@ def test_workspace_summary_contains_every_student_stage_without_raw_code():
     assert "读取方向 → 更新蛇头" in summary
     assert "最近测试 未通过(wrong_head)" in summary
     assert "SECRET_RAW_CODE" not in summary
+
+
+def test_metadata_carries_cap_so_frontend_can_show_the_effective_level():
+    """被钳制时，元数据必须同时给出「降到几」和「上限是多少」。
+
+    只有 wasClamped 一个布尔值，学生端无法在下一次求助**之前**知道点「再具体一级」
+    会不会白点，界面只能继续显示一个兑现不了的等级——这正是内部效度问题的来源。
+    """
+    policy = BlueprintScaffoldPolicy(coreImplementationMaxLevel=2)
+    profile = UserProfile(cognition=45, affect=60, behavior=80)
+
+    metadata = build_scaffold_metadata(
+        scaffold_context(level=3), profile, "def move():\n    pass", policy
+    )
+
+    assert metadata["requestedLevel"] == 3
+    assert metadata["level"] == 2
+    assert metadata["policyWasClamped"] is True
+    assert metadata["coreImplementationMaxLevel"] == 2
+    # 提示词也必须按实际生效等级给边界，否则模型会照 L3 的尺度回答。
+    assert metadata["levelRule"] == LEVEL_RULES[2]
+
+
+def test_cap_is_reported_even_when_no_clamp_happened():
+    """没有触发降级时也要回传上限，否则前端只能等撞了墙才知道有墙。"""
+    policy = BlueprintScaffoldPolicy(coreImplementationMaxLevel=2)
+    profile = UserProfile(cognition=45, affect=60, behavior=80)
+
+    metadata = build_scaffold_metadata(
+        scaffold_context(level=1), profile, "", policy
+    )
+
+    assert metadata["policyWasClamped"] is False
+    assert metadata["level"] == 1
+    assert metadata["coreImplementationMaxLevel"] == 2

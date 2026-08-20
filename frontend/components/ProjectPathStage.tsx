@@ -31,6 +31,7 @@ import {
 } from '../data/projectPath';
 import type { StudentFunctionCard } from './ProjectFunctionStage';
 import { ProjectMechanismStage } from './ProjectMechanismStage';
+import type { ReportKeyMoment } from '../services/stageEvents';
 import './ProjectPathStage.css';
 
 interface Props {
@@ -39,6 +40,8 @@ interface Props {
   stage: 'model' | 'plan';
   onBack: () => void;
   onContinue: () => void;
+  /** 上报关键教学事件。由 Research.tsx 注入，内部已处理幂等键与重试。 */
+  onReportKeyMoment?: ReportKeyMoment;
 }
 
 const CANVAS_NODE_WIDTH = 270;
@@ -1017,6 +1020,12 @@ const ProjectSystemPathStage: React.FC<Props> = ({
 
 export const ProjectPathStage: React.FC<Props> = props => (
   props.stage === 'model'
-    ? <ProjectMechanismStage language={props.language} taskId={props.taskId} onBack={props.onBack} onContinue={props.onContinue} />
+    ? <ProjectMechanismStage
+        language={props.language}
+        taskId={props.taskId}
+        onBack={props.onBack}
+        onContinue={props.onContinue}
+        onReportKeyMoment={props.onReportKeyMoment}
+      />
     : <ProjectSystemPathStage {...props} />
 );

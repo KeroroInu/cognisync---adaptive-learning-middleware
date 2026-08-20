@@ -116,6 +116,20 @@ export const Login: React.FC<LoginProps> = ({
                   {t.signUp}
                 </button>
               </div>
+
+              {/*
+                忘记密码的出路。
+
+                系统没有自助找回（学生多数没填邮箱，也不宜为测试期引入新的认证面），
+                管理端本来就有重置密码功能，缺的只是让学生知道该找谁。
+                另外注册中断的账号只能用原密码登录续做，忘了密码就彻底卡死，
+                这里必须给一句明确指引，否则学生只会反复重填学号。
+              */}
+              <p className="auth-footer" style={{ marginTop: '0.5rem', opacity: 0.75 }}>
+                {language === 'zh'
+                  ? '忘记密码，或注册中断后登不进来？请联系老师重置密码。'
+                  : 'Forgot your password, or stuck after an interrupted sign-up? Ask your teacher to reset it.'}
+              </p>
             </form>
           </SpotlightCard>
           <p className="login-footnote">OBSERVE · DECONSTRUCT · REBUILD · VERIFY</p>

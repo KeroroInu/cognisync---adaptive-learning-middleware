@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Download, Users, FileText, MessageSquare, TrendingUp, CheckCircle, AlertCircle, Loader } from 'lucide-react';
+import { Download, Users, FileText, MessageSquare, TrendingUp, CheckCircle, AlertCircle, Loader, GitBranch, Milestone, LifeBuoy } from 'lucide-react';
 import { adminApi } from '../lib/adminApi';
 
 interface DatasetConfig {
@@ -74,6 +74,52 @@ const DATASETS: DatasetConfig[] = [
     fields: ['user_id', 'student_id', 'user_name', 'user_email', 'snapshot_cognition', 'snapshot_affect', 'snapshot_behavior', 'snapshot_time', 'snapshot_source'],
     researchUse: '适用：纵向学习轨迹分析、干预效果前后对比、增长曲线建模（HLM/LCA）',
   },
+  // ── 项目解构过程证据（三份）─────────────────────────────────────────────
+  // 与上面四份「结果型」数据集不同，这三份是过程型证据：产物怎么改的、
+  // 关键时刻何时发生、支架请求与实际生效等级。端点早已实现，此前后台没有
+  // 入口，研究者只能手工拼 URL 带 admin key 调用。
+  {
+    id: 'artifact-versions',
+    title: '解构产物版本链',
+    titleEn: 'Artifact Version Chain',
+    description: '每行是一个阶段产物的一个版本，含完整内容快照、与上一版本的字段级差异摘要（changed_fields）、修改来源与修改理由，可还原「某张功能卡改了几次、每次改了什么、因何而改」。',
+    icon: <GitBranch size={24} />,
+    color: 'text-rose-600',
+    bgColor: 'bg-rose-50',
+    borderColor: 'border-rose-200',
+    filename: 'artifact_versions',
+    endpoint: '/admin/export/csv/artifact-versions',
+    fields: ['student_id', 'user_name', 'experiment_group', 'task_title', 'stage', 'artifact_type', 'artifact_key', 'version', 'change_source', 'change_reason', 'changed_fields', 'content（JSON 快照）', 'content_hash', 'created_at', 'blueprint_version_id'],
+    researchUse: '适用：解构质量的修订轨迹分析、自主修改与测试驱动修改的区分、蓝图对照下的产物演变',
+  },
+  {
+    id: 'stage-events',
+    title: '关键教学事件时间线',
+    titleEn: 'Stage Events',
+    description: '只记录阶段确认、结构修改、模块测试、主动求助与最终提交五类关键时刻，不含拖拽坐标与游戏帧。一次事件涉及多个产物时按产物展开为多行，同一事件共享 event_id 与 request_id，可据此重新聚合。',
+    icon: <Milestone size={24} />,
+    color: 'text-sky-600',
+    bgColor: 'bg-sky-50',
+    borderColor: 'border-sky-200',
+    filename: 'stage_events',
+    endpoint: '/admin/export/csv/stage-events',
+    fields: ['student_id', 'user_name', 'experiment_group', 'task_title', 'event_id', 'request_id', 'stage', 'event_type', 'artifact_position', 'artifact_type', 'artifact_key', 'artifact_version', 'artifact_version_created', 'detail（JSON）', 'blueprint_version_id', 'created_at'],
+    researchUse: '适用：阶段停留时长与推进节奏、求助时机、修订触发点、事件与产物版本的时间对应关系',
+  },
+  {
+    id: 'scaffold-events',
+    title: '支架请求与钳制轨迹',
+    titleEn: 'Scaffold Events',
+    description: '每行是一次成功送达的 L0–L3 支架，含学生请求等级、实际生效等级与是否被钳制（was_clamped），并关联学生提问原文与 AI 建议原文。学生发起但 AI 失败的求助不在此表，记录在关键事件的 help_request 中。',
+    icon: <LifeBuoy size={24} />,
+    color: 'text-teal-600',
+    bgColor: 'bg-teal-50',
+    borderColor: 'border-teal-200',
+    filename: 'scaffold_events',
+    endpoint: '/admin/export/csv/scaffold-events',
+    fields: ['student_id', 'user_name', 'experiment_group', 'task_title', 'stage', 'trigger', 'requested_level', 'applied_level', 'was_clamped', 'delivery_status', 'policy_source', 'policy_max_code_lines', 'current_module', 'profile_cognition/affect/behavior', 'code_length', 'code_fingerprint', 'adopted', 'student_message_text', 'assistant_suggestion_text', 'created_at'],
+    researchUse: '适用：支架依赖程度、请求等级与实际生效等级的落差、画像与求助强度的关联。注意含学生提问原文，对外共享前须按伦理要求脱敏',
+  },
 ];
 
 type ExportStatus = 'idle' | 'loading' | 'success' | 'error';
@@ -102,6 +148,15 @@ export const Exports = () => {
     } catch (err) {
       setStatuses(prev => ({ ...prev, [dataset.id]: 'error' }));
       setErrors(prev => ({ ...prev, [dataset.id]: err instanceof Error ? err.message : 'Export failed' }));
+    }
+  };
+
+  const handleExportAll = async () => {
+    // 刻意串行。数据集从 4 份增加到 7 份后，产物版本链会把整列 JSONB 快照读出来，
+    // 一次并发 7 个大查询在 2 核测试机上有把后端拖垮的风险，而研究者按顺序拿到
+    // 文件在体验上没有差别。
+    for (const dataset of DATASETS) {
+      await handleExport(dataset);
     }
   };
 
@@ -228,16 +283,16 @@ export const Exports = () => {
           <div>
             <h3 className="text-base font-bold mb-1" style={{ color: 'var(--text-primary)' }}>一键导出全部数据集</h3>
             <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-              依次下载上述 4 个 CSV 文件，适合完整数据备份或跨数据集联合分析。
+              依次下载上述 {DATASETS.length} 个 CSV 文件，适合完整数据备份或跨数据集联合分析。
             </p>
           </div>
           <button
-            onClick={() => DATASETS.forEach(ds => handleExport(ds))}
+            onClick={handleExportAll}
             disabled={Object.values(statuses).some(s => s === 'loading')}
             className="shrink-0 inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-slate-700 to-slate-900 text-white font-semibold text-sm hover:shadow-lg hover:scale-105 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Download size={18} />
-            导出全部（4 个文件）
+            导出全部（{DATASETS.length} 个文件）
           </button>
         </div>
       </div>

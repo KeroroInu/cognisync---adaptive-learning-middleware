@@ -42,7 +42,7 @@ async def test_auth_register(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_auth_register_duplicate_student_id(client: AsyncClient):
-    """测试重复学号注册时返回 400"""
+    """未完成画像的学号再次注册时，应引导用原密码继续。"""
     payload = {
         "student_id": "dup_test_001",
         "name": "用户甲",
@@ -54,9 +54,10 @@ async def test_auth_register_duplicate_student_id(client: AsyncClient):
 
     payload2 = {**payload, "name": "用户乙"}
     r2 = await client.post("/api/auth/register", json=payload2)
-    assert r2.status_code == 400
+    assert r2.status_code == 409
+    assert r2.json()["detail"]["code"] == "REGISTRATION_INCOMPLETE"
 
-    print(f"\n✅ Duplicate register test passed")
+    print("\n✅ Duplicate register test passed")
 
 
 @pytest.mark.asyncio
@@ -76,7 +77,7 @@ async def test_auth_login(client: AsyncClient, registered_user: dict):
     assert "user" in data
     assert data["user"]["student_id"] == registered_user["student_id"]
 
-    print(f"\n✅ Login test passed")
+    print("\n✅ Login test passed")
 
 
 @pytest.mark.asyncio
@@ -91,7 +92,7 @@ async def test_auth_login_wrong_password(client: AsyncClient, registered_user: d
     )
     assert response.status_code == 401
 
-    print(f"\n✅ Login (wrong password) test passed")
+    print("\n✅ Login (wrong password) test passed")
 
 
 @pytest.mark.asyncio
@@ -114,7 +115,7 @@ async def test_auth_me_no_token(client: AsyncClient):
     response = await client.get("/api/auth/me")
     assert response.status_code == 401
 
-    print(f"\n✅ Me (no token) test passed")
+    print("\n✅ Me (no token) test passed")
 
 
 # ==================== 聊天测试 ====================
@@ -174,7 +175,7 @@ async def test_chat_requires_auth(client: AsyncClient):
     )
     assert response.status_code == 401
 
-    print(f"\n✅ Chat (no auth) test passed")
+    print("\n✅ Chat (no auth) test passed")
 
 
 # ==================== 画像测试 ====================

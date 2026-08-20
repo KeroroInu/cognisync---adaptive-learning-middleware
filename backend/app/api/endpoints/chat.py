@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.postgres import get_db
 from app.schemas.base import SuccessResponse
-from app.schemas.chat import ChatRequest, ChatResponse
+from app.schemas.chat import ChatRequest, ChatResponse, ChatScaffoldInfo
 from app.schemas.chat import ChatAnalysis
 from app.schemas.profile import ProfileDelta
 from app.services.profile_service import ProfileService
@@ -22,6 +22,11 @@ from app.services.llm_config import get_chat_provider
 from app.models.sql.message import ChatMessage, MessageRole
 from app.models.sql.chat_session import ChatSession
 from app.models.sql.research import ProjectBlueprintVersion, ResearchTask, ResearchTaskSubmission
+from app.models.sql.research_event import (
+    ProjectStage,
+    ScaffoldDeliveryStatus,
+    StageEventType,
+)
 from app.schemas.project_blueprint import BlueprintScaffoldPolicy, ProjectBlueprintConfig
 from app.models.sql.user import User
 from app.api.endpoints.auth import get_current_user
@@ -30,6 +35,12 @@ from app.services.scaffold_service import (
     build_scaffold_prompt,
     summarize_project_workspace,
 )
+from app.services.research_event_service import (
+    freeze_blueprint_version,
+    record_scaffold_event,
+    record_stage_event,
+)
+from app.services.research_task_service import get_visible_task, parse_task_uuid
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -54,21 +65,93 @@ async def get_or_create_active_session(db: AsyncSession, user_id: UUID) -> ChatS
     return session
 
 
+async def _resolve_scaffold_task(
+    db: AsyncSession,
+    user: User,
+    scaffold_context,
+) -> ResearchTask:
+    """校验 ``scaffoldContext.taskId`` 并返回该学生**有权使用**的任务。
+
+    这一步不是普通的越权防护，而是准实验的组间隔离。``taskId`` 完全来自客户端，
+    此前的实现只按 UUID 查任务和蓝图，因此对照组学生只要拿到实验组任务的 UUID：
+
+    - 就能让 AI 加载该组的教师蓝图支架策略并按其作答；
+    - 还能把 submission / help_request / scaffold_event 写到该任务下。
+
+    这会直接污染组间差异，比一般越权读取更严重，所以携带 scaffoldContext 的请求
+    一律显式拒绝而不是静默降级——静默降级会产出 ``task_id=NULL`` 的规范事件行，
+    在导出时无法与真实数据区分。
+    """
+    tid = parse_task_uuid(str(scaffold_context.taskId))
+    return await get_visible_task(db, user, tid, require_active=True)
+
+
+async def _record_help_request_event(
+    db: AsyncSession,
+    user_id: UUID,
+    task: ResearchTask,
+    scaffold_metadata: dict,
+) -> None:
+    """记录「学生发起了一次求助」这一行为本身。
+
+    与 ``scaffold_event`` 的分工：本事件在请求进入时写入，表示求助行为已经发生；
+    ``scaffold_event`` 只在建议成功送达后写入。模型超时或失败时，求助行为仍然
+    可追踪，但不会产生「已送达支架」的假记录。
+
+    幂等键复用支架的 ``requestId``，因此客户端重试不会把一次求助计成多次。
+
+    任务的可见性与 ACTIVE 状态已由 :func:`_resolve_scaffold_task` 在调用前校验，
+    这里不再重复查询，也不再接受未经授权的任务。
+
+    仍然静默跳过的两种情况（均不影响对话主流程）：
+    - 缺少 ``requestId``：无法保证幂等，宁可不记录也不产生无法去重的行；
+    - ``stage`` 不在枚举内：说明客户端上下文异常，不应写入脏数据。
+    """
+    request_id = str(scaffold_metadata.get("requestId") or "").strip()
+    if not request_id:
+        return
+
+    try:
+        stage = ProjectStage(str(scaffold_metadata.get("stage") or ""))
+    except ValueError:
+        return
+
+    blueprint_version_id = await freeze_blueprint_version(db, task, user_id)
+
+    await record_stage_event(
+        db=db,
+        task_id=task.id,
+        user_id=user_id,
+        request_id=request_id,
+        stage=stage,
+        event_type=StageEventType.HELP_REQUEST,
+        detail={
+            "trigger": scaffold_metadata.get("trigger"),
+            "requestedLevel": scaffold_metadata.get("requestedLevel"),
+            "appliedLevel": scaffold_metadata.get("level"),
+            "policySource": scaffold_metadata.get("policySource"),
+            "currentModule": scaffold_metadata.get("currentModule"),
+        },
+        blueprint_version_id=blueprint_version_id,
+    )
+
+
 async def _load_scaffold_workspace_context(
     db: AsyncSession,
     user_id: UUID,
-    task_id: str,
+    task: ResearchTask,
 ) -> tuple[str, BlueprintScaffoldPolicy | None, str | None]:
     """读取当前学生的任务快照和冻结蓝图支架策略。
 
     已开始任务的学生继续使用首次绑定的蓝图版本；尚无提交记录时才
     回退到任务当前发布版本。不向客户端返回隐藏规则。
+
+    ``task`` 必须是 :func:`_resolve_scaffold_task` 校验过的对象——此前这里接收
+    裸 ``task_id`` 字符串并直接按 UUID 查询，任何学生都能借此读到其他实验组的
+    支架策略。
     """
 
-    try:
-        parsed_task_id = UUID(task_id)
-    except ValueError:
-        return "", None, None
+    parsed_task_id = task.id
 
     submission_result = await db.execute(
         select(
@@ -86,11 +169,7 @@ async def _load_scaffold_workspace_context(
     blueprint_id = submission.blueprint_version_id if submission else None
 
     if blueprint_id is None:
-        blueprint_id = await db.scalar(
-            select(ResearchTask.current_blueprint_version_id).where(
-                ResearchTask.id == parsed_task_id,
-            )
-        )
+        blueprint_id = task.current_blueprint_version_id
 
     if blueprint_id is None:
         return summarize_project_workspace(workspace), None, None
@@ -593,7 +672,11 @@ async def chat(
         scaffold_metadata = None
         scaffold_policy = None
         scaffold_blueprint_version_id = None
+        scaffold_task = None
         if scaffold_context:
+            # 先授权再加载：不可见任务 404、归档任务 409，绝不静默降级成
+            # task_id 为空的研究事件。
+            scaffold_task = await _resolve_scaffold_task(db, current_user, scaffold_context)
             (
                 database_summary,
                 scaffold_policy,
@@ -601,7 +684,7 @@ async def chat(
             ) = await _load_scaffold_workspace_context(
                 db,
                 user_id,
-                scaffold_context.taskId,
+                scaffold_task,
             )
             live_summary = scaffold_context.artifactSummary or ""
             combined_summary = "\n\n".join(filter(None, [
@@ -629,6 +712,22 @@ async def chat(
             analysis={"scaffoldContext": scaffold_metadata} if scaffold_metadata else None,
         )
         db.add(user_message)
+        await db.flush()
+
+        # 求助「行为」在此刻就已经发生，因此与用户消息同事务记录 stage_event。
+        # 它与 scaffold_event 语义不同，不可互相替代：
+        #   - stage_event(help_request)：学生发起了求助（即使 AI 随后失败也成立）；
+        #   - scaffold_event：一条 L0–L3 建议**确实送达**了学生。
+        # 若把两者合并在此处写入，模型超时时就会留下「已给出 L3 支架、学生却什么
+        # 都没收到」的假记录，使支架依赖分析失真。
+        if scaffold_metadata and scaffold_task is not None:
+            await _record_help_request_event(
+                db=db,
+                user_id=user_id,
+                task=scaffold_task,
+                scaffold_metadata=scaffold_metadata,
+            )
+
         await db.commit()
         await db.refresh(user_message)
 
@@ -849,6 +948,27 @@ async def chat(
             analysis=assistant_analysis,
         )
         db.add(assistant_message)
+        await db.flush()
+
+        # 支架建议此刻才真正送达学生，因此在**助手消息保存成功之后**、与它同一
+        # 事务写入 scaffold_event。若在调用模型之前写入，一旦超时或失败就会留下
+        # 「已应用 L0–L3 支架」但学生什么也没收到的假记录。
+        #
+        # 双写说明：这里同时保留 chat_messages.analysis.scaffoldContext（上面的
+        # assistant_analysis），因为教师端现有页面与 CSV 导出仍在读它。
+        # scaffold_events 表是后续研究分析的规范数据源；等任务 5 建立
+        # 「求助—建议—采用—修改—结果」链路后，再把新版导出切换到事件表，
+        # 旧 JSONB 作为历史兼容数据保留。
+        if scaffold_metadata:
+            await record_scaffold_event(
+                db=db,
+                user_id=user_id,
+                scaffold_metadata=scaffold_metadata,
+                student_message_id=user_message.id,
+                assistant_message_id=assistant_message.id,
+                delivery_status=ScaffoldDeliveryStatus.DELIVERED,
+            )
+
         await db.commit()
         await db.refresh(assistant_message)
 
@@ -866,11 +986,24 @@ async def chat(
         logger.info(f"Knowledge graph response composed: {len(updated_graph)} concepts")
 
         # ========== 9. 返回响应 ==========
+        # 回传本轮真正生效的支架等级。请求 L3 被教师蓝图压到 L2 时，界面必须显示 L2，
+        # 否则学生对「自己拿到了多深的帮助」的主观感知与实际收到的内容不一致。
+        scaffold_info = None
+        if scaffold_metadata:
+            scaffold_info = ChatScaffoldInfo(
+                requestedLevel=scaffold_metadata["requestedLevel"],
+                appliedLevel=scaffold_metadata["level"],
+                wasClamped=scaffold_metadata["policyWasClamped"],
+                policySource=scaffold_metadata["policySource"],
+                coreImplementationMaxLevel=scaffold_metadata["coreImplementationMaxLevel"],
+            )
+
         response = ChatResponse(
             message=assistant_reply,
             analysis=analysis,
             updatedProfile=updated_profile,
-            updatedGraph=updated_graph
+            updatedGraph=updated_graph,
+            scaffold=scaffold_info,
         )
 
         return SuccessResponse(data=response)

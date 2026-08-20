@@ -68,10 +68,25 @@ export interface ChatAnalysis {
   };
 }
 
+/**
+ * 本轮实际生效的支架边界。
+ *
+ * 只有走项目工坊支架链路的回合才有值。学生请求 L3、教师蓝图把建构阶段封顶在 L2 时，
+ * 界面必须按 appliedLevel 显示，否则学生对"拿到了多深的帮助"的感知与实际不符。
+ */
+export interface ChatScaffoldInfo {
+  requestedLevel: number;
+  appliedLevel: number;
+  wasClamped: boolean;
+  policySource: string;
+  coreImplementationMaxLevel: number;
+}
+
 export interface ChatResponse {
   message: string;
   analysis: ChatAnalysis;
   updatedProfile: UserProfile;
+  scaffold?: ChatScaffoldInfo | null;
 }
 
 export interface ApiResponse<T> {
@@ -134,6 +149,53 @@ export async function checkHealth(): Promise<boolean> {
 // ============================================
 
 /**
+ * 认证接口抛出的错误。`code` 来自后端结构化 detail，供 UI 分支使用
+ * （例如「注册未完成」要给出去登录的入口，而不是让学生反复重填）。
+ */
+export class AuthError extends Error {
+  code?: string;
+  status: number;
+  constructor(message: string, status: number, code?: string) {
+    super(message);
+    this.name = 'AuthError';
+    this.status = status;
+    this.code = code;
+  }
+}
+
+/**
+ * 从 FastAPI 的错误响应里稳妥地取出可读信息与错误码。
+ *
+ * `detail` 有三种形态，此前代码一律写成 `throw new Error(result.detail)`：
+ * 字符串没问题，但结构化对象会被字符串化成 `[object Object]` 直接怼到用户脸上，
+ * Pydantic 的校验错误数组同样如此。三种都要处理。
+ */
+function parseAuthError(result: unknown, status: number): AuthError {
+  const detail = (result as { detail?: unknown } | null)?.detail;
+
+  if (typeof detail === 'string' && detail.trim()) {
+    return new AuthError(detail, status);
+  }
+
+  if (detail && typeof detail === 'object' && !Array.isArray(detail)) {
+    const obj = detail as { message?: unknown; code?: unknown };
+    const message = typeof obj.message === 'string' && obj.message.trim()
+      ? obj.message
+      : `请求失败（${status}）`;
+    return new AuthError(message, status, typeof obj.code === 'string' ? obj.code : undefined);
+  }
+
+  // Pydantic 422：detail 是 [{loc, msg, type}, ...]
+  if (Array.isArray(detail) && detail.length > 0) {
+    const first = detail[0] as { msg?: unknown };
+    if (typeof first?.msg === 'string') return new AuthError(first.msg, status);
+  }
+
+  const fallback = (result as { error?: { message?: string } } | null)?.error?.message;
+  return new AuthError(fallback || `请求失败（${status}）`, status);
+}
+
+/**
  * 用户登录
  */
 export async function login(credentials: LoginRequest): Promise<AuthResponse> {
@@ -147,7 +209,7 @@ export async function login(credentials: LoginRequest): Promise<AuthResponse> {
     const result = await response.json();
 
     if (!response.ok) {
-      throw new Error(result.detail || result.error?.message || `HTTP error! status: ${response.status}`);
+      throw parseAuthError(result, response.status);
     }
 
     // 注意：token 的存储由调用方通过 setAuth() 统一处理，这里不存储
@@ -177,7 +239,7 @@ export async function register(data: RegisterRequest): Promise<AuthResponse> {
     const result = await response.json();
 
     if (!response.ok) {
-      throw new Error(result.detail || result.error?.message || `HTTP error! status: ${response.status}`);
+      throw parseAuthError(result, response.status);
     }
 
     // 注意：token 的存储由调用方通过 setAuth() 统一处理，这里不存储
@@ -215,7 +277,7 @@ export async function registerWithScale(data: {
     });
     const result = await response.json();
     if (!response.ok) {
-      throw new Error(result.detail || result.error?.message || `HTTP error! status: ${response.status}`);
+      throw parseAuthError(result, response.status);
     }
     return { success: true, data: result } as AuthResponse;
   } catch (error) {
@@ -283,6 +345,60 @@ export async function getRecentChanges(userId: string, limit: number = 5): Promi
   } catch (error) {
     console.error('Failed to get recent changes:', error);
     throw error;
+  }
+}
+
+export type CalibrationDimension = 'cognition' | 'affect' | 'behavior';
+
+export interface CalibrationEntry {
+  dimension: CalibrationDimension;
+  systemValue: number;
+  userValue: number;
+  userComment?: string;
+  likertTrust?: number;
+}
+
+/**
+ * 上报一次自我校准（单个维度）。
+ *
+ * 身份由 JWT 决定，不传 userId：后端 `record_calibration` 用的是
+ * `current_user.id`，客户端传什么都不会生效。
+ *
+ * 冲突等级（low/medium/high）由后端按 |系统值 − 自评值| 计算，前端不重复实现，
+ * 避免两处阈值日后走样。
+ */
+export async function postCalibration(entry: CalibrationEntry): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/calibration`, {
+    method: 'POST',
+    headers: getHeaders(true),
+    body: JSON.stringify({
+      dimension: entry.dimension,
+      // 后端限定 0–100 的整数，画像是浮点数，这里必须取整并夹紧，
+      // 否则一个 100.4 会让整条记录被 422 拒掉。
+      systemValue: clampScore(entry.systemValue),
+      userValue: clampScore(entry.userValue),
+      userComment: entry.userComment,
+      likertTrust: entry.likertTrust,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new ApiError(response.status, await readErrorDetail(response));
+  }
+}
+
+function clampScore(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.min(100, Math.max(0, Math.round(value)));
+}
+
+async function readErrorDetail(response: Response): Promise<unknown> {
+  try {
+    const payload = await response.json();
+    return payload?.detail ?? payload;
+  } catch {
+    // 响应体不是 JSON（例如网关返回的 HTML 错误页）。
+    return null;
   }
 }
 
@@ -581,6 +697,123 @@ export async function saveResearchWorkspace(
     keepalive: options?.keepalive,
   });
   if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+}
+
+// ── 关键教学事件 ─────────────────────────────────────────────────────────────
+
+export interface StageArtifactRequestPayload {
+  artifact_type: string;
+  artifact_key: string;
+  content: Record<string, unknown>;
+  change_source?: string;
+  change_reason?: string;
+}
+
+export interface StageEventRequestBody {
+  /** 幂等键。必须在同一次关键时刻的所有重试中保持不变，见 services/stageEvents.ts。 */
+  request_id: string;
+  stage: string;
+  event_type: string;
+  detail?: Record<string, unknown>;
+  artifacts?: StageArtifactRequestPayload[];
+}
+
+export interface StageEventResponse {
+  event_id: string;
+  stage: string;
+  event_type: string;
+  blueprint_version_id: string | null;
+  artifacts: Array<{
+    artifact_id: string;
+    artifact_type: string;
+    artifact_key: string;
+    version: number;
+    version_created: boolean;
+  }>;
+  replayed: boolean;
+}
+
+export interface FinalSubmitRequestBody {
+  /** 同一次最终提交的所有自动/手动重试必须复用此 ID。 */
+  request_id: string;
+  stage: 'build' | 'reflect';
+  code_submitted: string;
+  started_at?: string;
+  detail?: Record<string, unknown>;
+  artifacts?: StageArtifactRequestPayload[];
+}
+
+export interface FinalSubmitResponse {
+  event_id: string;
+  stage: string;
+  blueprint_version_id: string | null;
+  artifacts: StageEventResponse['artifacts'];
+  completed: boolean;
+  submitted_at: string | null;
+  replayed: boolean;
+}
+
+/** 携带状态码与结构化 detail 的接口错误，供上层区分 409/422/413 等终态。 */
+export class ApiError extends Error {
+  readonly status: number;
+  readonly detail: unknown;
+
+  constructor(status: number, detail: unknown, message?: string) {
+    super(message ?? `HTTP error! status: ${status}`);
+    this.name = 'ApiError';
+    this.status = status;
+    this.detail = detail;
+  }
+}
+
+/**
+ * 上报一次关键教学事件。
+ *
+ * 直接抛 `ApiError` 而不是笼统的 `Error`：调用方需要区分「可重试的网络故障」
+ * 与「重试也没用的 409/422」。重试逻辑在 services/stageEvents.ts 中。
+ */
+export async function postStageEvent(
+  taskId: string,
+  body: StageEventRequestBody,
+  options?: { keepalive?: boolean },
+): Promise<StageEventResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/research/tasks/${taskId}/stage-events`, {
+    method: 'POST',
+    headers: getHeaders(true),
+    body: JSON.stringify(body),
+    keepalive: options?.keepalive,
+  });
+
+  if (!response.ok) {
+    throw new ApiError(response.status, await readErrorDetail(response));
+  }
+
+  const result = await response.json();
+  return (result.data ?? result) as StageEventResponse;
+}
+
+/**
+ * 原子地写入最终产物版本、final_submit 事件和完成状态。
+ *
+ * 这三项不能拆成多个前端请求，否则任何一次断网都会留下
+ * “已完成但没有证据”或“有提交事件但任务未完成”的半成品。
+ */
+export async function postFinalResearchSubmission(
+  taskId: string,
+  body: FinalSubmitRequestBody,
+): Promise<FinalSubmitResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/research/tasks/${taskId}/final-submit`, {
+    method: 'POST',
+    headers: getHeaders(true),
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    throw new ApiError(response.status, await readErrorDetail(response));
+  }
+
+  const result = await response.json();
+  return (result.data ?? result) as FinalSubmitResponse;
 }
 
 /**

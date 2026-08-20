@@ -82,6 +82,9 @@ async def init_db():
         # 迁移：实验班级、实验条件与分组任务
         await _migrate_experiment_groups()
 
+        # 迁移：阶段产物版本与关键教学事件
+        await _migrate_research_process_events()
+
         # 打印已创建的表
         async with engine.begin() as conn:
             def get_table_names(sync_conn):
@@ -393,6 +396,281 @@ async def _migrate_experiment_groups():
     )
     for sql, label in statements:
         await _run_migration_sql(sql, label)
+
+
+async def _migrate_research_process_events():
+    """幂等迁移：阶段产物版本链与关键教学事件。
+
+    ``stage_artifacts`` / ``artifact_versions`` / ``stage_events`` /
+    ``stage_event_artifacts`` / ``scaffold_events`` 五张表本身由
+    ``Base.metadata.create_all`` 创建（与 ``project_blueprint_versions`` 的引入
+    方式一致）。本函数只做 ``create_all`` 无法保证的三件事：
+
+    1. 对既有库补建查询索引——研究导出会按「学生 × 任务 × 时间」和
+       「任务 × 事件类型 × 时间」扫描，缺索引会在 40–50 人课堂数据量下
+       变成顺序扫描；
+    2. 补建事件表的请求幂等唯一约束——同一次交互若因客户端重试写入两条，
+       会直接污染「求助次数 / 阶段确认数」这类核心研究指标；
+    3. 为 ``research_task_submissions`` 补建 ``(task_id, user_id)`` 唯一约束。
+       该表此前只有普通索引，但所有读取路径都用 ``scalar_one_or_none()``，
+       并发保存产生的重复行会让后续请求直接抛 ``MultipleResultsFound``。
+       补建前**只做只读检测**：发现重复就中止启动并打印诊断，不自动删除任何行
+       （重复行可能各自持有不同的工作区、代码与冻结蓝图，合并需要人工判断，
+       见 ``scripts/repair_duplicate_submissions.sql``）。
+
+    本函数不执行任何 DROP，也不执行任何删除数据的 DELETE。
+
+    **旧 Task 1 schema 前提**：本函数假定这五张表要么不存在（由 ``create_all``
+    按当前模型创建），要么已经是当前结构。它**不是**通用的 schema migration，
+    不会给既有表加列、改列名或改写外键动作。已由 Codex 在本机核验：
+    ``cognisync_db`` 与 ``cognisync_test`` 中都不存在旧版 Task 1 表，因此无需
+    兼容旧结构。若在其他数据库部署且怀疑存在旧版表，先运行
+    ``scripts/inspect_task1_schema.sql`` 检查，再决定是重建还是编写显式迁移。
+
+    这些语句在表刚由 create_all 建好时会因对象已存在而正常跳过，
+    因此保持默认 critical=True 不会影响正常启动。
+
+    **部署假设**：本迁移在应用启动时执行，假定同一时刻只有一个后端实例在做
+    DDL。DO 块虽已限定 schema 与表名，但「检查后再 ALTER」在多实例同时冷启动时
+    仍存在竞争窗口（其中一个会因约束已存在而失败）。若部署为多副本同时启动，
+    应改用独立的一次性 migration job 或数据库咨询锁，而不是让每个副本竞争 DDL。
+    """
+    statements = (
+        (
+            "CREATE INDEX IF NOT EXISTS ix_stage_artifacts_user_task "
+            "ON stage_artifacts (user_id, task_id);",
+            "INDEX stage_artifacts(user_id, task_id)",
+        ),
+        (
+            "CREATE INDEX IF NOT EXISTS ix_stage_artifacts_task_stage "
+            "ON stage_artifacts (task_id, stage);",
+            "INDEX stage_artifacts(task_id, stage)",
+        ),
+        (
+            "CREATE INDEX IF NOT EXISTS ix_artifact_versions_artifact_created "
+            "ON artifact_versions (artifact_id, created_at);",
+            "INDEX artifact_versions(artifact_id, created_at)",
+        ),
+        (
+            "CREATE INDEX IF NOT EXISTS ix_stage_events_user_task_created "
+            "ON stage_events (user_id, task_id, created_at);",
+            "INDEX stage_events(user_id, task_id, created_at)",
+        ),
+        (
+            "CREATE INDEX IF NOT EXISTS ix_stage_events_task_type_created "
+            "ON stage_events (task_id, event_type, created_at);",
+            "INDEX stage_events(task_id, event_type, created_at)",
+        ),
+        (
+            "CREATE INDEX IF NOT EXISTS ix_stage_event_artifacts_artifact "
+            "ON stage_event_artifacts (artifact_id);",
+            "INDEX stage_event_artifacts(artifact_id)",
+        ),
+        (
+            "CREATE INDEX IF NOT EXISTS ix_scaffold_events_user_task_created "
+            "ON scaffold_events (user_id, task_id, created_at);",
+            "INDEX scaffold_events(user_id, task_id, created_at)",
+        ),
+        (
+            "CREATE INDEX IF NOT EXISTS ix_scaffold_events_stage_level "
+            "ON scaffold_events (stage, applied_level);",
+            "INDEX scaffold_events(stage, applied_level)",
+        ),
+        (
+            _constraint_guard(
+                table="scaffold_events",
+                constraint="uq_scaffold_event_request",
+                ddl="ALTER TABLE scaffold_events "
+                    "ADD CONSTRAINT uq_scaffold_event_request UNIQUE (user_id, request_id);",
+            ),
+            "UNIQUE scaffold_events(user_id, request_id)",
+        ),
+        (
+            _constraint_guard(
+                table="stage_events",
+                constraint="uq_stage_event_request",
+                ddl="ALTER TABLE stage_events "
+                    "ADD CONSTRAINT uq_stage_event_request UNIQUE (user_id, request_id);",
+            ),
+            "UNIQUE stage_events(user_id, request_id)",
+        ),
+        (
+            _constraint_guard(
+                table="stage_event_artifacts",
+                constraint="uq_stage_event_artifact",
+                ddl="ALTER TABLE stage_event_artifacts "
+                    "ADD CONSTRAINT uq_stage_event_artifact UNIQUE (event_id, artifact_id);",
+            ),
+            "UNIQUE stage_event_artifacts(event_id, artifact_id)",
+        ),
+        (
+            _constraint_guard(
+                table="stage_artifacts",
+                constraint="uq_stage_artifact_identity",
+                ddl="ALTER TABLE stage_artifacts ADD CONSTRAINT uq_stage_artifact_identity "
+                    "UNIQUE (task_id, user_id, artifact_type, artifact_key);",
+            ),
+            "UNIQUE stage_artifacts identity",
+        ),
+        (
+            _constraint_guard(
+                table="artifact_versions",
+                constraint="uq_artifact_version_seq",
+                ddl="ALTER TABLE artifact_versions "
+                    "ADD CONSTRAINT uq_artifact_version_seq UNIQUE (artifact_id, version);",
+            ),
+            "UNIQUE artifact_versions(artifact_id, version)",
+        ),
+        # 加唯一约束前只做**只读检测**，绝不自动删行。
+        #
+        # 重复的提交记录可能分别持有不同的 workspace、代码、开始时间和已冻结
+        # 蓝图版本。「updated_at 最新」并不等于「数据最完整、最可信」——按它
+        # 自动删除会让研究过程证据不可逆地丢失，与本任务保护证据的目标相反。
+        # 因此这里让启动失败并给出可执行的诊断，由人工合并后再重试。
+        (
+            """
+            DO $$
+            DECLARE
+                dup_count integer;
+            BEGIN
+                SELECT count(*) INTO dup_count FROM (
+                    SELECT task_id, user_id
+                    FROM research_task_submissions
+                    GROUP BY task_id, user_id
+                    HAVING count(*) > 1
+                ) AS duplicates;
+
+                IF dup_count > 0 THEN
+                    RAISE EXCEPTION
+                        'research_task_submissions has % duplicated (task_id, user_id) group(s). '
+                        'Refusing to add the unique constraint automatically because merging '
+                        'requires human judgement: duplicated rows may hold different workspace '
+                        'snapshots, code and frozen blueprint versions. '
+                        'Inspect with: SELECT task_id, user_id, count(*) '
+                        'FROM research_task_submissions GROUP BY 1,2 HAVING count(*) > 1; '
+                        'then merge manually (see scripts/repair_duplicate_submissions.sql).',
+                        dup_count;
+                END IF;
+            END $$;
+            """,
+            "Detect duplicate research_task_submissions (read-only)",
+        ),
+        (
+            _constraint_guard(
+                table="research_task_submissions",
+                constraint="uq_research_submission_task_user",
+                ddl="ALTER TABLE research_task_submissions "
+                    "ADD CONSTRAINT uq_research_submission_task_user UNIQUE (task_id, user_id);",
+            ),
+            "UNIQUE research_task_submissions(task_id, user_id)",
+        ),
+        # 把支架事件指向聊天消息的外键从 SET NULL 升级为 RESTRICT。
+        #
+        # 应用层的「先 count 再 delete」有竞态：检查通过之后、删除发生之前
+        # 仍可插入新的支架事件，最终原文引用照样被置空；其他删除路径
+        # （直接 SQL、未来新增的端点）也绕得过 API 检查。保护必须落在约束上。
+        #
+        # 这段只改约束动作，不删除任何聊天或支架数据。
+        (
+            _fk_action_guard(
+                table="scaffold_events",
+                column="student_message_id",
+                target="chat_messages",
+                constraint="fk_scaffold_event_student_message",
+            ),
+            "RESTRICT scaffold_events.student_message_id",
+        ),
+        (
+            _fk_action_guard(
+                table="scaffold_events",
+                column="assistant_message_id",
+                target="chat_messages",
+                constraint="fk_scaffold_event_assistant_message",
+            ),
+            "RESTRICT scaffold_events.assistant_message_id",
+        ),
+    )
+    for sql, label in statements:
+        await _run_migration_sql(sql, label)
+
+
+def _fk_action_guard(
+    table: str,
+    column: str,
+    target: str,
+    constraint: str,
+) -> str:
+    """生成「把某列的外键删除动作改成 RESTRICT」的幂等 DO 块。
+
+    ``create_all`` 只在表不存在时按当前模型建约束；已经建成 ``SET NULL`` 的
+    既有库不会被自动改写。这里先查出该列上实际存在的外键（不依赖约束名，
+    因为 SQLAlchemy 的自动命名与手写名可能不同），若其 ``confdeltype`` 不是
+    ``'r'``（RESTRICT）就重建。
+
+    只操作约束，不触碰任何行数据。
+    """
+    return f"""
+        DO $$
+        DECLARE
+            existing_name text;
+            existing_action "char";
+        BEGIN
+            SELECT c.conname, c.confdeltype
+              INTO existing_name, existing_action
+            FROM pg_constraint c
+            JOIN pg_class t ON t.oid = c.conrelid
+            JOIN pg_namespace n ON n.oid = t.relnamespace
+            JOIN pg_attribute a
+              ON a.attrelid = t.oid AND a.attnum = c.conkey[1]
+            WHERE c.contype = 'f'
+              AND n.nspname = current_schema()
+              AND t.relname = '{table}'
+              AND a.attname = '{column}'
+              AND array_length(c.conkey, 1) = 1
+            LIMIT 1;
+
+            IF existing_name IS NULL THEN
+                -- 表或列尚不存在（首次由 create_all 建表时即为 RESTRICT），无需处理。
+                RETURN;
+            END IF;
+
+            IF existing_action = 'r' THEN
+                RETURN;  -- 已经是 RESTRICT
+            END IF;
+
+            EXECUTE format(
+                'ALTER TABLE {table} DROP CONSTRAINT %I', existing_name
+            );
+            EXECUTE
+                'ALTER TABLE {table} ADD CONSTRAINT {constraint} '
+                'FOREIGN KEY ({column}) REFERENCES {target}(id) ON DELETE RESTRICT';
+        END $$;
+    """
+
+
+def _constraint_guard(table: str, constraint: str, ddl: str) -> str:
+    """生成「约束不存在才创建」的幂等 DO 块。
+
+    必须同时限定 schema 与表名：只按 ``pg_constraint.conname`` 判断时，
+    其他 schema 或其他表上的同名约束会让本表误判为「已经存在」而静默跳过，
+    导致约束实际缺失但迁移显示成功。
+    """
+    return f"""
+        DO $$
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1
+                FROM pg_constraint c
+                JOIN pg_class t ON t.oid = c.conrelid
+                JOIN pg_namespace n ON n.oid = t.relnamespace
+                WHERE c.conname = '{constraint}'
+                  AND t.relname = '{table}'
+                  AND n.nspname = current_schema()
+            ) THEN
+                {ddl}
+            END IF;
+        END $$;
+    """
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:

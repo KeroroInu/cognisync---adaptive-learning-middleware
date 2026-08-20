@@ -4,6 +4,7 @@ Admin 会话管理 API 端点
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, func, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import verify_admin_key
@@ -242,9 +243,48 @@ async def delete_session(
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
 
+    # 两道防线，缺一不可：
+    #
+    # 1. 这里的预检查负责给出**可读的** 409 与证据条数，让管理员知道为什么删不了；
+    # 2. scaffold_events → chat_messages 的外键 RESTRICT 负责**真正**兜底。
+    #
+    # 只有预检查是不够的：检查通过之后、删除发生之前仍可写入新的支架事件，
+    # 而且直接 SQL 或未来新增的删除路径根本不会经过这里。
+    # 只有外键也不够：数据库抛出的是 IntegrityError，暴露给管理员是 500。
+    from app.api.endpoints.admin.users import count_session_scaffold_links
+
+    linked = await count_session_scaffold_links(db, sid)
+    if linked > 0:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "RESEARCH_EVIDENCE_EXISTS",
+                "message": (
+                    "该会话中的消息被支架事件引用，禁止物理删除。"
+                    "删除会切断「求助—建议」的原文链路，只留下等级与元数据。"
+                ),
+                "scaffoldEvents": linked,
+            },
+        )
+
     from sqlalchemy import delete as sql_delete
-    await db.execute(sql_delete(ChatMessage).where(ChatMessage.session_id == sid))
-    await db.delete(session)
-    await db.commit()
+    try:
+        await db.execute(sql_delete(ChatMessage).where(ChatMessage.session_id == sid))
+        await db.delete(session)
+        await db.commit()
+    except IntegrityError as exc:
+        # 预检查与删除之间的竞态窗口：期间新写入了支架事件。
+        # 外键 RESTRICT 挡住了它，这里把数据库错误翻译成与预检查一致的语义。
+        await db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "RESEARCH_EVIDENCE_EXISTS",
+                "message": (
+                    "该会话中的消息在删除期间被支架事件引用，已中止删除。"
+                    "请重新查询后再操作。"
+                ),
+            },
+        ) from exc
 
     return SuccessResponse(data={"deleted": True, "session_id": session_id})

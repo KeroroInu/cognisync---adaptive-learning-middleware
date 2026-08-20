@@ -550,3 +550,34 @@
 @media (prefers-reduced-motion: reduce) {
   .project-factory * { transition: none !important; }
 }
+
+/* 关键事件未能记录时的提示条。
+   绝不能让界面显示「已确认」而证据其实没写入——那会在研究数据里留下
+   无法解释的缺口，事后也分不清是学生没做还是系统没记上。 */
+.project-event-notice {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 8px;
+  padding: 9px 12px;
+  border: 1.5px solid #b45309;
+  border-radius: 8px;
+  background: #fef3c7;
+  color: #7c2d12;
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.project-event-notice button {
+  flex: 0 0 auto;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1.5px solid #b45309;
+  border-radius: 6px;
+  background: transparent;
+  color: #7c2d12;
+  font-size: .875rem;
+  font-weight: 900;
+}

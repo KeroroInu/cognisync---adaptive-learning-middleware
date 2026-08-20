@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { ClipboardList, MessageSquare, Check, ArrowLeft, Hash, Lock, User, Mail, Loader } from 'lucide-react';
 import { Input } from '../components/Input';
-import { register as registerAPI } from '../services/api';
+import { register as registerAPI, AuthError } from '../services/api';
 import { translations } from '../utils/translations';
 import type { Language } from '../types';
 
@@ -39,6 +39,8 @@ export const Register: React.FC<RegisterProps> = ({
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** 该学号已开始注册但未完成时置真：错误框下方额外给出「去登录继续」入口。 */
+  const [resumeHint, setResumeHint] = useState(false);
 
   // Validate and proceed to mode selection
   const handleNext = async (e: React.FormEvent) => {
@@ -120,7 +122,19 @@ export const Register: React.FC<RegisterProps> = ({
         throw new Error('Invalid registration response');
       }
     } catch (err: any) {
-      setError(err.message || (language === 'zh' ? '注册失败，请重试' : 'Registration failed, please try again'));
+      // 「该学号已开始注册但没完成」必须给出出口。
+      //
+      // 后端刻意不允许重复注册覆盖未完成账号的密码（学号可猜，覆盖等于账号劫持），
+      // 正确的恢复路径是用原密码登录——登录后 App.tsx 会依据 hasCompletedOnboarding
+      // 自动跳回未完成的那一步。但此前这里只显示后端原文 "Student ID already
+      // registered"，学生根本不知道该去登录，只会反复重填学号，真实测试中就卡在这里。
+      if (err instanceof AuthError && err.code === 'REGISTRATION_INCOMPLETE') {
+        setResumeHint(true);
+        setError(err.message);
+      } else {
+        setResumeHint(false);
+        setError(err?.message || (language === 'zh' ? '注册失败，请重试' : 'Registration failed, please try again'));
+      }
       setIsLoading(false);
     }
   };
@@ -280,6 +294,18 @@ export const Register: React.FC<RegisterProps> = ({
         {error && (
           <div className="max-w-2xl mx-auto mb-8 border border-red-200 rounded-lg p-4" style={{ backgroundColor: 'rgba(239,68,68,0.08)' }}>
             <p className="text-sm text-red-500 text-center">{error}</p>
+            {resumeHint && (
+              <div className="mt-3 text-center">
+                <button
+                  type="button"
+                  onClick={onNavigateToLogin}
+                  className="text-sm font-medium underline"
+                  style={{ color: 'var(--primary, #6366f1)' }}
+                >
+                  {language === 'zh' ? '去登录，继续未完成的注册' : 'Log in to finish your registration'}
+                </button>
+              </div>
+            )}
           </div>
         )}
 

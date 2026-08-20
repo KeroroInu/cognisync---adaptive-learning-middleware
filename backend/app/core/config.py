@@ -2,7 +2,7 @@
 配置管理 - 使用 Pydantic Settings
 所有配置从环境变量读取，支持 .env 文件
 """
-from typing import List
+from typing import List, Literal
 from urllib.parse import quote_plus
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
@@ -102,6 +102,24 @@ class Settings(BaseSettings):
     SEED_TEST_DATA: bool = Field(
         default=False,
         description="是否创建测试学生和演示数据；生产环境必须关闭"
+    )
+
+    # ── 新注册用户的默认实验分组 ──────────────────────────────────────────────
+    #
+    # ⚠️ 只用于试用/联调环境，正式实验前必须改回 "unassigned"。
+    #
+    # 代码默认是 "unassigned"（安全值）：未分组用户在学生端只能访问画像与量表，
+    # 看不到任何研究任务，因此不会误入某个实验条件、也不会产生带组别标签的数据。
+    #
+    # 设成 pdt / ai_pbl / lecture 之后，**所有**新注册者都会落进同一组。这对试用
+    # 很方便（注册完就能直接进任务），但会彻底破坏准实验的随机分配：组间差异将
+    # 无法归因于教学条件。忘记改回来的后果是整批数据作废且事后无法补救——
+    # 分组信息在注册那一刻就写进了 users 表，不会留下"这是被强制指定的"痕迹。
+    #
+    # 正式实验应通过管理端逐个分配，或实现随机分配接口后再开放注册。
+    DEFAULT_EXPERIMENT_GROUP: Literal["unassigned", "pdt", "ai_pbl", "lecture"] = Field(
+        default="unassigned",
+        description="新注册用户的实验分组；仅试用环境可改为具体组别，正式实验须为 unassigned"
     )
 
     # JWT 认证配置

@@ -7,6 +7,7 @@ from typing import Literal, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ValidationError
 from sqlalchemy import select, func, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import verify_admin_key
@@ -264,17 +265,55 @@ async def delete_research_task(
     task_id: UUID,
     db: AsyncSession = Depends(get_db),
 ) -> SuccessResponse[dict]:
-    """删除研究任务（级联删除提交记录）"""
+    """删除研究任务（级联删除提交记录）
+
+    研究证据保护：若该任务下已有学生产生不可覆盖的研究证据，则拒绝物理删除并返回
+    409。准实验的原始过程数据一旦删除无法重建；需要下线任务时请使用归档状态。
+    """
     result = await db.execute(select(ResearchTask).where(ResearchTask.id == task_id))
     task = result.scalar_one_or_none()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
+    from app.api.endpoints.admin.users import _count_research_evidence
+
+    evidence = await _count_research_evidence(db, task_id=task_id)
+    if evidence["total"] > 0:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "RESEARCH_EVIDENCE_EXISTS",
+                "message": (
+                    "该任务下已有学生产生不可覆盖的研究证据，禁止物理删除。"
+                    "请改为将任务归档（archived）。"
+                ),
+                "evidence": evidence,
+            },
+        )
+
     # 先解除任务指向子版本的引用，再由数据库级联删除版本和学生提交。
+    #
+    # 上面的计数只是为了给出可读的 409。真正的兜底是 scaffold_events 对
+    # chat_messages 的 RESTRICT 外键：检查与删除之间仍有窗口，学生可能刚好在
+    # 这一刻写入证据。捕获 IntegrityError 转成 409，避免管理员看到 500 而
+    # 以为是系统故障、进而重试或手工删库。
     task.current_blueprint_version_id = None
-    await db.flush()
-    await db.delete(task)
-    await db.commit()
+    try:
+        await db.flush()
+        await db.delete(task)
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "RESEARCH_EVIDENCE_EXISTS",
+                "message": (
+                    "删除过程中该任务下新产生了研究证据，已中止删除。"
+                    "请改为将任务归档（archived）。"
+                ),
+            },
+        ) from None
 
     return SuccessResponse(data={"deleted": True, "task_id": str(task_id)})
 
@@ -396,18 +435,66 @@ async def delete_research_submissions_batch(
 ) -> SuccessResponse[dict]:
     """批量删除研究任务提交记录"""
     from sqlalchemy import delete as sql_delete
+
+    from app.api.endpoints.admin.users import count_submission_evidence
+
     try:
         uuids = [UUID(sid) for sid in submission_ids]
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid submission_id in list")
 
-    result = await db.execute(
-        sql_delete(ResearchTaskSubmission)
+    # 先锁住这些提交行，再统计证据。
+    #
+    # 提交记录本身没有被任何证据表用外键引用，所以「先查后删」在并发下挡不住：
+    # 学生在检查与删除之间写入的证据不会被计入，删除照常执行，已冻结的教师
+    # 蓝图版本随之丢失——正是下面要防的那种漂移。
+    #
+    # 所有证据写入路径都先经过 freeze_blueprint_version -> upsert_submission，
+    # 对同一提交行做 INSERT ... ON CONFLICT DO UPDATE，需要这把行锁；因此
+    # FOR UPDATE 能真正把它们挡在事务之外，直到本次删除提交或回滚。
+    await db.execute(
+        select(ResearchTaskSubmission.id)
         .where(ResearchTaskSubmission.id.in_(uuids))
-        .returning(ResearchTaskSubmission.id)
+        .with_for_update()
     )
-    deleted_ids = [str(row[0]) for row in result.all()]
-    await db.commit()
+
+    # 提交记录承载着学生的教师蓝图冻结版本。删掉之后，学生的下一条关键事件
+    # 会按教师**当前**版本重建记录，同一学习过程因而跨越两个蓝图版本，
+    # 准实验的组间条件不再可解释。
+    evidence = await count_submission_evidence(db, uuids)
+    if evidence["total"] > 0:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "RESEARCH_EVIDENCE_EXISTS",
+                "message": (
+                    "这些提交记录对应的学生已产生不可覆盖的研究证据，禁止删除。"
+                    "删除会使已冻结的教师蓝图版本漂移到当前版本。"
+                ),
+                "evidence": evidence,
+                # protected 指明是哪几条提交记录被哪类证据保护，
+                # 管理员据此可以只清理未被保护的那些。
+                "protectedSubmissions": sorted(evidence.get("protected", {})),
+            },
+        )
+
+    try:
+        result = await db.execute(
+            sql_delete(ResearchTaskSubmission)
+            .where(ResearchTaskSubmission.id.in_(uuids))
+            .returning(ResearchTaskSubmission.id)
+        )
+        deleted_ids = [str(row[0]) for row in result.all()]
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "RESEARCH_EVIDENCE_EXISTS",
+                "message": "删除过程中新产生了关联记录，已中止删除。",
+            },
+        ) from None
 
     return SuccessResponse(data={"deleted": True, "count": len(deleted_ids)})
 

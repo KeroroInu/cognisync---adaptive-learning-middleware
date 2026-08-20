@@ -178,6 +178,78 @@
 .build-workspace-footer button,
 .project-build-workspace.is-empty button { min-height: 36px; padding: 0 11px; border: 1.5px solid #161713; border-radius: 6px; background: var(--surface-muted); color: var(--text-primary); font-size: .62rem; font-weight: 900; }
 
+/* 测试失败后的跨阶段修订入口。
+   「回到解构结果进行修订」是本教学法的主线，此前只有一句文字提示、没有入口。 */
+.build-revision-prompt {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 6px;
+  padding: 9px 12px;
+  border: 1.5px solid #161713;
+  border-radius: 8px;
+  background: var(--surface-muted);
+}
+
+.build-revision-prompt > span {
+  flex: 1 1 320px;
+  color: var(--text-secondary);
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+/* 证据没写成功时才出现。整行占满，红色实底，避免混进上面那句常驻说明。 */
+.build-revision-error {
+  flex: 1 1 100%;
+  margin: 0;
+  padding: 8px 10px;
+  border: 1.5px solid #b42318;
+  border-radius: 6px;
+  background: #fef3f2;
+  color: #912018;
+  font-size: .9375rem;
+  font-weight: 700;
+  line-height: 1.55;
+}
+
+.build-revision-actions { display: flex; flex-wrap: wrap; gap: 7px; }
+
+.build-revision-actions button {
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1.5px solid #161713;
+  border-radius: 6px;
+  background: var(--surface-base);
+  color: var(--text-primary);
+  font-size: .875rem;
+  font-weight: 900;
+}
+
+.build-revision-actions button:disabled {
+  cursor: not-allowed;
+  opacity: .55;
+}
+
+.build-revision-actions button:last-child {
+  background: transparent;
+  border-style: dashed;
+  color: var(--text-tertiary);
+}
+
+.build-workspace-footer .build-final-submit {
+  margin-left: auto;
+  background: var(--accent-strong, #161713);
+  color: var(--surface-base, #fff);
+}
+
+.build-workspace-footer .build-final-submit:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+
 @media (max-width: 1080px) {
   .project-build-workspace { overflow: auto; }
   .build-workspace-main { grid-template-columns: 1fr; }

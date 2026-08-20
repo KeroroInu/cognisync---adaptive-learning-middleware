@@ -271,6 +271,9 @@ def build_scaffold_metadata(
         "policyMaxCodeLines": resolved["maxCodeLines"],
         "policySource": resolved["source"],
         "policyWasClamped": resolved["wasClamped"],
+        # 封顶值本身也要留痕：只知道"被降级了"，无法回答"降到几、上限是多少"，
+        # 而这正是分析教师策略强度与学生求助行为关系时要用的量。
+        "coreImplementationMaxLevel": resolved["coreImplementationMaxLevel"],
         "requireAttemptBeforeUpgrade": resolved["requireAttemptBeforeUpgrade"],
         "blueprintVersionId": blueprint_version_id,
         "profileSnapshot": {
