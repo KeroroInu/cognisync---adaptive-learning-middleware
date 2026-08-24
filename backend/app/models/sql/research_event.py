@@ -484,11 +484,11 @@ class ScaffoldEvent(Base, UUIDMixin):
       因此不会出现「事件表显示已给出 L3 支架，学生却什么都没收到」的假记录。
 
     当前与 ``chat_messages.analysis.scaffoldContext`` 双写：本表作为后续研究分析
-    的规范数据源，旧 JSONB 保留以兼容既有页面与导出。任务 5 完成
-    「求助—建议—采用—修改—结果」链路后，再把新版导出切换到本表。
+    的规范数据源，旧 JSONB 保留以兼容既有页面与导出。等后续建立
+    「求助—建议—修改—结果」关联后，再把新版导出切换到本表。
 
-    注意：``adopted`` 等采用链字段留待任务 5 填充，当前不得依据不完整的旧字段
-    推测学生是否采用了建议，因此默认值为 NULL 而非 False。
+    注意：最新裁定不让学生额外填写采用理由；``adopted`` 默认保持 NULL，
+    后续研究分析依据建议、代码版本和测试结果推断，不把“未判定”误写为 False。
     """
 
     __tablename__ = "scaffold_events"
@@ -557,7 +557,7 @@ class ScaffoldEvent(Base, UUIDMixin):
     trigger: Mapped[str] = mapped_column(
         String(40),
         nullable=False,
-        comment="hint_button | student_message | level_up | minimum_completion",
+        comment="hint_button | student_message | level_up | minimum_completion | l3_confirmed",
     )
 
     requested_level: Mapped[int] = mapped_column(
@@ -583,7 +583,7 @@ class ScaffoldEvent(Base, UUIDMixin):
         String(40),
         nullable=False,
         default="platform_default",
-        comment="teacher_blueprint | platform_default",
+        comment="teacher_blueprint | platform_default | platform_latest",
     )
 
     policy_max_code_lines: Mapped[int] = mapped_column(
@@ -626,7 +626,7 @@ class ScaffoldEvent(Base, UUIDMixin):
     adopted: Mapped[Optional[bool]] = mapped_column(
         Boolean,
         nullable=True,
-        comment="学生是否采用了建议；任务 5 填充，NULL 表示尚未判定",
+        comment="学生是否采用了建议；不新增学生表单，NULL 表示尚未判定",
     )
 
     created_at: Mapped[datetime] = mapped_column(

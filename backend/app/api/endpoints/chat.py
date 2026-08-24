@@ -31,6 +31,7 @@ from app.schemas.project_blueprint import BlueprintScaffoldPolicy, ProjectBluepr
 from app.models.sql.user import User
 from app.api.endpoints.auth import get_current_user
 from app.services.scaffold_service import (
+    build_controlled_build_response,
     build_scaffold_metadata,
     build_scaffold_prompt,
     summarize_project_workspace,
@@ -900,34 +901,42 @@ async def chat(
 
 学生说：{request.message}{verification_hint}"""
 
-        # 调用 LLM 生成回复（30 秒超时，失败自动重试一次）
+        # 固定七函数的 L0-L3 都由服务端按等级返回受控代码，避免模型越级或改写
+        # 已通过本地行为检查的完整函数；其他项目与阶段仍走 LLM。
         import asyncio
-        llm_provider = get_chat_provider()
         assistant_reply = ""
+        if scaffold_context and scaffold_metadata:
+            assistant_reply = build_controlled_build_response(
+                scaffold_context,
+                int(scaffold_metadata["level"]),
+                request.language or "zh",
+            ) or ""
         last_llm_error: Optional[BaseException] = None
-        for attempt in range(2):
-            try:
-                assistant_reply = await asyncio.wait_for(
-                    llm_provider.complete(
-                        system_prompt=system_prompt,
-                        user_prompt=user_prompt,
-                        temperature=0.7,
-                        max_tokens=300
-                    ),
-                    timeout=30.0,
-                )
-                break
-            except asyncio.CancelledError:
-                # 客户端断开或服务关闭：不要当作 LLM 故障重试，直接向上传播
-                raise
-            except HTTPException:
-                # 不要把上游的业务异常误判为 LLM 故障而重试
-                raise
-            except (asyncio.TimeoutError, Exception) as llm_err:
-                last_llm_error = llm_err
-                logger.warning(f"LLM attempt {attempt + 1} failed: {llm_err}")
-                if attempt == 0:
-                    await asyncio.sleep(1)
+        if not assistant_reply:
+            llm_provider = get_chat_provider()
+            for attempt in range(2):
+                try:
+                    assistant_reply = await asyncio.wait_for(
+                        llm_provider.complete(
+                            system_prompt=system_prompt,
+                            user_prompt=user_prompt,
+                            temperature=0.7,
+                            max_tokens=300
+                        ),
+                        timeout=30.0,
+                    )
+                    break
+                except asyncio.CancelledError:
+                    # 客户端断开或服务关闭：不要当作 LLM 故障重试，直接向上传播
+                    raise
+                except HTTPException:
+                    # 不要把上游的业务异常误判为 LLM 故障而重试
+                    raise
+                except (asyncio.TimeoutError, Exception) as llm_err:
+                    last_llm_error = llm_err
+                    logger.warning(f"LLM attempt {attempt + 1} failed: {llm_err}")
+                    if attempt == 0:
+                        await asyncio.sleep(1)
         if not assistant_reply:
             logger.error(f"LLM failed after retries: {last_llm_error}")
             raise HTTPException(status_code=503, detail="AI service temporarily unavailable, please retry")
@@ -956,8 +965,8 @@ async def chat(
         #
         # 双写说明：这里同时保留 chat_messages.analysis.scaffoldContext（上面的
         # assistant_analysis），因为教师端现有页面与 CSV 导出仍在读它。
-        # scaffold_events 表是后续研究分析的规范数据源；等任务 5 建立
-        # 「求助—建议—采用—修改—结果」链路后，再把新版导出切换到事件表，
+        # scaffold_events 表是后续研究分析的规范数据源；等证据链建立完整的
+        # 「求助—建议—修改—结果」关联后，再把新版导出切换到事件表，
         # 旧 JSONB 作为历史兼容数据保留。
         if scaffold_metadata:
             await record_scaffold_event(

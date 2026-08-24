@@ -141,6 +141,45 @@ async def test_llm_failure_records_help_request_but_no_delivered_scaffold(
 
 
 @pytest.mark.asyncio
+async def test_confirmed_build_l3_returns_controlled_function_without_llm(
+    test_db, client, auth_headers, monkeypatch
+):
+    """L3 完整函数不经模型自由改写，并照常记录已送达支架。"""
+    task_id = await _create_active_task(test_db)
+    request_id = f"req-{uuid.uuid4().hex[:12]}"
+    payload = _scaffold_payload(task_id, request_id)
+    payload["scaffoldContext"].update({
+        "level": 3,
+        "trigger": "l3_confirmed",
+        "currentModule": "movement",
+        "l3Confirmed": True,
+    })
+
+    monkeypatch.setattr(llm_config, "get_chat_provider", lambda: _FailingProvider())
+    monkeypatch.setattr(
+        "app.api.endpoints.chat.get_chat_provider", lambda: _FailingProvider()
+    )
+
+    response = await client.post("/api/chat", headers=auth_headers, json=payload)
+
+    assert response.status_code == 200, response.text
+    data = response.json()["data"]
+    assert "def move_snake(snake, direction):" in data["message"]
+    assert data["scaffold"]["requestedLevel"] == 3
+    assert data["scaffold"]["appliedLevel"] == 3
+
+    async with test_db() as session:
+        scaffold = (
+            await session.execute(
+                select(ScaffoldEvent).where(ScaffoldEvent.request_id == request_id)
+            )
+        ).scalar_one()
+        assert scaffold.delivery_status == ScaffoldDeliveryStatus.DELIVERED
+        assert scaffold.requested_level == 3
+        assert scaffold.applied_level == 3
+
+
+@pytest.mark.asyncio
 async def test_scaffold_event_is_idempotent_per_request(test_db, client, auth_headers):
     """客户端重试同一 requestId 不得把一次求助计成两次。"""
     task_id = await _create_active_task(test_db)

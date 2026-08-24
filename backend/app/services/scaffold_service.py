@@ -15,7 +15,7 @@ STAGE_GOALS = {
     "decompose": "从观察现象推断程序职责，并形成输入、处理、输出与验证约定",
     "model": "围绕一张功能卡表达内部处理、判断、分支与结果",
     "plan": "根据功能间数据和前置关系形成可执行而非唯一的实现路径",
-    "build": "结合当前模块代码和测试反馈定位最小问题，修改后重新运行与解释",
+    "build": "围绕当前基础函数按 L0-L3 提供可复制运行的代码支持，不自动覆盖学生代码",
 }
 
 LEVEL_RULES = {
@@ -25,6 +25,219 @@ LEVEL_RULES = {
     3: "L3 最小补全：只补足阻塞推进的一个局部判断、表达式、连线建议或短代码片段；禁止给出完整模块或整套项目答案，并要求学生重新运行、解释或修改。",
 }
 
+BUILD_LEVEL_RULES = {
+    0: "L0 定位问题：只给测试、断言或打印代码，帮助学生看到当前函数在哪里偏离预期；不补实现代码。",
+    1: "L1 关键代码：只给解决当前卡点所需的少量关键代码，保留其余部分由学生完成。",
+    2: "L2 函数结构：给出接近完整的当前函数结构，允许保留少量明确空位；不得扩展到其他函数。",
+    3: "L3 完整函数：学生明确确认后，给出当前函数经过平台行为检查的完整正确实现；不自动覆盖编辑器，也不要求学生解释原错误。",
+}
+
+BUILD_MAX_CODE_LINES = {0: 8, 1: 5, 2: 40, 3: 100}
+
+SNAKE_L3_SOLUTIONS = {
+    "initial-state": """def create_initial_state(board_size=12, initial_length=3):
+    y = board_size // 2
+    head_x = max(initial_length - 1, board_size // 2)
+    snake = [(head_x - offset, y) for offset in range(initial_length)]
+    return snake, 'right', 0""",
+    "direction-input": """def change_direction(current_direction, next_direction):
+    opposite = {'up': 'down', 'down': 'up', 'left': 'right', 'right': 'left'}
+    if next_direction not in opposite or opposite[current_direction] == next_direction:
+        return current_direction
+    return next_direction""",
+    "movement": """def move_snake(snake, direction):
+    dx, dy = {'up': (0, -1), 'down': (0, 1), 'left': (-1, 0), 'right': (1, 0)}[direction]
+    head_x, head_y = snake[0]
+    new_head = (head_x + dx, head_y + dy)
+    return [new_head, *snake[:-1]]""",
+    "food-spawn": """def spawn_food(snake, board_size):
+    import random
+    free_cells = [(x, y) for y in range(board_size) for x in range(board_size)
+                  if (x, y) not in snake]
+    if not free_cells:
+        raise ValueError('No free cell for food')
+    return random.choice(free_cells)""",
+    "eat-grow-score": """def apply_food_effect(snake, food, score):
+    if snake[0] == food:
+        grown_snake = [*snake, snake[-1]]
+        return grown_snake, score + 10, True
+    return snake, score, False""",
+    "collision": """def check_collision(snake, board_size):
+    head_x, head_y = snake[0]
+    outside = head_x < 0 or head_x >= board_size or head_y < 0 or head_y >= board_size
+    hit_self = snake[0] in snake[1:]
+    return outside or hit_self""",
+    "game-loop": """def step_game(state, user_input):
+    if state['game_over']:
+        return state
+    if user_input:
+        state['direction'] = change_direction(state['direction'], user_input)
+    state['snake'] = move_snake(state['snake'], state['direction'])
+    state['game_over'] = check_collision(state['snake'], 12)
+    if state['game_over']:
+        return state
+    before_score = state['score']
+    effect = apply_food_effect(state['snake'], state['food'], state['score'])
+    state['snake'], state['score'] = effect[:2]
+    needs_food = effect[2] if len(effect) > 2 else state['score'] > before_score
+    if needs_food:
+        state['food'] = spawn_food(state['snake'], 12)
+    return state""",
+}
+
+SNAKE_L0_CHECKS = {
+    "initial-state": """state = create_initial_state()
+print(state)
+assert len(state) == 3
+assert state[1] in ('up', 'down', 'left', 'right')
+assert state[2] == 0""",
+    "direction-input": """print(change_direction('right', 'up'))
+print(change_direction('right', 'left'))
+assert change_direction('right', 'left') == 'right'""",
+    "movement": """before = [(2, 2), (1, 2), (0, 2)]
+after = move_snake(before, 'right')
+print('before:', before)
+print('after: ', after)
+assert after[0] == (3, 2) and len(after) == len(before)""",
+    "food-spawn": """snake = [(1, 1), (1, 2)]
+for _ in range(5):
+    food = spawn_food(snake, 8)
+    print(food)
+    assert 0 <= food[0] < 8 and 0 <= food[1] < 8
+    assert food not in snake""",
+    "eat-grow-score": """snake = [(2, 2), (1, 2), (0, 2)]
+result = apply_food_effect(snake, (2, 2), 0)
+print(result)
+assert len(result[0]) == 4 and result[1] == 10""",
+    "collision": """print('normal:', check_collision([(3, 2), (2, 2)], 12))
+print('outside:', check_collision([(-1, 2), (0, 2)], 12))
+assert check_collision([(-1, 2), (0, 2)], 12) is True""",
+    "game-loop": """state = {'snake': [(6, 5), (5, 5), (4, 5)], 'direction': 'right',
+         'food': (10, 10), 'score': 0, 'game_over': False}
+next_state = step_game(state, None)
+print(next_state)
+assert next_state['snake'][0] == (7, 5)""",
+}
+
+SNAKE_L1_SNIPPETS = {
+    "initial-state": "snake = [(head_x - offset, y) for offset in range(initial_length)]\nreturn snake, 'right', 0",
+    "direction-input": "if opposite[current_direction] == next_direction:\n    return current_direction",
+    "movement": "new_head = (head_x + dx, head_y + dy)\nreturn [new_head, *snake[:-1]]",
+    "food-spawn": "free_cells = [(x, y) for y in range(board_size) for x in range(board_size)\n              if (x, y) not in snake]",
+    "eat-grow-score": "if snake[0] == food:\n    return [*snake, snake[-1]], score + 10, True",
+    "collision": "outside = head_x < 0 or head_x >= board_size or head_y < 0 or head_y >= board_size\nhit_self = snake[0] in snake[1:]",
+    "game-loop": "state['snake'] = move_snake(state['snake'], state['direction'])\nstate['game_over'] = check_collision(state['snake'], 12)",
+}
+
+SNAKE_L2_STRUCTURES = {
+    "initial-state": """def create_initial_state(board_size=12, initial_length=3):
+    y = board_size // 2
+    head_x = max(initial_length - 1, board_size // 2)
+    # TODO: 按 head_x、y 和 initial_length 生成蛇身坐标列表
+    return snake, 'right', 0""",
+    "direction-input": """def change_direction(current_direction, next_direction):
+    opposite = {'up': 'down', 'down': 'up', 'left': 'right', 'right': 'left'}
+    if next_direction not in opposite:
+        return current_direction
+    # TODO: 如果 next_direction 与 current_direction 相反，保持当前方向
+    return next_direction""",
+    "movement": """def move_snake(snake, direction):
+    delta = {'up': (0, -1), 'down': (0, 1), 'left': (-1, 0), 'right': (1, 0)}
+    dx, dy = delta[direction]
+    head_x, head_y = snake[0]
+    new_head = (head_x + dx, head_y + dy)
+    # TODO: 把新蛇头放到最前面，并移除旧蛇尾后返回
+""",
+    "food-spawn": """def spawn_food(snake, board_size):
+    import random
+    free_cells = [(x, y) for y in range(board_size) for x in range(board_size)
+                  if (x, y) not in snake]
+    if not free_cells:
+        raise ValueError('No free cell for food')
+    # TODO: 从 free_cells 随机返回一个坐标
+""",
+    "eat-grow-score": """def apply_food_effect(snake, food, score):
+    if snake[0] == food:
+        grown_snake = [*snake, snake[-1]]
+        # TODO: 返回增长后的蛇身、新得分和需要新食物的标记
+    return snake, score, False""",
+    "collision": """def check_collision(snake, board_size):
+    head_x, head_y = snake[0]
+    outside = head_x < 0 or head_x >= board_size or head_y < 0 or head_y >= board_size
+    hit_self = snake[0] in snake[1:]
+    # TODO: 组合两个判断并返回布尔值
+""",
+    "game-loop": """def step_game(state, user_input):
+    if state['game_over']:
+        return state
+    if user_input:
+        state['direction'] = change_direction(state['direction'], user_input)
+    state['snake'] = move_snake(state['snake'], state['direction'])
+    state['game_over'] = check_collision(state['snake'], 12)
+    if state['game_over']:
+        return state
+    # TODO: 调用进食函数；需要时生成新食物
+    return state""",
+}
+
+
+def build_controlled_build_response(
+    context: ProjectScaffoldContext,
+    applied_level: int,
+    language: str = "zh",
+) -> str | None:
+    """Build a level-exact response for the seven fixed browser functions."""
+
+    if context.stage != "build" or context.currentModule not in SNAKE_L3_SOLUTIONS:
+        return None
+    node_id = context.currentModule
+    if applied_level == 3:
+        return build_confirmed_l3_response(context, language)
+    content = (
+        SNAKE_L0_CHECKS[node_id]
+        if applied_level == 0
+        else SNAKE_L1_SNIPPETS[node_id]
+        if applied_level == 1
+        else SNAKE_L2_STRUCTURES[node_id]
+    )
+    introductions = {
+        "zh": {
+            0: "先不要改实现。把这段定位代码放在函数后运行，只看打印和断言停在哪里：",
+            1: "当前卡点只需要下面这几行关键写法；把它放回你自己的函数结构中：",
+            2: "这是当前函数接近完整的结构，只保留了一个明确空位：",
+        },
+        "en": {
+            0: "Do not change the implementation yet. Run this diagnostic code after the function and see which print or assertion stops:",
+            1: "Only these key lines are needed for the current blocker; place them into your own function:",
+            2: "This is a nearly complete structure for the current function, with one explicit gap left:",
+        },
+    }
+    closing = "运行后把新的测试反馈告诉我。" if language == "zh" else "Run it, then share the new test feedback."
+    return f"{introductions[language][applied_level]}\n\n```python\n{content}\n```\n\n{closing}"
+
+
+def build_confirmed_l3_response(
+    context: ProjectScaffoldContext,
+    language: str = "zh",
+) -> str | None:
+    """Return the controlled full solution only after an explicit build-L3 confirmation."""
+
+    if context.stage != "build" or context.level != 3 or not context.l3Confirmed:
+        return None
+    solution = SNAKE_L3_SOLUTIONS.get(context.currentModule or "")
+    if solution is None:
+        return None
+    if language == "en":
+        return (
+            "You confirmed that you want the complete implementation for this function. "
+            "Copy it into the editor yourself, then run the function test.\n\n"
+            f"```python\n{solution}\n```"
+        )
+    return (
+        "你已确认需要当前函数的完整实现。请自行复制到编辑器，再运行函数测试；平台不会自动覆盖你原来的代码。\n\n"
+        f"```python\n{solution}\n```"
+    )
+
 
 def resolve_scaffold_rule(
     context: ProjectScaffoldContext,
@@ -32,8 +245,8 @@ def resolve_scaffold_rule(
 ) -> dict[str, Any]:
     """合并通用 L0–L3 边界与学生所绑定蓝图的阶段策略。
 
-    蓝图可以缩小帮助边界，但不能放宽通用规则；建构阶段超过
-    ``coreImplementationMaxLevel`` 的请求会被显式记录为降级，不会伪装成学生未请求。
+    2026-08-24 后建构 L3 是产品级例外：一次明确确认后允许给当前函数完整实现。
+    旧冻结蓝图中的“最多 5 行”继续保留用于历史解释，但不再把新建构 L3 降到 L2。
     """
 
     requested_level = context.level
@@ -42,11 +255,11 @@ def resolve_scaffold_rule(
     require_attempt = True
     max_implementation_level = 3
 
+    if context.stage == "build" and requested_level == 3 and not context.l3Confirmed:
+        applied_level = 2
+
     if policy:
         require_attempt = policy.requireAttemptBeforeUpgrade
-        max_implementation_level = policy.coreImplementationMaxLevel
-        if context.stage == "build":
-            applied_level = min(requested_level, max_implementation_level)
         configured = next(
             (
                 item
@@ -56,16 +269,21 @@ def resolve_scaffold_rule(
             None,
         )
 
+    build_rule = context.stage == "build"
     return {
         "requestedLevel": requested_level,
         "appliedLevel": applied_level,
         "wasClamped": applied_level != requested_level,
-        "goalZh": configured.goalZh if configured else STAGE_GOALS[context.stage],
-        "allowedHelpZh": configured.allowedHelpZh if configured else LEVEL_RULES[applied_level],
-        "maxCodeLines": configured.maxCodeLines if configured else 0,
+        "goalZh": (
+            STAGE_GOALS[context.stage]
+            if build_rule
+            else (configured.goalZh if configured else STAGE_GOALS[context.stage])
+        ),
+        "allowedHelpZh": BUILD_LEVEL_RULES[applied_level] if build_rule else (configured.allowedHelpZh if configured else LEVEL_RULES[applied_level]),
+        "maxCodeLines": BUILD_MAX_CODE_LINES[applied_level] if build_rule else (configured.maxCodeLines if configured else 0),
         "requireAttemptBeforeUpgrade": require_attempt,
         "coreImplementationMaxLevel": max_implementation_level,
-        "source": "teacher_blueprint" if configured else "platform_default",
+        "source": "platform_latest" if build_rule else ("teacher_blueprint" if configured else "platform_default"),
     }
 
 
@@ -204,7 +422,7 @@ def build_scaffold_prompt(
     resolved = resolve_scaffold_rule(context, policy)
     applied_level = resolved["appliedLevel"]
     stage_goal = resolved["goalZh"]
-    level_rule = LEVEL_RULES[applied_level]
+    level_rule = BUILD_LEVEL_RULES[applied_level] if context.stage == "build" else LEVEL_RULES[applied_level]
     teacher_boundary = resolved["allowedHelpZh"]
     code_limit = resolved["maxCodeLines"] or 0
     upgrade_rule = (
@@ -265,7 +483,7 @@ def build_scaffold_metadata(
         "requestedLevel": resolved["requestedLevel"],
         "level": resolved["appliedLevel"],
         "levelLabel": f"L{resolved['appliedLevel']}",
-        "levelRule": LEVEL_RULES[resolved["appliedLevel"]],
+        "levelRule": BUILD_LEVEL_RULES[resolved["appliedLevel"]] if context.stage == "build" else LEVEL_RULES[resolved["appliedLevel"]],
         "policyGoal": resolved["goalZh"],
         "policyAllowedHelp": resolved["allowedHelpZh"],
         "policyMaxCodeLines": resolved["maxCodeLines"],

@@ -615,7 +615,7 @@ export const Research: React.FC<Props> = ({
     const taskWorkspaceSummary = summarizeStudentTaskWorkspace(workspace);
     if (factoryStage === 'build') return {
       summary: [taskWorkspaceSummary, '【当前建构焦点】', buildAssistantContext.artifactSummary].filter(Boolean).join('\n'),
-      currentModule: buildAssistantContext.currentModule,
+      currentModule: buildAssistantContext.currentModuleId,
       currentCode: buildAssistantContext.currentCode,
       testFeedback: buildAssistantContext.testFeedback,
     };
@@ -1064,6 +1064,7 @@ export const Research: React.FC<Props> = ({
 
       {experimentGroup !== 'lecture' && (
         <ProjectScaffoldAssistant
+          key={task.id}
           language={language}
           taskId={task.id}
           taskTitle={task.title}
@@ -1074,6 +1075,7 @@ export const Research: React.FC<Props> = ({
           onOpenChange={setAssistantOpen}
           evidence={runtimeEvidence}
           observationCount={observationCardCount}
+          contextKey={factoryStage === 'build' ? buildAssistantContext.currentModuleId : factoryStage}
           getArtifactContext={getScaffoldArtifactContext}
           onProfileUpdate={onUpdateProfile}
           onApplyCompletion={setScaffoldCompletion}

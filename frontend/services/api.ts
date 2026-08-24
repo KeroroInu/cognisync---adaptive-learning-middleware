@@ -72,8 +72,8 @@ export interface ChatAnalysis {
 /**
  * 本轮实际生效的支架边界。
  *
- * 只有走项目工坊支架链路的回合才有值。学生请求 L3、教师蓝图把建构阶段封顶在 L2 时，
- * 界面必须按 appliedLevel 显示，否则学生对"拿到了多深的帮助"的感知与实际不符。
+ * 只有走项目工坊支架链路的回合才有值。除建构阶段已确认的 L3 例外外，
+ * 教师蓝图仍可压低请求等级；界面必须按 appliedLevel 显示，避免感知等级与实际不符。
  */
 export interface ChatScaffoldInfo {
   requestedLevel: number;

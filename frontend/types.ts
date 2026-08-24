@@ -67,7 +67,8 @@ export interface ProjectScaffoldMetadata {
   taskTitle?: string;
   stage: 'observe' | 'decompose' | 'model' | 'plan' | 'build';
   level: 0 | 1 | 2 | 3;
-  trigger: 'hint_button' | 'student_message' | 'level_up' | 'minimum_completion';
+  trigger: 'hint_button' | 'student_message' | 'level_up' | 'minimum_completion' | 'l3_confirmed';
+  l3Confirmed?: boolean;
   artifactSummary?: string;
   currentModule?: string;
   testFeedback?: string;

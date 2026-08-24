@@ -334,10 +334,10 @@
         {"level": 3, "goalZh": "给出最小可执行修正", "allowedHelpZh": "移动或补连一张关键卡使路径能够继续，并要求学生解释。", "maxCodeLines": 0}
       ],
       "build": [
-        {"level": 0, "goalZh": "读取失败证据", "allowedHelpZh": "追问实际结果与预期结果的具体差异，不给代码。", "maxCodeLines": 0},
-        {"level": 1, "goalZh": "定位相关函数与知识", "allowedHelpZh": "结合当前模块、失败测试和学生画像提示相关函数或知识点。", "maxCodeLines": 0},
-        {"level": 2, "goalZh": "提供局部伪代码", "allowedHelpZh": "提供当前模块的局部步骤，保留关键表达式和变量由学生完成。", "maxCodeLines": 0},
-        {"level": 3, "goalZh": "补全最小阻塞片段", "allowedHelpZh": "最多补全 5 行导致测试无法推进的代码，要求学生重新运行、解释并修改。", "maxCodeLines": 5}
+        {"level": 0, "goalZh": "用运行证据定位问题", "allowedHelpZh": "给测试、断言或打印代码定位当前函数的异常，不补实现代码。", "maxCodeLines": 8},
+        {"level": 1, "goalZh": "给少量关键代码", "allowedHelpZh": "只给解决当前卡点所需的少量关键代码，其余部分由学生完成。", "maxCodeLines": 5},
+        {"level": 2, "goalZh": "给接近完整的函数结构", "allowedHelpZh": "给当前函数接近完整的结构，可保留少量明确空位，不扩展到其他函数。", "maxCodeLines": 40},
+        {"level": 3, "goalZh": "确认后给完整正确函数", "allowedHelpZh": "学生明确确认一次后，给当前函数经过平台行为检查的完整正确实现；不自动覆盖编辑器，不要求解释原错误。", "maxCodeLines": 100}
       ],
       "transfer": [
         {"level": 0, "goalZh": "比较新旧项目结构", "allowedHelpZh": "追问哪些功能、数据或关系可以迁移。", "maxCodeLines": 0},

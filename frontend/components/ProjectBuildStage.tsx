@@ -48,6 +48,7 @@ interface Props {
 }
 
 export interface ProjectBuildAssistantContext {
+  currentModuleId?: string;
   currentModule?: string;
   currentCode?: string;
   testFeedback?: string;
@@ -333,6 +334,7 @@ export const ProjectBuildStage: React.FC<Props> = ({
   useEffect(() => {
     const latestAttempt = currentProgress?.testAttempts?.[currentProgress.testAttempts.length - 1];
     onAssistantContextChange?.({
+      currentModuleId: selectedNode.id,
       currentModule: isZh ? selectedNode.titleZh : selectedNode.titleEn,
       currentCode,
       testFeedback: testMessage || (latestAttempt ? `${latestAttempt.passed ? 'passed' : 'failed'} · ${latestAttempt.resultCode}` : undefined),

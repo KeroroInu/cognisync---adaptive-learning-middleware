@@ -41,6 +41,8 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   evidence: SnakeRuntimeEvidence[];
   observationCount: number;
+  /** 建构阶段为固定函数 ID；用于按函数保存连续对话与 L3 确认。 */
+  contextKey?: string;
   getArtifactContext: () => ScaffoldArtifactContext;
   onProfileUpdate: (profile: UserProfile) => void;
   onApplyCompletion: (completion: ScaffoldCompletion) => void;
@@ -52,6 +54,7 @@ interface ScaffoldMessage {
   role: 'user' | 'assistant';
   text: string;
   stage: ProjectStage;
+  contextKey: string;
   /** 助手气泡显示的是**实际生效**等级；学生气泡显示的是他请求的等级。 */
   level: number;
   /** 仅助手气泡：被教师蓝图降级时，记下学生原本请求的等级，用于说明差异。 */
@@ -71,6 +74,22 @@ const LEVEL_LABELS = {
   en: ['Clarify', 'Concept cue', 'Strategy cue', 'Minimum completion'],
 };
 
+const BUILD_LEVEL_LABELS = {
+  zh: ['测试定位', '关键代码', '函数结构', '完整函数'],
+  en: ['Locate with tests', 'Key code', 'Function structure', 'Complete function'],
+};
+
+const confirmedL3Key = (taskId: string) => `cognisync:build-l3-confirmed:v1:${taskId}`;
+
+const readConfirmedL3 = (taskId: string): Set<string> => {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(confirmedL3Key(taskId)) ?? '[]');
+    return new Set(Array.isArray(parsed) ? parsed.filter(item => typeof item === 'string') : []);
+  } catch {
+    return new Set();
+  }
+};
+
 const getDefaultPosition = (): Position => {
   if (typeof window === 'undefined') return { x: 680, y: 92 };
   const width = Math.min(680, window.innerWidth - 24);
@@ -88,27 +107,29 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
   onOpenChange,
   evidence,
   observationCount,
+  contextKey,
   getArtifactContext,
   onProfileUpdate,
   onApplyCompletion,
 }) => {
   const isZh = language === 'zh';
   const [position, setPosition] = useState<Position>(getDefaultPosition);
-  const [levels, setLevels] = useState<Record<ProjectStage, number>>({ observe: 0, decompose: 0, model: 0, plan: 0, build: 0 });
+  const [levels, setLevels] = useState<Record<string, number>>({});
   const [messages, setMessages] = useState<ScaffoldMessage[]>([]);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
-  // 教师蓝图在当前阶段实际封顶到的等级。null 表示本阶段未受限或尚未问过一次。
-  // 后端只在建构阶段应用 coreImplementationMaxLevel，因此只有 build 才会有值。
-  // 仅用于界面提示，不参与任何等级计算——真正的裁定永远在后端，
-  // 前端复制一份阈值只会两处走样。
-  const [effectiveCap, setEffectiveCap] = useState<number | null>(null);
+  const [confirmedL3, setConfirmedL3] = useState<Set<string>>(() => readConfirmedL3(taskId));
+  const [l3ConfirmationOpen, setL3ConfirmationOpen] = useState(false);
   const panelRef = useRef<HTMLElement>(null);
   const streamRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef({ pointerId: -1, offsetX: 0, offsetY: 0 });
-  const level = levels[stage];
+  const activeContextKey = stage === 'build' ? (contextKey || 'build-unselected') : stage;
+  const level = levels[activeContextKey] ?? 0;
   const stageLabel = STAGE_LABELS[stage];
+  const levelLabels = stage === 'build' ? BUILD_LEVEL_LABELS : LEVEL_LABELS;
+  const visibleMessages = messages.filter(message => message.contextKey === activeContextKey);
+  const l3IsConfirmed = stage === 'build' && confirmedL3.has(activeContextKey);
 
   const latestEvidence = useMemo(() => {
     const meaningful = [...evidence].reverse().find(item => !['opened', 'started', 'paused'].includes(item.type));
@@ -138,16 +159,15 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
     streamRef.current?.scrollTo({ top: streamRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages, sending]);
 
-  // 封顶是按阶段生效的（只有 build 会被 coreImplementationMaxLevel 限制），
-  // 换阶段后必须清掉，否则会在不受限的阶段继续显示"已封顶"。
   useEffect(() => {
-    setEffectiveCap(null);
-  }, [stage]);
+    setL3ConfirmationOpen(false);
+  }, [activeContextKey]);
 
   const submit = useCallback(async (
     text: string,
-    trigger: 'hint_button' | 'student_message' | 'level_up',
+    trigger: 'hint_button' | 'student_message' | 'level_up' | 'l3_confirmed',
     requestedLevel = level,
+    l3ConfirmedForRequest = requestedLevel === 3 && l3IsConfirmed,
   ) => {
     const clean = text.trim();
     if (!clean || sending) return;
@@ -156,13 +176,14 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
     // 更关键的是它在每次提交时重新生成，后端的 (user_id, request_id) 幂等约束
     // 实际从未生效——手动重试会被计成一次全新的求助。
     //
-    // 注意：本轮只保证 ID 本身正确。「消息、LLM 调用与支架事件的完整幂等」
-    // 仍属于任务 5；当前前端不会自动重放聊天请求，因此不会产生重复记录。
+    // 注意：这里保证 ID 本身正确；聊天消息、模型调用、画像分析与支架事件的
+    // 事务级幂等仍是证据链技术债。当前前端不自动重放请求，正常交互不会触发它。
     const requestId = createRequestId();
     const artifactContext = getArtifactContext();
     setError('');
     setDraft('');
-    setMessages(current => [...current, { id: `${requestId}-user`, role: 'user', text: clean, stage, level: requestedLevel }]);
+    const requestContextKey = activeContextKey;
+    setMessages(current => [...current, { id: `${requestId}-user`, role: 'user', text: clean, stage, contextKey: requestContextKey, level: requestedLevel }]);
     setSending(true);
     try {
       const response = await sendChatMessage({
@@ -179,13 +200,14 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
           stage,
           level: requestedLevel as 0 | 1 | 2 | 3,
           trigger,
+          l3Confirmed: l3ConfirmedForRequest,
           artifactSummary: artifactContext.summary.slice(0, 6000),
           currentModule: artifactContext.currentModule,
           testFeedback: artifactContext.testFeedback,
         },
       });
-      // 后端可能因教师蓝图上限把等级压低。气泡按实际生效等级标注，
-      // 并把"从 L3 降到 L2"这件事明说；沿用请求等级会让学生高估自己拿到的支持。
+      // 除建构阶段已确认的 L3 外，后端仍可能按教师蓝图压低等级。
+      // 气泡按实际生效等级标注；沿用请求等级会让学生高估自己拿到的支持。
       const appliedLevel = response.scaffold?.appliedLevel ?? requestedLevel;
       const wasClamped = response.scaffold?.wasClamped ?? false;
       setMessages(current => [...current, {
@@ -193,17 +215,17 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
         role: 'assistant',
         text: response.message,
         stage,
+        contextKey: requestContextKey,
         level: appliedLevel,
         clampedFrom: wasClamped ? requestedLevel : undefined,
       }]);
-      setEffectiveCap(stage === 'build' ? (response.scaffold?.coreImplementationMaxLevel ?? null) : null);
       if (response.updatedProfile) onProfileUpdate(response.updatedProfile);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : (isZh ? '暂时无法获得建议，请稍后重试。' : 'Unable to get advice. Please retry.'));
     } finally {
       setSending(false);
     }
-  }, [getArtifactContext, isZh, language, level, onProfileUpdate, sending, stage, taskId, taskPrompt, taskTitle, userId]);
+  }, [activeContextKey, getArtifactContext, isZh, l3IsConfirmed, language, level, onProfileUpdate, sending, stage, taskId, taskPrompt, taskTitle, userId]);
 
   const requestHint = () => void submit(
     isZh ? '请结合我当前的阶段产物，只提示我接下来最小的一步。' : 'Use my current work and give me only the smallest next step.',
@@ -213,11 +235,36 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
 
   const requestMoreSpecific = () => {
     const nextLevel = Math.min(3, level + 1);
-    setLevels(current => ({ ...current, [stage]: nextLevel }));
+    if (stage === 'build' && nextLevel === 3 && !l3IsConfirmed) {
+      setL3ConfirmationOpen(true);
+      return;
+    }
+    setLevels(current => ({ ...current, [activeContextKey]: nextLevel }));
     void submit(
-      isZh ? '我尝试后仍然没有推进。请在不直接给完整答案的前提下，再具体一级。' : 'I am still stuck. Be one level more specific without giving the full answer.',
+      stage === 'build' && nextLevel === 3
+        ? (isZh ? '我已确认需要当前函数的完整正确实现。请给出代码，我会自行复制并运行。' : 'I confirmed that I need the complete correct implementation for this function. I will copy and run it myself.')
+        : (isZh ? '我尝试后仍然没有推进，请再具体一级。' : 'I am still stuck. Be one level more specific.'),
       'level_up',
       nextLevel,
+    );
+  };
+
+  const confirmBuildL3 = () => {
+    if (stage !== 'build') return;
+    const next = new Set(confirmedL3).add(activeContextKey);
+    setConfirmedL3(next);
+    setL3ConfirmationOpen(false);
+    setLevels(current => ({ ...current, [activeContextKey]: 3 }));
+    try {
+      window.localStorage.setItem(confirmedL3Key(taskId), JSON.stringify([...next]));
+    } catch {
+      // 本轮确认仍有效；只是刷新后需要再次确认。
+    }
+    void submit(
+      isZh ? '我确认需要当前函数的完整正确实现。我会自行复制到编辑器并运行测试。' : 'I confirm that I need the complete correct implementation for this function. I will copy it into the editor and run the test.',
+      'l3_confirmed',
+      3,
+      true,
     );
   };
 
@@ -261,12 +308,12 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
 
       <div className="project-scaffold-body">
         <header className="project-scaffold-context">
-          <div><span>{isZh ? stageLabel.zh : stageLabel.en}</span><b>L{level} · {LEVEL_LABELS[language][level]}</b></div>
+          <div><span>{isZh ? stageLabel.zh : stageLabel.en}</span><b>L{level} · {levelLabels[language][level]}</b></div>
           <small><Sparkles size={13} />{isZh ? '已读取本任务各环节产物与学习画像' : 'Uses every stage of this task and your learner profile'}</small>
         </header>
 
         <div ref={streamRef} className="project-scaffold-stream" aria-live="polite">
-          {messages.length === 0 ? (
+          {visibleMessages.length === 0 ? (
             <div className="project-scaffold-empty">
               <MessageCircleMore size={34} />
               <h4>{isZh ? '我知道你现在正在做什么' : 'I know what you are working on'}</h4>
@@ -275,12 +322,12 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
                 : `You are at “${stageLabel.en}”. I can use this task's observations, function cards and function progress, plus current code and tests during build.`}</p>
               <small>{isZh ? `当前证据：${observationCount} 张观察卡` : `${observationCount} observation cards`}</small>
             </div>
-          ) : messages.map(message => (
+          ) : visibleMessages.map(message => (
             <article key={message.id} className={`project-scaffold-chat is-${message.role}`}>
               <span>{message.role === 'assistant' ? <Bot size={16} /> : <MessageCircleMore size={16} />}</span>
               <div>
                 <small>{message.role === 'assistant'
-                  ? `L${message.level} · ${LEVEL_LABELS[language][message.level]}${
+                  ? `L${message.level} · ${(message.stage === 'build' ? BUILD_LEVEL_LABELS : LEVEL_LABELS)[language][message.level]}${
                       message.clampedFrom !== undefined
                         ? (isZh
                             ? `（教师蓝图上限，已从 L${message.clampedFrom} 下调）`
@@ -297,22 +344,31 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
 
         {error ? <p className="project-scaffold-error">{error}</p> : null}
 
+        {l3ConfirmationOpen ? (
+          <section className="project-scaffold-l3-confirm" role="alertdialog" aria-labelledby="build-l3-confirm-title">
+            <div>
+              <strong id="build-l3-confirm-title">{isZh ? '确认查看当前函数的完整实现？' : 'Show the complete implementation?'}</strong>
+              <p>{isZh
+                ? '确认后，助手会给出这一张函数卡的完整正确代码。代码不会自动写入编辑器；你仍需自行复制或输入，并运行测试。'
+                : 'After confirmation, the assistant gives the complete correct code for this function only. It will not edit the editor; you still copy or type and run it yourself.'}</p>
+            </div>
+            <div>
+              <button type="button" onClick={() => setL3ConfirmationOpen(false)}>{isZh ? '先不用' : 'Not now'}</button>
+              <button type="button" className="is-confirm" onClick={confirmBuildL3}>{isZh ? '确认，给我完整函数' : 'Confirm complete function'}</button>
+            </div>
+          </section>
+        ) : null}
+
         <form className="project-scaffold-composer" onSubmit={event => { event.preventDefault(); void submit(draft, 'student_message'); }}>
           <textarea value={draft} onChange={event => setDraft(event.target.value)} placeholder={isZh ? '说说你正在想什么，或哪里没有按预期运行…' : 'Describe what you are thinking or what did not work…'} maxLength={800} rows={2} />
           <button type="submit" disabled={!draft.trim() || sending} aria-label={isZh ? '发送问题' : 'Send question'}><Send size={18} /></button>
         </form>
 
         <div className="project-scaffold-actions">
-          {/* 按钮显示的是「这一轮实际会拿到的等级」。教师蓝图封顶后仍写 L3，
-              等于让学生按一个永远兑现不了的承诺去点。 */}
-          <button type="button" className="is-primary" onClick={requestHint} disabled={sending}><Lightbulb size={16} />{
-            effectiveCap !== null && effectiveCap < level
-              ? (isZh ? `提示一下 · L${effectiveCap}（上限）` : `Hint · L${effectiveCap} (capped)`)
-              : (isZh ? `提示一下 · L${level}` : `Hint · L${level}`)
-          }</button>
-          {messages.some(message => message.role === 'assistant' && message.stage === stage)
+          <button type="button" className="is-primary" onClick={requestHint} disabled={sending}><Lightbulb size={16} />{isZh ? `提示一下 · L${level}` : `Hint · L${level}`}</button>
+          {visibleMessages.some(message => message.role === 'assistant')
             && level < 3
-            && (effectiveCap === null || level < effectiveCap) ? (
+            ? (
             <button type="button" onClick={requestMoreSpecific} disabled={sending}>{isZh ? '再具体一级' : 'One level more'}<ArrowRight size={16} /></button>
           ) : null}
           {level === 3 && stage === 'observe' && latestEvidence ? (

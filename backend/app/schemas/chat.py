@@ -78,9 +78,13 @@ class ProjectScaffoldContext(BaseModel):
         description="学生当前所在项目阶段",
     )
     level: int = Field(..., ge=0, le=3, description="本轮请求的支架等级 L0-L3")
-    trigger: Literal["hint_button", "student_message", "level_up", "minimum_completion"] = Field(
+    trigger: Literal["hint_button", "student_message", "level_up", "minimum_completion", "l3_confirmed"] = Field(
         ...,
         description="支架触发方式",
+    )
+    l3Confirmed: bool = Field(
+        default=False,
+        description="建构阶段请求 L3 前，学生是否已在界面完成一次明确确认",
     )
     artifactSummary: Optional[str] = Field(
         default=None,
@@ -134,9 +138,9 @@ class ChatRequest(BaseModel):
 class ChatScaffoldInfo(BaseModel):
     """本轮**实际生效**的支架边界。
 
-    学生请求 L3、教师蓝图把建构阶段封顶到 L2 时，此前响应里没有任何字段体现这次
-    降级，界面继续显示 L3。学生以为拿到了更深的支架，实际收到的是更浅的——
-    「感知支架强度」这一测量就被污染了，属于内部效度问题，所以必须回传。
+    除建构阶段已明确确认的 L3 例外外，教师蓝图仍可把请求等级压低。如果响应不体现
+    这次降级，学生对支架深度的感知会与实际不符，污染「感知支架强度」测量，
+    所以必须回传请求等级和实际等级。
 
     可选字段：只有走项目工坊支架链路（请求带 scaffoldContext）的回合才有值，
     普通对话为 None。旧前端忽略未知字段，不受影响。
@@ -145,7 +149,10 @@ class ChatScaffoldInfo(BaseModel):
     requestedLevel: int = Field(..., ge=0, le=3, description="学生本轮请求的等级")
     appliedLevel: int = Field(..., ge=0, le=3, description="教师策略裁定后实际生效的等级")
     wasClamped: bool = Field(..., description="是否因教师蓝图上限而被降级")
-    policySource: str = Field(..., description="边界来源：teacher_blueprint | platform_default")
+    policySource: str = Field(
+        ...,
+        description="边界来源：teacher_blueprint | platform_default | platform_latest",
+    )
     coreImplementationMaxLevel: int = Field(
         ..., ge=0, le=3, description="建构阶段的核心实现封顶等级"
     )
