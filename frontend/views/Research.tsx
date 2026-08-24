@@ -76,6 +76,7 @@ const workspaceSignature = (workspace: SnakeProjectWorkspace) => JSON.stringify(
   functions: workspace.functions,
   path: workspace.path,
   progress: workspace.progress,
+  creativeFunctions: workspace.creativeFunctions ?? [],
 });
 
 const summarizeStudentTaskWorkspace = (workspace: SnakeProjectWorkspace) => {
@@ -136,6 +137,18 @@ const summarizeStudentTaskWorkspace = (workspace: SnakeProjectWorkspace) => {
       lines.push(
         `- ${functionById.get(item.cardId) ?? item.cardId} / ${item.blueprintNodeId}：${item.verified ? '已验证' : '未验证'}`
         + (latestAttempt ? `；最近测试 ${latestAttempt.passed ? '通过' : '未通过'}(${latestAttempt.resultCode})` : '；尚无测试记录'),
+      );
+    });
+  }
+
+  const creativeFunctions = workspace.creativeFunctions ?? [];
+  if (creativeFunctions.length > 0) {
+    lines.push('创意功能：');
+    creativeFunctions.slice(-12).forEach(item => {
+      const latestAttempt = item.testAttempts?.[item.testAttempts.length - 1];
+      lines.push(
+        `- ${item.title}｜钩子 ${item.hook}｜${item.enabled ? '已启用' : item.verified ? '已验证未启用' : '待验证'}`
+        + (latestAttempt ? `｜最近测试 ${latestAttempt.passed ? '通过' : '未通过'}(${latestAttempt.resultCode})` : ''),
       );
     });
   }
@@ -779,6 +792,9 @@ export const Research: React.FC<Props> = ({
         Object.entries(workspace.progress).forEach(([unitId, item]) => {
           if (seen.has(unitId)) return;
           blocks.push(`# ── ${byCard.get(item.cardId) ?? item.cardId} / ${item.blueprintNodeId}\n${item.code}`);
+        });
+        (workspace.creativeFunctions ?? []).forEach(card => {
+          blocks.push(`# ── 创意功能：${card.title} / ${card.hook} / ${card.enabled ? 'enabled' : 'disabled'}\n${card.code}`);
         });
         submitted = blocks.join('\n\n');
       }

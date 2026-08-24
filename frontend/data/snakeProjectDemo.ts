@@ -7,6 +7,7 @@ import {
   type StudentModuleProgress,
   type StudentPathPlan,
 } from './projectPath';
+import type { StudentCreativeFunction } from './snakeCreativeFunctions';
 import type { SnakeRuntimeEvidence } from './snakeProjectBlueprint';
 
 const OBSERVATIONS: StudentObservationCard[] = [
@@ -329,6 +330,7 @@ export interface SnakeProjectWorkspace extends Record<string, unknown> {
   functions: StudentFunctionCard[];
   path: StudentPathPlan;
   progress: Record<string, StudentModuleProgress>;
+  creativeFunctions?: StudentCreativeFunction[];
 }
 
 const storageKeys = (taskId: string) => ({
@@ -337,6 +339,7 @@ const storageKeys = (taskId: string) => ({
   functions: `cognisync:project-function-cards:v1:${taskId}`,
   path: `cognisync:project-path-plan:v1:${taskId}`,
   progress: `cognisync:project-module-progress:v1:${taskId}`,
+  creativeFunctions: `cognisync:project-creative-functions:v1:${taskId}`,
 });
 
 const parseStored = <T,>(key: string, fallback: T): T => {
@@ -355,6 +358,7 @@ export const hydrateSnakeProjectWorkspace = (taskId: string, workspace: SnakePro
   window.localStorage.setItem(keys.functions, JSON.stringify(workspace.functions ?? []));
   window.localStorage.setItem(keys.path, JSON.stringify(workspace.path ?? { orderedCardIds: [], prerequisites: {}, relationKinds: {} }));
   window.localStorage.setItem(keys.progress, JSON.stringify(workspace.progress ?? {}));
+  window.localStorage.setItem(keys.creativeFunctions, JSON.stringify(workspace.creativeFunctions ?? []));
 };
 
 export const collectSnakeProjectWorkspace = (taskId: string): SnakeProjectWorkspace => {
@@ -367,6 +371,7 @@ export const collectSnakeProjectWorkspace = (taskId: string): SnakeProjectWorksp
     functions: parseStored<StudentFunctionCard[]>(keys.functions, []),
     path: parseStored<StudentPathPlan>(keys.path, { orderedCardIds: [], prerequisites: {}, relationKinds: {} }),
     progress: parseStored<Record<string, StudentModuleProgress>>(keys.progress, {}),
+    creativeFunctions: parseStored<StudentCreativeFunction[]>(keys.creativeFunctions, []),
   };
 };
 
@@ -401,6 +406,7 @@ export const seedSnakeProjectDemo = (taskId: string) => {
     functions: FUNCTIONS,
     path: { ...PATH, confirmedAt: now },
     progress,
+    creativeFunctions: [],
   };
   hydrateSnakeProjectWorkspace(taskId, workspace);
 

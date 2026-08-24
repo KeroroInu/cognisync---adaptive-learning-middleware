@@ -301,6 +301,7 @@ def summarize_project_workspace(workspace: Any, max_chars: int = 4800) -> str:
 
     observations = _safe_list(workspace.get("observations"))
     functions = _safe_list(workspace.get("functions"))
+    creative_functions = _safe_list(workspace.get("creativeFunctions"))
     path = workspace.get("path") if isinstance(workspace.get("path"), dict) else {}
     progress = workspace.get("progress") if isinstance(workspace.get("progress"), dict) else {}
     function_by_id = {
@@ -310,7 +311,8 @@ def summarize_project_workspace(workspace: Any, max_chars: int = 4800) -> str:
     }
 
     lines = [
-        f"数据库任务快照：观察卡 {len(observations)} 张，功能卡 {len(functions)} 张，模块记录 {len(progress)} 个。",
+        f"数据库任务快照：观察卡 {len(observations)} 张，功能卡 {len(functions)} 张，"
+        f"基础模块记录 {len(progress)} 个，创意功能 {len(creative_functions)} 个。",
     ]
     if workspace.get("savedAt"):
         lines.append(f"最近同步：{workspace['savedAt']}")
@@ -327,10 +329,25 @@ def summarize_project_workspace(workspace: Any, max_chars: int = 4800) -> str:
         lines.append("学生功能卡：")
         for item in functions[-10:]:
             responsibility = item.get("responsibility") or item.get("title") or "未命名功能"
-            knowledge = item.get("knowledge") if isinstance(item.get("knowledge"), list) else []
+            implementation = item.get("implementation")
+            observation = item.get("observationText")
+            line = f"- {responsibility}｜实现描述 {implementation or '未填'}｜引用观察 {observation or '未记录'}"
+            if not implementation and (item.get("input") or item.get("output")):
+                line += f"｜历史输入 {item.get('input') or '-'}｜历史输出 {item.get('output') or '-'}"
+            lines.append(line)
+
+    if creative_functions:
+        lines.append("学生创意功能：")
+        for item in creative_functions[-12:]:
+            attempts = _safe_list(item.get("testAttempts"))
+            latest = attempts[-1] if attempts else None
+            latest_result = (
+                f"｜最近测试 {'通过' if latest.get('passed') else '未通过'}({latest.get('resultCode', '无代码')})"
+                if latest else ""
+            )
+            status = "已启用" if item.get("enabled") else "已验证未启用" if item.get("verified") else "待验证"
             lines.append(
-                f"- {responsibility}｜输入 {item.get('input') or '未填'}｜输出 {item.get('output') or '未填'}"
-                f"｜知识 {'、'.join(map(str, knowledge)) or '未填'}｜验证 {item.get('verification') or '未填'}"
+                f"- {item.get('title') or '未命名创意'}｜钩子 {item.get('hook') or '未选'}｜{status}{latest_result}"
             )
 
     mechanisms = path.get("functionMechanisms") if isinstance(path.get("functionMechanisms"), dict) else {}

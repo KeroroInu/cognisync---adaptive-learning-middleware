@@ -863,9 +863,24 @@ async def chat(
         if request.isResearchMode and request.currentCode:
             code_snippet = request.currentCode[:3000]
             lang = request.language or "zh"
+            confirmed_build_l3 = bool(
+                scaffold_context
+                and scaffold_context.stage == "build"
+                and scaffold_context.l3Confirmed
+                and scaffold_metadata
+                and scaffold_metadata["level"] == 3
+            )
             code_context = {
-                "zh": f"\n\n**学生当前代码：**\n```\n{code_snippet}\n```\n请根据以上代码内容理解学生进度。先给一个具体观察、关键解释或小提示，再问一个检查问题；可以给局部伪代码或小片段，但不要直接给出完整答案。\n",
-                "en": f"\n\n**Student's current code:**\n```\n{code_snippet}\n```\nUse this code to understand the student's progress. First give one concrete observation, key explanation, or small hint, then ask one check question. You may provide local pseudocode or a small snippet, but do not provide a complete answer.\n",
+                "zh": f"\n\n**学生当前代码：**\n```\n{code_snippet}\n```\n" + (
+                    "学生已确认建构 L3；可以给当前这一个函数的完整实现，但不得扩展到其他函数。\n"
+                    if confirmed_build_l3
+                    else "请根据以上代码理解学生进度，严格遵守本轮 L0-L2 边界，不要越级给完整函数。\n"
+                ),
+                "en": f"\n\n**Student's current code:**\n```\n{code_snippet}\n```\n" + (
+                    "The student confirmed build L3. You may give the complete implementation of this function only.\n"
+                    if confirmed_build_l3
+                    else "Use the code to understand progress and stay within the current L0-L2 boundary. Do not give a complete function.\n"
+                ),
             }[lang]
             system_prompt += code_context
 

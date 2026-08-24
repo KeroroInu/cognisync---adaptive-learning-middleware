@@ -34,6 +34,7 @@ import type {
   StudentModuleProgress,
   StudentPathPlan,
 } from '../data/projectPath';
+import type { StudentCreativeFunction } from '../data/snakeCreativeFunctions';
 
 /** 后端 ProjectStage 枚举。注意后端比前端多一个 `reflect`。 */
 export type BackendStage = 'observe' | 'decompose' | 'model' | 'plan' | 'build' | 'reflect';
@@ -387,6 +388,29 @@ export const moduleCodeArtifact = (
     blueprintNodeId: progress.blueprintNodeId,
     code: progress.code,
     verified: progress.verified,
+  },
+  change_source: changeSource,
+  change_reason: changeReason,
+});
+
+/** 创意函数沿用 module_code 产物类型，以 `creative::<UUID>` 稳定键与基础函数区分。 */
+export const creativeCodeArtifact = (
+  card: StudentCreativeFunction,
+  changeSource: ArtifactChangeSource = 'structure_edit',
+  changeReason?: string,
+  deleted = false,
+): StageArtifactPayload => ({
+  artifact_type: 'module_code',
+  artifact_key: `creative::${card.id}`,
+  content: {
+    creative: true,
+    cardId: card.id,
+    title: card.title,
+    hook: card.hook,
+    code: card.code,
+    enabled: deleted ? false : card.enabled,
+    verified: deleted ? false : card.verified,
+    deleted,
   },
   change_source: changeSource,
   change_reason: changeReason,

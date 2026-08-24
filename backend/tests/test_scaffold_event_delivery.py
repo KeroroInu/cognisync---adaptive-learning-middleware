@@ -68,6 +68,18 @@ class _FailingProvider:
         return False
 
 
+class _CapturingProvider:
+    def __init__(self):
+        self.system_prompt = ""
+
+    async def complete(self, **kwargs):
+        self.system_prompt = kwargs["system_prompt"]
+        return "def creative_feature(event, state):\n    return state"
+
+    async def health_check(self) -> bool:
+        return True
+
+
 @pytest.mark.asyncio
 async def test_successful_scaffold_records_delivered_event(
     test_db, client, auth_headers
@@ -177,6 +189,33 @@ async def test_confirmed_build_l3_returns_controlled_function_without_llm(
         assert scaffold.delivery_status == ScaffoldDeliveryStatus.DELIVERED
         assert scaffold.requested_level == 3
         assert scaffold.applied_level == 3
+
+
+@pytest.mark.asyncio
+async def test_confirmed_creative_l3_prompt_allows_only_current_complete_function(
+    test_db, client, auth_headers, monkeypatch
+):
+    """创意函数走模型时，研究模式代码提示不得与已确认 L3 的完整函数规则冲突。"""
+    task_id = await _create_active_task(test_db)
+    request_id = f"req-{uuid.uuid4().hex[:12]}"
+    payload = _scaffold_payload(task_id, request_id)
+    payload["currentCode"] = "def creative_feature(event, state):\n    pass"
+    payload["scaffoldContext"].update({
+        "level": 3,
+        "trigger": "l3_confirmed",
+        "currentModule": f"creative::{uuid.uuid4()}",
+        "l3Confirmed": True,
+    })
+    provider = _CapturingProvider()
+    monkeypatch.setattr(llm_config, "get_chat_provider", lambda: provider)
+    monkeypatch.setattr("app.api.endpoints.chat.get_chat_provider", lambda: provider)
+
+    response = await client.post("/api/chat", headers=auth_headers, json=payload)
+
+    assert response.status_code == 200, response.text
+    assert "可以给当前这一个函数的完整实现" in provider.system_prompt
+    assert "不要越级给完整函数" not in provider.system_prompt
+    assert response.json()["data"]["scaffold"]["appliedLevel"] == 3
 
 
 @pytest.mark.asyncio

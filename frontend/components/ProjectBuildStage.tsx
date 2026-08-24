@@ -12,24 +12,39 @@ import {
   Gamepad2,
   LoaderCircle,
   Play,
+  Plus,
+  Power,
   RotateCcw,
   TestTube2,
+  Trash2,
 } from 'lucide-react';
 import type { Language } from '../types';
 import { readStoredList, readStoredObject, type StudentModuleProgress } from '../data/projectPath';
 import { SNAKE_BUILD_FUNCTIONS, type SnakeBuildFunction } from '../data/snakeBuildFunctions';
 import {
+  SNAKE_CREATIVE_HOOKS,
+  MAX_CREATIVE_CODE_CHARS,
+  MAX_CREATIVE_FUNCTIONS,
+  createStudentCreativeFunction,
+  creativeHookLabel,
+  creativeUnitId,
+  type StudentCreativeFunction,
+} from '../data/snakeCreativeFunctions';
+import {
   disposePythonModuleRunner,
   formatPythonModuleTestResult,
   formatPythonRunnerError,
   resetPythonGame,
+  runPythonCreativeHooks,
+  runPythonCreativeTest,
   runPythonModuleTest,
   stepPythonGame,
   type PythonGameState,
   type PythonModulePreview,
+  type PythonCreativeHookError,
 } from '../services/pythonModuleRunner';
 import type { StudentFunctionCard } from './ProjectFunctionStage';
-import { createRequestId, moduleCodeArtifact, type ReportKeyMoment } from '../services/stageEvents';
+import { creativeCodeArtifact, createRequestId, moduleCodeArtifact, type ReportKeyMoment } from '../services/stageEvents';
 import './ProjectBuildStage.css';
 
 const ResearchCodeEditor = React.lazy(() => import('./ResearchCodeEditor'));
@@ -93,18 +108,22 @@ interface SnakeBuildPreviewProps {
   language: Language;
   capabilities: Set<string>;
   codeByNode: Record<string, string>;
+  creativeFunctions: StudentCreativeFunction[];
   demonstration: { nodeId: string; run: number; label: string; preview?: PythonModulePreview } | null;
   diagnosticRun: number;
   onDiagnostic: (messages: string[]) => void;
+  onCreativeRuntimeErrors: (errors: PythonCreativeHookError[]) => void;
 }
 
-const SnakeBuildPreview: React.FC<SnakeBuildPreviewProps> = ({
+const SnakeBuildPreview: React.FC<SnakeBuildPreviewProps> = React.memo(({
   language,
   capabilities,
   codeByNode,
+  creativeFunctions,
   demonstration,
   diagnosticRun,
   onDiagnostic,
+  onCreativeRuntimeErrors,
 }) => {
   const isZh = language === 'zh';
   const [game, setGame] = useState<PythonGameState>(INITIAL_GAME_STATE);
@@ -113,8 +132,28 @@ const SnakeBuildPreview: React.FC<SnakeBuildPreviewProps> = ({
   const gameRef = useRef(game);
   const inputRef = useRef<Direction | null>(null);
   const boardRef = useRef<HTMLDivElement>(null);
+  const creativeRuntimeRef = useRef(creativeFunctions);
+  const creativeErrorHandlerRef = useRef(onCreativeRuntimeErrors);
   const has = useCallback((id: string) => capabilities.has(id), [capabilities]);
   const tickMs = Math.max(190, 360 - Math.floor(game.score / 20) * 25);
+
+  useEffect(() => {
+    creativeRuntimeRef.current = creativeFunctions;
+  }, [creativeFunctions]);
+
+  useEffect(() => {
+    creativeErrorHandlerRef.current = onCreativeRuntimeErrors;
+  }, [onCreativeRuntimeErrors]);
+
+  const runCreativeHook = useCallback(async (
+    hook: StudentCreativeFunction['hook'],
+    state: PythonGameState,
+    event: { input?: Direction | null; scoreBefore?: number; scoreAfter?: number } = {},
+  ) => {
+    const result = await runPythonCreativeHooks(creativeRuntimeRef.current, hook, state, event);
+    if (result.errors.length > 0) creativeErrorHandlerRef.current(result.errors);
+    return result.state;
+  }, []);
 
   const applyGame = useCallback((next: PythonGameState) => {
     gameRef.current = next;
@@ -130,12 +169,13 @@ const SnakeBuildPreview: React.FC<SnakeBuildPreviewProps> = ({
       return;
     }
     try {
-      applyGame(await resetPythonGame(codeByNode));
+      const base = await resetPythonGame(codeByNode);
+      applyGame(await runCreativeHook('game_start', base));
     } catch (error) {
       applyGame(INITIAL_GAME_STATE);
       setRuntimeMessage(formatPythonRunnerError(error, language));
     }
-  }, [applyGame, codeByNode, has, language]);
+  }, [applyGame, codeByNode, has, language, runCreativeHook]);
 
   useEffect(() => {
     void reset();
@@ -159,8 +199,20 @@ const SnakeBuildPreview: React.FC<SnakeBuildPreviewProps> = ({
     let cancelled = false;
     const timer = window.setTimeout(async () => {
       try {
-        const next = await stepPythonGame(codeByNode, gameRef.current, inputRef.current);
+        const userInput = inputRef.current;
+        let before = gameRef.current;
+        if (userInput) before = await runCreativeHook('key_input', before, { input: userInput });
+        before = await runCreativeHook('before_move', before, { input: userInput });
+        const scoreBefore = before.score;
+        let next = await stepPythonGame(codeByNode, before, userInput);
+        const baseScoreAfter = next.score;
         inputRef.current = null;
+        next = await runCreativeHook('after_move', next, { scoreBefore, scoreAfter: baseScoreAfter });
+        if (baseScoreAfter > scoreBefore) {
+          next = await runCreativeHook('food_eaten', next, { scoreBefore, scoreAfter: baseScoreAfter });
+        }
+        next = await runCreativeHook('loop', next, { scoreBefore, scoreAfter: next.score });
+        if (!before.game_over && next.game_over) next = await runCreativeHook('game_end', next);
         if (cancelled) return;
         applyGame(next);
         if (next.game_over) setRunning(false);
@@ -174,7 +226,7 @@ const SnakeBuildPreview: React.FC<SnakeBuildPreviewProps> = ({
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [applyGame, codeByNode, game.game_over, game.score, game.snake, has, language, running, tickMs]);
+  }, [applyGame, codeByNode, game.game_over, game.score, game.snake, has, language, runCreativeHook, running, tickMs]);
 
   useEffect(() => {
     if (diagnosticRun === 0) return;
@@ -273,7 +325,7 @@ const SnakeBuildPreview: React.FC<SnakeBuildPreviewProps> = ({
       <p className="construction-keyboard-hint">{isZh ? '通过测试的函数会立即加入这里；按键与每一帧都只在浏览器内运行' : 'Passed functions join this runner immediately; keys and frames stay in your browser'}</p>
     </section>
   );
-};
+});
 
 const linkedFunctionCard = (cards: StudentFunctionCard[], nodeId: string) => cards.find(
   card => card.mappingDecision?.status === 'accepted' && card.mappingDecision.acceptedNodeIds.includes(nodeId),
@@ -294,9 +346,13 @@ export const ProjectBuildStage: React.FC<Props> = ({
   const isZh = language === 'zh';
   const functionKey = `cognisync:project-function-cards:v1:${taskId}`;
   const progressKey = `cognisync:project-module-progress:v1:${taskId}`;
+  const creativeKey = `cognisync:project-creative-functions:v1:${taskId}`;
   const [cards] = useState<StudentFunctionCard[]>(() => readStoredList(functionKey));
   const [progress, setProgress] = useState<Record<string, StudentModuleProgress>>(() => readStoredObject(progressKey, {}));
+  const [creativeFunctions, setCreativeFunctions] = useState<StudentCreativeFunction[]>(() => readStoredList(creativeKey));
+  const creativeFunctionsRef = useRef(creativeFunctions);
   const [selectedNodeId, setSelectedNodeId] = useState(SNAKE_BUILD_FUNCTIONS[0].id);
+  const [activeCreativeId, setActiveCreativeId] = useState<string | null>(null);
   const [testMessage, setTestMessage] = useState('');
   const [testRunning, setTestRunning] = useState(false);
   const [lastFailedUnitId, setLastFailedUnitId] = useState<string | null>(null);
@@ -307,6 +363,7 @@ export const ProjectBuildStage: React.FC<Props> = ({
   const [demonstration, setDemonstration] = useState<{ nodeId: string; run: number; label: string; preview?: PythonModulePreview } | null>(null);
 
   const selectedNode = SNAKE_BUILD_FUNCTIONS.find(node => node.id === selectedNodeId) ?? SNAKE_BUILD_FUNCTIONS[0];
+  const selectedCreative = creativeFunctions.find(card => card.id === activeCreativeId);
   const selectedCard = linkedFunctionCard(cards, selectedNode.id);
   const currentProgress = resolveProgress(progress, selectedNode.id);
   const currentCode = currentProgress?.code ?? selectedNode.starterCode;
@@ -324,14 +381,48 @@ export const ProjectBuildStage: React.FC<Props> = ({
     () => Object.fromEntries(JSON.parse(verifiedCodeSnapshot) as [string, string][]),
     [verifiedCodeSnapshot],
   );
+  const creativeRuntimeSnapshot = JSON.stringify(
+    creativeFunctions.filter(card => card.enabled && card.verified).slice(0, MAX_CREATIVE_FUNCTIONS),
+  );
+  const creativeRuntimeFunctions = useMemo<StudentCreativeFunction[]>(
+    () => JSON.parse(creativeRuntimeSnapshot) as StudentCreativeFunction[],
+    [creativeRuntimeSnapshot],
+  );
+
+  const persistCreativeFunctions = useCallback((next: StudentCreativeFunction[]) => {
+    creativeFunctionsRef.current = next;
+    setCreativeFunctions(next);
+    window.localStorage.setItem(creativeKey, JSON.stringify(next));
+  }, [creativeKey]);
 
   useEffect(() => {
     window.localStorage.setItem(progressKey, JSON.stringify(progress));
   }, [progress, progressKey]);
 
+  useEffect(() => {
+    window.localStorage.setItem(creativeKey, JSON.stringify(creativeFunctions));
+  }, [creativeFunctions, creativeKey]);
+
   useEffect(() => () => disposePythonModuleRunner(), []);
 
   useEffect(() => {
+    if (selectedCreative) {
+      const latestAttempt = selectedCreative.testAttempts?.[selectedCreative.testAttempts.length - 1];
+      onAssistantContextChange?.({
+        currentModuleId: creativeUnitId(selectedCreative.id),
+        currentModule: selectedCreative.title,
+        currentCode: selectedCreative.code,
+        testFeedback: selectedCreative.lastRuntimeError
+          || (latestAttempt ? `${latestAttempt.passed ? 'passed' : 'failed'} · ${latestAttempt.resultCode}` : undefined),
+        artifactSummary: [
+          `当前创意函数：${selectedCreative.title}`,
+          `受控事件钩子：${creativeHookLabel(selectedCreative.hook, language)}`,
+          `状态：${selectedCreative.enabled ? '已启用' : selectedCreative.verified ? '已通过、未启用' : '待测试'}`,
+          `七函数进度：${completedCount}/7`,
+        ].join('\n'),
+      });
+      return;
+    }
     const latestAttempt = currentProgress?.testAttempts?.[currentProgress.testAttempts.length - 1];
     onAssistantContextChange?.({
       currentModuleId: selectedNode.id,
@@ -345,7 +436,147 @@ export const ProjectBuildStage: React.FC<Props> = ({
         `七函数进度：${completedCount}/7`,
       ].filter(Boolean).join('\n'),
     });
-  }, [completedCount, currentCode, currentProgress?.testAttempts, isZh, onAssistantContextChange, selectedCard, selectedNode, testMessage]);
+  }, [completedCount, currentCode, currentProgress?.testAttempts, isZh, language, onAssistantContextChange, selectedCard, selectedCreative, selectedNode, testMessage]);
+
+  const addCreativeFunction = () => {
+    if (completedCount < 7 || creativeFunctionsRef.current.length >= MAX_CREATIVE_FUNCTIONS) return;
+    const current = creativeFunctionsRef.current;
+    const created = createStudentCreativeFunction(current.length + 1);
+    const next = [...current, created];
+    persistCreativeFunctions(next);
+    setActiveCreativeId(created.id);
+    setTestMessage('');
+    void onReportKeyMoment?.({
+      stage: 'build',
+      eventType: 'structure_change',
+      detail: { action: 'creative_add', cardId: created.id, hook: created.hook },
+      artifacts: [creativeCodeArtifact(created, 'structure_edit', 'creative function added')],
+    });
+  };
+
+  const updateCreativeFunction = (cardId: string, update: Partial<StudentCreativeFunction>) => {
+    const now = new Date().toISOString();
+    persistCreativeFunctions(creativeFunctionsRef.current.map(card => (
+      card.id === cardId ? { ...card, ...update, updatedAt: now } : card
+    )));
+  };
+
+  const updateCreativeCode = (code: string) => {
+    if (!selectedCreative) return;
+    if (code.length > MAX_CREATIVE_CODE_CHARS) {
+      setTestMessage(isZh ? '单张创意卡最多保存 12000 个字符。' : 'A creative card can store up to 12,000 characters.');
+      return;
+    }
+    updateCreativeFunction(selectedCreative.id, {
+      code,
+      enabled: false,
+      verified: false,
+      lastRuntimeError: undefined,
+    });
+    setTestMessage('');
+  };
+
+  const verifyCreativeFunction = async () => {
+    if (!selectedCreative || testRunning) return;
+    setTestRunning(true);
+    setTestMessage(isZh ? '正在浏览器内检查创意函数与受控状态契约。' : 'Checking the creative function against the controlled state contract.');
+    try {
+      const result = await runPythonCreativeTest(selectedCreative.code, selectedCreative.hook);
+      const now = new Date().toISOString();
+      const attempt = {
+        id: createRequestId(), passed: result.passed, resultCode: result.resultCode,
+        durationMs: result.durationMs, createdAt: now,
+      };
+      const nextCard: StudentCreativeFunction = {
+        ...selectedCreative,
+        enabled: result.passed ? selectedCreative.enabled : false,
+        verified: result.passed,
+        updatedAt: now,
+        lastRuntimeError: undefined,
+        testAttempts: [...(selectedCreative.testAttempts ?? []).slice(-11), attempt],
+      };
+      persistCreativeFunctions(creativeFunctionsRef.current.map(card => card.id === nextCard.id ? nextCard : card));
+      setTestMessage(result.passed
+        ? (isZh ? '创意函数通过安全检查；你可以决定是否启用。' : 'The creative function passed its safety check. You can now choose whether to enable it.')
+        : formatPythonModuleTestResult(result, language));
+      void onReportKeyMoment?.({
+        stage: 'build',
+        eventType: 'module_test',
+        detail: {
+          unitId: creativeUnitId(nextCard.id), cardId: nextCard.id, creative: true,
+          hook: nextCard.hook, attemptId: attempt.id, passed: result.passed,
+          resultCode: result.resultCode, durationMs: result.durationMs,
+        },
+        artifacts: [creativeCodeArtifact(nextCard, 'structure_edit', result.passed ? undefined : `test failed: ${result.resultCode}`)],
+      });
+    } catch (error) {
+      setTestMessage(formatPythonRunnerError(error, language));
+    } finally {
+      setTestRunning(false);
+    }
+  };
+
+  const toggleCreativeFunction = (card: StudentCreativeFunction) => {
+    if (!card.verified) return;
+    const nextCard = { ...card, enabled: !card.enabled, lastRuntimeError: undefined, updatedAt: new Date().toISOString() };
+    persistCreativeFunctions(creativeFunctionsRef.current.map(item => item.id === card.id ? nextCard : item));
+    void onReportKeyMoment?.({
+      stage: 'build',
+      eventType: 'structure_change',
+      detail: { action: nextCard.enabled ? 'creative_enable' : 'creative_disable', cardId: card.id, hook: card.hook },
+      artifacts: [creativeCodeArtifact(nextCard, 'structure_edit', nextCard.enabled ? 'creative function enabled' : 'creative function disabled')],
+    });
+  };
+
+  const deleteCreativeFunction = (card: StudentCreativeFunction) => {
+    const confirmed = window.confirm(isZh ? `删除创意功能“${card.title}”？` : `Delete “${card.title}”?`);
+    if (!confirmed) return;
+    persistCreativeFunctions(creativeFunctionsRef.current.filter(item => item.id !== card.id));
+    if (activeCreativeId === card.id) setActiveCreativeId(null);
+    void onReportKeyMoment?.({
+      stage: 'build',
+      eventType: 'structure_change',
+      detail: { action: 'creative_delete', cardId: card.id, hook: card.hook },
+      artifacts: [creativeCodeArtifact(card, 'structure_edit', 'creative function deleted', true)],
+    });
+  };
+
+  const handleCreativeRuntimeErrors = useCallback((errors: PythonCreativeHookError[]) => {
+    if (errors.length === 0) return;
+    const byId = new Map(errors.map(error => [error.cardId, error]));
+    const next = creativeFunctionsRef.current.map(card => {
+      const error = byId.get(card.id);
+      return error ? {
+        ...card,
+        enabled: false,
+        lastRuntimeError: error.resultCode,
+        updatedAt: new Date().toISOString(),
+      } : card;
+    });
+    persistCreativeFunctions(next);
+    const failedCards = errors.flatMap(error => {
+      const card = next.find(item => item.id === error.cardId);
+      return card ? [{ card, error }] : [];
+    });
+    if (failedCards.length > 0) {
+      void onReportKeyMoment?.({
+        stage: 'build',
+        eventType: 'module_test',
+        detail: {
+          creative: true,
+          runtime: true,
+          passed: false,
+          failures: failedCards.map(({ card, error }) => ({
+            unitId: creativeUnitId(card.id), cardId: card.id,
+            hook: card.hook, resultCode: error.resultCode,
+          })),
+        },
+        artifacts: failedCards.map(({ card, error }) => (
+          creativeCodeArtifact(card, 'test_revision', `runtime isolated: ${error.resultCode}`)
+        )),
+      });
+    }
+  }, [onReportKeyMoment, persistCreativeFunctions]);
 
   const updateCode = (code: string) => {
     setProgress(current => {
@@ -459,9 +690,11 @@ export const ProjectBuildStage: React.FC<Props> = ({
             language={language}
             capabilities={capabilities}
             codeByNode={codeByNode}
+            creativeFunctions={creativeRuntimeFunctions}
             diagnosticRun={diagnosticRun}
             demonstration={demonstration}
             onDiagnostic={setDiagnostics}
+            onCreativeRuntimeErrors={handleCreativeRuntimeErrors}
           />
           <section className="integration-diagnostics">
             <header>
@@ -488,7 +721,7 @@ export const ProjectBuildStage: React.FC<Props> = ({
             {SNAKE_BUILD_FUNCTIONS.map((node, index) => {
               const verified = Boolean(resolveProgress(progress, node.id)?.verified);
               return (
-                <button key={node.id} type="button" className={`${selectedNode.id === node.id ? 'is-active' : ''} ${verified ? 'is-verified' : ''}`} onClick={() => { setSelectedNodeId(node.id); setTestMessage(''); }}>
+                <button key={node.id} type="button" className={`${!selectedCreative && selectedNode.id === node.id ? 'is-active' : ''} ${verified ? 'is-verified' : ''}`} onClick={() => { setActiveCreativeId(null); setSelectedNodeId(node.id); setTestMessage(''); }}>
                   <span>{String(index + 1).padStart(2, '0')}</span>
                   <p title={isZh ? node.titleZh : node.titleEn}>{isZh ? node.titleZh : node.titleEn}<small>{node.signature}</small></p>
                   <i>{verified ? <Check size={14} /> : <CircleDot size={14} />}</i>
@@ -497,6 +730,78 @@ export const ProjectBuildStage: React.FC<Props> = ({
             })}
           </nav>
 
+          <section className="creative-function-workbench">
+            <header>
+              <div><span>04 / CREATIVE HOOKS</span><h3>{isZh ? '创意功能' : 'Creative functions'}</h3></div>
+              <button type="button" onClick={addCreativeFunction} disabled={completedCount < 7 || creativeFunctions.length >= MAX_CREATIVE_FUNCTIONS} title={creativeFunctions.length >= MAX_CREATIVE_FUNCTIONS ? (isZh ? '每个项目最多 12 张创意卡' : 'Up to 12 creative cards per project') : undefined}><Plus size={15} />{isZh ? '添加创意卡' : 'Add card'}</button>
+            </header>
+            {completedCount < 7 ? (
+              <p>{isZh ? '七个基础函数全部通过后，可以自由添加创意功能。' : 'Pass all seven core functions to add creative features.'}</p>
+            ) : creativeFunctions.length === 0 ? (
+              <p>{isZh ? '基础游戏已完成。添加一张卡，选择它在游戏中的触发时刻。' : 'The core game is complete. Add a card and choose when it runs.'}</p>
+            ) : (
+              <nav aria-label={isZh ? '创意功能卡' : 'Creative function cards'}>
+                {creativeFunctions.map(card => (
+                  <button key={card.id} type="button" className={`${selectedCreative?.id === card.id ? 'is-active' : ''} ${card.enabled ? 'is-enabled' : ''}`} onClick={() => { setActiveCreativeId(card.id); setTestMessage(''); }}>
+                    <span><Power size={13} />{card.enabled ? (isZh ? '已启用' : 'ON') : card.verified ? (isZh ? '待启用' : 'READY') : (isZh ? '待测试' : 'TEST')}</span>
+                    <strong>{card.title}</strong>
+                    <small>{creativeHookLabel(card.hook, language)}</small>
+                  </button>
+                ))}
+              </nav>
+            )}
+          </section>
+
+          {selectedCreative ? (
+            <article className="module-editor-card creative-editor-card">
+              <header>
+                <div>
+                  <span>{isZh ? '自由创意函数' : 'CREATIVE FUNCTION'}</span>
+                  <input aria-label={isZh ? '创意功能名称' : 'Creative function name'} maxLength={60} value={selectedCreative.title} onChange={event => updateCreativeFunction(selectedCreative.id, { title: event.target.value })} />
+                  <small>{isZh ? '只会在你选择的受控游戏事件中运行' : 'Runs only on the controlled game event you choose'}</small>
+                </div>
+                <span className={selectedCreative.enabled ? 'is-complete' : ''}>{selectedCreative.enabled ? (isZh ? '运行中' : 'ENABLED') : selectedCreative.verified ? (isZh ? '已验证' : 'VERIFIED') : (isZh ? '待测试' : 'TO TEST')}</span>
+              </header>
+
+              <div className="creative-hook-control">
+                <label>
+                  <span>{isZh ? '触发时刻' : 'EVENT HOOK'}</span>
+                  <select value={selectedCreative.hook} onChange={event => updateCreativeFunction(selectedCreative.id, { hook: event.target.value as StudentCreativeFunction['hook'], enabled: false, verified: false })}>
+                    {SNAKE_CREATIVE_HOOKS.map(hook => <option key={hook.id} value={hook.id}>{isZh ? hook.labelZh : hook.labelEn}</option>)}
+                  </select>
+                </label>
+                <p>{isZh
+                  ? SNAKE_CREATIVE_HOOKS.find(hook => hook.id === selectedCreative.hook)?.descriptionZh
+                  : SNAKE_CREATIVE_HOOKS.find(hook => hook.id === selectedCreative.hook)?.descriptionEn}</p>
+                <div>
+                  <button type="button" className={selectedCreative.enabled ? 'is-on' : ''} onClick={() => toggleCreativeFunction(selectedCreative)} disabled={!selectedCreative.verified}><Power size={15} />{selectedCreative.enabled ? (isZh ? '停用' : 'Disable') : (isZh ? '启用' : 'Enable')}</button>
+                  <button type="button" onClick={() => deleteCreativeFunction(selectedCreative)}><Trash2 size={15} />{isZh ? '删除' : 'Delete'}</button>
+                </div>
+              </div>
+
+              <p className="creative-contract-note">{isZh
+                ? '可读取 event["type"]、event.get("input")；state 只包含 snake、direction、food、score、game_over。返回 state 应用修改，返回 None 保持原状态。'
+                : 'Read event["type"] and event.get("input"). State contains only snake, direction, food, score and game_over. Return state to apply changes, or None to keep it.'}</p>
+
+              {selectedCreative.lastRuntimeError ? (
+                <div className="creative-runtime-isolated" role="alert"><CircleAlert size={15} />{isZh ? `运行异常已隔离并自动停用：${selectedCreative.lastRuntimeError}` : `Runtime error isolated; card disabled: ${selectedCreative.lastRuntimeError}`}</div>
+              ) : null}
+
+              <div className="module-code-header"><div><Code2 size={15} /><span>def creative_feature(event, state):</span></div><div><span>{isZh ? '无文件 / 无网络 / 5 秒上限' : 'NO FILES / NO NETWORK / 5S LIMIT'}</span></div></div>
+              <div className="module-code-editor">
+                <React.Suspense fallback={<div className="view-loading">{isZh ? '正在准备编辑器…' : 'Preparing editor…'}</div>}>
+                  <ResearchCodeEditor value={selectedCreative.code} onChange={updateCreativeCode} language="python" theme={theme} />
+                </React.Suspense>
+              </div>
+              <footer className="module-test-bar">
+                <span>{testMessage || (isZh ? '测试只检查函数能否在受控钩子中安全运行；通过后再由你决定是否启用。' : 'The test checks safe execution in the selected hook; you decide whether to enable it.')}</span>
+                <button type="button" onClick={() => void verifyCreativeFunction()} disabled={testRunning}>
+                  {testRunning ? <LoaderCircle size={15} className="is-spinning" /> : <Play size={15} />}
+                  {testRunning ? (isZh ? '正在运行' : 'Running') : (isZh ? '测试创意函数' : 'Test creative function')}
+                </button>
+              </footer>
+            </article>
+          ) : (
           <article className="module-editor-card">
             <header>
               <div>
@@ -526,6 +831,7 @@ export const ProjectBuildStage: React.FC<Props> = ({
               </button>
             </footer>
           </article>
+          )}
         </div>
       </div>
 
@@ -543,12 +849,13 @@ export const ProjectBuildStage: React.FC<Props> = ({
 
       <footer className="build-workspace-footer">
         <button type="button" onClick={onBack}>{isZh ? '返回功能卡' : 'Back to function cards'}</button>
-        <span>{isZh ? '七张卡固定呈现；教师依赖关系只用于装配与诊断，不锁住编码顺序' : 'Seven fixed cards; teacher dependencies guide assembly, not coding order.'}</span>
-        {onFinalSubmit && (
-          <button type="button" className="build-final-submit" onClick={() => void onFinalSubmit()} disabled={completing || completed || completedCount < 7} title={completedCount < 7 ? (isZh ? '七个基础函数全部通过后再继续' : 'Pass all seven core functions first') : undefined}>
-            {completed ? (isZh ? '已提交' : 'Submitted') : completing ? (isZh ? '提交中' : 'Submitting') : (isZh ? '提交基础项目' : 'Submit core project')}
-          </button>
-        )}
+        <span>{isZh ? '七个基础函数与已启用创意卡共用浏览器运行器；教师依赖不锁住编码顺序' : 'Core and enabled creative functions share the browser runner; teacher dependencies do not lock order.'}</span>
+        <button type="button" className="build-final-submit" onClick={() => {
+          if (creativeFunctions.length === 0) addCreativeFunction();
+          else setActiveCreativeId(creativeFunctions[0].id);
+        }} disabled={completedCount < 7} title={completedCount < 7 ? (isZh ? '七个基础函数全部通过后再继续' : 'Pass all seven core functions first') : undefined}>
+          {creativeFunctions.length > 0 ? (isZh ? '继续创意扩展' : 'Continue creative work') : (isZh ? '开始创意扩展' : 'Start creative work')}
+        </button>
       </footer>
     </section>
   );

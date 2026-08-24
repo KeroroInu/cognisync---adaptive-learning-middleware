@@ -115,6 +115,8 @@ def test_workspace_summary_contains_every_student_stage_without_raw_code():
         "functions": [{
             "id": "move",
             "responsibility": "移动蛇身",
+            "implementation": "先算新蛇头；当移动时去掉蛇尾；最后返回蛇身",
+            "observationText": "蛇头向前一格",
             "input": "蛇身与方向",
             "output": "新蛇身",
             "knowledge": ["列表", "坐标"],
@@ -137,12 +139,21 @@ def test_workspace_summary_contains_every_student_stage_without_raw_code():
                 "testAttempts": [{"passed": False, "resultCode": "wrong_head"}],
             },
         },
+        "creativeFunctions": [{
+            "id": "creative-1",
+            "title": "移动后加分",
+            "hook": "after_move",
+            "enabled": True,
+            "verified": True,
+            "testAttempts": [{"passed": True, "resultCode": "PASSED"}],
+        }],
     }
 
     summary = summarize_project_workspace(workspace)
 
     assert "蛇头每次向前移动一格" in summary
-    assert "移动蛇身｜输入 蛇身与方向｜输出 新蛇身" in summary
+    assert "移动蛇身｜实现描述 先算新蛇头" in summary
+    assert "移动后加分｜钩子 after_move｜已启用｜最近测试 通过(PASSED)" in summary
     assert "读取方向 → 更新蛇头" in summary
     assert "最近测试 未通过(wrong_head)" in summary
     assert "SECRET_RAW_CODE" not in summary

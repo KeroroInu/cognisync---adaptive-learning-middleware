@@ -1,4 +1,6 @@
 import type { Language } from '../types';
+import type { SnakeCreativeHook, StudentCreativeFunction } from '../data/snakeCreativeFunctions';
+import { CREATIVE_FUNCTION_NAME } from '../data/snakeCreativeFunctions';
 
 export interface PythonModuleTestResult {
   passed: boolean;
@@ -22,6 +24,24 @@ export interface PythonGameState {
   food: number[];
   score: number;
   game_over: boolean;
+}
+
+export interface PythonCreativeHookEvent {
+  type: SnakeCreativeHook;
+  input?: PythonGameState['direction'] | null;
+  scoreBefore?: number;
+  scoreAfter?: number;
+}
+
+export interface PythonCreativeHookError {
+  cardId: string;
+  resultCode: string;
+  detail: string;
+}
+
+export interface PythonCreativeHookResult {
+  state: PythonGameState;
+  errors: PythonCreativeHookError[];
 }
 
 interface WorkerResponse {
@@ -338,6 +358,136 @@ export const stepPythonGame = (
   userInput: PythonGameState['direction'] | null,
 ) => runPythonJson<unknown>(createGameHarness('step', codeByNode, state, userInput)).then(normalizeGameState);
 
+interface CreativeExecutionResult {
+  passed: boolean;
+  resultCode: string;
+  detail: string;
+  state?: unknown;
+}
+
+const createCreativeHarness = (
+  code: string,
+  state: PythonGameState,
+  event: PythonCreativeHookEvent,
+) => `
+import ast
+import builtins
+import json
+_creative_result = {'passed': False, 'resultCode': 'UNKNOWN', 'detail': ''}
+_safe_builtin_names = (
+    'abs', 'all', 'any', 'bool', 'dict', 'enumerate', 'float', 'int', 'len',
+    'list', 'max', 'min', 'range', 'reversed', 'round', 'set', 'sorted',
+    'str', 'sum', 'tuple', 'zip'
+)
+_safe_builtins = {name: getattr(builtins, name) for name in _safe_builtin_names}
+try:
+    _creative_tree = ast.parse(${JSON.stringify(code)})
+    _blocked_names = {
+        'open', 'exec', 'eval', 'compile', '__import__', 'globals', 'locals',
+        'vars', 'getattr', 'setattr', 'delattr', 'breakpoint', 'input', 'help'
+    }
+    for _node in ast.walk(_creative_tree):
+        if isinstance(_node, (ast.Import, ast.ImportFrom)):
+            raise AssertionError('CREATIVE_RESTRICTED')
+        if isinstance(_node, ast.Attribute) and _node.attr.startswith('__'):
+            raise AssertionError('CREATIVE_RESTRICTED')
+        if isinstance(_node, ast.Name) and (_node.id.startswith('__') or _node.id in _blocked_names):
+            raise AssertionError('CREATIVE_RESTRICTED')
+    _creative_namespace = {'__builtins__': _safe_builtins}
+    exec(${JSON.stringify(code)}, _creative_namespace)
+    _creative_fn = _creative_namespace.get(${JSON.stringify(CREATIVE_FUNCTION_NAME)})
+    if not callable(_creative_fn):
+        raise AssertionError('FUNCTION_MISSING')
+    _creative_state = json.loads(${JSON.stringify(JSON.stringify(state))})
+    _creative_event = json.loads(${JSON.stringify(JSON.stringify(event))})
+    _creative_returned = _creative_fn(_creative_event, _creative_state)
+    if _creative_returned is not None:
+        _creative_state = _creative_returned
+    if not isinstance(_creative_state, dict):
+        raise AssertionError('CREATIVE_RETURN')
+    _creative_result = {'passed': True, 'resultCode': 'PASSED', 'detail': '', 'state': _creative_state}
+except SyntaxError as _error:
+    _creative_result = {'passed': False, 'resultCode': 'SYNTAX_ERROR', 'detail': f'line {_error.lineno}: {_error.msg}'}
+except AssertionError as _error:
+    _creative_result = {'passed': False, 'resultCode': str(_error), 'detail': ''}
+except Exception as _error:
+    _creative_result = {'passed': False, 'resultCode': 'RUNTIME_ERROR', 'detail': f'{type(_error).__name__}: {_error}'}
+json.dumps(_creative_result, ensure_ascii=False)
+`;
+
+const SAMPLE_CREATIVE_STATE: PythonGameState = {
+  snake: [[6, 5], [5, 5], [4, 5]],
+  direction: 'right',
+  food: [9, 5],
+  score: 0,
+  game_over: false,
+};
+
+const executeCreative = async (
+  code: string,
+  state: PythonGameState,
+  event: PythonCreativeHookEvent,
+): Promise<CreativeExecutionResult> => runPythonJson<CreativeExecutionResult>(
+  createCreativeHarness(code, state, event),
+);
+
+export const runPythonCreativeTest = async (
+  code: string,
+  hook: SnakeCreativeHook,
+): Promise<PythonModuleTestResult> => {
+  const startedAt = performance.now();
+  const result = await executeCreative(code, SAMPLE_CREATIVE_STATE, { type: hook, input: 'up' });
+  if (result.passed) {
+    try {
+      normalizeGameState(result.state);
+    } catch {
+      return {
+        passed: false,
+        resultCode: 'CREATIVE_STATE',
+        detail: '',
+        durationMs: Math.round(performance.now() - startedAt),
+      };
+    }
+  }
+  return { ...result, durationMs: Math.round(performance.now() - startedAt) };
+};
+
+/**
+ * 逐卡执行同一事件上的创意函数。每张卡单独进入 Worker 调用：普通异常在 Python
+ * 内捕获；无限循环只会让当前卡超时并重启 Worker，下一张卡和基础游戏继续运行。
+ */
+export const runPythonCreativeHooks = async (
+  cards: StudentCreativeFunction[],
+  hook: SnakeCreativeHook,
+  state: PythonGameState,
+  event: Omit<PythonCreativeHookEvent, 'type'> = {},
+): Promise<PythonCreativeHookResult> => {
+  let next = normalizeGameState(state);
+  const errors: PythonCreativeHookError[] = [];
+  const active = cards.filter(card => card.enabled && card.verified && card.hook === hook);
+  for (const card of active) {
+    try {
+      const result = await executeCreative(card.code, next, { ...event, type: hook });
+      if (!result.passed) {
+        errors.push({ cardId: card.id, resultCode: result.resultCode, detail: result.detail });
+        continue;
+      }
+      try {
+        next = normalizeGameState(result.state);
+      } catch {
+        errors.push({ cardId: card.id, resultCode: 'CREATIVE_STATE', detail: '' });
+      }
+    } catch (error) {
+      errors.push({
+        cardId: card.id,
+        resultCode: error instanceof Error ? error.message : 'python-runtime-error',
+        detail: '',
+      });
+    }
+  }
+  return { state: next, errors };
+};
+
 export const disposePythonModuleRunner = () => {
   runnerGeneration += 1;
   stopWorker();
@@ -371,6 +521,9 @@ const RESULT_MESSAGES: Record<string, { zh: string; en: string }> = {
   LOOP_DEPENDENCIES: { zh: '先让前六个基础函数分别通过测试，再检查它们怎样在一次循环中组合。', en: 'Pass the first six functions, then check how one loop combines them.' },
   LOOP_STATE: { zh: '循环返回的状态字段不完整或被意外修改。', en: 'The loop returned incomplete or unexpectedly changed state.' },
   LOOP_ONE_TICK: { zh: '一次循环没有恰好推进一格。', en: 'One loop call did not advance exactly one cell.' },
+  CREATIVE_RETURN: { zh: '创意函数需要返回游戏状态字典，或返回 None 保持原状态。', en: 'The creative function must return the game-state dictionary or None.' },
+  CREATIVE_STATE: { zh: '创意函数返回的状态不符合安全游戏契约。', en: 'The creative function returned a state outside the safe game contract.' },
+  CREATIVE_RESTRICTED: { zh: '创意函数只能使用受控状态和基础 Python 表达式，不能访问文件、导入模块或动态执行代码。', en: 'Creative functions can use only the controlled state and basic Python expressions; files, imports and dynamic execution are blocked.' },
   SYNTAX_ERROR: { zh: '代码存在语法错误。', en: 'The code contains a syntax error.' },
   RUNTIME_ERROR: { zh: '代码运行时发生错误。', en: 'The code raised an error while running.' },
 };
