@@ -20,6 +20,7 @@ import type {
   ResearchTask,
   EmotionDetail,
   ProjectScaffoldMetadata,
+  FunctionCoverageResponse,
   FunctionMappingSuggestionResponse,
 } from '@/types';
 
@@ -839,6 +840,32 @@ export async function suggestResearchFunctionMapping(
   if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
   const result = await response.json();
   return (result.data ?? result) as FunctionMappingSuggestionResponse;
+}
+
+/**
+ * 检查学生的功能卡是否覆盖教师蓝图中的必做基础功能。
+ * 只回传数量与简短问题，不下发契约名称、同义表达或隐藏测试。
+ */
+export async function checkResearchFunctionCoverage(
+  taskId: string,
+  payload: {
+    cards: {
+      card_id: string;
+      responsibility: string;
+      implementation: string;
+      observation_text: string;
+    }[];
+    unreferenced_observation_count: number;
+  },
+): Promise<FunctionCoverageResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/research/tasks/${taskId}/blueprint/function-coverage`, {
+    method: 'POST',
+    headers: getHeaders(true),
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  const result = await response.json();
+  return (result.data ?? result) as FunctionCoverageResponse;
 }
 
 /**

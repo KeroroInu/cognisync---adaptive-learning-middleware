@@ -257,6 +257,102 @@ class FunctionMappingSuggestionResponse(BaseModel):
     suggestions: list[FunctionMappingSuggestionItem]
 
 
+class FunctionCoverageCardRequest(BaseModel):
+    """一张简化功能卡：引用的观察、学生命名的功能、一句实现描述。"""
+
+    card_id: str = Field(min_length=1, max_length=80)
+    responsibility: str = Field(default="", max_length=100)
+    implementation: str = Field(default="", max_length=300)
+    observation_text: str = Field(default="", max_length=500)
+
+
+class FunctionCoverageRequest(BaseModel):
+    cards: list[FunctionCoverageCardRequest] = Field(default_factory=list, max_length=40)
+    unreferenced_observation_count: int = Field(default=0, ge=0, le=200)
+
+
+class FunctionCoverageCardResult(BaseModel):
+    card_id: str
+    matched: bool
+
+
+class FunctionCoverageResponse(BaseModel):
+    blueprint_version_id: str
+    required_total: int
+    covered_total: int
+    uncovered_total: int
+    unmatched_card_count: int
+    cards: list[FunctionCoverageCardResult]
+    questions: list[str]
+
+
+def _coverage_questions(
+    uncovered_total: int,
+    unmatched_card_count: int,
+    unreferenced_observation_count: int,
+) -> list[str]:
+    """生成提醒遗漏的简短问题。
+
+    这些问题**不包含任何教师蓝图文本**：不出现契约名称、同义表达、输入输出
+    和隐藏测试。只使用数量，以及学生自己的观察卡是否已被引用。
+    把学生推回自己的运行观察，而不是把蓝图名称当答案发下去。
+    """
+
+    questions: list[str] = []
+    if uncovered_total > 0:
+        questions.append(
+            f"基础版还有 {uncovered_total} 个功能没有被你命名。"
+            "回到运行画面再看一遍：还有哪些变化，是你现在的功能卡没有说到的？"
+        )
+    if unmatched_card_count > 0:
+        questions.append(
+            f"有 {unmatched_card_count} 张功能卡还看不出对应哪一件程序要做的事。"
+            "你写的是画面上的效果，还是程序需要完成的动作？"
+        )
+    if unreferenced_observation_count > 0:
+        questions.append(
+            f"你还有 {unreferenced_observation_count} 条观察没有被任何功能卡引用。"
+            "其中有没有哪一条，其实也是一个独立的功能？"
+        )
+    if not questions:
+        questions.append("七个基础功能都有对应的功能卡了。接下来可以逐个把它们写成代码。")
+    return questions
+
+
+def _coverage_result(
+    data: FunctionCoverageRequest,
+    nodes: list[BlueprintNode],
+) -> tuple[int, int, list[FunctionCoverageCardResult]]:
+    """对照冻结蓝图统计覆盖情况，只返回数量与每张卡是否命中。
+
+    复用 `_mapping_suggestions` 的评分，保证「覆盖检查」与「契约建议」
+    对同一段文字给出一致判断，不再维护第二套关键词规则。
+    """
+
+    required_ids = {node.id for node in nodes if node.required}
+    covered_ids: set[str] = set()
+    card_results: list[FunctionCoverageCardResult] = []
+
+    for card in data.cards:
+        suggestions = _mapping_suggestions(
+            FunctionMappingSuggestionRequest(
+                observation_text=card.observation_text,
+                # responsibility 是必填字段；空名称的卡用占位符参与匹配，
+                # 匹配不到即视为未命中，而不是让整次请求 422。
+                responsibility=card.responsibility.strip() or "-",
+                boundary_reason=card.implementation[:300],
+            ),
+            nodes,
+        )
+        matched_ids = {item.node_id for item in suggestions}
+        covered_ids |= matched_ids
+        card_results.append(
+            FunctionCoverageCardResult(card_id=card.card_id, matched=bool(matched_ids))
+        )
+
+    return len(required_ids), len(covered_ids & required_ids), card_results
+
+
 def _parse_client_timestamp(raw: Optional[str]) -> Optional[datetime]:
     """解析客户端上报的 ISO 时间戳，非法值按「没有提供」处理。
 
@@ -451,6 +547,52 @@ async def suggest_function_mapping(
         data=FunctionMappingSuggestionResponse(
             blueprint_version_id=str(blueprint_id),
             suggestions=_mapping_suggestions(data, blueprint.nodes),
+        )
+    )
+
+
+@router.post("/tasks/{task_id}/blueprint/function-coverage")
+async def check_function_coverage(
+    task_id: str,
+    data: FunctionCoverageRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> SuccessResponse[FunctionCoverageResponse]:
+    """检查学生的功能卡是否覆盖教师蓝图中的必做基础功能。
+
+    响应只包含数量、每张卡是否命中，以及不含蓝图文本的简短问题。
+    契约名称、同义表达、输入输出、前置关系和隐藏测试一律不下发——
+    覆盖检查是提醒学生回到自己的观察，不是把标准答案换个方式发出去。
+    """
+
+    try:
+        tid = uuid.UUID(task_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid task_id") from exc
+
+    task = await get_visible_task(db, current_user, tid, require_active=True)
+
+    blueprint, blueprint_id = await _load_student_blueprint(db, task, current_user.id)
+    if blueprint is None or blueprint_id is None:
+        raise HTTPException(status_code=404, detail="No published project blueprint")
+
+    required_total, covered_total, card_results = _coverage_result(data, blueprint.nodes)
+    uncovered_total = max(required_total - covered_total, 0)
+    unmatched_card_count = sum(1 for item in card_results if not item.matched)
+
+    return SuccessResponse(
+        data=FunctionCoverageResponse(
+            blueprint_version_id=str(blueprint_id),
+            required_total=required_total,
+            covered_total=covered_total,
+            uncovered_total=uncovered_total,
+            unmatched_card_count=unmatched_card_count,
+            cards=card_results,
+            questions=_coverage_questions(
+                uncovered_total,
+                unmatched_card_count,
+                data.unreferenced_observation_count,
+            ),
         )
     )
 

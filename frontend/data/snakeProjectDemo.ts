@@ -174,14 +174,16 @@ const DEMO_MAPPING_META: Record<string, {
   title: string;
   boundaryReason: string;
   responsibilityOwner: 'student-core' | 'ai-supported';
+  /** 一句「这个功能如何实现」，只用于补齐固定 demo 卡缺失的新字段 */
+  implementation: string;
 }> = {
-  'demo-function-initial': { nodeId: 'initial-state', title: '建立与重置初始状态', boundaryReason: '它有独立的输入和输出', responsibilityOwner: 'ai-supported' },
-  'demo-function-direction': { nodeId: 'direction-input', title: '安全更新移动方向', boundaryReason: '它有单独的判断或状态变化', responsibilityOwner: 'student-core' },
-  'demo-function-movement': { nodeId: 'movement', title: '更新蛇身位置', boundaryReason: '它可以单独运行和验证', responsibilityOwner: 'student-core' },
-  'demo-function-food': { nodeId: 'food-spawn', title: '生成合法食物位置', boundaryReason: '它可以单独运行和验证', responsibilityOwner: 'ai-supported' },
-  'demo-function-eat': { nodeId: 'eat-grow-score', title: '处理进食、增长与计分', boundaryReason: '它有单独的判断或状态变化', responsibilityOwner: 'student-core' },
-  'demo-function-collision': { nodeId: 'collision', title: '判断碰撞与结束条件', boundaryReason: '它有单独的判断或状态变化', responsibilityOwner: 'student-core' },
-  'demo-function-loop': { nodeId: 'game-loop', title: '组合并驱动游戏循环', boundaryReason: '其他功能会重复使用它的调度结果', responsibilityOwner: 'ai-supported' },
+  'demo-function-initial': { nodeId: 'initial-state', title: '建立与重置初始状态', boundaryReason: '它有独立的输入和输出', responsibilityOwner: 'ai-supported' , implementation: '先准备棋盘大小和初始长度；当开始或重新开始时，把蛇身、方向和得分设回起点；最后返回结果。' },
+  'demo-function-direction': { nodeId: 'direction-input', title: '安全更新移动方向', boundaryReason: '它有单独的判断或状态变化', responsibilityOwner: 'student-core' , implementation: '先读取按键；当目标方向和当前方向相反时保持不变；最后返回可以采用的新方向。' },
+  'demo-function-movement': { nodeId: 'movement', title: '更新蛇身位置', boundaryReason: '它可以单独运行和验证', responsibilityOwner: 'student-core' , implementation: '先按当前方向更新坐标算出新蛇头；当没有吃到东西时去掉蛇尾；最后返回新的蛇身列表。' },
+  'demo-function-food': { nodeId: 'food-spawn', title: '生成合法食物位置', boundaryReason: '它可以单独运行和验证', responsibilityOwner: 'ai-supported' , implementation: '先随机取一个格子；当这个位置被蛇身占用时重新取；最后返回一个空闲坐标。' },
+  'demo-function-eat': { nodeId: 'eat-grow-score', title: '处理进食、增长与计分', boundaryReason: '它有单独的判断或状态变化', responsibilityOwner: 'student-core' , implementation: '先判断条件：蛇头是否和果实重合；当重合时保留蛇尾让蛇变长并加分；最后返回新蛇身和新得分。' },
+  'demo-function-collision': { nodeId: 'collision', title: '判断碰撞与结束条件', boundaryReason: '它有单独的判断或状态变化', responsibilityOwner: 'student-core' , implementation: '先取出新蛇头坐标；当它越过边界或已经在蛇身里时判定结束；最后返回结果。' },
+  'demo-function-loop': { nodeId: 'game-loop', title: '组合并驱动游戏循环', boundaryReason: '其他功能会重复使用它的调度结果', responsibilityOwner: 'ai-supported' , implementation: '先每隔一段时间读取按键；当游戏还在进行时依次调用方向、移动、进食和碰撞；最后更新画面。' },
 };
 
 const enrichDemoFunctionCard = (card: StudentFunctionCard): StudentFunctionCard => {
@@ -190,6 +192,8 @@ const enrichDemoFunctionCard = (card: StudentFunctionCard): StudentFunctionCard 
   return {
     ...card,
     boundaryReason: card.boundaryReason ?? meta.boundaryReason,
+    // 只补齐缺失字段：kero 之后的人工修改不会被覆盖
+    implementation: card.implementation ?? meta.implementation,
     responsibilityOwner: card.responsibilityOwner ?? meta.responsibilityOwner,
     mappingDecision: card.mappingDecision ?? {
       status: 'accepted',

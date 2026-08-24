@@ -274,6 +274,7 @@ export const functionCardArtifacts = (
       evidenceId: card.evidenceId,
       observationText: card.observationText,
       responsibility: card.responsibility,
+      implementation: card.implementation ?? '',
       input: card.input,
       output: card.output,
       knowledge: card.knowledge,

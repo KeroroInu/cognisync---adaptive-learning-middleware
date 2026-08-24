@@ -1,22 +1,18 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowRight,
-  BookOpenCheck,
-  Bot,
   Boxes,
   Check,
   ClipboardList,
   Eye,
-  Link2,
+  HelpCircle,
   PencilLine,
   RotateCcw,
   Save,
-  ShieldCheck,
   Trash2,
-  Unlink,
 } from 'lucide-react';
-import type { FunctionMappingSuggestion, Language } from '../types';
-import { suggestResearchFunctionMapping } from '../services/api';
+import type { FunctionCoverageResponse, FunctionMappingSuggestion, Language } from '../types';
+import { checkResearchFunctionCoverage } from '../services/api';
 import type { StudentObservationCard } from './ProjectFactory';
 import './ProjectFunctionStage.css';
 
@@ -28,12 +24,24 @@ interface Props {
   onCardCountChange?: (count: number) => void;
 }
 
+/**
+ * 学生功能卡。
+ *
+ * 2026-08-24 裁定后，新建卡片只保留三项内容：引用的观察卡、学生命名的功能、
+ * 一句「这个功能如何实现」。`input` / `output` / `knowledge` / `verification` /
+ * `boundaryReason` / `responsibilityOwner` / `mappingDecision` 是旧版字段，
+ * **保留在类型里只为读取历史工作区和历史研究产物**，新流程不再采集，
+ * 也不得通过迁移删除已有数据。
+ */
 export interface StudentFunctionCard {
   id: string;
   observationId: string;
   evidenceId?: string;
   observationText: string;
+  /** 学生为这个现象命名的功能 */
   responsibility: string;
+  /** 一句「这个功能如何实现」；旧卡可能没有 */
+  implementation?: string;
   input: string;
   output: string;
   knowledge: string[];
@@ -53,29 +61,16 @@ export interface StudentFunctionCard {
   updatedAt: string;
 }
 
-const KNOWLEDGE_OPTIONS = {
-  zh: ['变量', '列表', '条件判断', '循环', '函数', '坐标', '随机数', '布尔值'],
-  en: ['Variables', 'Lists', 'Conditionals', 'Loops', 'Functions', 'Coordinates', 'Random values', 'Booleans'],
+/** 淡化模板：只给句式骨架，不规定内容 */
+const IMPLEMENTATION_TEMPLATE = {
+  zh: '先……；当……时……；最后……',
+  en: 'First…; when…; finally…',
 };
 
-const VERIFICATION_OPTIONS = {
-  zh: ['运行后观察变化', '给定输入比较输出', '测试边界情况', '重复运行检查稳定性'],
-  en: ['Observe after running', 'Compare output for a given input', 'Test edge cases', 'Repeat to check stability'],
-};
-
-const BOUNDARY_REASON_OPTIONS = {
-  zh: [
-    '它有独立的输入和输出',
-    '它有单独的判断或状态变化',
-    '它可以单独运行和验证',
-    '它会被其他功能重复使用',
-  ],
-  en: [
-    'It has independent inputs and outputs',
-    'It owns a separate decision or state change',
-    'It can be run and verified independently',
-    'Other functions reuse it',
-  ],
+/** 少量快捷插入短语，点击后插入光标位置 */
+const QUICK_PHRASES = {
+  zh: ['读取按键', '判断条件', '更新坐标', '修改列表', '返回结果'],
+  en: ['read the key', 'check a condition', 'update coordinates', 'change the list', 'return a result'],
 };
 
 const readStoredList = <T,>(key: string): T[] => {
@@ -103,14 +98,11 @@ export const ProjectFunctionStage: React.FC<Props> = ({
   const [selectedObservationId, setSelectedObservationId] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [responsibility, setResponsibility] = useState('');
-  const [input, setInput] = useState('');
-  const [output, setOutput] = useState('');
-  const [knowledge, setKnowledge] = useState<string[]>([]);
-  const [verification, setVerification] = useState('');
-  const [boundaryReason, setBoundaryReason] = useState('');
-  const [responsibilityOwner, setResponsibilityOwner] = useState<'student-core' | 'ai-supported'>('student-core');
-  const [mappingLoadingId, setMappingLoadingId] = useState<string | null>(null);
-  const [mappingError, setMappingError] = useState('');
+  const [implementation, setImplementation] = useState('');
+  const [coverage, setCoverage] = useState<FunctionCoverageResponse | null>(null);
+  const [coverageLoading, setCoverageLoading] = useState(false);
+  const [coverageError, setCoverageError] = useState('');
+  const implementationRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
     window.localStorage.setItem(functionStorageKey, JSON.stringify(cards));
@@ -122,207 +114,136 @@ export const ProjectFunctionStage: React.FC<Props> = ({
     [observations, selectedObservationId],
   );
 
-  const canSave = Boolean(
-    selectedObservation
-    && responsibility.trim()
-    && input.trim()
-    && output.trim()
-    && knowledge.length
-    && verification
-    && boundaryReason.trim()
-    && responsibilityOwner
-  );
+  const unreferencedObservationCount = useMemo(() => {
+    const referenced = new Set(cards.map(card => card.observationId));
+    return observations.filter(item => !referenced.has(item.id)).length;
+  }, [cards, observations]);
+
+  /**
+   * 对照冻结蓝图检查七个基础功能的覆盖情况。
+   *
+   * 按规则匹配，不调用模型；只在学生保存/删除卡片或主动点击重新检查时请求一次，
+   * 不随输入实时触发，避免 40—50 人课堂里形成持续写入。
+   */
+  const runCoverageCheck = useCallback(async (nextCards: StudentFunctionCard[]) => {
+    if (nextCards.length === 0) {
+      setCoverage(null);
+      setCoverageError('');
+      return;
+    }
+    setCoverageLoading(true);
+    setCoverageError('');
+    const referenced = new Set(nextCards.map(card => card.observationId));
+    try {
+      const result = await checkResearchFunctionCoverage(taskId, {
+        cards: nextCards.map(card => ({
+          card_id: card.id,
+          responsibility: card.responsibility,
+          implementation: card.implementation ?? '',
+          observation_text: card.observationText,
+        })),
+        unreferenced_observation_count: observations.filter(item => !referenced.has(item.id)).length,
+      });
+      setCoverage(result);
+    } catch {
+      setCoverage(null);
+      setCoverageError(isZh
+        ? '功能覆盖检查暂时不可用，你的功能卡已经保存，可以稍后再检查。'
+        : 'The coverage check is unavailable right now. Your cards are saved; retry later.');
+    } finally {
+      setCoverageLoading(false);
+    }
+  }, [isZh, observations, taskId]);
+
+  const canSave = Boolean(selectedObservation && responsibility.trim() && implementation.trim());
 
   const resetDraft = () => {
     setEditingId(null);
     setSelectedObservationId('');
     setResponsibility('');
-    setInput('');
-    setOutput('');
-    setKnowledge([]);
-    setVerification('');
-    setBoundaryReason('');
-    setResponsibilityOwner('student-core');
+    setImplementation('');
   };
 
-  const toggleKnowledge = (item: string) => {
-    setKnowledge(current => (
-      current.includes(item)
-        ? current.filter(value => value !== item)
-        : [...current, item].slice(-4)
-    ));
-  };
-
-  const requestMapping = async (card: StudentFunctionCard) => {
-    setMappingLoadingId(card.id);
-    setMappingError('');
-    const requestedAt = new Date().toISOString();
-    setCards(current => current.map(item => item.id === card.id ? {
-      ...item,
-      mappingDecision: {
-        status: 'pending',
-        suggestions: [],
-        acceptedNodeIds: [],
-        suggestedAt: requestedAt,
-      },
-    } : item));
-    try {
-      const result = await suggestResearchFunctionMapping(taskId, {
-        observation_text: card.observationText,
-        responsibility: card.responsibility,
-        boundary_reason: card.boundaryReason ?? '',
-        input_text: card.input,
-        output_text: card.output,
-        knowledge: card.knowledge,
-      });
-      setCards(current => current.map(item => item.id === card.id ? {
-        ...item,
-        mappingDecision: {
-          status: result.suggestions.length ? 'pending' : 'unmapped',
-          blueprintVersionId: result.blueprint_version_id,
-          suggestions: result.suggestions,
-          acceptedNodeIds: [],
-          suggestedAt: requestedAt,
-        },
-        updatedAt: new Date().toISOString(),
-      } : item));
-    } catch {
-      setCards(current => current.map(item => item.id === card.id ? {
-        ...item,
-        mappingDecision: {
-          status: 'unmapped',
-          suggestions: [],
-          acceptedNodeIds: [],
-          suggestedAt: requestedAt,
-          decidedAt: new Date().toISOString(),
-        },
-        updatedAt: new Date().toISOString(),
-      } : item));
-      setMappingError(isZh
-        ? '契约建议暂时未载入，功能卡已保存，可以稍后重试。'
-        : 'Mapping suggestions are temporarily unavailable. The card is saved; retry later.');
-    } finally {
-      setMappingLoadingId(null);
+  /** 在光标位置插入快捷短语，不覆盖学生已经写下的内容 */
+  const insertPhrase = (phrase: string) => {
+    const field = implementationRef.current;
+    if (!field) {
+      setImplementation(current => `${current}${phrase}`);
+      return;
     }
+    const start = field.selectionStart ?? implementation.length;
+    const end = field.selectionEnd ?? implementation.length;
+    const next = `${implementation.slice(0, start)}${phrase}${implementation.slice(end)}`;
+    setImplementation(next.slice(0, 120));
+    window.requestAnimationFrame(() => {
+      field.focus();
+      const caret = Math.min(start + phrase.length, 120);
+      field.setSelectionRange(caret, caret);
+    });
   };
 
   const saveCard = () => {
     if (!canSave || !selectedObservation) return;
     const now = new Date().toISOString();
+    const existing = editingId ? cards.find(item => item.id === editingId) : undefined;
     const nextCard: StudentFunctionCard = {
+      // 旧字段保持原值：修改一张历史卡不应该清空它当时保存的内容
+      ...existing,
       id: editingId ?? `function-${Date.now()}`,
       observationId: selectedObservation.id,
       evidenceId: selectedObservation.evidenceId,
       observationText: selectedObservation.observationText,
       responsibility: responsibility.trim(),
-      input: input.trim(),
-      output: output.trim(),
-      knowledge,
-      verification,
-      boundaryReason: boundaryReason.trim(),
-      responsibilityOwner,
-      mappingDecision: {
-        status: 'pending',
-        suggestions: [],
-        acceptedNodeIds: [],
-        suggestedAt: now,
-      },
+      implementation: implementation.trim(),
+      input: existing?.input ?? '',
+      output: existing?.output ?? '',
+      knowledge: existing?.knowledge ?? [],
+      verification: existing?.verification ?? '',
       source: 'student',
-      createdAt: editingId
-        ? cards.find(item => item.id === editingId)?.createdAt ?? now
-        : now,
+      createdAt: existing?.createdAt ?? now,
       updatedAt: now,
     };
 
-    setCards(current => {
-      if (editingId) {
-        return current.map(item => item.id === editingId ? nextCard : item);
-      }
-      return [...current, nextCard].slice(-10);
-    });
+    const nextCards = editingId
+      ? cards.map(item => (item.id === editingId ? nextCard : item))
+      : [...cards, nextCard].slice(-12);
+    setCards(nextCards);
     resetDraft();
-    void requestMapping(nextCard);
+    void runCoverageCheck(nextCards);
   };
 
   const editCard = (card: StudentFunctionCard) => {
     setEditingId(card.id);
     setSelectedObservationId(card.observationId);
     setResponsibility(card.responsibility);
-    setInput(card.input);
-    setOutput(card.output);
-    setKnowledge(card.knowledge);
-    setVerification(card.verification);
-    setBoundaryReason(card.boundaryReason ?? '');
-    setResponsibilityOwner(card.responsibilityOwner ?? 'student-core');
+    setImplementation(card.implementation ?? '');
     window.requestAnimationFrame(() => {
       document.querySelector('.function-card-composer')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     });
   };
 
   const removeCard = (id: string) => {
-    setCards(current => current.filter(item => item.id !== id));
+    const nextCards = cards.filter(item => item.id !== id);
+    setCards(nextCards);
     if (editingId === id) resetDraft();
+    void runCoverageCheck(nextCards);
   };
 
-  const toggleMappedNode = (cardId: string, nodeId: string) => {
-    setCards(current => current.map(card => {
-      if (card.id !== cardId || !card.mappingDecision) return card;
-      const selected = card.mappingDecision.acceptedNodeIds;
-      return {
-        ...card,
-        mappingDecision: {
-          ...card.mappingDecision,
-          status: 'pending',
-          acceptedNodeIds: selected.includes(nodeId)
-            ? selected.filter(id => id !== nodeId)
-            : [...selected, nodeId],
-          decidedAt: undefined,
-        },
-        updatedAt: new Date().toISOString(),
-      };
-    }));
-  };
-
-  const decideMapping = (
-    cardId: string,
-    status: 'pending' | 'accepted' | 'rejected' | 'unmapped',
-  ) => {
-    setCards(current => current.map(card => {
-      if (card.id !== cardId || !card.mappingDecision) return card;
-      const acceptedNodeIds = status === 'accepted' || status === 'pending'
-        ? card.mappingDecision.acceptedNodeIds
-        : [];
-      if (status === 'accepted' && acceptedNodeIds.length === 0) return card;
-      return {
-        ...card,
-        mappingDecision: {
-          ...card.mappingDecision,
-          status,
-          acceptedNodeIds,
-          decidedAt: status === 'pending' ? undefined : new Date().toISOString(),
-        },
-        updatedAt: new Date().toISOString(),
-      };
-    }));
-  };
-
-  const knowledgeOptions = KNOWLEDGE_OPTIONS[language];
-  const verificationOptions = VERIFICATION_OPTIONS[language];
-  const boundaryReasonOptions = BOUNDARY_REASON_OPTIONS[language];
+  const quickPhrases = QUICK_PHRASES[language];
 
   return (
     <section className="project-function-stage">
       <header className="function-stage-heading">
         <div>
           <span>02 / FUNCTION CARDS</span>
-          <h3>{isZh ? '从自己的观察推测程序职责' : 'Infer program responsibilities from your observations'}</h3>
+          <h3>{isZh ? '把观察到的现象命名为功能' : 'Name the functions behind what you saw'}</h3>
           <p>
             {isZh
-              ? '先选择一条自己记录的现象，再说明程序需要承担什么职责。教师蓝图保持隐藏，系统只检查卡片是否完整。'
-              : 'Choose one of your observations, then state what responsibility the program needs. The teacher blueprint remains hidden.'}
+              ? '选一条自己记录的现象，给它命名一个功能，再用一句话说说这个功能大概怎么实现。写短句就够了。'
+              : 'Pick one of your observations, name the function behind it, and describe in one sentence how it works.'}
           </p>
         </div>
-        <strong>{String(cards.length).padStart(2, '0')}<small>/02</small></strong>
+        <strong>{String(cards.length).padStart(2, '0')}<small>/07</small></strong>
       </header>
 
       {observations.length === 0 ? (
@@ -338,16 +259,17 @@ export const ProjectFunctionStage: React.FC<Props> = ({
             <aside className="function-observation-source">
               <div className="function-section-label">
                 <span>01</span>
-                <p><strong>{isZh ? '引用一张观察卡' : 'Choose an observation'}</strong><small>{isZh ? '这张卡是你推测功能的证据' : 'This is the evidence for your inference'}</small></p>
+                <p><strong>{isZh ? '引用一张观察卡' : 'Choose an observation'}</strong><small>{isZh ? '这张卡是你命名功能的依据' : 'This is the evidence behind your naming'}</small></p>
               </div>
               <div className="function-observation-list">
                 {observations.map((observation, index) => {
                   const selected = selectedObservationId === observation.id;
+                  const used = cards.some(card => card.observationId === observation.id);
                   return (
                     <button
                       key={observation.id}
                       type="button"
-                      className={selected ? 'is-selected' : ''}
+                      className={`${selected ? 'is-selected' : ''} ${used ? 'is-used' : ''}`}
                       onClick={() => setSelectedObservationId(observation.id)}
                       aria-pressed={selected}
                     >
@@ -364,8 +286,8 @@ export const ProjectFunctionStage: React.FC<Props> = ({
               <div className="function-section-label">
                 <span>02</span>
                 <p>
-                  <strong>{editingId ? (isZh ? '修改功能卡' : 'Edit function card') : (isZh ? '补全功能卡' : 'Complete the function card')}</strong>
-                  <small>{isZh ? '短句即可，不需要写成长段说明' : 'Short phrases are enough'}</small>
+                  <strong>{editingId ? (isZh ? '修改功能卡' : 'Edit function card') : (isZh ? '写一张功能卡' : 'Write a function card')}</strong>
+                  <small>{isZh ? '只需要一个名称和一句实现描述' : 'Only a name and one sentence'}</small>
                 </p>
               </div>
 
@@ -375,120 +297,35 @@ export const ProjectFunctionStage: React.FC<Props> = ({
               </div>
 
               <label className="function-field is-responsibility">
-                <span>{isZh ? '程序职责' : 'Program responsibility'}<small>{responsibility.length}/32</small></span>
+                <span>{isZh ? '我给这个功能起的名字' : 'Function name'}<small>{responsibility.length}/32</small></span>
                 <input
                   value={responsibility}
                   onChange={event => setResponsibility(event.target.value)}
                   maxLength={32}
-                  placeholder={isZh ? '程序需要完成什么事情？' : 'What must the program do?'}
+                  placeholder={isZh ? '例如：吃到果实后变长并加分' : 'e.g. grow and score after eating'}
                 />
               </label>
 
-              <fieldset className="function-choice-field is-boundary">
-                <legend>
-                  {isZh ? '为什么它应该成为一个独立功能？' : 'Why should this be a separate function?'}
-                  <small>{boundaryReason.length}/64</small>
-                </legend>
-                <div>
-                  {boundaryReasonOptions.map(item => (
-                    <button
-                      key={item}
-                      type="button"
-                      className={boundaryReason === item ? 'is-selected' : ''}
-                      onClick={() => setBoundaryReason(item)}
-                      aria-pressed={boundaryReason === item}
-                    >
-                      {item}
-                    </button>
-                  ))}
-                </div>
-                <input
-                  value={boundaryReason}
-                  onChange={event => setBoundaryReason(event.target.value)}
-                  maxLength={64}
-                  placeholder={isZh ? '也可以用一句自己的话说明功能边界' : 'Or explain the boundary in your own words'}
+              <label className="function-field is-implementation">
+                <span>{isZh ? '这个功能如何实现' : 'How this function works'}<small>{implementation.length}/120</small></span>
+                <textarea
+                  ref={implementationRef}
+                  value={implementation}
+                  onChange={event => setImplementation(event.target.value.slice(0, 120))}
+                  maxLength={120}
+                  rows={3}
+                  placeholder={IMPLEMENTATION_TEMPLATE[language]}
                 />
-              </fieldset>
+              </label>
 
-              <fieldset className="function-owner-field">
-                <legend>
-                  {isZh ? '这部分理解责任属于谁？' : 'Who owns the understanding?'}
-                  <small>{isZh ? 'AI 可以协助，但不能替代判断' : 'AI may assist, but not replace judgment'}</small>
-                </legend>
+              <div className="function-quick-phrases">
+                <small>{isZh ? '可以点一下插入：' : 'Tap to insert:'}</small>
                 <div>
-                  <button
-                    type="button"
-                    className={responsibilityOwner === 'student-core' ? 'is-selected' : ''}
-                    onClick={() => setResponsibilityOwner('student-core')}
-                  >
-                    <ShieldCheck size={15} />
-                    <span><strong>{isZh ? '我必须理解' : 'I must understand'}</strong><small>{isZh ? '核心判断由我完成' : 'I make the core judgment'}</small></span>
-                  </button>
-                  <button
-                    type="button"
-                    className={responsibilityOwner === 'ai-supported' ? 'is-selected' : ''}
-                    onClick={() => setResponsibilityOwner('ai-supported')}
-                  >
-                    <Bot size={15} />
-                    <span><strong>{isZh ? '可以请 AI 协助' : 'AI may assist'}</strong><small>{isZh ? '我仍负责验证结果' : 'I still verify the result'}</small></span>
-                  </button>
+                  {quickPhrases.map(phrase => (
+                    <button key={phrase} type="button" onClick={() => insertPhrase(phrase)}>{phrase}</button>
+                  ))}
                 </div>
-              </fieldset>
-
-              <div className="function-io-grid">
-                <label className="function-field">
-                  <span>{isZh ? '输入' : 'Input'}</span>
-                  <input
-                    value={input}
-                    onChange={event => setInput(event.target.value)}
-                    maxLength={48}
-                    placeholder={isZh ? '它需要接收哪些信息？' : 'What information does it receive?'}
-                  />
-                </label>
-                <label className="function-field">
-                  <span>{isZh ? '输出' : 'Output'}</span>
-                  <input
-                    value={output}
-                    onChange={event => setOutput(event.target.value)}
-                    maxLength={48}
-                    placeholder={isZh ? '完成后产生什么变化？' : 'What change should it produce?'}
-                  />
-                </label>
               </div>
-
-              <fieldset className="function-choice-field">
-                <legend>{isZh ? '可能需要的知识' : 'Possible knowledge'}<small>{isZh ? '最多选 4 项' : 'Choose up to 4'}</small></legend>
-                <div>
-                  {knowledgeOptions.map(item => (
-                    <button
-                      key={item}
-                      type="button"
-                      className={knowledge.includes(item) ? 'is-selected' : ''}
-                      onClick={() => toggleKnowledge(item)}
-                      aria-pressed={knowledge.includes(item)}
-                    >
-                      {item}
-                    </button>
-                  ))}
-                </div>
-              </fieldset>
-
-              <fieldset className="function-choice-field is-verification">
-                <legend>{isZh ? '我准备怎样验证' : 'How I will verify it'}</legend>
-                <div>
-                  {verificationOptions.map(item => (
-                    <button
-                      key={item}
-                      type="button"
-                      className={verification === item ? 'is-selected' : ''}
-                      onClick={() => setVerification(item)}
-                      aria-pressed={verification === item}
-                    >
-                      {item}
-                    </button>
-                  ))}
-                </div>
-              </fieldset>
 
               <div className="function-composer-actions">
                 {editingId && <button type="button" onClick={resetDraft}>{isZh ? '取消修改' : 'Cancel'}</button>}
@@ -503,13 +340,13 @@ export const ProjectFunctionStage: React.FC<Props> = ({
           <section className="saved-function-section">
             <div className="function-section-label">
               <span>03</span>
-              <p><strong>{isZh ? '我的功能卡组' : 'My function cards'}</strong><small>{isZh ? '可以继续编辑；至少形成 2 张后进入关系建模' : 'Editable; create at least two before modeling relations'}</small></p>
+              <p><strong>{isZh ? '我的功能卡组' : 'My function cards'}</strong><small>{isZh ? '可以继续修改；接下来会逐个把它们写成代码' : 'Editable; you will turn them into code next'}</small></p>
             </div>
 
             {cards.length === 0 ? (
-              <div className="saved-function-empty"><Boxes size={21} />{isZh ? '选择观察并补全右侧内容，第一张功能卡会出现在这里。' : 'Choose an observation and complete the form to create your first card.'}</div>
+              <div className="saved-function-empty"><Boxes size={21} />{isZh ? '选择一条观察并命名功能，第一张功能卡会出现在这里。' : 'Choose an observation and name a function to create your first card.'}</div>
             ) : (
-              <div className="saved-function-grid">
+              <div className="saved-function-grid is-simplified">
                 {cards.map((card, index) => (
                   <article key={card.id}>
                     <header>
@@ -521,80 +358,54 @@ export const ProjectFunctionStage: React.FC<Props> = ({
                     </header>
                     <h4>{card.responsibility}</h4>
                     <p className="saved-function-observation"><Eye size={12} />{card.observationText}</p>
-                    <dl>
-                      <div><dt>{isZh ? '输入' : 'IN'}</dt><dd>{card.input}</dd></div>
-                      <div><dt>{isZh ? '输出' : 'OUT'}</dt><dd>{card.output}</dd></div>
-                    </dl>
-                    <div className="saved-function-boundary">
-                      <ShieldCheck size={13} />
-                      <span>{card.boundaryReason || (isZh ? '尚未说明功能边界' : 'Boundary not explained')}</span>
-                      <strong>{card.responsibilityOwner === 'ai-supported'
-                        ? (isZh ? 'AI 可协助' : 'AI assisted')
-                        : (isZh ? '学生核心责任' : 'Student owned')}</strong>
-                    </div>
-                    <div className="saved-function-tags">{card.knowledge.map(item => <span key={item}>{item}</span>)}</div>
-                    <footer><BookOpenCheck size={13} />{card.verification}</footer>
-                    <section className={`function-mapping-panel is-${card.mappingDecision?.status ?? 'legacy'}`}>
-                      <header>
-                        <div><Link2 size={14} /><strong>{isZh ? '对应哪项教师契约？' : 'Which teacher contract fits?'}</strong></div>
-                        {card.mappingDecision?.blueprintVersionId && <small>{card.mappingDecision.blueprintVersionId.slice(0, 8)}</small>}
-                      </header>
-
-                      {mappingLoadingId === card.id ? (
-                        <p><Bot size={14} />{isZh ? '正在生成候选，不会直接替你决定。' : 'Finding candidates without deciding for you.'}</p>
-                      ) : !card.mappingDecision || card.mappingDecision.status === 'rejected' || card.mappingDecision.status === 'unmapped' ? (
-                        <div className="mapping-empty-state">
-                          <span>{card.mappingDecision?.status === 'rejected'
-                            ? (isZh ? '你拒绝了上一组建议。' : 'You rejected the previous suggestions.')
-                            : (isZh ? '当前保持未映射，建构阶段不会自动猜测。' : 'Currently unmapped; the build stage will not guess.')}</span>
-                          <button type="button" onClick={() => void requestMapping(card)}><RotateCcw size={13} />{isZh ? '重新获取建议' : 'Retry suggestions'}</button>
-                        </div>
-                      ) : card.mappingDecision.status === 'accepted' ? (
-                        <div className="mapping-accepted-state">
-                          <p><ShieldCheck size={14} />{isZh ? '已由你确认：' : 'Confirmed by you:'}</p>
-                          <div>{card.mappingDecision.suggestions
-                            .filter(item => card.mappingDecision?.acceptedNodeIds.includes(item.node_id))
-                            .map(item => <span key={item.node_id}>{item.title_zh}</span>)}</div>
-                          <button type="button" onClick={() => decideMapping(card.id, 'pending')}><RotateCcw size={13} />{isZh ? '重新判断' : 'Reconsider'}</button>
-                        </div>
-                      ) : (
-                        <>
-                          <p><Bot size={14} />{isZh ? '这是候选，不是答案；可以多选，也可以全部拒绝。' : 'These are candidates, not answers. Select multiple or reject all.'}</p>
-                          <div className="mapping-suggestion-list">
-                            {card.mappingDecision.suggestions.map(item => {
-                              const selected = card.mappingDecision?.acceptedNodeIds.includes(item.node_id);
-                              return (
-                                <button key={item.node_id} type="button" className={selected ? 'is-selected' : ''} onClick={() => toggleMappedNode(card.id, item.node_id)}>
-                                  <i>{selected ? <Check size={13} /> : <Unlink size={13} />}</i>
-                                  <span><strong>{item.title_zh}</strong><small>{item.match_reasons.join(' · ')}</small></span>
-                                </button>
-                              );
-                            })}
-                          </div>
-                          <div className="mapping-decision-actions">
-                            <button type="button" onClick={() => decideMapping(card.id, 'rejected')}>{isZh ? '都不符合' : 'Reject all'}</button>
-                            <button type="button" onClick={() => decideMapping(card.id, 'unmapped')}>{isZh ? '暂不映射' : 'Leave unmapped'}</button>
-                            <button type="button" className="is-primary" disabled={!card.mappingDecision.acceptedNodeIds.length} onClick={() => decideMapping(card.id, 'accepted')}>
-                              <Link2 size={13} />{isZh ? '确认我的选择' : 'Confirm selection'}
-                            </button>
-                          </div>
-                        </>
-                      )}
-                    </section>
+                    {card.implementation
+                      ? <p className="saved-function-implementation">{card.implementation}</p>
+                      : <p className="saved-function-implementation is-empty">
+                          {isZh ? '这张旧卡还没有实现描述，可以点编辑补一句。' : 'This older card has no implementation sentence yet.'}
+                        </p>}
                   </article>
                 ))}
               </div>
             )}
-            {mappingError && <p className="function-mapping-error">{mappingError}</p>}
+          </section>
+
+          <section className="function-coverage-panel" aria-live="polite">
+            <header>
+              <div><HelpCircle size={15} /><strong>{isZh ? '还有哪些功能没被说到？' : 'Anything still missing?'}</strong></div>
+              {coverage && (
+                <small>{isZh
+                  ? `已对应 ${coverage.covered_total} / ${coverage.required_total} 个基础功能`
+                  : `${coverage.covered_total} / ${coverage.required_total} base functions matched`}</small>
+              )}
+            </header>
+
+            {coverageLoading
+              ? <p>{isZh ? '正在核对……' : 'Checking…'}</p>
+              : coverageError
+                ? <p className="function-coverage-error">{coverageError}</p>
+                : coverage
+                  ? <ul>{coverage.questions.map(question => <li key={question}>{question}</li>)}</ul>
+                  : <p>{isZh ? '保存第一张功能卡后，这里会提示还缺哪些功能。' : 'Save your first card to see what is still missing.'}</p>}
+
+            {cards.length > 0 && (
+              <button type="button" onClick={() => void runCoverageCheck(cards)} disabled={coverageLoading}>
+                <RotateCcw size={13} />{isZh ? '重新检查一次' : 'Check again'}
+              </button>
+            )}
+            <p className="function-coverage-note">
+              {isZh
+                ? `提示只告诉你还差几个，不会直接给出功能名称。${unreferencedObservationCount > 0 ? `你还有 ${unreferencedObservationCount} 条观察没有被引用。` : ''}`
+                : 'Hints only tell you how many are missing, never the names.'}
+            </p>
           </section>
         </>
       )}
 
       <footer className="function-stage-footer">
         <button type="button" onClick={onBack}>{isZh ? '返回观察' : 'Back to observation'}</button>
-        <div><ClipboardList size={15} /><span>{isZh ? '你的选择与修改会作为解构过程证据保存' : 'Your choices and edits are saved as process evidence'}</span></div>
+        <div><ClipboardList size={15} /><span>{isZh ? '你的命名与修改会作为解构过程证据保存' : 'Your naming and edits are saved as process evidence'}</span></div>
         <button type="button" className="is-primary" disabled={cards.length < 2} onClick={onContinue}>
-          {isZh ? '进入关系建模' : 'Continue to relations'}<ArrowRight size={16} />
+          {isZh ? '进入下一阶段' : 'Continue'}<ArrowRight size={16} />
         </button>
       </footer>
     </section>

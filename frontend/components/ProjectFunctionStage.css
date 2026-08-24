@@ -480,6 +480,90 @@
 }
 .function-stage-footer > div { display: flex; align-items: center; justify-content: center; gap: 7px; color: var(--text-tertiary); font-size: .62rem; text-align: center; }
 
+/* ── 简化功能卡（2026-08-24 裁定）───────────────────────────────────────── */
+
+.function-field.is-implementation { margin-top: 12px; }
+
+.function-field textarea {
+  width: 100%;
+  min-height: 78px;
+  padding: 9px 11px;
+  border: 1.2px solid var(--line-strong);
+  border-radius: 7px;
+  background: var(--surface-strong);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: .8rem;
+  line-height: 1.55;
+  resize: vertical;
+  outline: none;
+}
+
+.function-field textarea:focus { border-color: #161713; box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand-cyan) 48%, transparent); }
+.function-field textarea::placeholder { color: var(--text-tertiary); }
+
+.function-quick-phrases { display: grid; gap: 6px; margin-top: 9px; }
+.function-quick-phrases > small { color: var(--text-tertiary); font-size: .62rem; }
+.function-quick-phrases > div { display: flex; flex-wrap: wrap; gap: 6px; }
+.function-quick-phrases button {
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--surface-muted);
+  color: var(--text-secondary);
+  font-size: .68rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.function-quick-phrases button:hover { border-color: #161713; color: #161713; }
+
+.function-observation-list button.is-used { border-style: dashed; }
+
+.saved-function-implementation {
+  margin: 0;
+  padding: 8px 10px;
+  border-left: 3px solid var(--brand-cyan);
+  background: var(--surface-muted);
+  color: var(--text-secondary);
+  font-size: .72rem;
+  line-height: 1.5;
+}
+.saved-function-implementation.is-empty { border-left-color: var(--line-strong); color: var(--text-tertiary); font-size: .66rem; }
+
+.function-coverage-panel {
+  display: grid;
+  gap: 9px;
+  justify-items: start;
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 9px;
+  background: var(--surface-muted);
+}
+.function-coverage-panel > header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; width: 100%; }
+.function-coverage-panel > header > div { display: flex; align-items: center; gap: 7px; font-size: .78rem; }
+.function-coverage-panel > header small { color: var(--text-tertiary); font-family: 'Google Sans Code', ui-monospace, monospace; font-size: .64rem; }
+.function-coverage-panel ul { display: grid; gap: 6px; margin: 0; padding-left: 18px; color: var(--text-secondary); font-size: .74rem; line-height: 1.55; }
+.function-coverage-panel > p { margin: 0; color: var(--text-secondary); font-size: .74rem; }
+.function-coverage-panel .function-coverage-error { color: #b84e35; }
+.function-coverage-panel .function-coverage-note { color: var(--text-tertiary); font-size: .62rem; }
+.function-coverage-panel > button {
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 11px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--surface-strong);
+  color: var(--text-primary);
+  font-size: .68rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+.function-coverage-panel > button:disabled { opacity: .5; cursor: not-allowed; }
+
 @media (max-width: 1100px) {
   .function-stage-workspace { grid-template-columns: 1fr; }
   .function-observation-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }

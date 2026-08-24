@@ -294,3 +294,17 @@ export interface FunctionMappingSuggestionResponse {
   blueprint_version_id: string;
   suggestions: FunctionMappingSuggestion[];
 }
+
+/**
+ * 七个基础功能的覆盖检查结果。
+ * 后端只回传数量、每张卡是否命中和不含蓝图文本的简短问题。
+ */
+export interface FunctionCoverageResponse {
+  blueprint_version_id: string;
+  required_total: number;
+  covered_total: number;
+  uncovered_total: number;
+  unmatched_card_count: number;
+  cards: { card_id: string; matched: boolean }[];
+  questions: string[];
+}

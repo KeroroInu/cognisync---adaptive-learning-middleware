@@ -103,10 +103,11 @@ const summarizeStudentTaskWorkspace = (workspace: SnakeProjectWorkspace) => {
           .join('、')
         : item.mappingDecision?.status ?? '旧数据未判断';
       lines.push(
-        `${index + 1}. ${item.responsibility}｜IN ${item.input || '未填'}｜OUT ${item.output || '未填'}`
-        + `｜知识 ${item.knowledge.join('、') || '未填'}｜验证 ${item.verification || '未填'}`
-        + `｜边界 ${item.boundaryReason || '未说明'}｜责任 ${item.responsibilityOwner === 'ai-supported' ? 'AI协助、学生验证' : '学生核心责任'}`
-        + `｜契约判断 ${mappedTitles || '暂未选择'}`,
+        `${index + 1}. ${item.responsibility}｜实现描述 ${item.implementation || '未填'}`
+        + `｜引用观察 ${item.observationText || '未记录'}`
+        // 以下为旧版字段，只在历史卡片上还有值；新流程不再采集
+        + (item.input || item.output ? `｜旧IN ${item.input || '-'}｜旧OUT ${item.output || '-'}` : '')
+        + (mappedTitles ? `｜旧契约判断 ${mappedTitles}` : ''),
       );
     });
   }
