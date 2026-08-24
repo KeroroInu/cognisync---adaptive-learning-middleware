@@ -12,20 +12,16 @@ import {
   Gamepad2,
   Layers3,
   LoaderCircle,
-  LockKeyhole,
   Play,
   RotateCcw,
   TestTube2,
 } from 'lucide-react';
 import type { Language } from '../types';
 import {
-  createInitialPathPlan,
   getMappedBlueprintNodes,
-  getImplementationOrderIds,
   readStoredList,
   readStoredObject,
   type StudentModuleProgress,
-  type StudentPathPlan,
 } from '../data/projectPath';
 import type { BlueprintNode } from '../data/snakeProjectBlueprint';
 import {
@@ -51,7 +47,7 @@ interface Props {
   /** 上报关键教学事件。由 Research.tsx 注入，内部已处理幂等键与重试。 */
   onReportKeyMoment?: ReportKeyMoment;
   /** 测试失败后回到更早阶段修订解构结果。 */
-  onReviseEarlierStage?: (stage: 'observe' | 'decompose' | 'model' | 'plan') => void;
+  onReviseEarlierStage?: (stage: 'observe' | 'decompose') => void;
   onFinalSubmit?: () => void | Promise<void>;
   completing?: boolean;
   completed?: boolean;
@@ -345,38 +341,28 @@ export const ProjectBuildStage: React.FC<Props> = ({
   const isZh = language === 'zh';
   const functionKey = `cognisync:project-function-cards:v1:${taskId}`;
   const observationKey = `cognisync:project-observation-cards:v2:${taskId}`;
-  const pathKey = `cognisync:project-path-plan:v1:${taskId}`;
   const progressKey = `cognisync:project-module-progress:v1:${taskId}`;
   const [cards] = useState<StudentFunctionCard[]>(() => readStoredList(functionKey));
   const [observations] = useState<StudentObservationCard[]>(() => readStoredList(observationKey));
-  const [plan] = useState<StudentPathPlan>(() => readStoredObject(pathKey, createInitialPathPlan(readStoredList(functionKey))));
   const [progress, setProgress] = useState<Record<string, StudentModuleProgress>>(() => readStoredObject(progressKey, {}));
-  const plannedCardIds = useMemo(() => getImplementationOrderIds(cards, plan), [cards, plan]);
-  const cardsById = useMemo(() => new Map(cards.map(card => [card.id, card])), [cards]);
-  const orderedCards = useMemo(
-    () => plannedCardIds.map(id => cardsById.get(id)).filter((card): card is StudentFunctionCard => Boolean(card)),
-    [cardsById, plannedCardIds],
-  );
-  const buildUnits = useMemo<StudentBuildUnit[]>(() => orderedCards.flatMap(card => (
+  // 新任务不再读取学生绘制的路径来决定建构顺序。功能卡自身的稳定顺序就是
+  // 当前过渡工作区的顺序；教师蓝图依赖只服务测试装配和诊断，不再锁住学生。
+  // 旧 path 数据仍由 workspace 快照原样保存，后续教师诊断可只读查看。
+  const buildUnits = useMemo<StudentBuildUnit[]>(() => cards.flatMap(card => (
     getMappedBlueprintNodes(card, observations).map(node => ({
       id: `${card.id}::${node.id}`,
       card,
       node,
     }))
-  )), [observations, orderedCards]);
+  )), [cards, observations]);
   const unmappedCards = useMemo(
-    () => orderedCards.filter(card => getMappedBlueprintNodes(card, observations).length === 0),
-    [observations, orderedCards],
+    () => cards.filter(card => getMappedBlueprintNodes(card, observations).length === 0),
+    [cards, observations],
   );
   const mappedCardCount = useMemo(
     () => cards.filter(card => getMappedBlueprintNodes(card, observations).length > 0).length,
     [cards, observations],
   );
-  const unitsByCardId = useMemo(() => {
-    const result = new Map<string, StudentBuildUnit[]>();
-    buildUnits.forEach(unit => result.set(unit.card.id, [...(result.get(unit.card.id) ?? []), unit]));
-    return result;
-  }, [buildUnits]);
   const [selectedId, setSelectedId] = useState(() => buildUnits[0]?.id ?? '');
   const [testMessage, setTestMessage] = useState('');
   const [testRunning, setTestRunning] = useState(false);
@@ -388,7 +374,7 @@ export const ProjectBuildStage: React.FC<Props> = ({
   const [lastFailedUnitId, setLastFailedUnitId] = useState<string | null>(null);
   // 正在为哪个目标阶段写修订证据。非空即禁用整组按钮，避免连点产生多条事件
   // （每次点击都会生成新的 request_id，后端幂等键拦不住）。
-  const [revisingStage, setRevisingStage] = useState<'observe' | 'decompose' | 'model' | 'plan' | null>(null);
+  const [revisingStage, setRevisingStage] = useState<'observe' | 'decompose' | null>(null);
   const [revisionError, setRevisionError] = useState('');
   const [diagnosticRun, setDiagnosticRun] = useState(0);
   const [diagnostics, setDiagnostics] = useState<string[]>([]);
@@ -431,16 +417,6 @@ export const ProjectBuildStage: React.FC<Props> = ({
     return ids;
   }, [buildUnits, progress, selectedCheckpointIndex]);
 
-  const dependencyReady = (unit: StudentBuildUnit) => {
-    const sameCardUnits = unitsByCardId.get(unit.card.id) ?? [];
-    const ownIndex = sameCardUnits.findIndex(item => item.id === unit.id);
-    const earlierUnitsReady = sameCardUnits.slice(0, Math.max(0, ownIndex)).every(unitIsComplete);
-    const prerequisiteCardsReady = (plan.prerequisites[unit.card.id] ?? []).every(cardId => {
-      const prerequisiteUnits = unitsByCardId.get(cardId) ?? [];
-      return prerequisiteUnits.length > 0 && prerequisiteUnits.every(unitIsComplete);
-    });
-    return earlierUnitsReady && prerequisiteCardsReady;
-  };
   const currentProgress = progressForUnit(selectedUnit);
   const completedCardCount = buildUnits.filter(unitIsComplete).length;
   const currentCode = selectedNode && selectedCard
@@ -462,35 +438,19 @@ export const ProjectBuildStage: React.FC<Props> = ({
         selectedCard ? `理解责任：${selectedCard.responsibilityOwner === 'ai-supported' ? 'AI 可协助、学生验证' : '学生核心责任'}` : '',
         selectedCard ? `输入：${selectedCard.input}；输出：${selectedCard.output}` : '',
         selectedCard ? `验证方式：${selectedCard.verification}` : '',
-        `路径进度：${completedCardCount}/${buildUnits.length}`,
+        `函数进度：${completedCardCount}/${buildUnits.length}`,
       ].filter(Boolean).join('\n'),
     });
   }, [buildUnits.length, completedCardCount, currentCode, currentProgress?.testAttempts, isZh, onAssistantContextChange, selectedCard, selectedNode, testMessage]);
 
-  const dependentCardIds = (cardId: string) => {
-    const dependents = new Set<string>();
-    const queue = [cardId];
-    while (queue.length > 0) {
-      const dependencyId = queue.shift();
-      if (!dependencyId) continue;
-      orderedCards.forEach(card => {
-        if (dependents.has(card.id) || !(plan.prerequisites[card.id] ?? []).includes(dependencyId)) return;
-        dependents.add(card.id);
-        queue.push(card.id);
-      });
-    }
-    return dependents;
-  };
-
   const updateCode = (code: string) => {
     if (!selectedCard || !selectedNode || !selectedUnit || FRAMEWORK_NODE_IDS.has(selectedNode.id)) return;
-    const invalidatedIds = dependentCardIds(selectedCard.id);
     setProgress(current => {
       const next = { ...current };
       buildUnits.forEach(unit => {
         const laterSameCard = unit.card.id === selectedCard.id
           && buildUnits.indexOf(unit) > buildUnits.indexOf(selectedUnit);
-        if ((invalidatedIds.has(unit.card.id) || laterSameCard) && next[unit.id]) {
+        if (laterSameCard && next[unit.id]) {
           next[unit.id] = { ...next[unit.id], verified: false };
         }
       });
@@ -528,7 +488,7 @@ export const ProjectBuildStage: React.FC<Props> = ({
    * 各阶段组件在返回时会重新挂载并重读 localStorage，因此修订后回到建构阶段
    * 能看到最新内容，不需要额外的同步机制。
    */
-  const reviseEarlierStage = async (stage: 'observe' | 'decompose' | 'model' | 'plan') => {
+  const reviseEarlierStage = async (stage: 'observe' | 'decompose') => {
     if (revisingStage) return;
     const failedUnitId = lastFailedUnitId;
     const failed = failedUnitId ? progress[failedUnitId] : undefined;
@@ -579,10 +539,6 @@ export const ProjectBuildStage: React.FC<Props> = ({
 
   const verifyCurrentModule = async () => {
     if (!selectedCard || !selectedNode || !selectedUnit || testRunning) return;
-    if (!dependencyReady(selectedUnit)) {
-      setTestMessage(isZh ? '前置功能还没有通过测试，请先按你的路径完成它们。' : 'Complete the prerequisites in your route first.');
-      return;
-    }
     if (FRAMEWORK_NODE_IDS.has(selectedNode.id)) {
       setTestMessage(isZh ? '该部分由平台提供，已接入装配器。' : 'This part is provided by the platform and already connected.');
       return;
@@ -680,13 +636,11 @@ export const ProjectBuildStage: React.FC<Props> = ({
     return (
       <section className="project-build-workspace is-empty">
         <Layers3 size={35} />
-        <h3>{mappedCardCount > 0
-          ? (isZh ? '实现路径还没有形成' : 'The implementation route is not ready')
-          : (isZh ? '还没有由学生确认的功能契约' : 'No student-confirmed contracts yet')}</h3>
+        <h3>{isZh ? '还没有可建构的功能' : 'No functions are ready to build'}</h3>
         <p>{mappedCardCount > 0
-          ? (isZh ? '功能契约已经确认，但当前路径没有可执行顺序。请回到定路径阶段检查未连线卡片或循环依赖。' : 'Contracts are confirmed, but the route has no executable order. Check unconnected cards or cycles.')
-          : (isZh ? '返回功能卡阶段，为候选契约作出接受、拒绝或暂不映射的判断；平台不会暗中替你匹配。' : 'Return to function cards and decide which suggested contracts fit. The platform will not map them silently.')}</p>
-        <button type="button" onClick={onBack}>{isZh ? '返回实现规划' : 'Back to plan'}</button>
+          ? (isZh ? '当前功能卡暂时无法形成建构单元，请返回检查功能描述。' : 'The current cards could not form build units. Review their descriptions.')
+          : (isZh ? '请先回到功能卡，用自己的观察命名功能并简述实现。' : 'Return to function cards, name functions from your observations, and describe how they work.')}</p>
+        <button type="button" onClick={onBack}>{isZh ? '返回功能卡' : 'Back to function cards'}</button>
       </section>
     );
   }
@@ -721,7 +675,7 @@ export const ProjectBuildStage: React.FC<Props> = ({
 
         <div className="build-editor-column">
           <header className="build-editor-heading">
-            <div><span>05 / BUILD & VERIFY</span><h3>{isZh ? '按自己的路径逐个实现' : 'Build one module at a time'}</h3></div>
+            <div><span>03 / BUILD & VERIFY</span><h3>{isZh ? '逐个实现并运行验证' : 'Build and verify one function at a time'}</h3></div>
             <strong>{completedCardCount}<small>/{buildUnits.length}</small></strong>
           </header>
 
@@ -729,22 +683,20 @@ export const ProjectBuildStage: React.FC<Props> = ({
             <div className="build-unmapped-notice">
               <CircleAlert size={15} />
               <span>{isZh
-                ? `${unmappedCards.length} 张功能卡尚未确认契约，暂不进入建构路径。`
-                : `${unmappedCards.length} function cards are not mapped and are excluded from the build route.`}</span>
-              <button type="button" onClick={onBack}>{isZh ? '返回处理' : 'Review cards'}</button>
+                ? `${unmappedCards.length} 张历史功能卡被标记为不参与建构，可返回功能卡修改。`
+                : `${unmappedCards.length} legacy cards are excluded from building and can be revised.`}</span>
+              <button type="button" onClick={onBack}>{isZh ? '修改功能卡' : 'Review cards'}</button>
             </div>
           )}
 
-          <nav className="student-module-rail" aria-label={isZh ? '学生实现路径' : 'Student build route'}>
+          <nav className="student-module-rail" aria-label={isZh ? '函数建构列表' : 'Function build list'}>
             {buildUnits.map((unit, index) => {
-              const provided = FRAMEWORK_NODE_IDS.has(unit.node.id);
               const verified = unitIsComplete(unit);
-              const ready = dependencyReady(unit);
               return (
                 <button key={unit.id} type="button" className={`${selectedUnit?.id === unit.id ? 'is-active' : ''} ${verified ? 'is-verified' : ''}`} onClick={() => { setSelectedId(unit.id); setTestMessage(''); }}>
                   <span>{String(index + 1).padStart(2, '0')}</span>
                   <p title={`${unit.card.responsibility} · ${isZh ? unit.node.titleZh : unit.node.titleEn}`}>{unit.card.responsibility}<small>{isZh ? unit.node.titleZh : unit.node.titleEn}</small></p>
-                  <i>{verified ? <Check size={14} /> : ready ? <CircleDot size={14} /> : <LockKeyhole size={14} />}</i>
+                  <i>{verified ? <Check size={14} /> : <CircleDot size={14} />}</i>
                 </button>
               );
             })}
@@ -765,9 +717,7 @@ export const ProjectBuildStage: React.FC<Props> = ({
 
               <div className="module-contract-grid">
                 <div><small>OBSERVE</small><span>{selectedCard.observationText}</span></div>
-                <div><small>IN</small><span>{selectedCard.input}</span></div>
-                <div><small>OUT</small><span>{selectedCard.output}</span></div>
-                <div><small>{isZh ? '验证' : 'VERIFY'}</small><span>{selectedCard.verification}</span></div>
+                <div><small>{isZh ? '实现描述' : 'HOW'}</small><span>{selectedCard.implementation || [selectedCard.input, selectedCard.output].filter(Boolean).join(' → ') || (isZh ? '尚未填写' : 'Not described yet')}</span></div>
               </div>
 
               <div className="module-code-header">
@@ -782,8 +732,8 @@ export const ProjectBuildStage: React.FC<Props> = ({
               </div>
 
               <footer className="module-test-bar">
-                <span>{testMessage || (dependencyReady(selectedUnit) ? (isZh ? '只需完成这项已确认契约对应的函数，其他项目代码已由平台锁定。' : 'Complete only this confirmed contract; the rest of the project is locked.') : (isZh ? '它依赖的前置功能还没有通过测试。' : 'Its prerequisite functions are not verified yet.'))}</span>
-                <button type="button" onClick={() => void verifyCurrentModule()} disabled={!dependencyReady(selectedUnit) || testRunning}>
+                <span>{testMessage || (isZh ? '可以从任意函数开始；运行后根据反馈继续修改。' : 'Start with any function, run it, and revise from the feedback.')}</span>
+                <button type="button" onClick={() => void verifyCurrentModule()} disabled={testRunning}>
                   {testRunning ? <LoaderCircle size={15} className="is-spinning" /> : <Play size={15} />}
                   {testRunning ? (isZh ? '正在运行' : 'Running') : (isZh ? '运行模块测试' : 'Run module test')}
                 </button>
@@ -804,14 +754,11 @@ export const ProjectBuildStage: React.FC<Props> = ({
             <p className="build-revision-error" role="alert">{revisionError}</p>
           ) : null}
           <div className="build-revision-actions">
+            <button type="button" disabled={revisingStage !== null} onClick={() => void reviseEarlierStage('observe')}>
+              {revisingStage === 'observe' ? (isZh ? '正在记录…' : 'Recording…') : (isZh ? '补充观察' : 'Revise observations')}
+            </button>
             <button type="button" disabled={revisingStage !== null} onClick={() => void reviseEarlierStage('decompose')}>
               {revisingStage === 'decompose' ? (isZh ? '正在记录…' : 'Recording…') : (isZh ? '修订功能卡' : 'Revise function cards')}
-            </button>
-            <button type="button" disabled={revisingStage !== null} onClick={() => void reviseEarlierStage('model')}>
-              {revisingStage === 'model' ? (isZh ? '正在记录…' : 'Recording…') : (isZh ? '修订功能流程' : 'Revise mechanism')}
-            </button>
-            <button type="button" disabled={revisingStage !== null} onClick={() => void reviseEarlierStage('plan')}>
-              {revisingStage === 'plan' ? (isZh ? '正在记录…' : 'Recording…') : (isZh ? '修订实现路径' : 'Revise route')}
             </button>
             <button type="button" disabled={revisingStage !== null} onClick={() => { setRevisionError(''); setLastFailedUnitId(null); }}>
               {isZh ? '继续在这里改' : 'Keep editing here'}
@@ -821,8 +768,8 @@ export const ProjectBuildStage: React.FC<Props> = ({
       )}
 
       <footer className="build-workspace-footer">
-        <button type="button" onClick={onBack}>{isZh ? '返回实现路径' : 'Back to route'}</button>
-        <span>{isZh ? '一个项目页面内完成观察、规划、建构和验证' : 'Observe, plan, build and verify in one project workspace.'}</span>
+        <button type="button" onClick={onBack}>{isZh ? '返回功能卡' : 'Back to function cards'}</button>
+        <span>{isZh ? '从运行观察和功能命名直接进入函数建构与验证' : 'Move directly from observations and function names into building and verification.'}</span>
         {onFinalSubmit && (
           <button
             type="button"

@@ -73,6 +73,8 @@ const STAGES: Array<{
   { id: 'build', zh: '编码验证', en: 'Build & verify', shortZh: '再建构', shortEn: 'Build', icon: Code2 },
 ];
 
+const PDT_STAGE_IDS = new Set<ProjectStage>(['observe', 'decompose', 'build']);
+
 export interface StudentObservationCard {
   id: string;
   evidenceId: string;
@@ -102,6 +104,9 @@ export const ProjectFactoryHeader: React.FC<FactoryHeaderProps> = ({
 }) => {
   const isZh = language === 'zh';
   const groupLabel = GROUP_LABELS[experimentGroup] ?? GROUP_LABELS.unassigned;
+  const visibleStages = experimentGroup === 'pdt'
+    ? STAGES.filter(stage => PDT_STAGE_IDS.has(stage.id))
+    : STAGES;
 
   return (
     <header className="project-factory-header">
@@ -124,8 +129,12 @@ export const ProjectFactoryHeader: React.FC<FactoryHeaderProps> = ({
         </div>
       </div>
 
-      <nav className="project-stage-rail" aria-label={isZh ? '项目阶段' : 'Project stages'}>
-        {STAGES.map((stage, index) => {
+      <nav
+        className="project-stage-rail"
+        aria-label={isZh ? '项目阶段' : 'Project stages'}
+        style={{ '--project-stage-count': visibleStages.length } as React.CSSProperties}
+      >
+        {visibleStages.map((stage, index) => {
           const Icon = stage.icon;
           const active = stage.id === activeStage;
           return (

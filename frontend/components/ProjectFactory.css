@@ -106,7 +106,7 @@
 .project-stage-rail {
   min-width: 0;
   display: grid;
-  grid-template-columns: repeat(5, minmax(82px, 1fr));
+  grid-template-columns: repeat(var(--project-stage-count, 5), minmax(82px, 1fr));
   gap: 4px;
   padding: 4px;
   border: 1px solid var(--line-strong);

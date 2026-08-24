@@ -21,7 +21,6 @@ import {
   type ProjectStage,
 } from '../components/ProjectFactory';
 import { ProjectFunctionStage } from '../components/ProjectFunctionStage';
-import { ProjectPathStage } from '../components/ProjectPathStage';
 import { ProjectBuildStage, type ProjectBuildAssistantContext } from '../components/ProjectBuildStage';
 import type { SnakeRuntimeEvidence } from '../data/snakeProjectBlueprint';
 import {
@@ -41,7 +40,6 @@ import {
   isStageEventPersisted,
   moduleCodeArtifact,
   observationArtifacts,
-  pathArtifact,
   reportFinalSubmission,
   reportStageEvent,
   type ArtifactChangeSource,
@@ -444,7 +442,7 @@ export const Research: React.FC<Props> = ({
             await saveResearchWorkspace(t.id, workspace);
           } else if (workspace && studentId === 'kero' && experimentGroup === 'pdt' && (
             !workspace.path.functionMechanisms
-            || workspace.functions.some(card => !card.boundaryReason || !card.mappingDecision)
+            || workspace.functions.some(card => !card.boundaryReason || !card.mappingDecision || !card.implementation)
           )) {
             workspace = {
               ...workspace,
@@ -537,8 +535,8 @@ export const Research: React.FC<Props> = ({
 
   const handleFactoryStageChange = useCallback((stage: ProjectStage) => {
     queueWorkspaceSave(0);
-    setFactoryStage(stage);
-  }, [queueWorkspaceSave]);
+    setFactoryStage(experimentGroup === 'pdt' && (stage === 'model' || stage === 'plan') ? 'build' : stage);
+  }, [experimentGroup, queueWorkspaceSave]);
 
   // 各阶段的确认动作。刻意**不**挂在 handleFactoryStageChange 上：
   // 那个函数同时服务于「确认进入下一阶段」和「点导航条往回走」，
@@ -585,42 +583,8 @@ export const Research: React.FC<Props> = ({
       ],
     });
     if (!recorded) return;
-    handleFactoryStageChange('model');
-  }, [handleFactoryStageChange, reportKeyMoment, task]);
-
-  const confirmModelStage = useCallback(async () => {
-    if (!task) return;
-    const workspace = collectSnakeProjectWorkspace(task.id);
-    const mechanisms = workspace.path.functionMechanisms ?? {};
-    const recorded = await reportKeyMoment({
-      stage: 'model',
-      eventType: 'stage_confirm',
-      detail: {
-        mechanismCount: Object.keys(mechanisms).length,
-        confirmedCount: Object.values(mechanisms).filter(item => item.confirmedAt).length,
-      },
-      // 逐卡机制图已在 confirmDiagram 时单独上报过；这里只记阶段确认本身，
-      // 不重复上报全部机制产物，避免同一内容在同一时刻产生两批版本。
-    });
-    if (!recorded) return;
-    handleFactoryStageChange('plan');
-  }, [handleFactoryStageChange, reportKeyMoment, task]);
-
-  const confirmPlanStage = useCallback(async () => {
-    if (!task) return;
-    const workspace = collectSnakeProjectWorkspace(task.id);
-    const recorded = await reportKeyMoment({
-      stage: 'plan',
-      eventType: 'stage_confirm',
-      detail: {
-        orderedCount: workspace.path.orderedCardIds.length,
-        prerequisiteCount: Object.keys(workspace.path.prerequisites ?? {}).length,
-      },
-      artifacts: [pathArtifact(workspace.path)],
-    });
-    if (!recorded) return;
-    handleFactoryStageChange('build');
-  }, [handleFactoryStageChange, reportKeyMoment, task]);
+    handleFactoryStageChange(experimentGroup === 'pdt' ? 'build' : 'model');
+  }, [experimentGroup, handleFactoryStageChange, reportKeyMoment, task]);
 
   const getScaffoldArtifactContext = useCallback((): ScaffoldArtifactContext => {
     if (!task) return { summary: '' };
@@ -643,7 +607,7 @@ export const Research: React.FC<Props> = ({
       summary: [
         taskWorkspaceSummary,
         '【当前功能拆解焦点】',
-        `学生正在检查 ${workspace.functions.length} 张功能卡的职责、输入输出、知识和验证方式。`,
+        `学生正在用功能名称、实现描述和观察引用整理 ${workspace.functions.length} 张功能卡。`,
       ].join('\n'),
     };
     if (factoryStage === 'model') {
@@ -1114,40 +1078,22 @@ export const Research: React.FC<Props> = ({
         />
       )}
 
-      {factoryStage === 'model' && (
-        experimentGroup === 'pdt'
-          ? <ProjectPathStage
-              language={language}
-              taskId={task.id}
-              stage="model"
-              onBack={() => handleFactoryStageChange('decompose')}
-              onContinue={() => { void confirmModelStage(); }}
-              onReportKeyMoment={reportKeyMoment}
-            />
-          : <ProjectStagePreview
-              language={language}
-              stage="model"
-              onBack={() => handleFactoryStageChange('decompose')}
-              onContinue={() => handleFactoryStageChange('plan')}
-            />
+      {factoryStage === 'model' && experimentGroup !== 'pdt' && (
+        <ProjectStagePreview
+          language={language}
+          stage="model"
+          onBack={() => handleFactoryStageChange('decompose')}
+          onContinue={() => handleFactoryStageChange('plan')}
+        />
       )}
 
-      {factoryStage === 'plan' && (
-        experimentGroup === 'pdt'
-          ? <ProjectPathStage
-              language={language}
-              taskId={task.id}
-              stage="plan"
-              onBack={() => handleFactoryStageChange('model')}
-              onContinue={() => { void confirmPlanStage(); }}
-              onReportKeyMoment={reportKeyMoment}
-            />
-          : <ProjectStagePreview
-              language={language}
-              stage="plan"
-              onBack={() => handleFactoryStageChange('model')}
-              onContinue={() => handleFactoryStageChange('build')}
-            />
+      {factoryStage === 'plan' && experimentGroup !== 'pdt' && (
+        <ProjectStagePreview
+          language={language}
+          stage="plan"
+          onBack={() => handleFactoryStageChange('model')}
+          onContinue={() => handleFactoryStageChange('build')}
+        />
       )}
 
       {factoryStage === 'build' && experimentGroup === 'pdt' && (
@@ -1155,7 +1101,7 @@ export const Research: React.FC<Props> = ({
           language={language}
           theme={theme}
           taskId={task.id}
-          onBack={() => handleFactoryStageChange('plan')}
+          onBack={() => handleFactoryStageChange('decompose')}
           onAssistantContextChange={setBuildAssistantContext}
           onReportKeyMoment={reportKeyMoment}
           onReviseEarlierStage={handleFactoryStageChange}

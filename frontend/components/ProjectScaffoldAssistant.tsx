@@ -271,8 +271,8 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
               <MessageCircleMore size={34} />
               <h4>{isZh ? '我知道你现在正在做什么' : 'I know what you are working on'}</h4>
               <p>{isZh
-                ? `当前处于“${stageLabel.zh}”。我会同时参考本任务已保存的观察卡、功能卡、流程图、实现路径和模块进度；建构阶段还会读取当前代码与测试反馈。`
-                : `You are at “${stageLabel.en}”. I can use this task's observations, function cards, flow diagrams, path and module progress, plus current code and tests during build.`}</p>
+                ? `当前处于“${stageLabel.zh}”。我会参考本任务已保存的观察卡、功能卡和函数进度；建构阶段还会读取当前代码与测试反馈。`
+                : `You are at “${stageLabel.en}”. I can use this task's observations, function cards and function progress, plus current code and tests during build.`}</p>
               <small>{isZh ? `当前证据：${observationCount} 张观察卡` : `${observationCount} observation cards`}</small>
             </div>
           ) : messages.map(message => (

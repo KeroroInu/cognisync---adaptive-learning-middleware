@@ -405,7 +405,7 @@ export const ProjectFunctionStage: React.FC<Props> = ({
         <button type="button" onClick={onBack}>{isZh ? '返回观察' : 'Back to observation'}</button>
         <div><ClipboardList size={15} /><span>{isZh ? '你的命名与修改会作为解构过程证据保存' : 'Your naming and edits are saved as process evidence'}</span></div>
         <button type="button" className="is-primary" disabled={cards.length < 2} onClick={onContinue}>
-          {isZh ? '进入下一阶段' : 'Continue'}<ArrowRight size={16} />
+          {isZh ? '进入函数建构' : 'Start building functions'}<ArrowRight size={16} />
         </button>
       </footer>
     </section>

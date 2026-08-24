@@ -88,7 +88,7 @@ git diff --check                  通过
 
 **浏览器验收结果（使用者本机，2026-08-24）**：通过。登录后直接进入项目，不再经过学习首页。
 
-### 第 2 项：功能卡简化 — 代码完成，待测试与浏览器验收
+### 第 2 项：功能卡简化 — 已完成并验收
 
 提交：`816fd22 feat: simplify function cards to name and one sentence`。
 
@@ -123,10 +123,46 @@ backend/  覆盖统计算法用等价桩核对          4/4 与预期一致
 git diff --check                           通过
 ```
 
-- **未做**：`backend/venv/bin/pytest -q`、`ruff check`、浏览器验收。沙箱无法执行后端。
-- **请在本机执行**：`cd backend && venv/bin/pytest tests/test_research_function_coverage.py -q` 与全量 `pytest -q`；`venv/bin/ruff check app/ tests/`；浏览器检查：新学生写一张卡（只有名称和一句话可填）、快捷短语插到光标处、保存后出现「已对应 N/7」与简短提醒、提醒里**没有**出现七个函数的教师名称、`kero` 的 7 张旧卡显示实现描述且编辑旧卡不丢原有字段、`1280×720` 下覆盖面板不遮挡底部按钮。
+- 本机复核：覆盖检查针对性测试 `15 passed`；后端全量 `203 passed, 4 warnings`；改动后端文件 Ruff 通过；学生端 type-check / build 通过；管理端 lint / `15 passed` / build 通过。4 条 warning 仍是既有 `schema_json` Pydantic 命名提示。
+- 浏览器验收：覆盖检查返回 `7/7` 且未出现教师函数名称、输入输出、同义词或隐藏测试文本；`1280×720` 无横向溢出，覆盖面板与底部操作区顺序正常。
+- 验收时修复一处存量兼容遗漏：`upgradeSnakeProjectFunctionCards()` 已能只补缺失的 `implementation`，但 `Research.tsx` 的 kero 升级触发条件没有检查该字段，导致完整旧工作区永远不进入升级分支。补上 `!card.implementation` 后，7 张旧卡均获得实现描述且不会覆盖已有值。
 
-下一项：**第 3 项 移除流程/路径门槛** —— 新任务从功能卡直接进入建构，移除新 UI 的 `ProjectMechanismStage`、`ProjectPathStage` 和前置拓扑锁定；旧 `workspace_data`、`artifact_versions`、`stage_events` 与历史产物保持可读取。
+### 第 3 项：移除流程/路径门槛 — 已完成并验收
+
+改动目标：PDT 新任务从功能卡直接进入函数建构，不再要求学生完成单功能机制图、系统关系图或实现路径；教师依赖和旧学生画布继续保存在工作区与研究证据中，只退出新任务主流程。
+
+实施内容：
+
+- PDT 顶部阶段栏由五步收敛为 `观察 → 拆功能 → 再建构`；AI-PBL 与讲授组仍保留自己的既有五阶段预览，不继承 PDT 的新流程。
+- 功能卡确认成功并写入 `decompose/stage_confirm` 后直接进入 `build`。`Research.tsx` 不再挂载 `ProjectMechanismStage` / `ProjectPathStage`，也不再产生新的 `model` / `plan` 阶段确认事件；旧组件和事件类型没有删除。
+- 过渡建构页按功能卡稳定顺序形成建构单元，不再读取学生路径的拓扑顺序；移除前置函数锁定，任一函数均可直接编辑与运行测试。第 4 项仍会把该过渡页升级为固定七张基础函数卡与统一运行器。
+- 测试失败后只提供“补充观察 / 修订功能卡 / 继续在这里改”，不再把学生送回已退出主流程的机制图或路径图。
+- 建构页回退统一返回功能卡；旧 `input/output/verification` 不再作为主要建构信息，卡内显示引用观察和一句实现描述，历史卡没有实现描述时才用旧输入输出作兼容回显。
+- 浮动助手的新任务说明只引用观察卡、功能卡、函数进度、当前代码与测试反馈，不再引导学生填写流程图和实现路径。
+
+兼容边界：
+
+- `SnakeProjectWorkspace.path`、`functionMechanisms`、`orderedCardIds`、`prerequisites`、旧机制/路径产物与 `model/plan` 事件均未迁移、删除或覆盖；工作区收集、保存和教师侧读取路径保持原状。
+- 建构进度继续读取 `cardId::blueprintNodeId`，并保留旧 `cardId` 键回退。
+- 本地数据库只读核验 kero 最新快照仍含：7 张功能卡、7 张旧机制图、7 个旧顺序项、6 组旧前置关系和 6 个旧进度项。
+
+验证状态：
+
+```text
+backend/  pytest -q                         203 passed, 4 warnings
+frontend/ npm run type-check                passed
+frontend/ npm run build                     passed
+admin/    lint + 15 tests + build           passed（第 2 项回归）
+Docker    backend/frontend rebuild          passed
+GET       http://localhost:8003/health      200，PostgreSQL / Neo4j connected
+git diff --check                            passed
+```
+
+真实浏览器 `kero` 验收：顶部只显示三阶段；功能卡按钮文案为“进入函数建构”且成功直达建构；第 6 个函数可在未按旧路径逐步解锁的情况下直接运行测试并通过；返回按钮回到功能卡；浏览器控制台无 error/warning。`1280×720` 下页面宽度为 1280、无横向溢出，阶段栏、游戏、编辑器、模块测试与底部按钮均可达。
+
+尚未覆盖：空白新学生的完整新链路仍需在第 4 项固定七函数工作区完成后一起验收；本项没有新增前端测试运行器。
+
+下一项：**第 4 项 七函数建构工作区** —— 固定七张基础功能卡，左侧同一个贪吃蛇由七个学生函数真实组合，右侧统一呈现对话、代码、运行、错误与隐藏测试反馈。
 
 ## 必读文件（按顺序）
 
