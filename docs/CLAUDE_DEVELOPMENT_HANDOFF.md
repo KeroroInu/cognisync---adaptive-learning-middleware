@@ -84,9 +84,49 @@ git diff --check                  通过
 ```
 
 - 静态核查：全仓已无学生端指向 `graph` / `calibration` 的导航或按钮，只剩类型声明与 `renderProtectedContent` 的 case 分支（刻意保留）。
-- **未做**：浏览器验收、后端 pytest、Docker 健康检查。当前开发沙箱没有 Docker、没有 psql，`backend/venv` 是 macOS 二进制无法在此执行；本项只改学生端三个文件，未触碰后端。**请在本机执行浏览器验收后再进入第 2 项**：`kero` 登录后直达当前任务、刷新后仍在任务内、退出登录后重新登录正常、无开放任务时回退到学习首页且首页不再出现画像与雷达图、`1280×720` 顶部导航只剩「学习首页 / 对话 / 项目工坊」。
+- **未做**：浏览器验收、后端 pytest、Docker 健康检查。当前开发沙箱没有 Docker、没有 psql，`backend/venv` 是 macOS 二进制无法在此执行；本项只改学生端三个文件，未触碰后端。
 
-下一项：**第 2 项 功能卡简化** —— 把 `ProjectFunctionStage` 的多字段表单改为「引用观察卡 + 功能命名 + 一句实现描述 + 快捷短语」，并接入七函数覆盖检查；旧功能卡字段保持读取兼容。
+**浏览器验收结果（使用者本机，2026-08-24）**：通过。登录后直接进入项目，不再经过学习首页。
+
+### 第 2 项：功能卡简化 — 代码完成，待测试与浏览器验收
+
+提交：`816fd22 feat: simplify function cards to name and one sentence`。
+
+设计要点：
+
+- 新建功能卡只有三项：引用的观察卡、学生命名的功能、一句「这个功能如何实现」。实现描述用 `textarea`，淡化模板作为 placeholder（`先……；当……时……；最后……`），下方五个快捷短语「读取按键 / 判断条件 / 更新坐标 / 修改列表 / 返回结果」点击后插入**光标位置**，不覆盖已写内容。
+- 移除的旧表单：输入、输出、知识点、验证方式、功能边界理由、人机责任标签、教师契约映射面板。这些字段**保留在 `StudentFunctionCard` 类型和历史数据里**，编辑一张旧卡时按 `...existing` 原值保留，不会被清空；`functionMappingArtifacts` 仍会上报历史卡已有的映射决定。
+- 七函数覆盖检查改为新端点，**规则匹配、不调用模型**：`POST /api/research/tasks/{task_id}/blueprint/function-coverage`。复用 `_mapping_suggestions` 的评分，保证「覆盖检查」与「契约建议」对同一段文字给出一致判断。
+- **不泄漏**是这个端点的核心约束：响应只有 `required_total` / `covered_total` / `uncovered_total` / `unmatched_card_count` / 每张卡 `matched` 布尔值 / 不含任何蓝图文本的简短问题。契约名称、同义表达、输入输出、场景描述、前置关系和隐藏测试一律不下发。提醒问题把学生推回自己的运行观察和未被引用的观察卡。
+- 请求时机：只在保存卡片、删除卡片和学生主动点「重新检查一次」时请求，不随输入实时触发。
+
+改动文件：
+
+| 文件 | 改动 |
+|---|---|
+| `backend/app/api/endpoints/research.py` | 新增 `FunctionCoverage*` schema、`_coverage_result()`、`_coverage_questions()` 和 `function-coverage` 端点；沿用 `get_visible_task(require_active=True)` 与冻结蓝图读取 |
+| `backend/tests/test_research_function_coverage.py` | 新增 13 条离线单元测试：required 才计入分母、实现描述参与匹配、可选节点不虚高覆盖、两张重复卡只覆盖一个节点、空名称卡不 422、提醒问题**不得出现蓝图文本**（参数化 4 条） |
+| `frontend/components/ProjectFunctionStage.tsx` | 重写为简化功能卡；新增 `implementation` 字段、快捷插入、覆盖检查面板；已引用过的观察卡显示虚线边框 |
+| `frontend/components/ProjectFunctionStage.css` | 新增实现描述框、快捷短语胶囊、覆盖检查面板样式 |
+| `frontend/types.ts`、`frontend/services/api.ts` | 新增 `FunctionCoverageResponse` 与 `checkResearchFunctionCoverage()` |
+| `frontend/services/stageEvents.ts` | `function_card` 产物内容增加 `implementation`，其余字段不变（保持旧产物可比） |
+| `frontend/data/snakeProjectDemo.ts` | 给 7 张固定 demo 卡补 `implementation`，只补缺失值（`card.implementation ?? meta.implementation`），不覆盖 kero 之后的人工修改 |
+| `frontend/views/Research.tsx` | 助手上下文摘要改为「功能名 + 实现描述 + 引用观察」，旧字段仅在历史卡上附带显示 |
+
+验证状态（如实）：
+
+```text
+frontend/ npx tsc --noEmit                 通过
+frontend/ npx vite build                   通过
+backend/  python3 -m py_compile            通过（语法）
+backend/  覆盖统计算法用等价桩核对          4/4 与预期一致
+git diff --check                           通过
+```
+
+- **未做**：`backend/venv/bin/pytest -q`、`ruff check`、浏览器验收。沙箱无法执行后端。
+- **请在本机执行**：`cd backend && venv/bin/pytest tests/test_research_function_coverage.py -q` 与全量 `pytest -q`；`venv/bin/ruff check app/ tests/`；浏览器检查：新学生写一张卡（只有名称和一句话可填）、快捷短语插到光标处、保存后出现「已对应 N/7」与简短提醒、提醒里**没有**出现七个函数的教师名称、`kero` 的 7 张旧卡显示实现描述且编辑旧卡不丢原有字段、`1280×720` 下覆盖面板不遮挡底部按钮。
+
+下一项：**第 3 项 移除流程/路径门槛** —— 新任务从功能卡直接进入建构，移除新 UI 的 `ProjectMechanismStage`、`ProjectPathStage` 和前置拓扑锁定；旧 `workspace_data`、`artifact_versions`、`stage_events` 与历史产物保持可读取。
 
 ## 必读文件（按顺序）
 
