@@ -42,7 +42,9 @@ function App() {
   );
 
   // 入口解析状态：已登录会话在解析出当前开放任务之前不渲染学习首页，避免闪现
-  const [entryResolved, setEntryResolved] = useState(false);
+  // 有持久化 token 时，必须等用户恢复和当前任务解析完成；否则首个 effect
+  // 会把尚未恢复的 user 当成“未登录”，提前锁定到总览页。
+  const [entryResolved, setEntryResolved] = useState(() => !state.token);
 
   // Scale 模式注册暂存数据（选择模式后，量表提交前）
   const [pendingScaleReg, setPendingScaleReg] = useState<PendingScaleRegistration | null>(null);
@@ -99,7 +101,8 @@ function App() {
   useEffect(() => {
     if (entryResolved) return;
     if (!state.user) {
-      setEntryResolved(true);
+      // token 仍存在表示认证恢复尚在进行；失效 token 被 store 清掉后才进入登录页。
+      if (!state.token) setEntryResolved(true);
       return;
     }
     let cancelled = false;
@@ -110,7 +113,7 @@ function App() {
       setEntryResolved(true);
     })();
     return () => { cancelled = true; };
-  }, [entryResolved, resolveEntryView, state.user]);
+  }, [entryResolved, resolveEntryView, state.token, state.user]);
 
   // 登录成功处理
   const handleLoginSuccess = async (token: string, user: any, profile?: UserProfile) => {

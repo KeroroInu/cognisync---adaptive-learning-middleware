@@ -5,6 +5,8 @@ interface PyodideRuntime {
 interface WorkerScope {
   importScripts: (...urls: string[]) => void;
   loadPyodide?: (options: { indexURL: string }) => Promise<PyodideRuntime>;
+  fetch?: typeof fetch;
+  WebSocket?: typeof WebSocket;
   postMessage: (message: unknown) => void;
   onmessage: ((event: MessageEvent<{ id: string; source: string }>) => void) | null;
 }
@@ -38,9 +40,19 @@ workerScope.onmessage = async event => {
   const { id, source } = event.data;
   try {
     const runtime = await getRuntime();
+    // Pyodide 完成同源启动后再关闭网络能力。学生代码可导入 Python 标准库，
+    // 但不能借 `js.fetch` / `js.WebSocket` 向外发送数据或动态安装依赖。
+    workerScope.fetch = (() => Promise.reject(new Error('Network access is disabled'))) as typeof fetch;
+    workerScope.WebSocket = class DisabledWebSocket {
+      constructor() {
+        throw new Error('Network access is disabled');
+      }
+    } as unknown as typeof WebSocket;
     workerScope.postMessage({ type: 'executing', id });
     const result = await runtime.runPythonAsync(source);
-    workerScope.postMessage({ type: 'result', id, result: String(result ?? '') });
+    const serialized = String(result ?? '');
+    if (serialized.length > 200_000) throw new Error('Python result is too large');
+    workerScope.postMessage({ type: 'result', id, result: serialized });
   } catch (error) {
     workerScope.postMessage({
       type: 'error',

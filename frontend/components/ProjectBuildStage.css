@@ -68,8 +68,10 @@
 .construction-behavior-feedback { display: flex; align-items: center; gap: 6px; min-height: 32px; padding: 6px 9px; border: 1px solid #0b0e0a; border-top: 0; background: color-mix(in srgb, var(--brand-cyan) 24%, var(--surface)); color: var(--text-secondary); font-size: .64rem; animation: construction-feedback-in .24s ease-out; }
 .construction-behavior-feedback svg { flex: none; color: #667c2f; }
 .construction-behavior-feedback strong { overflow: hidden; color: var(--text-primary); text-overflow: ellipsis; white-space: nowrap; }
+.construction-runtime-error { display: flex; align-items: center; gap: 6px; min-height: 32px; padding: 6px 9px; border: 1px solid #9a4b3b; border-top: 0; background: color-mix(in srgb, #d85c45 12%, var(--surface)); color: #9a4b3b; font-size: .64rem; font-weight: 750; }
+.construction-runtime-error svg { flex: none; }
 
-.construction-board { position: relative; aspect-ratio: 14 / 10; display: grid; overflow: hidden; border: 1px solid #0b0e0a; background: radial-gradient(circle at 52% 50%, rgba(189,245,47,.08), transparent 58%), #101610; }
+.construction-board { position: relative; aspect-ratio: 1; display: grid; overflow: hidden; border: 1px solid #0b0e0a; background: radial-gradient(circle at 52% 50%, rgba(189,245,47,.08), transparent 58%), #101610; }
 .construction-board:focus-visible { outline: 3px solid var(--brand-lime); outline-offset: 3px; }
 .construction-board > span { position: relative; border-right: 1px solid rgba(189,245,47,.055); border-bottom: 1px solid rgba(189,245,47,.055); }
 .construction-board > span.is-snake::after,

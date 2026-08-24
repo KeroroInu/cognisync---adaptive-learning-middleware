@@ -155,6 +155,20 @@ const WORKSPACE_RETRY_DELAY_MS = 4000;
 // 随前端镜像分发。改动此常量时必须同步改 workers/pythonModuleWorker.ts。
 const PYODIDE_BASE_URL = '/pyodide/';
 
+const projectStageKey = (taskId: string) => `cognisync:project-stage:v1:${taskId}`;
+
+const restoreProjectStage = (taskId: string, workspace: SnakeProjectWorkspace | null): ProjectStage => {
+  try {
+    const stored = window.localStorage.getItem(projectStageKey(taskId));
+    if (stored === 'observe' || stored === 'decompose' || stored === 'build') return stored;
+    if (stored === 'model' || stored === 'plan') return 'build';
+  } catch {
+    // localStorage 不可用时仍可进入默认观察阶段。
+  }
+  // 存量工作区没有阶段键；已有函数测试进度说明学生此前已进入建构。
+  return workspace && Object.keys(workspace.progress ?? {}).length > 0 ? 'build' : 'observe';
+};
+
 // Extend Window so TS knows about the self-hosted Pyodide loader
 declare global {
   interface Window {
@@ -462,6 +476,7 @@ export const Research: React.FC<Props> = ({
           workspaceLastSavedSignatureRef.current = workspace ? workspaceSignature(workspace) : '';
           workspacePendingRef.current = null;
           setWorkspaceSaveStatus('saved');
+          setFactoryStage(restoreProjectStage(t.id, workspace));
 
           // 优先使用学生已保存的代码，否则用模板原始代码
           setCode(t.code_submitted || t.code_content);
@@ -535,8 +550,16 @@ export const Research: React.FC<Props> = ({
 
   const handleFactoryStageChange = useCallback((stage: ProjectStage) => {
     queueWorkspaceSave(0);
-    setFactoryStage(experimentGroup === 'pdt' && (stage === 'model' || stage === 'plan') ? 'build' : stage);
-  }, [experimentGroup, queueWorkspaceSave]);
+    const nextStage = experimentGroup === 'pdt' && (stage === 'model' || stage === 'plan') ? 'build' : stage;
+    setFactoryStage(nextStage);
+    if (task?.id) {
+      try {
+        window.localStorage.setItem(projectStageKey(task.id), nextStage);
+      } catch {
+        // 阶段仍在内存中正常切换；只是不提供刷新恢复。
+      }
+    }
+  }, [experimentGroup, queueWorkspaceSave, task?.id]);
 
   // 各阶段的确认动作。刻意**不**挂在 handleFactoryStageChange 上：
   // 那个函数同时服务于「确认进入下一阶段」和「点导航条往回走」，
