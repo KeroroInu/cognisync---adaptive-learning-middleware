@@ -54,6 +54,40 @@
 - 重建相应 Docker 服务并检查 `http://localhost:8003/health`；完成浏览器验收后再提交；
 - 不要删除历史蓝图版本、学生工作区或研究事件；任何迁移都要有兼容测试。
 
+## 逐项进展记录（2026-08-24 起）
+
+### 第 1 项：学生入口收敛 — 代码完成，待浏览器验收
+
+提交：`38762cf feat: land students in the open project on entry`（基线 `353f529`）。
+
+产品裁定确认（本轮由使用者裁定）：
+
+- 画像卡、雷达图、画像变化趋势、知识图谱、自我校准在学生端**只做去链接**，视图文件、路由分支和后端接口全部保留，等第 8 项教师端承接后再决定是否清理。不删除任何画像/图谱数据。
+- 直达当前开放任务适用于 `pdt`、`ai_pbl`、`lecture` 三组；工作区内容仍由 `experimentGroup` 决定，条件隔离不变。`unassigned` 仍停留在学习首页与量表。
+
+改动文件：
+
+| 文件 | 改动 |
+|---|---|
+| `frontend/App.tsx` | 抽出 `resolveEntryView()`：未完成 onboarding → 注册流程；已分组且存在教师开放任务 → `research`；无任务或后端不可用 → `dashboard`。登录、注册完成、**会话恢复（刷新/重开标签页）**三条路径统一走它；新增 `entryResolved` 门，解析完成前不渲染学习首页，避免闪现后跳转；`pdt` 的 `allowed` 视图去掉 `graph`、`calibration` |
+| `frontend/components/Layout.tsx` | `allowedViews` 与 `primaryViews` 去掉 `graph`、`calibration`；`allNavItems` 条目保留，仅被过滤掉 |
+| `frontend/views/Dashboard.tsx` | 移除 `LearnerCardDeck`、`RadarDisplay`、三张画像指标卡、`ProfileTrendChart` 和「查看结构关系」按钮；首页收敛为「当前无开放任务」时的回退入口 |
+
+修复的既有缺陷：原实现只在**登录那一次**检查开放任务，刷新页面后会回到学习首页；现在会话恢复同样直达当前项目。
+
+验证状态（如实）：
+
+```text
+frontend/ npx tsc --noEmit        通过
+frontend/ npx vite build          通过（2714 modules，5.2s）
+git diff --check                  通过
+```
+
+- 静态核查：全仓已无学生端指向 `graph` / `calibration` 的导航或按钮，只剩类型声明与 `renderProtectedContent` 的 case 分支（刻意保留）。
+- **未做**：浏览器验收、后端 pytest、Docker 健康检查。当前开发沙箱没有 Docker、没有 psql，`backend/venv` 是 macOS 二进制无法在此执行；本项只改学生端三个文件，未触碰后端。**请在本机执行浏览器验收后再进入第 2 项**：`kero` 登录后直达当前任务、刷新后仍在任务内、退出登录后重新登录正常、无开放任务时回退到学习首页且首页不再出现画像与雷达图、`1280×720` 顶部导航只剩「学习首页 / 对话 / 项目工坊」。
+
+下一项：**第 2 项 功能卡简化** —— 把 `ProjectFunctionStage` 的多字段表单改为「引用观察卡 + 功能命名 + 一句实现描述 + 快捷短语」，并接入七函数覆盖检查；旧功能卡字段保持读取兼容。
+
 ## 必读文件（按顺序）
 
 1. `AGENTS.md`（若当前环境提供）
