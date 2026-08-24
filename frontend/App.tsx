@@ -1,4 +1,4 @@
-import React, { Suspense, useState, useEffect } from 'react';
+import React, { Suspense, useCallback, useState, useEffect } from 'react';
 import { Layout } from './components/Layout';
 import { Login } from './views/Login';
 import { Register } from './views/Register';
@@ -41,6 +41,9 @@ function App() {
     state.user ? 'dashboard' : 'login'
   );
 
+  // 入口解析状态：已登录会话在解析出当前开放任务之前不渲染学习首页，避免闪现
+  const [entryResolved, setEntryResolved] = useState(false);
+
   // Scale 模式注册暂存数据（选择模式后，量表提交前）
   const [pendingScaleReg, setPendingScaleReg] = useState<PendingScaleRegistration | null>(null);
 
@@ -62,7 +65,7 @@ function App() {
   useEffect(() => {
     if (!state.user) return;
     const allowed: Record<User['experimentGroup'], AppView[]> = {
-      pdt: ['dashboard', 'chat', 'graph', 'calibration', 'evidence', 'research', 'scales'],
+      pdt: ['dashboard', 'chat', 'evidence', 'research', 'scales'],
       ai_pbl: ['dashboard', 'chat', 'evidence', 'research', 'scales'],
       lecture: ['dashboard', 'evidence', 'research', 'scales'],
       unassigned: ['dashboard', 'scales'],
@@ -72,28 +75,48 @@ function App() {
     }
   }, [state.user, currentView]);
 
+  /**
+   * 解析登录后的落地视图。
+   * 未完成 onboarding 的学生进入注册流程；已分组学生若存在教师开放的当前任务，
+   * 直接进入该任务工作区；只有在无开放任务或后端不可用时才回退到学习首页。
+   */
+  const resolveEntryView = useCallback(async (user: User | null): Promise<View> => {
+    if (!user) return 'login';
+    if (!user.hasCompletedOnboarding) {
+      return (user.onboardingMode || 'scale') === 'ai' ? 'register-ai' : 'register-scale';
+    }
+    if ((user.experimentGroup ?? 'unassigned') === 'unassigned') return 'dashboard';
+    try {
+      const task = await getActiveResearchTask();
+      if (task) return 'research';
+    } catch {
+      // 无法读取当前任务时不阻塞登录，回退到学习首页
+    }
+    return 'dashboard';
+  }, []);
+
+  // 会话恢复（刷新、重新打开标签页）时同样直达当前开放任务
+  useEffect(() => {
+    if (entryResolved) return;
+    if (!state.user) {
+      setEntryResolved(true);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const view = await resolveEntryView(state.user);
+      if (cancelled) return;
+      setCurrentView(view);
+      setEntryResolved(true);
+    })();
+    return () => { cancelled = true; };
+  }, [entryResolved, resolveEntryView, state.user]);
+
   // 登录成功处理
   const handleLoginSuccess = async (token: string, user: any, profile?: UserProfile) => {
     setAuth(user, token, profile);
-
-    // 检查是否完成了onboarding
-    if (user.hasCompletedOnboarding) {
-      // 检查是否有激活的研究任务
-      try {
-        const task = user.experimentGroup !== 'unassigned' ? await getActiveResearchTask() : null;
-        if (task) {
-          setCurrentView('research');
-          return;
-        }
-      } catch {
-        // 无研究任务，正常进入 dashboard
-      }
-      setCurrentView('dashboard');
-    } else {
-      // 根据 onboarding 模式跳转
-      const mode = user.onboardingMode || 'scale';
-      setCurrentView(mode === 'ai' ? 'register-ai' : 'register-scale');
-    }
+    setCurrentView(await resolveEntryView(user as User));
+    setEntryResolved(true);
   };
 
   // 注册成功处理（设置认证信息并跳转到onboarding）
@@ -109,7 +132,7 @@ function App() {
   };
 
   // 注册完成处理
-  const handleRegistrationComplete = (
+  const handleRegistrationComplete = async (
     initialProfile: UserProfile,
     attributes?: string[],
     conceptSeeds?: string[],
@@ -121,12 +144,15 @@ function App() {
     } else {
       updateProfile(initialProfile);
     }
-    setCurrentView('dashboard');
+    const user = auth?.user ?? state.user;
+    setCurrentView(user ? await resolveEntryView({ ...user, hasCompletedOnboarding: true }) : 'dashboard');
+    setEntryResolved(true);
   };
 
   // 登出处理
   const handleLogout = () => {
     clearAuth();
+    setEntryResolved(true);
     setCurrentView('login');
   };
 
@@ -293,6 +319,11 @@ function App() {
   if (!state.user) {
     // 未登录状态：显示认证相关视图（无 Layout）
     return <>{renderAuthView()}</>;
+  }
+
+  // 已登录但尚未解析当前开放任务：先不渲染学习首页，避免闪现后再跳转
+  if (!entryResolved) {
+    return <div className="view-loading" role="status">正在读取当前项目…</div>;
   }
 
   // 已登录但未完成 onboarding：显示 onboarding 视图（无 Layout）

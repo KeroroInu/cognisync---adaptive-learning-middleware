@@ -102,15 +102,17 @@ export const Layout: React.FC<Props> = ({
   ];
 
   const group = user?.experimentGroup ?? 'unassigned';
+  // 2026-08-24 裁定：知识图谱与自我校准不再作为学生端入口，相关数据迁入教师端单生详情。
+  // 视图代码与后端接口保留，便于教师端承接后再决定是否清理。
   const allowedViews: Record<User['experimentGroup'], View[]> = {
-    pdt: ['dashboard', 'chat', 'graph', 'research', 'calibration', 'evidence', 'scales'],
+    pdt: ['dashboard', 'chat', 'research', 'evidence', 'scales'],
     ai_pbl: ['dashboard', 'chat', 'research', 'evidence', 'scales'],
     lecture: ['dashboard', 'research', 'evidence', 'scales'],
     unassigned: ['dashboard', 'scales'],
   };
   const navItems = allNavItems.filter(item => allowedViews[group].includes(item.id));
 
-  const primaryViews: View[] = ['dashboard', 'chat', 'graph', 'research'];
+  const primaryViews: View[] = ['dashboard', 'chat', 'research'];
   const primaryItems = navItems.filter(item => primaryViews.includes(item.id));
   const currentItem = navItems.find(item => item.id === currentView) ?? navItems[0];
   const userMeta = user?.email || user?.student_id || user?.id;
