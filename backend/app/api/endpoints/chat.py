@@ -32,7 +32,7 @@ from app.schemas.project_blueprint import BlueprintScaffoldPolicy, ProjectBluepr
 from app.models.sql.user import User
 from app.api.endpoints.auth import get_current_user
 from app.services.scaffold_service import (
-    build_controlled_build_response,
+    build_controlled_scaffold_response,
     build_scaffold_metadata,
     build_scaffold_prompt,
     summarize_project_workspace,
@@ -957,7 +957,7 @@ async def chat(
         import asyncio
         assistant_reply = ""
         if scaffold_context and scaffold_metadata:
-            assistant_reply = build_controlled_build_response(
+            assistant_reply = build_controlled_scaffold_response(
                 scaffold_context,
                 int(scaffold_metadata["level"]),
                 request.language or "zh",

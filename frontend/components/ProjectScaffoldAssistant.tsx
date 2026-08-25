@@ -130,6 +130,8 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
   const levelLabels = stage === 'build' ? BUILD_LEVEL_LABELS : LEVEL_LABELS;
   const visibleMessages = messages.filter(message => message.contextKey === activeContextKey);
   const l3IsConfirmed = stage === 'build' && confirmedL3.has(activeContextKey);
+  const hasOpenedProject = evidence.some(item => item.type === 'opened');
+  const observationStageReady = stage === 'observe' && hasOpenedProject && observationCount >= 2;
 
   const latestEvidence = useMemo(() => {
     const meaningful = [...evidence].reverse().find(item => !['opened', 'started', 'paused'].includes(item.type));
@@ -186,6 +188,9 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
     setMessages(current => [...current, { id: `${requestId}-user`, role: 'user', text: clean, stage, contextKey: requestContextKey, level: requestedLevel }]);
     setSending(true);
     try {
+      const observationStageStatus = stage === 'observe'
+        ? `【观察阶段状态】已运行项目：${hasOpenedProject ? '是' : '否'}；观察卡：${observationCount}；完成条件：${observationStageReady ? '已满足' : '未满足'}。`
+        : '';
       const response = await sendChatMessage({
         userId: userId || 'guest',
         message: clean,
@@ -201,7 +206,7 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
           level: requestedLevel as 0 | 1 | 2 | 3,
           trigger,
           l3Confirmed: l3ConfirmedForRequest,
-          artifactSummary: artifactContext.summary.slice(0, 6000),
+          artifactSummary: [observationStageStatus, artifactContext.summary].filter(Boolean).join('\n').slice(0, 6000),
           currentModule: artifactContext.currentModule,
           testFeedback: artifactContext.testFeedback,
         },
@@ -225,10 +230,12 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
     } finally {
       setSending(false);
     }
-  }, [activeContextKey, getArtifactContext, isZh, l3IsConfirmed, language, level, onProfileUpdate, sending, stage, taskId, taskPrompt, taskTitle, userId]);
+  }, [activeContextKey, getArtifactContext, hasOpenedProject, isZh, l3IsConfirmed, language, level, observationCount, observationStageReady, onProfileUpdate, sending, stage, taskId, taskPrompt, taskTitle, userId]);
 
   const requestHint = () => void submit(
-    isZh ? '请结合我当前的阶段产物，只提示我接下来最小的一步。' : 'Use my current work and give me only the smallest next step.',
+    observationStageReady
+      ? (isZh ? '请先核对我已有的观察卡和阶段完成条件，再告诉我下一步，不要重复要求已完成的观察。' : 'Check my saved observations and stage completion first, then tell me the next step without repeating completed observation work.')
+      : (isZh ? '请结合我当前的阶段产物，只提示我接下来最小的一步。' : 'Use my current work and give me only the smallest next step.'),
     'hint_button',
     level,
   );
@@ -269,7 +276,7 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
   };
 
   const applyMinimumCompletion = () => {
-    if (stage !== 'observe' || !latestEvidence) return;
+    if (stage !== 'observe' || observationStageReady || !latestEvidence) return;
     const evidenceText = formatSnakeEvidence(latestEvidence, language);
     onApplyCompletion({
       requestId: createRequestId(),
@@ -316,11 +323,19 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
           {visibleMessages.length === 0 ? (
             <div className="project-scaffold-empty">
               <MessageCircleMore size={34} />
-              <h4>{isZh ? '我知道你现在正在做什么' : 'I know what you are working on'}</h4>
-              <p>{isZh
-                ? `当前处于“${stageLabel.zh}”。我会参考本任务已保存的观察卡、功能卡和函数进度；建构阶段还会读取当前代码与测试反馈。`
-                : `You are at “${stageLabel.en}”. I can use this task's observations, function cards and function progress, plus current code and tests during build.`}</p>
-              <small>{isZh ? `当前证据：${observationCount} 张观察卡` : `${observationCount} observation cards`}</small>
+              <h4>{observationStageReady
+                ? (isZh ? '这个观察环节已经完成' : 'This observation stage is complete')
+                : (isZh ? '我知道你现在正在做什么' : 'I know what you are working on')}</h4>
+              <p>{observationStageReady
+                ? (isZh
+                    ? `我已读到你保存的 ${observationCount} 张观察卡，也确认你运行过完整项目；不会再重复要求你观察。`
+                    : `I read your ${observationCount} saved observation cards and confirmed that you ran the complete project. I will not ask you to repeat observations.`)
+                : (isZh
+                    ? `当前处于“${stageLabel.zh}”。我会参考本任务已保存的观察卡、功能卡和函数进度；建构阶段还会读取当前代码与测试反馈。`
+                    : `You are at “${stageLabel.en}”. I can use this task's observations, function cards and function progress, plus current code and tests during build.`)}</p>
+              <small>{observationStageReady
+                ? (isZh ? '下一步：进入功能拆解' : 'Next: continue to function decomposition')
+                : (isZh ? `当前证据：${observationCount} 张观察卡` : `${observationCount} observation cards`)}</small>
             </div>
           ) : visibleMessages.map(message => (
             <article key={message.id} className={`project-scaffold-chat is-${message.role}`}>
@@ -365,13 +380,16 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
         </form>
 
         <div className="project-scaffold-actions">
-          <button type="button" className="is-primary" onClick={requestHint} disabled={sending}><Lightbulb size={16} />{isZh ? `提示一下 · L${level}` : `Hint · L${level}`}</button>
+          <button type="button" className="is-primary" onClick={requestHint} disabled={sending}><Lightbulb size={16} />{observationStageReady
+            ? (isZh ? '确认下一步' : 'Confirm next step')
+            : (isZh ? `提示一下 · L${level}` : `Hint · L${level}`)}</button>
           {visibleMessages.some(message => message.role === 'assistant')
+            && !observationStageReady
             && level < 3
             ? (
             <button type="button" onClick={requestMoreSpecific} disabled={sending}>{isZh ? '再具体一级' : 'One level more'}<ArrowRight size={16} /></button>
           ) : null}
-          {level === 3 && stage === 'observe' && latestEvidence ? (
+          {level === 3 && stage === 'observe' && !observationStageReady && latestEvidence ? (
             <button type="button" onClick={applyMinimumCompletion}><Check size={16} />{isZh ? '采用最小补全' : 'Apply minimum completion'}</button>
           ) : null}
         </div>

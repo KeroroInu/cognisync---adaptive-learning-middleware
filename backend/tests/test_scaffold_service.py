@@ -8,6 +8,7 @@ from app.services.scaffold_service import (
     SNAKE_L3_SOLUTIONS,
     build_confirmed_l3_response,
     build_controlled_build_response,
+    build_controlled_scaffold_response,
     build_profile_adaptation,
     build_scaffold_metadata,
     build_scaffold_prompt,
@@ -247,6 +248,50 @@ def test_controlled_build_response_can_identify_the_current_card():
     assert response is not None
     assert "基础函数卡「移动蛇身」" in response
     assert "不会跳到其他功能卡" in response
+
+
+def test_completed_observation_stage_advances_instead_of_repeating_questions():
+    context = scaffold_context(level=3)
+    context.stage = "observe"
+    context.currentModule = None
+    context.trigger = "level_up"
+    context.artifactSummary = (
+        "【观察阶段状态】已运行项目：是；观察卡：7；完成条件：已满足。\n"
+        "观察记录：蛇头向前移动；碰到果实后增长。"
+    )
+
+    response = build_controlled_scaffold_response(
+        context,
+        3,
+        student_message="我尝试后仍然没有推进，请再具体一级。",
+    )
+
+    assert response is not None
+    assert "读到你保存的 7 张观察卡" in response
+    assert "不需要为了获得提示再重复观察" in response
+    assert "进入「拆功能」" in response
+    assert "坐标" not in response
+
+
+def test_completed_observation_stage_still_allows_specific_student_questions():
+    context = scaffold_context(level=1)
+    context.stage = "observe"
+    context.currentModule = None
+    context.trigger = "student_message"
+    context.artifactSummary = "【观察阶段状态】已运行项目：是；观察卡：3；完成条件：已满足。"
+
+    response = build_controlled_scaffold_response(
+        context,
+        1,
+        student_message="我的第三张观察卡描述得清楚吗？",
+    )
+    prompt = build_scaffold_prompt(
+        context,
+        UserProfile(cognition=50, affect=50, behavior=50),
+    )
+
+    assert response is None
+    assert "不得再要求新增或重复观察" in prompt
 
 
 def test_learning_agent_harness_scopes_history_by_task_stage_and_function():
