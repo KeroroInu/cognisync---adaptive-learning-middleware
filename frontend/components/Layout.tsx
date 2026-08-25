@@ -105,9 +105,9 @@ export const Layout: React.FC<Props> = ({
   // 2026-08-24 裁定：知识图谱与自我校准不再作为学生端入口，相关数据迁入教师端单生详情。
   // 视图代码与后端接口保留，便于教师端承接后再决定是否清理。
   const allowedViews: Record<User['experimentGroup'], View[]> = {
-    pdt: ['dashboard', 'chat', 'research', 'evidence', 'scales'],
-    ai_pbl: ['dashboard', 'chat', 'research', 'evidence', 'scales'],
-    lecture: ['dashboard', 'research', 'evidence', 'scales'],
+    pdt: ['research', 'evidence', 'scales'],
+    ai_pbl: ['research', 'evidence', 'scales'],
+    lecture: ['research', 'evidence', 'scales'],
     unassigned: ['dashboard', 'scales'],
   };
   const navItems = allNavItems.filter(item => allowedViews[group].includes(item.id));
@@ -146,8 +146,8 @@ export const Layout: React.FC<Props> = ({
             <button
               type="button"
               className="workspace-brand"
-              onClick={() => navigate('dashboard')}
-              aria-label={language === 'zh' ? '返回学习首页' : 'Return to learning home'}
+              onClick={() => navigate(group === 'unassigned' ? 'dashboard' : 'research')}
+              aria-label={language === 'zh' ? '返回当前学习任务' : 'Return to current learning task'}
             >
               <span className="brand-mark">C</span>
               <span className="workspace-brand-copy">

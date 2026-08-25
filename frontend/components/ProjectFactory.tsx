@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ArrowLeft,
   ArrowRight,
   Blocks,
   CircleDot,
@@ -11,6 +10,7 @@ import {
   GitBranch,
   Lightbulb,
   ListChecks,
+  LogOut,
   MousePointer2,
   PencilLine,
   Play,
@@ -31,13 +31,13 @@ export type { ProjectStage } from '../data/snakeProjectBlueprint';
 
 interface FactoryHeaderProps {
   language: Language;
-  taskTitle: string;
   experimentGroup: User['experimentGroup'];
   activeStage: ProjectStage;
-  onExit: () => void;
   onStageChange: (stage: ProjectStage) => void;
   onOpenProject: () => void;
   onOpenAssistant: () => void;
+  onOpenClassTask: () => void;
+  onLogout: () => void;
   saveLabel: string;
 }
 
@@ -84,51 +84,24 @@ export interface StudentObservationCard {
   createdAt: string;
 }
 
-const GROUP_LABELS: Record<User['experimentGroup'], { zh: string; en: string }> = {
-  pdt: { zh: '项目解构工作台', en: 'Project deconstruction workspace' },
-  ai_pbl: { zh: 'AI 项目学习工作台', en: 'AI project workspace' },
-  lecture: { zh: '项目实践工作台', en: 'Project practice workspace' },
-  unassigned: { zh: '项目学习工作台', en: 'Project workspace' },
-};
-
 export const ProjectFactoryHeader: React.FC<FactoryHeaderProps> = ({
   language,
-  taskTitle,
   experimentGroup,
   activeStage,
-  onExit,
   onStageChange,
   onOpenProject,
   onOpenAssistant,
+  onOpenClassTask,
+  onLogout,
   saveLabel,
 }) => {
   const isZh = language === 'zh';
-  const groupLabel = GROUP_LABELS[experimentGroup] ?? GROUP_LABELS.unassigned;
   const visibleStages = experimentGroup === 'pdt'
     ? STAGES.filter(stage => PDT_STAGE_IDS.has(stage.id))
     : STAGES;
 
   return (
     <header className="project-factory-header">
-      <button
-        type="button"
-        className="project-factory-back"
-        onClick={onExit}
-        aria-label={isZh ? '返回学习首页' : 'Back to learning home'}
-      >
-        <ArrowLeft size={20} />
-        <span>{isZh ? '返回' : 'Back'}</span>
-      </button>
-
-      <div className="project-factory-heading">
-        <span className="project-factory-index">PROJECT_001</span>
-        <div>
-          <p>{isZh ? groupLabel.zh : groupLabel.en}</p>
-          <h2>{isZh ? '贪吃蛇项目工厂' : 'Snake project factory'}</h2>
-          <span title={taskTitle}>{taskTitle}</span>
-        </div>
-      </div>
-
       <nav
         className="project-stage-rail"
         aria-label={isZh ? '项目阶段' : 'Project stages'}
@@ -155,14 +128,36 @@ export const ProjectFactoryHeader: React.FC<FactoryHeaderProps> = ({
       </nav>
 
       <div className="project-factory-tools">
-        <span className="project-save-indicator"><Save size={13} />{saveLabel}</span>
-        <button type="button" className="project-hint-button" onClick={onOpenAssistant}>
-          <Lightbulb size={17} />
-          <span>{isZh ? '提示一下' : 'Hint'}</span>
+        <span className="project-save-indicator" title={saveLabel} aria-label={saveLabel}>
+          <Save size={16} />
+        </span>
+        <button
+          type="button"
+          className="project-class-task-button"
+          onClick={onOpenClassTask}
+          title={isZh ? '查看课堂任务' : 'View class task'}
+          aria-label={isZh ? '查看课堂任务' : 'View class task'}
+        >
+          <ClipboardList size={18} />
         </button>
+        {experimentGroup !== 'lecture' && (
+          <button type="button" className="project-hint-button" onClick={onOpenAssistant}>
+            <Lightbulb size={17} />
+            <span>{isZh ? '提示一下' : 'Hint'}</span>
+          </button>
+        )}
         <button type="button" className="project-demo-button" onClick={onOpenProject}>
           <Gamepad2 size={17} />
           <span>{isZh ? '运行完整项目' : 'Run complete project'}</span>
+        </button>
+        <button
+          type="button"
+          className="project-logout-button"
+          onClick={onLogout}
+          title={isZh ? '退出登录' : 'Sign out'}
+          aria-label={isZh ? '退出登录' : 'Sign out'}
+        >
+          <LogOut size={18} />
         </button>
       </div>
     </header>

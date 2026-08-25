@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { Send, CheckCircle, FlaskConical, Loader, Save, Play, Terminal, Trash2, X } from 'lucide-react';
+import { Send, CheckCircle, FlaskConical, Loader, LogOut, Save, Play, Terminal, Trash2, X } from 'lucide-react';
 import type { ChatMessage, Language, User, UserProfile, ResearchTask } from '../types';
 import {
   sendChatMessage,
@@ -23,6 +23,7 @@ import {
 import { ProjectFunctionStage } from '../components/ProjectFunctionStage';
 import { ProjectMechanismStage } from '../components/ProjectMechanismStage';
 import { ProjectBuildStage, type ProjectBuildAssistantContext } from '../components/ProjectBuildStage';
+import { ClassroomTaskBrief } from '../components/ClassroomTaskBrief';
 import type { SnakeRuntimeEvidence } from '../data/snakeProjectBlueprint';
 import { hasBasicFunctionFlow } from '../data/projectPath';
 import {
@@ -61,7 +62,7 @@ interface TerminalLine {
 
 interface Props {
   onUpdateProfile: (profile: UserProfile) => void;
-  onExit: () => void;
+  onLogout: () => void;
   language: Language;
   theme: 'light' | 'dark';
   userId?: string;
@@ -177,6 +178,11 @@ const WORKSPACE_RETRY_DELAY_MS = 4000;
 const PYODIDE_BASE_URL = '/pyodide/';
 
 const projectStageKey = (taskId: string) => `cognisync:project-stage:v1:${taskId}`;
+const classroomTaskSeenKey = (
+  taskId: string,
+  learnerId: string,
+  experimentGroup: User['experimentGroup'],
+) => `cognisync:classroom-task-seen:v1:${learnerId}:${taskId}:${experimentGroup}`;
 
 const restoreProjectStage = (
   taskId: string,
@@ -206,7 +212,7 @@ declare global {
 
 export const Research: React.FC<Props> = ({
   onUpdateProfile,
-  onExit,
+  onLogout,
   language,
   theme,
   userId,
@@ -222,12 +228,38 @@ export const Research: React.FC<Props> = ({
   const [factoryStage, setFactoryStage] = useState<ProjectStage>('observe');
   const [demoOpen, setDemoOpen] = useState(false);
   const [assistantOpen, setAssistantOpen] = useState(false);
+  const [classTaskOpen, setClassTaskOpen] = useState(false);
   const [runtimeEvidence, setRuntimeEvidence] = useState<SnakeRuntimeEvidence[]>([]);
   const [observationCardCount, setObservationCardCount] = useState(0);
   const [scaffoldCompletion, setScaffoldCompletion] = useState<ScaffoldCompletion | null>(null);
   const [buildAssistantContext, setBuildAssistantContext] = useState<ProjectBuildAssistantContext>({ artifactSummary: '' });
   /** 关键事件未能记录时给学生的提示。绝不静默失败。 */
   const [eventNotice, setEventNotice] = useState<string | null>(null);
+
+  const classTaskStorageKey = task
+    ? classroomTaskSeenKey(task.id, userId || studentId || 'guest', experimentGroup)
+    : null;
+
+  useEffect(() => {
+    if (!classTaskStorageKey) return;
+    try {
+      setClassTaskOpen(window.localStorage.getItem(classTaskStorageKey) !== '1');
+    } catch {
+      // 浏览器禁用本地存储时仍展示一次，学生可以正常关闭继续操作。
+      setClassTaskOpen(true);
+    }
+  }, [classTaskStorageKey]);
+
+  const closeClassTask = useCallback(() => {
+    if (classTaskStorageKey) {
+      try {
+        window.localStorage.setItem(classTaskStorageKey, '1');
+      } catch {
+        // 课堂任务弹窗属于界面偏好，写入失败不应阻塞项目学习。
+      }
+    }
+    setClassTaskOpen(false);
+  }, [classTaskStorageKey]);
 
   // Chat state
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -1083,6 +1115,10 @@ export const Research: React.FC<Props> = ({
             ? '教师发布任务后，将会在此处显示。'
             : 'Tasks will appear here once published by your instructor.'}
         </p>
+        <button type="button" className="project-empty-logout" onClick={onLogout}>
+          <LogOut size={17} />
+          {isZh ? '退出登录' : 'Sign out'}
+        </button>
       </div>
     );
   }
@@ -1093,14 +1129,21 @@ export const Research: React.FC<Props> = ({
     <div className="project-factory">
       <ProjectFactoryHeader
         language={language}
-        taskTitle={task.title}
         experimentGroup={experimentGroup}
         activeStage={factoryStage}
-        onExit={onExit}
         onStageChange={handleFactoryStageChange}
         onOpenProject={() => setDemoOpen(true)}
         onOpenAssistant={() => setAssistantOpen(true)}
+        onOpenClassTask={() => setClassTaskOpen(true)}
+        onLogout={onLogout}
         saveLabel={factorySaveLabel}
+      />
+
+      <ClassroomTaskBrief
+        open={classTaskOpen}
+        language={language}
+        experimentGroup={experimentGroup}
+        onClose={closeClassTask}
       />
 
       {/*

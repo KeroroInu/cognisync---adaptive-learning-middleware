@@ -6,7 +6,6 @@ import type { PendingScaleRegistration } from './views/Register';
 import { RegisterScale } from './views/RegisterScale';
 import { RegisterAI } from './views/RegisterAI';
 import { useAppStore } from './services/store';
-import { getActiveResearchTask } from './services/api';
 import type { User, UserProfile } from './types';
 
 const Dashboard = React.lazy(() => import('./views/Dashboard').then(module => ({ default: module.Dashboard })));
@@ -38,11 +37,13 @@ function App() {
   } = useAppStore();
 
   const [currentView, setCurrentView] = useState<View>(
-    state.user ? 'dashboard' : 'login'
+    state.user
+      ? ((state.user.experimentGroup ?? 'unassigned') === 'unassigned' ? 'dashboard' : 'research')
+      : 'login'
   );
 
-  // 入口解析状态：已登录会话在解析出当前开放任务之前不渲染学习首页，避免闪现
-  // 有持久化 token 时，必须等用户恢复和当前任务解析完成；否则首个 effect
+  // 入口解析状态：已登录会话恢复期间不渲染旧学习首页，避免闪现。
+  // 有持久化 token 时，必须等用户身份恢复并解析落地视图；否则首个 effect
   // 会把尚未恢复的 user 当成“未登录”，提前锁定到总览页。
   const [entryResolved, setEntryResolved] = useState(() => !state.token);
 
@@ -67,20 +68,20 @@ function App() {
   useEffect(() => {
     if (!state.user) return;
     const allowed: Record<User['experimentGroup'], AppView[]> = {
-      pdt: ['dashboard', 'chat', 'evidence', 'research', 'scales'],
-      ai_pbl: ['dashboard', 'chat', 'evidence', 'research', 'scales'],
-      lecture: ['dashboard', 'evidence', 'research', 'scales'],
+      pdt: ['evidence', 'research', 'scales'],
+      ai_pbl: ['evidence', 'research', 'scales'],
+      lecture: ['evidence', 'research', 'scales'],
       unassigned: ['dashboard', 'scales'],
     };
     if (requiresAuth(currentView) && !allowed[state.user.experimentGroup ?? 'unassigned'].includes(currentView as AppView)) {
-      setCurrentView('dashboard');
+      setCurrentView((state.user.experimentGroup ?? 'unassigned') === 'unassigned' ? 'dashboard' : 'research');
     }
   }, [state.user, currentView]);
 
   /**
    * 解析登录后的落地视图。
-   * 未完成 onboarding 的学生进入注册流程；已分组学生若存在教师开放的当前任务，
-   * 直接进入该任务工作区；只有在无开放任务或后端不可用时才回退到学习首页。
+   * 未完成 onboarding 的学生进入注册流程；已分组学生直接进入唯一项目工作区，
+   * 任务尚未发布或后端暂不可用时由工作区显示明确状态，不再绕回学习首页。
    */
   const resolveEntryView = useCallback(async (user: User | null): Promise<View> => {
     if (!user) return 'login';
@@ -88,16 +89,10 @@ function App() {
       return (user.onboardingMode || 'scale') === 'ai' ? 'register-ai' : 'register-scale';
     }
     if ((user.experimentGroup ?? 'unassigned') === 'unassigned') return 'dashboard';
-    try {
-      const task = await getActiveResearchTask();
-      if (task) return 'research';
-    } catch {
-      // 无法读取当前任务时不阻塞登录，回退到学习首页
-    }
-    return 'dashboard';
+    return 'research';
   }, []);
 
-  // 会话恢复（刷新、重新打开标签页）时同样直达当前开放任务
+  // 会话恢复（刷新、重新打开标签页）时同样直达唯一项目工作区
   useEffect(() => {
     if (entryResolved) return;
     if (!state.user) {
@@ -286,7 +281,7 @@ function App() {
         return (
           <Research
             onUpdateProfile={updateProfile}
-            onExit={() => setCurrentView('dashboard')}
+            onLogout={handleLogout}
             language={state.language}
             theme={theme}
             userId={state.user?.id}
@@ -324,7 +319,7 @@ function App() {
     return <>{renderAuthView()}</>;
   }
 
-  // 已登录但尚未解析当前开放任务：先不渲染学习首页，避免闪现后再跳转
+  // 已登录但尚未恢复用户入口：先不渲染旧学习首页，避免闪现后再跳转
   if (!entryResolved) {
     return <div className="view-loading" role="status">正在读取当前项目…</div>;
   }
