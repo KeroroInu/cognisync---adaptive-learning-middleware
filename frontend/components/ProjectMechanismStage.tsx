@@ -287,6 +287,9 @@ export const ProjectMechanismStage: React.FC<Props> = ({
   };
 
   const handleNodeKeyDown = (event: React.KeyboardEvent<HTMLElement>, node: StudentFlowNode) => {
+    // 选中节点后，文字输入框嵌套在节点容器内。输入框的 Backspace、Delete
+    // 和方向键会冒泡到这里；只有节点容器自身持有焦点时才执行节点快捷键。
+    if (event.target !== event.currentTarget) return;
     if (event.key === 'Delete' || event.key === 'Backspace') {
       event.preventDefault();
       removeNode(node.id);
