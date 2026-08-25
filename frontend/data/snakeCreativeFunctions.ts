@@ -43,10 +43,18 @@ export const CREATIVE_FUNCTION_NAME = 'creative_feature';
 export const MAX_CREATIVE_FUNCTIONS = 12;
 export const MAX_CREATIVE_CODE_CHARS = 12_000;
 
-export const createCreativeStarterCode = () => `def ${CREATIVE_FUNCTION_NAME}(event, state):
+const LEGACY_CREATIVE_STARTER_CODE = `def ${CREATIVE_FUNCTION_NAME}(event, state):
     # event 只包含当前钩子的公开信息
     # 可以修改并返回 state，也可以直接返回 None 保持原状态
     return state`;
+
+export const createCreativeStarterCode = () => `def ${CREATIVE_FUNCTION_NAME}(event, state):
+    pass`;
+
+/** Only replace the untouched former template; student-authored code is preserved verbatim. */
+export const upgradeCreativeStarterCode = (code: string) => (
+  code === LEGACY_CREATIVE_STARTER_CODE ? createCreativeStarterCode() : code
+);
 
 export const createStudentCreativeFunction = (
   index: number,

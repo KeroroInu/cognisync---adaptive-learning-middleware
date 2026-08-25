@@ -26,12 +26,12 @@ import type { Language } from '../types';
 import { readStoredList, readStoredObject, type StudentModuleProgress } from '../data/projectPath';
 import { SNAKE_BUILD_FUNCTIONS, type SnakeBuildFunction } from '../data/snakeBuildFunctions';
 import {
-  SNAKE_CREATIVE_HOOKS,
   MAX_CREATIVE_CODE_CHARS,
   MAX_CREATIVE_FUNCTIONS,
   createStudentCreativeFunction,
   creativeHookLabel,
   creativeUnitId,
+  upgradeCreativeStarterCode,
   type StudentCreativeFunction,
 } from '../data/snakeCreativeFunctions';
 import {
@@ -352,7 +352,12 @@ export const ProjectBuildStage: React.FC<Props> = ({
   const sidebarKey = `cognisync:project-build-sidebar:v1:${taskId}`;
   const [cards] = useState<StudentFunctionCard[]>(() => readStoredList(functionKey));
   const [progress, setProgress] = useState<Record<string, StudentModuleProgress>>(() => readStoredObject(progressKey, {}));
-  const [creativeFunctions, setCreativeFunctions] = useState<StudentCreativeFunction[]>(() => readStoredList(creativeKey));
+  const [creativeFunctions, setCreativeFunctions] = useState<StudentCreativeFunction[]>(() => (
+    readStoredList<StudentCreativeFunction>(creativeKey).map(card => ({
+      ...card,
+      code: upgradeCreativeStarterCode(card.code),
+    }))
+  ));
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     try {
       return window.localStorage.getItem(sidebarKey) !== 'expanded';
@@ -464,6 +469,7 @@ export const ProjectBuildStage: React.FC<Props> = ({
     const next = [...current, created];
     persistCreativeFunctions(next);
     setActiveCreativeId(created.id);
+    setSidebarCollapsed(false);
     setTestMessage('');
     void onReportKeyMoment?.({
       stage: 'build',
@@ -771,9 +777,9 @@ export const ProjectBuildStage: React.FC<Props> = ({
                   <nav aria-label={isZh ? '创意功能卡' : 'Creative function cards'}>
                     {creativeFunctions.map((card, index) => (
                       <button key={card.id} type="button" title={sidebarCollapsed ? card.title : undefined} aria-label={card.title} className={`${selectedCreative?.id === card.id ? 'is-active' : ''} ${card.enabled ? 'is-enabled' : ''}`} onClick={() => { setActiveCreativeId(card.id); setTestMessage(''); setContextOpen(false); }}>
-                        <Power size={13} />
-                        <p><strong>{card.title}</strong><small>{creativeHookLabel(card.hook, language)}</small></p>
-                        <span>{String(index + 1).padStart(2, '0')}</span>
+                        <span className="creative-card-index">C{index + 1}</span>
+                        <p><strong>{card.title}</strong><small>{card.enabled ? (isZh ? '运行中' : 'Enabled') : card.verified ? (isZh ? '已测试' : 'Tested') : (isZh ? '待测试' : 'To test')}</small></p>
+                        <i className="creative-card-state"><Power size={13} /></i>
                       </button>
                     ))}
                   </nav>
@@ -784,51 +790,33 @@ export const ProjectBuildStage: React.FC<Props> = ({
             <div className="build-editor-pane">
             {selectedCreative ? (
             <article className="module-editor-card creative-editor-card">
-              <header>
-                <div>
-                  <span>{isZh ? '自由创意函数' : 'CREATIVE FUNCTION'}</span>
-                  <input aria-label={isZh ? '创意功能名称' : 'Creative function name'} maxLength={60} value={selectedCreative.title} onChange={event => updateCreativeFunction(selectedCreative.id, { title: event.target.value })} />
-                  <small>{isZh ? '只会在你选择的受控游戏事件中运行' : 'Runs only on the controlled game event you choose'}</small>
+              <header className="creative-editor-header">
+                <input aria-label={isZh ? '创意功能名称' : 'Creative function name'} placeholder={isZh ? '给这个创意命名' : 'Name this idea'} maxLength={60} value={selectedCreative.title} onChange={event => updateCreativeFunction(selectedCreative.id, { title: event.target.value })} />
+                <div className="creative-editor-status">
+                  <span className={selectedCreative.enabled ? 'is-complete' : ''}>{selectedCreative.enabled ? (isZh ? '运行中' : 'ENABLED') : selectedCreative.verified ? (isZh ? '已测试' : 'TESTED') : (isZh ? '待测试' : 'TO TEST')}</span>
+                  <button type="button" onClick={() => deleteCreativeFunction(selectedCreative)} aria-label={isZh ? '删除创意卡' : 'Delete creative card'} title={isZh ? '删除创意卡' : 'Delete creative card'}><Trash2 size={16} /></button>
                 </div>
-                <span className={selectedCreative.enabled ? 'is-complete' : ''}>{selectedCreative.enabled ? (isZh ? '运行中' : 'ENABLED') : selectedCreative.verified ? (isZh ? '已验证' : 'VERIFIED') : (isZh ? '待测试' : 'TO TEST')}</span>
               </header>
-
-              <div className="creative-hook-control">
-                <label>
-                  <span>{isZh ? '触发时刻' : 'EVENT HOOK'}</span>
-                  <select value={selectedCreative.hook} onChange={event => updateCreativeFunction(selectedCreative.id, { hook: event.target.value as StudentCreativeFunction['hook'], enabled: false, verified: false })}>
-                    {SNAKE_CREATIVE_HOOKS.map(hook => <option key={hook.id} value={hook.id}>{isZh ? hook.labelZh : hook.labelEn}</option>)}
-                  </select>
-                </label>
-                <p>{isZh
-                  ? SNAKE_CREATIVE_HOOKS.find(hook => hook.id === selectedCreative.hook)?.descriptionZh
-                  : SNAKE_CREATIVE_HOOKS.find(hook => hook.id === selectedCreative.hook)?.descriptionEn}</p>
-                <div>
-                  <button type="button" className={selectedCreative.enabled ? 'is-on' : ''} onClick={() => toggleCreativeFunction(selectedCreative)} disabled={!selectedCreative.verified}><Power size={15} />{selectedCreative.enabled ? (isZh ? '停用' : 'Disable') : (isZh ? '启用' : 'Enable')}</button>
-                  <button type="button" onClick={() => deleteCreativeFunction(selectedCreative)}><Trash2 size={15} />{isZh ? '删除' : 'Delete'}</button>
-                </div>
-              </div>
-
-              <p className="creative-contract-note">{isZh
-                ? '可读取 event["type"]、event.get("input")；state 只包含 snake、direction、food、score、game_over。返回 state 应用修改，返回 None 保持原状态。'
-                : 'Read event["type"] and event.get("input"). State contains only snake, direction, food, score and game_over. Return state to apply changes, or None to keep it.'}</p>
 
               {selectedCreative.lastRuntimeError ? (
                 <div className="creative-runtime-isolated" role="alert"><CircleAlert size={15} />{isZh ? `运行异常已隔离并自动停用：${selectedCreative.lastRuntimeError}` : `Runtime error isolated; card disabled: ${selectedCreative.lastRuntimeError}`}</div>
               ) : null}
 
-              <div className="module-code-header"><div><Code2 size={15} /><span>def creative_feature(event, state):</span></div><div><span>{isZh ? '无文件 / 无网络 / 5 秒上限' : 'NO FILES / NO NETWORK / 5S LIMIT'}</span></div></div>
+              <div className="module-code-header"><div><Code2 size={15} /><span>def creative_feature(event, state):</span></div></div>
               <div className="module-code-editor">
                 <React.Suspense fallback={<div className="view-loading">{isZh ? '正在准备编辑器…' : 'Preparing editor…'}</div>}>
                   <ResearchCodeEditor value={selectedCreative.code} onChange={updateCreativeCode} language="python" theme={theme} />
                 </React.Suspense>
               </div>
-              <footer className="module-test-bar">
-                <span>{testMessage || (isZh ? '测试只检查函数能否在受控钩子中安全运行；通过后再由你决定是否启用。' : 'The test checks safe execution in the selected hook; you decide whether to enable it.')}</span>
-                <button type="button" onClick={() => void verifyCreativeFunction()} disabled={testRunning}>
-                  {testRunning ? <LoaderCircle size={15} className="is-spinning" /> : <Play size={15} />}
-                  {testRunning ? (isZh ? '正在运行' : 'Running') : (isZh ? '测试创意函数' : 'Test creative function')}
-                </button>
+              <footer className="module-test-bar creative-test-bar">
+                <span>{testMessage || (isZh ? '从空白模板开始，也可以先向 AI 描述你的创意。' : 'Start from the blank template, or describe your idea to AI first.')}</span>
+                <div className="creative-test-actions">
+                  <button type="button" className={`creative-enable-button ${selectedCreative.enabled ? 'is-on' : ''}`} onClick={() => toggleCreativeFunction(selectedCreative)} disabled={!selectedCreative.verified}><Power size={15} />{selectedCreative.enabled ? (isZh ? '停用' : 'Disable') : (isZh ? '启用' : 'Enable')}</button>
+                  <button type="button" onClick={() => void verifyCreativeFunction()} disabled={testRunning}>
+                    {testRunning ? <LoaderCircle size={15} className="is-spinning" /> : <Play size={15} />}
+                    {testRunning ? (isZh ? '正在运行' : 'Running') : (isZh ? '测试创意' : 'Test idea')}
+                  </button>
+                </div>
               </footer>
             </article>
           ) : (
