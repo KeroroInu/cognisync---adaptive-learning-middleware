@@ -11,7 +11,6 @@ import {
   CircleAlert,
   CircleDot,
   Code2,
-  Gamepad2,
   LoaderCircle,
   PanelLeftClose,
   PanelLeftOpen,
@@ -274,16 +273,6 @@ const SnakeBuildPreview: React.FC<SnakeBuildPreviewProps> = React.memo(({
 
   return (
     <section className="construction-preview">
-      <header className="construction-titlebar">
-        <div className="construction-title">
-          <span><Gamepad2 size={15} />{isZh ? '当前游戏' : 'CURRENT GAME'}</span>
-          <h3>{isZh ? '贪吃蛇 · 七函数共同运行' : 'Snake · Shared seven-function runner'}</h3>
-        </div>
-        <div className="construction-status-stack">
-          <strong>{capabilities.size}/7 {isZh ? '已接入' : 'connected'}</strong>
-          <span className={running ? 'is-running' : ''}><i />{game.game_over ? (isZh ? '已碰撞' : 'COLLISION') : running ? (isZh ? '运行中' : 'RUNNING') : (isZh ? '当前版本' : 'CURRENT')}</span>
-        </div>
-      </header>
       <div className="construction-scorebar">
         <div><small>{isZh ? '得分' : 'SCORE'}</small><strong>{String(game.score).padStart(3, '0')}</strong></div>
         <div><small>{isZh ? '间隔' : 'TICK'}</small><strong>{tickMs}<i>ms</i></strong></div>
@@ -735,11 +724,6 @@ export const ProjectBuildStage: React.FC<Props> = ({
         </div>
 
         <div className="build-editor-column">
-          <header className="build-editor-heading">
-            <h3>{isZh ? '七个基础函数' : 'Seven core functions'}</h3>
-            <strong>{completedCount}/7 <small>{isZh ? '已通过' : 'passed'}</small></strong>
-          </header>
-
           <div className={`build-editor-shell ${sidebarCollapsed ? 'is-sidebar-collapsed' : ''}`}>
             <aside className="build-function-sidebar">
               <header>

@@ -46,18 +46,9 @@
   box-shadow: 2px 3px 0 color-mix(in srgb, var(--brand-ink) 10%, transparent);
 }
 
-.construction-preview { min-height: 0; flex: 1 1 auto; display: flex; flex-direction: column; overflow: hidden; padding: 16px; }
-.construction-titlebar { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.construction-title { min-width: 0; display: grid; gap: 5px; }
-.construction-title > span { display: flex; align-items: center; gap: 7px; color: #6e8137; font-size: 13px; font-weight: 850; }
-.construction-title h3 { overflow: hidden; margin: 0; font-family: 'Songti SC', 'STSong', 'Noto Serif CJK SC', serif; font-size: clamp(1.2rem, 1.5vw, 1.5rem); line-height: 1.1; text-overflow: ellipsis; white-space: nowrap; }
-.construction-status-stack { flex: none; display: grid; justify-items: end; gap: 5px; }
-.construction-status-stack strong { color: #60752d; font-size: 13px; font-weight: 850; }
-.construction-status-stack > span { display: inline-flex; align-items: center; gap: 6px; color: var(--text-tertiary); font-size: 13px; font-weight: 750; white-space: nowrap; }
-.construction-status-stack > span i { width: 7px; height: 7px; border-radius: 50%; background: var(--text-tertiary); }
-.construction-status-stack > span.is-running i { background: var(--brand-cyan); box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-cyan) 22%, transparent); }
+.construction-preview { min-height: 0; flex: 1 1 auto; display: flex; flex-direction: column; overflow: hidden; padding: 12px; }
 
-.construction-scorebar { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; margin-top: 14px; border: 1px solid #0b0e0a; border-bottom: 0; border-radius: 8px 8px 0 0; overflow: hidden; background: #344030; }
+.construction-scorebar { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; border: 1px solid #0b0e0a; border-bottom: 0; border-radius: 8px 8px 0 0; overflow: hidden; background: #344030; }
 .construction-scorebar > div { display: grid; gap: 2px; padding: 9px 12px; background: #121812; color: #e4ecd9; }
 .construction-scorebar > div:nth-child(2) { text-align: center; }
 .construction-scorebar > div:last-child { text-align: right; }
@@ -106,11 +97,7 @@
 .integration-diagnostics li { display: flex; align-items: flex-start; gap: 6px; color: #9a4b3b; font-size: 13px; line-height: 1.45; }
 .integration-diagnostics li svg { flex: none; margin-top: 1px; }
 
-.build-editor-column { overflow: hidden; padding: 14px; }
-.build-editor-heading { min-height: 42px; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
-.build-editor-heading h3 { margin: 0; font-family: 'Songti SC', 'STSong', 'Noto Serif CJK SC', serif; font-size: clamp(1.45rem, 2vw, 2rem); line-height: 1.1; }
-.build-editor-heading > strong { display: inline-flex; align-items: baseline; gap: 6px; color: #60752d; font-family: 'Google Sans Code', ui-monospace, monospace; font-size: 1rem; }
-.build-editor-heading > strong small { color: var(--text-tertiary); font-family: inherit; font-size: 13px; }
+.build-editor-column { overflow: hidden; padding: 12px; }
 
 /* VS Code 式函数资源管理器：默认折叠，把横向卡片轨道占用的高度还给代码区。 */
 .build-editor-shell {
