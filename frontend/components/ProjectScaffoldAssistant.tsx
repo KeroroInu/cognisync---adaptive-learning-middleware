@@ -49,6 +49,8 @@ interface Props {
 }
 
 interface Position { x: number; y: number }
+interface PanelSize { width: number; height: number }
+type ResizeDirection = 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w' | 'nw';
 interface ScaffoldMessage {
   id: string;
   role: 'user' | 'assistant';
@@ -91,9 +93,17 @@ const readConfirmedL3 = (taskId: string): Set<string> => {
 };
 
 const getDefaultPosition = (): Position => {
-  if (typeof window === 'undefined') return { x: 680, y: 92 };
-  const width = Math.min(680, window.innerWidth - 24);
+  if (typeof window === 'undefined') return { x: 748, y: 92 };
+  const width = Math.min(520, window.innerWidth - 24);
   return { x: Math.max(12, window.innerWidth - width - 24), y: 92 };
+};
+
+const getDefaultSize = (): PanelSize => {
+  if (typeof window === 'undefined') return { width: 520, height: 680 };
+  return {
+    width: Math.min(520, window.innerWidth - 24),
+    height: Math.min(680, window.innerHeight - 90),
+  };
 };
 
 export const ProjectScaffoldAssistant: React.FC<Props> = ({
@@ -114,6 +124,7 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
 }) => {
   const isZh = language === 'zh';
   const [position, setPosition] = useState<Position>(getDefaultPosition);
+  const [panelSize, setPanelSize] = useState<PanelSize>(getDefaultSize);
   const [levels, setLevels] = useState<Record<string, number>>({});
   const [messages, setMessages] = useState<ScaffoldMessage[]>([]);
   const [draft, setDraft] = useState('');
@@ -124,6 +135,14 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
   const panelRef = useRef<HTMLElement>(null);
   const streamRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef({ pointerId: -1, offsetX: 0, offsetY: 0 });
+  const resizeRef = useRef({
+    pointerId: -1,
+    direction: 'se' as ResizeDirection,
+    startX: 0,
+    startY: 0,
+    position: { x: 0, y: 0 },
+    size: { width: 0, height: 0 },
+  });
   const activeContextKey = stage === 'build' ? (contextKey || 'build-unselected') : stage;
   const level = levels[activeContextKey] ?? 0;
   const stageLabel = STAGE_LABELS[stage];
@@ -139,7 +158,7 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
   }, [evidence]);
 
   const clampPosition = useCallback((x: number, y: number): Position => {
-    const width = panelRef.current?.offsetWidth ?? Math.min(680, window.innerWidth - 24);
+    const width = panelRef.current?.offsetWidth ?? Math.min(520, window.innerWidth - 24);
     const height = panelRef.current?.offsetHeight ?? Math.min(720, window.innerHeight - 100);
     return {
       x: Math.min(Math.max(12, x), Math.max(12, window.innerWidth - width - 12)),
@@ -148,14 +167,20 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
   }, []);
 
   useEffect(() => {
-    const handleResize = () => setPosition(current => clampPosition(current.x, current.y));
+    const handleResize = () => {
+      setPanelSize(current => ({
+        width: Math.min(current.width, window.innerWidth - 24),
+        height: Math.min(current.height, window.innerHeight - 90),
+      }));
+      setPosition(current => clampPosition(current.x, current.y));
+    };
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, [clampPosition]);
 
   useEffect(() => {
     if (open) setPosition(current => clampPosition(current.x, current.y));
-  }, [clampPosition, open]);
+  }, [clampPosition, open, panelSize]);
 
   useEffect(() => {
     streamRef.current?.scrollTo({ top: streamRef.current.scrollHeight, behavior: 'smooth' });
@@ -301,10 +326,105 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
     dragRef.current.pointerId = -1;
   };
 
+  const handleResizeStart = (direction: ResizeDirection) => (event: React.PointerEvent<HTMLDivElement>) => {
+    if (window.innerWidth <= 760) return;
+    event.preventDefault();
+    event.stopPropagation();
+    resizeRef.current = {
+      pointerId: event.pointerId,
+      direction,
+      startX: event.clientX,
+      startY: event.clientY,
+      position: { ...position },
+      size: { ...panelSize },
+    };
+  };
+
+  const handleResizeMove = useCallback((event: PointerEvent) => {
+    const active = resizeRef.current;
+    if (active.pointerId !== event.pointerId) return;
+    const dx = event.clientX - active.startX;
+    const dy = event.clientY - active.startY;
+    const minWidth = Math.min(400, window.innerWidth - 24);
+    const minHeight = Math.min(520, window.innerHeight - 90);
+    const maxWidth = window.innerWidth - 24;
+    const maxHeight = window.innerHeight - 90;
+    const nextPosition = { ...active.position };
+    const nextSize = { ...active.size };
+
+    if (active.direction.includes('e')) {
+      nextSize.width = Math.min(
+        Math.max(minWidth, active.size.width + dx),
+        Math.min(maxWidth, window.innerWidth - active.position.x - 12),
+      );
+    }
+    if (active.direction.includes('s')) {
+      nextSize.height = Math.min(
+        Math.max(minHeight, active.size.height + dy),
+        Math.min(maxHeight, window.innerHeight - active.position.y - 12),
+      );
+    }
+    if (active.direction.includes('w')) {
+      const right = active.position.x + active.size.width;
+      nextPosition.x = Math.min(
+        Math.max(12, active.position.x + dx, right - maxWidth),
+        right - minWidth,
+      );
+      nextSize.width = right - nextPosition.x;
+    }
+    if (active.direction.includes('n')) {
+      const bottom = active.position.y + active.size.height;
+      nextPosition.y = Math.min(
+        Math.max(76, active.position.y + dy, bottom - maxHeight),
+        bottom - minHeight,
+      );
+      nextSize.height = bottom - nextPosition.y;
+    }
+
+    setPosition(nextPosition);
+    setPanelSize(nextSize);
+  }, []);
+
+  const handleResizeEnd = useCallback((event: PointerEvent) => {
+    if (resizeRef.current.pointerId !== event.pointerId) return;
+    resizeRef.current.pointerId = -1;
+  }, []);
+
+  useEffect(() => {
+    window.addEventListener('pointermove', handleResizeMove);
+    window.addEventListener('pointerup', handleResizeEnd);
+    window.addEventListener('pointercancel', handleResizeEnd);
+    return () => {
+      window.removeEventListener('pointermove', handleResizeMove);
+      window.removeEventListener('pointerup', handleResizeEnd);
+      window.removeEventListener('pointercancel', handleResizeEnd);
+    };
+  }, [handleResizeEnd, handleResizeMove]);
+
+  const handleComposerKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return;
+    event.preventDefault();
+    if (!draft.trim() || sending) return;
+    void submit(draft, 'student_message');
+  };
+
   if (!open) return null;
 
   return (
-    <aside ref={panelRef} className="project-scaffold-panel" style={{ left: position.x, top: position.y }} aria-label={isZh ? '项目学习提示助手' : 'Project scaffold assistant'}>
+    <aside
+      ref={panelRef}
+      className="project-scaffold-panel"
+      style={{ left: position.x, top: position.y, width: panelSize.width, height: panelSize.height }}
+      aria-label={isZh ? '项目学习提示助手' : 'Project scaffold assistant'}
+    >
+      {(['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw'] as ResizeDirection[]).map(direction => (
+        <div
+          key={direction}
+          className={`project-scaffold-resize project-scaffold-resize--${direction}`}
+          onPointerDown={handleResizeStart(direction)}
+          aria-hidden="true"
+        />
+      ))}
       <div className="project-scaffold-titlebar" onPointerDown={handleDragStart} onPointerMove={handleDragMove} onPointerUp={handleDragEnd} onPointerCancel={handleDragEnd}>
         <div>
           <GripHorizontal size={17} />
@@ -375,7 +495,16 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
         ) : null}
 
         <form className="project-scaffold-composer" onSubmit={event => { event.preventDefault(); void submit(draft, 'student_message'); }}>
-          <textarea value={draft} onChange={event => setDraft(event.target.value)} placeholder={isZh ? '说说你正在想什么，或哪里没有按预期运行…' : 'Describe what you are thinking or what did not work…'} maxLength={800} rows={2} />
+          <textarea
+            value={draft}
+            onChange={event => setDraft(event.target.value)}
+            onKeyDown={handleComposerKeyDown}
+            placeholder={isZh ? '说说你正在想什么…（Enter 发送）' : 'Describe what you are thinking… (Enter to send)'}
+            aria-label={isZh ? '向项目学习助手提问；Enter 发送，Shift+Enter 换行' : 'Ask the project assistant; Enter sends, Shift+Enter starts a new line'}
+            title={isZh ? 'Enter 发送，Shift+Enter 换行' : 'Enter to send, Shift+Enter for a new line'}
+            maxLength={800}
+            rows={2}
+          />
           <button type="submit" disabled={!draft.trim() || sending} aria-label={isZh ? '发送问题' : 'Send question'}><Send size={18} /></button>
         </form>
 

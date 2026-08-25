@@ -1,14 +1,55 @@
 .project-scaffold-panel {
   position: fixed;
   z-index: 140;
-  width: min(680px, calc(100vw - 24px));
-  max-height: min(800px, calc(100vh - 90px));
+  width: min(520px, calc(100vw - 24px));
+  height: min(680px, calc(100vh - 90px));
+  min-width: min(400px, calc(100vw - 24px));
+  min-height: min(520px, calc(100vh - 90px));
+  max-width: calc(100vw - 24px);
+  max-height: calc(100vh - 90px);
+  box-sizing: border-box;
   overflow: hidden;
   border: 2px solid #161713;
   border-radius: 14px;
   background: var(--surface-strong);
   color: var(--text-primary);
   box-shadow: 10px 11px 0 rgba(22, 23, 19, .24);
+}
+
+.project-scaffold-resize {
+  position: absolute;
+  z-index: 4;
+  touch-action: none;
+}
+
+.project-scaffold-resize--n,
+.project-scaffold-resize--s { left: 12px; right: 12px; height: 8px; cursor: ns-resize; }
+.project-scaffold-resize--n { top: 0; }
+.project-scaffold-resize--s { bottom: 0; }
+.project-scaffold-resize--e,
+.project-scaffold-resize--w { top: 12px; bottom: 12px; width: 8px; cursor: ew-resize; }
+.project-scaffold-resize--e { right: 0; }
+.project-scaffold-resize--w { left: 0; }
+.project-scaffold-resize--ne,
+.project-scaffold-resize--se,
+.project-scaffold-resize--sw,
+.project-scaffold-resize--nw { width: 16px; height: 16px; }
+.project-scaffold-resize--ne { top: 0; right: 0; cursor: nesw-resize; }
+.project-scaffold-resize--se { right: 0; bottom: 0; cursor: nwse-resize; }
+.project-scaffold-resize--sw { bottom: 0; left: 0; cursor: nesw-resize; }
+.project-scaffold-resize--nw { top: 0; left: 0; cursor: nwse-resize; }
+
+.project-scaffold-resize--se::after {
+  content: '';
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 13px;
+  height: 13px;
+  background:
+    linear-gradient(135deg, transparent 0 47%, #68744a 48% 56%, transparent 57%),
+    linear-gradient(135deg, transparent 0 68%, #68744a 69% 77%, transparent 78%);
+  opacity: .8;
 }
 
 .project-scaffold-titlebar {
@@ -33,7 +74,7 @@
 .project-scaffold-titlebar strong { overflow: hidden; font-size: 1.14rem; text-overflow: ellipsis; white-space: nowrap; }
 .project-scaffold-titlebar button { width: 48px; height: 48px; display: grid; place-items: center; border: 1px solid #55594d; border-radius: 9px; background: #242620; color: #f7f4ea; cursor: pointer; }
 
-.project-scaffold-body { display: grid; grid-template-rows: auto minmax(240px, 1fr) auto auto auto; gap: 12px; max-height: calc(min(800px, 100vh - 90px) - 78px); padding: 16px; }
+.project-scaffold-body { height: calc(100% - 76px); box-sizing: border-box; display: grid; grid-template-rows: auto minmax(120px, 1fr) auto auto auto; gap: 12px; overflow: hidden; padding: 16px; }
 .project-scaffold-context { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .project-scaffold-context > div { min-width: 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .project-scaffold-context span,
@@ -43,8 +84,8 @@
 .project-scaffold-context > small { display: inline-flex; align-items: center; gap: 5px; color: var(--text-tertiary); font-size: .7rem; }
 
 .project-scaffold-stream {
-  min-height: 290px;
-  max-height: 430px;
+  min-height: 0;
+  max-height: none;
   display: grid;
   align-content: start;
   gap: 11px;
@@ -99,9 +140,10 @@
 .project-scaffold-footnote { margin: 0; color: var(--text-tertiary); font-size: .64rem; line-height: 1.45; text-align: center; }
 
 @media (max-width: 760px) {
-  .project-scaffold-panel { left: 8px !important; top: 76px !important; right: 8px; bottom: 8px; width: auto; max-height: none; }
+  .project-scaffold-panel { left: 8px !important; top: 76px !important; right: 8px; bottom: 8px; width: auto !important; height: auto !important; min-width: 0; min-height: 0; max-width: none; max-height: none; }
+  .project-scaffold-resize { display: none; }
   .project-scaffold-titlebar { cursor: default; }
-  .project-scaffold-body { max-height: calc(100vh - 164px); }
+  .project-scaffold-body { height: calc(100vh - 164px); }
   .project-scaffold-stream { max-height: none; }
   .project-scaffold-context > small { display: none; }
   .project-scaffold-l3-confirm { grid-template-columns: 1fr; }
