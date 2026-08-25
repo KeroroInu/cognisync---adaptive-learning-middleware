@@ -34,6 +34,23 @@ export interface StudentFunctionMechanism {
   confirmedAt?: string;
 }
 
+/**
+ * A function flow is usable for construction once it contains a minimal
+ * directed structure. `confirmedAt` is process evidence only: older saved
+ * diagrams and interrupted evidence writes must not lock students out of the
+ * construction workspace.
+ */
+export const hasBasicFunctionFlow = (diagram: StudentFunctionMechanism | undefined) => {
+  if (!diagram || diagram.flowNodes.length < 3) return false;
+  const nodeIds = new Set(diagram.flowNodes.map(node => node.id));
+  const validEdges = diagram.diagramEdges.filter(edge => (
+    edge.sourceId !== edge.targetId
+    && nodeIds.has(edge.sourceId)
+    && nodeIds.has(edge.targetId)
+  ));
+  return validEdges.length >= 2;
+};
+
 export interface StudentPathPlan {
   orderedCardIds: string[];
   placedCardIds?: string[];

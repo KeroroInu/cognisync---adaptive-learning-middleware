@@ -24,6 +24,7 @@ import { ProjectFunctionStage } from '../components/ProjectFunctionStage';
 import { ProjectMechanismStage } from '../components/ProjectMechanismStage';
 import { ProjectBuildStage, type ProjectBuildAssistantContext } from '../components/ProjectBuildStage';
 import type { SnakeRuntimeEvidence } from '../data/snakeProjectBlueprint';
+import { hasBasicFunctionFlow } from '../data/projectPath';
 import {
   collectSnakeProjectWorkspace,
   createSnakeProjectMechanisms,
@@ -574,12 +575,12 @@ export const Research: React.FC<Props> = ({
       const workspace = collectSnakeProjectWorkspace(task.id);
       const mechanisms = workspace.path.functionMechanisms ?? {};
       const allFunctionFlowsCompleted = workspace.functions.length > 0
-        && workspace.functions.every(card => Boolean(mechanisms[card.id]?.confirmedAt));
+        && workspace.functions.every(card => hasBasicFunctionFlow(mechanisms[card.id]));
       if (!allFunctionFlowsCompleted) {
         nextStage = 'model';
         setEventNotice(isZh
-          ? '请先完成并记录每张功能卡的内部流程，再进入七函数建构。'
-          : 'Complete and record every function flow before building the seven functions.');
+          ? '请先让每张功能流程至少包含 3 个节点和 2 条连线，再进入七函数建构。'
+          : 'Give every function flow at least three nodes and two connections before building the seven functions.');
       }
     }
     setFactoryStage(nextStage);

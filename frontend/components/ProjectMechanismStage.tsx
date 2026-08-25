@@ -20,6 +20,7 @@ import {
 import type { Language } from '../types';
 import {
   createInitialPathPlan,
+  hasBasicFunctionFlow,
   readStoredList,
   readStoredObject,
   type StudentCanvasPosition,
@@ -123,10 +124,6 @@ const getHandlePosition = (
   return { left: position.x + size.width - 7, top: position.y + size.height / 2 - 7 };
 };
 
-const diagramIsReady = (diagram: StudentFunctionMechanism | undefined) => Boolean(
-  diagram?.confirmedAt && diagram.flowNodes.length >= 3 && diagram.diagramEdges.length >= 2,
-);
-
 export const ProjectMechanismStage: React.FC<Props> = ({
   language,
   taskId,
@@ -176,7 +173,7 @@ export const ProjectMechanismStage: React.FC<Props> = ({
   const selectedEdge = diagram.diagramEdges.find(edge => edge.id === selectedEdgeId);
   const selectedEdges = diagram.diagramEdges.filter(edge => edge.sourceId === selectedNodeId || edge.targetId === selectedNodeId);
   const completedCount = useMemo(
-    () => cards.reduce((count, card) => count + (diagramIsReady(plan.functionMechanisms?.[card.id]) ? 1 : 0), 0),
+    () => cards.reduce((count, card) => count + (hasBasicFunctionFlow(plan.functionMechanisms?.[card.id]) ? 1 : 0), 0),
     [cards, plan.functionMechanisms],
   );
   const allCompleted = cards.length > 0 && completedCount === cards.length;
@@ -598,7 +595,7 @@ export const ProjectMechanismStage: React.FC<Props> = ({
           <p>{isZh ? '一次只处理一张，避免把项目层关系混进函数内部。' : 'Work on one card at a time.'}</p>
           <div className="mechanism-card-list">
             {cards.map((card, index) => {
-              const completed = diagramIsReady(plan.functionMechanisms?.[card.id]);
+              const completed = hasBasicFunctionFlow(plan.functionMechanisms?.[card.id]);
               return (
                 <button
                   key={card.id}
