@@ -6,6 +6,8 @@ import {
   ArrowUp,
   Check,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   CircleAlert,
   CircleDot,
   Code2,
@@ -274,18 +276,17 @@ const SnakeBuildPreview: React.FC<SnakeBuildPreviewProps> = React.memo(({
     <section className="construction-preview">
       <header className="construction-titlebar">
         <div className="construction-title">
-          <span><Gamepad2 size={15} />SNAKE_BUILD / SHARED RUNNER</span>
+          <span><Gamepad2 size={15} />{isZh ? '当前游戏' : 'CURRENT GAME'}</span>
           <h3>{isZh ? '贪吃蛇 · 七函数共同运行' : 'Snake · Shared seven-function runner'}</h3>
         </div>
         <div className="construction-status-stack">
-          <small>{capabilities.size}/7</small>
+          <strong>{capabilities.size}/7 {isZh ? '已接入' : 'connected'}</strong>
           <span className={running ? 'is-running' : ''}><i />{game.game_over ? (isZh ? '已碰撞' : 'COLLISION') : running ? (isZh ? '运行中' : 'RUNNING') : (isZh ? '当前版本' : 'CURRENT')}</span>
         </div>
       </header>
       <div className="construction-scorebar">
         <div><small>{isZh ? '得分' : 'SCORE'}</small><strong>{String(game.score).padStart(3, '0')}</strong></div>
         <div><small>{isZh ? '间隔' : 'TICK'}</small><strong>{tickMs}<i>ms</i></strong></div>
-        <div><small>{isZh ? '已验证' : 'VERIFIED'}</small><strong>{capabilities.size}<i>/7</i></strong></div>
         <div><small>{isZh ? '方向' : 'DIRECTION'}</small><strong>{game.direction.toUpperCase()}</strong></div>
       </div>
       {demonstration && (
@@ -324,7 +325,6 @@ const SnakeBuildPreview: React.FC<SnakeBuildPreviewProps> = React.memo(({
         </button>
         <button type="button" className="construction-reset" onClick={() => void reset()} disabled={!has('initial-state')}><RotateCcw size={16} />{isZh ? '执行重置函数' : 'Run reset function'}</button>
       </div>
-      <p className="construction-keyboard-hint">{isZh ? '通过测试的函数会立即加入这里；按键与每一帧都只在浏览器内运行' : 'Passed functions join this runner immediately; keys and frames stay in your browser'}</p>
     </section>
   );
 });
@@ -370,6 +370,7 @@ export const ProjectBuildStage: React.FC<Props> = ({
   const [revisionError, setRevisionError] = useState('');
   const [diagnosticRun, setDiagnosticRun] = useState(0);
   const [diagnostics, setDiagnostics] = useState<string[]>([]);
+  const [contextOpen, setContextOpen] = useState(false);
   const [demonstration, setDemonstration] = useState<{ nodeId: string; run: number; label: string; preview?: PythonModulePreview } | null>(null);
 
   const selectedNode = SNAKE_BUILD_FUNCTIONS.find(node => node.id === selectedNodeId) ?? SNAKE_BUILD_FUNCTIONS[0];
@@ -457,7 +458,7 @@ export const ProjectBuildStage: React.FC<Props> = ({
   }, [completedCount, currentCode, currentProgress?.testAttempts, isZh, language, onAssistantContextChange, selectedCard, selectedCreative, selectedNode, testMessage]);
 
   const addCreativeFunction = () => {
-    if (completedCount < 7 || creativeFunctionsRef.current.length >= MAX_CREATIVE_FUNCTIONS) return;
+    if (creativeFunctionsRef.current.length >= MAX_CREATIVE_FUNCTIONS) return;
     const current = creativeFunctionsRef.current;
     const created = createStudentCreativeFunction(current.length + 1);
     const next = [...current, created];
@@ -716,29 +717,27 @@ export const ProjectBuildStage: React.FC<Props> = ({
           />
           <section className="integration-diagnostics">
             <header>
-              <div><TestTube2 size={16} /><strong>{isZh ? '七函数组合检查' : 'SEVEN-FUNCTION CHECK'}</strong></div>
-              <button type="button" onClick={() => setDiagnosticRun(value => value + 1)}>{isZh ? '检查当前游戏' : 'Check current game'}</button>
+              <div><TestTube2 size={16} /><strong>{isZh ? '整体检查' : 'Game check'}</strong></div>
+              <button type="button" onClick={() => setDiagnosticRun(value => value + 1)}>{isZh ? '检查游戏' : 'Check game'}</button>
             </header>
-            {diagnosticRun === 0 ? (
-              <p>{isZh ? '系统只报告当前游戏中可观察的问题；不会显示教师测试数据。' : 'Only observable game problems are reported; teacher test data stays hidden.'}</p>
-            ) : diagnostics.length === 0 ? (
+            {diagnosticRun > 0 && (diagnostics.length === 0 ? (
               <p className="is-success"><CheckCircle2 size={15} />{isZh ? '七个基础函数都已通过并接入同一个运行器。' : 'All seven functions passed and share one runner.'}</p>
             ) : (
               <ul>{diagnostics.map(item => <li key={item}><CircleAlert size={14} />{item}</li>)}</ul>
-            )}
+            ))}
           </section>
         </div>
 
         <div className="build-editor-column">
           <header className="build-editor-heading">
-            <div><span>04 / BUILD & VERIFY</span><h3>{isZh ? '七个基础函数' : 'Seven core functions'}</h3></div>
-            <strong>{completedCount}<small>/7</small></strong>
+            <h3>{isZh ? '七个基础函数' : 'Seven core functions'}</h3>
+            <strong>{completedCount}/7 <small>{isZh ? '已通过' : 'passed'}</small></strong>
           </header>
 
           <div className={`build-editor-shell ${sidebarCollapsed ? 'is-sidebar-collapsed' : ''}`}>
             <aside className="build-function-sidebar">
               <header>
-                <div><span>EXPLORER</span><strong>{isZh ? '函数卡' : 'Functions'}</strong></div>
+                <div><strong>{isZh ? '函数卡' : 'Functions'}</strong></div>
                 <button
                   type="button"
                   onClick={() => setSidebarCollapsed(value => !value)}
@@ -754,7 +753,7 @@ export const ProjectBuildStage: React.FC<Props> = ({
                   const verified = Boolean(resolveProgress(progress, node.id)?.verified);
                   const title = isZh ? node.titleZh : node.titleEn;
                   return (
-                    <button key={node.id} type="button" title={sidebarCollapsed ? `${String(index + 1).padStart(2, '0')} ${title}` : undefined} aria-label={`${String(index + 1).padStart(2, '0')} ${title}`} className={`${!selectedCreative && selectedNode.id === node.id ? 'is-active' : ''} ${verified ? 'is-verified' : ''}`} onClick={() => { setActiveCreativeId(null); setSelectedNodeId(node.id); setTestMessage(''); }}>
+                    <button key={node.id} type="button" title={sidebarCollapsed ? `${String(index + 1).padStart(2, '0')} ${title}` : undefined} aria-label={`${String(index + 1).padStart(2, '0')} ${title}`} className={`${!selectedCreative && selectedNode.id === node.id ? 'is-active' : ''} ${verified ? 'is-verified' : ''}`} onClick={() => { setActiveCreativeId(null); setSelectedNodeId(node.id); setTestMessage(''); setContextOpen(false); }}>
                       <span>{String(index + 1).padStart(2, '0')}</span>
                       <p>{title}<small>{node.signature}</small></p>
                       <i>{verified ? <Check size={14} /> : <CircleDot size={14} />}</i>
@@ -765,20 +764,20 @@ export const ProjectBuildStage: React.FC<Props> = ({
 
               <section className="build-creative-sidebar">
                 <header>
-                  <div><span>CREATIVE</span><strong>{isZh ? '创意卡' : 'Creative'}</strong></div>
-                  <button type="button" onClick={addCreativeFunction} disabled={completedCount < 7 || creativeFunctions.length >= MAX_CREATIVE_FUNCTIONS} aria-label={isZh ? '添加创意卡' : 'Add creative card'} title={completedCount < 7 ? (isZh ? '七个基础函数全部通过后开放' : 'Available after all seven functions pass') : (isZh ? '添加创意卡' : 'Add creative card')}><Plus size={14} /></button>
+                  <div><strong>{isZh ? '创意卡' : 'Creative'}</strong></div>
+                  <button type="button" onClick={addCreativeFunction} disabled={creativeFunctions.length >= MAX_CREATIVE_FUNCTIONS} aria-label={isZh ? '添加创意卡' : 'Add creative card'} title={isZh ? '添加创意卡' : 'Add creative card'}><Plus size={14} /></button>
                 </header>
                 {creativeFunctions.length > 0 ? (
                   <nav aria-label={isZh ? '创意功能卡' : 'Creative function cards'}>
                     {creativeFunctions.map((card, index) => (
-                      <button key={card.id} type="button" title={sidebarCollapsed ? card.title : undefined} aria-label={card.title} className={`${selectedCreative?.id === card.id ? 'is-active' : ''} ${card.enabled ? 'is-enabled' : ''}`} onClick={() => { setActiveCreativeId(card.id); setTestMessage(''); }}>
+                      <button key={card.id} type="button" title={sidebarCollapsed ? card.title : undefined} aria-label={card.title} className={`${selectedCreative?.id === card.id ? 'is-active' : ''} ${card.enabled ? 'is-enabled' : ''}`} onClick={() => { setActiveCreativeId(card.id); setTestMessage(''); setContextOpen(false); }}>
                         <Power size={13} />
                         <p><strong>{card.title}</strong><small>{creativeHookLabel(card.hook, language)}</small></p>
                         <span>{String(index + 1).padStart(2, '0')}</span>
                       </button>
                     ))}
                   </nav>
-                ) : <p>{completedCount < 7 ? (isZh ? '完成 7/7 后开放' : 'Unlocks at 7/7') : (isZh ? '点击 + 添加' : 'Press + to add')}</p>}
+                ) : <p>{isZh ? '点击 + 添加' : 'Press + to add'}</p>}
               </section>
             </aside>
 
@@ -836,17 +835,22 @@ export const ProjectBuildStage: React.FC<Props> = ({
           <article className="module-editor-card">
             <header>
               <div>
-                <span>{isZh ? '固定基础函数' : 'CORE FUNCTION'}</span>
                 <h4>{isZh ? selectedNode.titleZh : selectedNode.titleEn}</h4>
-                <small>{selectedCard ? `${isZh ? '你的功能命名' : 'Your function name'}：${selectedCard.responsibility}` : (isZh ? '可以从任意一张函数卡开始' : 'Start with any function')}</small>
+                {selectedCard ? <small>{selectedCard.responsibility}</small> : null}
               </div>
-              <span className={currentProgress?.verified ? 'is-complete' : ''}>{currentProgress?.verified ? (isZh ? '已验证' : 'VERIFIED') : (isZh ? '待实现' : 'TO BUILD')}</span>
+              <span className={currentProgress?.verified ? 'is-complete' : ''}>{currentProgress?.verified ? (isZh ? '已接入' : 'CONNECTED') : (isZh ? '待接入' : 'TO CONNECT')}</span>
             </header>
 
-            <div className="module-contract-grid">
-              <div><small>{isZh ? '你的运行观察' : 'YOUR OBSERVATION'}</small><span>{selectedCard?.observationText || (isZh ? '回看左侧游戏，先定位这个函数对应的变化。' : 'Use the game on the left to locate this function’s change.')}</span></div>
-              <div><small>{isZh ? '你的实现描述' : 'YOUR DESCRIPTION'}</small><span>{selectedCard?.implementation || (isZh ? '功能卡没有直接对应时，也可以先编码再回去修订。' : 'You can code first and revise your function card later.')}</span></div>
-            </div>
+            <button type="button" className="module-context-toggle" aria-expanded={contextOpen} onClick={() => setContextOpen(value => !value)}>
+              <span>{contextOpen ? (isZh ? '收起功能依据' : 'Hide function context') : (isZh ? '查看功能依据' : 'View function context')}</span>
+              {contextOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            </button>
+            {contextOpen ? (
+              <div className="module-contract-grid">
+                <div><strong>{isZh ? '运行观察' : 'Observation'}</strong><span>{selectedCard?.observationText || (isZh ? '回看左侧游戏，定位这个函数对应的变化。' : 'Use the game on the left to locate this function’s change.')}</span></div>
+                <div><strong>{isZh ? '实现描述' : 'Implementation'}</strong><span>{selectedCard?.implementation || (isZh ? '可以先编码，再回去修订功能卡。' : 'You can code first and revise the function card later.')}</span></div>
+              </div>
+            ) : null}
 
             <div className="module-code-header"><div><Code2 size={15} /><span>{selectedNode.signature}</span></div><div><span>{isZh ? '浏览器本地运行' : 'LOCAL IN BROWSER'}</span></div></div>
             <div className="module-code-editor">
@@ -855,10 +859,10 @@ export const ProjectBuildStage: React.FC<Props> = ({
               </React.Suspense>
             </div>
             <footer className="module-test-bar">
-              <span>{testMessage || (isZh ? '运行后只显示通过状态或可观察的短问题，不显示测试输入与标准答案。' : 'Tests report pass status or a short observable issue, never test inputs or answer code.')}</span>
+              <span>{testMessage || (isZh ? '修改后先测试；通过的版本才会替换左侧游戏。' : 'Test after editing. Only a passing version replaces the game on the left.')}</span>
               <button type="button" onClick={() => void verifyCurrentModule()} disabled={testRunning}>
                 {testRunning ? <LoaderCircle size={15} className="is-spinning" /> : <Play size={15} />}
-                {testRunning ? (isZh ? '正在运行' : 'Running') : (isZh ? '运行函数测试' : 'Run function test')}
+                {testRunning ? (isZh ? '正在运行' : 'Running') : (isZh ? '测试并接入游戏' : 'Test and connect')}
               </button>
             </footer>
           </article>
@@ -870,7 +874,7 @@ export const ProjectBuildStage: React.FC<Props> = ({
 
       {lastFailedUnitId && (
         <div className="build-revision-prompt" role="status">
-          <span>{isZh ? '测试没通过。如果问题出在观察、功能命名或功能内部流程，可以回去修订，再回来继续。' : 'If the failed test comes from the observation, function name or internal flow, revise it and return.'}</span>
+          <strong>{isZh ? '测试未通过，要回看哪一步？' : 'Test failed. Which step do you want to revisit?'}</strong>
           {revisionError ? <p className="build-revision-error" role="alert">{revisionError}</p> : null}
           <div className="build-revision-actions">
             <button type="button" disabled={revisingStage !== null} onClick={() => void reviseEarlierStage('observe')}>{revisingStage === 'observe' ? (isZh ? '正在记录…' : 'Recording…') : (isZh ? '补充观察' : 'Revise observations')}</button>
@@ -883,11 +887,10 @@ export const ProjectBuildStage: React.FC<Props> = ({
 
       <footer className="build-workspace-footer">
         <button type="button" onClick={onBack}>{isZh ? '返回功能流程' : 'Back to function flows'}</button>
-        <span>{isZh ? '七个基础函数与已启用创意卡共用浏览器运行器；教师依赖不锁住编码顺序' : 'Core and enabled creative functions share the browser runner; teacher dependencies do not lock order.'}</span>
         <button type="button" className="build-final-submit" onClick={() => {
           if (creativeFunctions.length === 0) addCreativeFunction();
           else setActiveCreativeId(creativeFunctions[0].id);
-        }} disabled={completedCount < 7} title={completedCount < 7 ? (isZh ? '七个基础函数全部通过后再继续' : 'Pass all seven core functions first') : undefined}>
+        }}>
           {creativeFunctions.length > 0 ? (isZh ? '继续创意扩展' : 'Continue creative work') : (isZh ? '开始创意扩展' : 'Start creative work')}
         </button>
       </footer>
