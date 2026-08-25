@@ -334,6 +334,8 @@ git diff --check                            passed
 
 ## 必读文件（按顺序）
 
+后续讨论智能体架构、学校实验或论文方法部分时，先读 `docs/LEARNING_AGENT_HARNESS_ARCHITECTURE.md`；该文档区分了当前实现、论文可用表述、待验证主张和未来规划/多智能体演进。
+
 1. `AGENTS.md`（若当前环境提供）
 2. `docs/TASK1_REVIEW_HANDOFF.md`（研究证据链的三方滚动记录，改动前必读）
 3. `docs/PROJECT_WORKBENCH_V02.md`
