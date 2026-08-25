@@ -4,7 +4,7 @@ Chat Endpoint - 对话接口（完整实现）
 import logging
 from uuid import UUID
 from datetime import datetime, timedelta, timezone
-from typing import List, Dict, Optional
+from typing import Any, List, Dict, Optional
 from fastapi import APIRouter, HTTPException, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,6 +19,7 @@ from app.services.graph_service import GraphService
 from app.services.emotion_log_service import record_emotion_log
 from app.services.text_analyzer import TextAnalyzer
 from app.services.llm_config import get_chat_provider
+from app.services.learning_agent_harness import learning_agent_harness
 from app.models.sql.message import ChatMessage, MessageRole
 from app.models.sql.chat_session import ChatSession
 from app.models.sql.research import ProjectBlueprintVersion, ResearchTask, ResearchTaskSubmission
@@ -347,7 +348,7 @@ async def get_recent_messages(
     db: AsyncSession,
     user_id: UUID,
     limit: int = 5
-) -> List[Dict[str, str]]:
+) -> List[Dict[str, Any]]:
     """
     获取最近的对话历史（用于上下文）
 
@@ -373,7 +374,16 @@ async def get_recent_messages(
 
     # 反转顺序（最旧的在前）
     return [
-        {"role": msg.role.value, "text": msg.text}
+        {
+            "role": msg.role.value,
+            "text": msg.text,
+            "scaffoldContext": (
+                msg.analysis.get("scaffoldContext")
+                if isinstance(msg.analysis, dict)
+                and isinstance(msg.analysis.get("scaffoldContext"), dict)
+                else None
+            ),
+        }
         for msg in reversed(messages)
     ]
 
@@ -689,8 +699,8 @@ async def chat(
             )
             live_summary = scaffold_context.artifactSummary or ""
             combined_summary = "\n\n".join(filter(None, [
-                database_summary,
                 f"本轮浏览器实时产物：\n{live_summary}" if live_summary else "",
+                database_summary,
             ]))[:6000]
             scaffold_context = scaffold_context.model_copy(
                 update={"artifactSummary": combined_summary or None},
@@ -702,6 +712,9 @@ async def chat(
                 scaffold_policy,
                 scaffold_blueprint_version_id,
             )
+            scaffold_metadata["contextKey"] = learning_agent_harness.context_key(
+                scaffold_context
+            ).serialize()
 
         # ========== 2. 保存用户消息 ==========
         user_message = ChatMessage(
@@ -734,8 +747,27 @@ async def chat(
 
         logger.info(f"User message saved: {user_message.id}")
 
-        # 获取对话历史作为上下文（增加到 20 条以保持更长的上下文）
-        recent_messages = await get_recent_messages(db, user_id, limit=20)
+        # Harness 先从较宽的持久化窗口读取，再严格投影到同任务、同环节、
+        # 同功能卡。普通聊天保持原来的最近 20 条语义。
+        raw_recent_messages = await get_recent_messages(
+            db,
+            user_id,
+            limit=80 if scaffold_context else 20,
+        )
+        agent_turn = (
+            learning_agent_harness.prepare_turn(
+                scaffold_context,
+                raw_recent_messages,
+                request.language or "zh",
+            )
+            if scaffold_context
+            else None
+        )
+        recent_messages = (
+            agent_turn.history
+            if agent_turn
+            else learning_agent_harness.scope_history(raw_recent_messages, None, 20)
+        )
         is_student_authored = not scaffold_context or scaffold_context.trigger == "student_message"
 
         # 只有学生亲自输入的文本才参与情感/画像分析。按钮生成的固定句子只表示
@@ -847,6 +879,8 @@ async def chat(
         )
 
         if scaffold_context:
+            if agent_turn:
+                system_prompt += agent_turn.prompt_section
             system_prompt += build_scaffold_prompt(
                 scaffold_context,
                 current_profile,
@@ -855,7 +889,8 @@ async def chat(
             )
 
         # 注入跨会话上下文（让 AI 能自然引用上次讨论内容）
-        cross_session_ctx = await get_cross_session_context(db, user_id)
+        # 项目智能体使用任务作用域记忆；普通自由对话才允许引用跨会话主题。
+        cross_session_ctx = None if scaffold_context else await get_cross_session_context(db, user_id)
         if cross_session_ctx:
             system_prompt += f"\n上次对话涉及：{cross_session_ctx}，如自然可提及。"
 
@@ -898,7 +933,7 @@ async def chat(
         conversation_context = "\n".join([
             f"{'学生' if msg['role'] == 'user' else '老师'}: {msg['text']}"
             for msg in recent_messages[-12:]  # 使用最近 12 条消息
-        ])
+        ]) or "（当前学习上下文暂无前序对话）"
 
         # 检测学生是否表达了"理解/完成"
         understanding_keywords = ["理解了", "懂了", "明白了", "好的", "知道了", "完成了", "我会了",
@@ -911,7 +946,8 @@ async def chat(
         else:
             verification_hint = ""
 
-        user_prompt = f"""对话记录：
+        history_label = "同一学习上下文对话记录" if scaffold_context else "对话记录"
+        user_prompt = f"""{history_label}：
 {conversation_context}
 
 学生说：{request.message}{verification_hint}"""
@@ -925,6 +961,8 @@ async def chat(
                 scaffold_context,
                 int(scaffold_metadata["level"]),
                 request.language or "zh",
+                student_message=request.message,
+                current_code=request.currentCode,
             ) or ""
         last_llm_error: Optional[BaseException] = None
         if not assistant_reply:

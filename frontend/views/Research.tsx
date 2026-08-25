@@ -81,10 +81,15 @@ const workspaceSignature = (workspace: SnakeProjectWorkspace) => JSON.stringify(
   creativeFunctions: workspace.creativeFunctions ?? [],
 });
 
-const summarizeStudentTaskWorkspace = (workspace: SnakeProjectWorkspace) => {
+const summarizeStudentTaskWorkspace = (
+  workspace: SnakeProjectWorkspace,
+  stage: ProjectStage,
+  currentModule?: string,
+) => {
   const functionById = new Map(workspace.functions.map(card => [card.id, card.responsibility]));
   const lines = [
-    `【当前任务完整过程数据】观察卡 ${workspace.observations.length} 张；功能卡 ${workspace.functions.length} 张；模块记录 ${Object.keys(workspace.progress).length} 个。`,
+    `【当前阶段可用过程数据】观察卡 ${workspace.observations.length} 张`
+      + (stage === 'observe' ? '。' : `；功能卡 ${workspace.functions.length} 张。`),
   ];
 
   if (workspace.observations.length > 0) {
@@ -94,28 +99,21 @@ const summarizeStudentTaskWorkspace = (workspace: SnakeProjectWorkspace) => {
     });
   }
 
-  if (workspace.functions.length > 0) {
+  if (stage !== 'observe' && workspace.functions.length > 0) {
     lines.push('功能卡：');
     workspace.functions.slice(-10).forEach((item, index) => {
-      const mappedTitles = item.mappingDecision?.status === 'accepted'
-        ? item.mappingDecision.suggestions
-          .filter(suggestion => item.mappingDecision?.acceptedNodeIds.includes(suggestion.node_id))
-          .map(suggestion => suggestion.title_zh)
-          .join('、')
-        : item.mappingDecision?.status ?? '旧数据未判断';
       lines.push(
         `${index + 1}. ${item.responsibility}｜实现描述 ${item.implementation || '未填'}`
         + `｜引用观察 ${item.observationText || '未记录'}`
         // 以下为旧版字段，只在历史卡片上还有值；新流程不再采集
         + (item.input || item.output ? `｜旧IN ${item.input || '-'}｜旧OUT ${item.output || '-'}` : '')
-        + (mappedTitles ? `｜旧契约判断 ${mappedTitles}` : ''),
       );
     });
   }
 
   const mechanisms = workspace.path.functionMechanisms ?? {};
   const mechanismEntries = Object.entries(mechanisms);
-  if (mechanismEntries.length > 0) {
+  if (['model', 'plan', 'build'].includes(stage) && mechanismEntries.length > 0) {
     lines.push('功能内部流程图：');
     mechanismEntries.slice(-10).forEach(([cardId, mechanism]) => {
       const labels = mechanism.flowNodes.map(node => node.label).filter(Boolean);
@@ -126,12 +124,20 @@ const summarizeStudentTaskWorkspace = (workspace: SnakeProjectWorkspace) => {
     });
   }
 
-  const relationCount = Object.values(workspace.path.prerequisites)
-    .reduce((sum, ids) => sum + ids.length, 0);
-  const orderedNames = workspace.path.orderedCardIds.map(id => functionById.get(id) ?? id);
-  lines.push(`项目实现路径：${orderedNames.join(' → ') || '尚未排序'}；前置关系 ${relationCount} 条。`);
+  if (['plan', 'build'].includes(stage)) {
+    const relationCount = Object.values(workspace.path.prerequisites)
+      .reduce((sum, ids) => sum + ids.length, 0);
+    const orderedNames = workspace.path.orderedCardIds.map(id => functionById.get(id) ?? id);
+    lines.push(`项目实现路径：${orderedNames.join(' → ') || '尚未排序'}；前置关系 ${relationCount} 条。`);
+  }
 
-  const progressEntries = Object.entries(workspace.progress);
+  const progressEntries = stage === 'build'
+    ? Object.entries(workspace.progress).filter(([, item]) => (
+        !currentModule
+        || item.blueprintNodeId === currentModule
+        || item.cardId === currentModule
+      ))
+    : [];
   if (progressEntries.length > 0) {
     lines.push('模块建构：');
     progressEntries.slice(-10).forEach(([, item]) => {
@@ -143,7 +149,7 @@ const summarizeStudentTaskWorkspace = (workspace: SnakeProjectWorkspace) => {
     });
   }
 
-  const creativeFunctions = workspace.creativeFunctions ?? [];
+  const creativeFunctions = stage === 'build' ? workspace.creativeFunctions ?? [] : [];
   if (creativeFunctions.length > 0) {
     lines.push('创意功能：');
     creativeFunctions.slice(-12).forEach(item => {
@@ -660,43 +666,49 @@ export const Research: React.FC<Props> = ({
   const getScaffoldArtifactContext = useCallback((): ScaffoldArtifactContext => {
     if (!task) return { summary: '' };
     const workspace = collectSnakeProjectWorkspace(task.id);
-    const taskWorkspaceSummary = summarizeStudentTaskWorkspace(workspace);
+    const taskWorkspaceSummary = summarizeStudentTaskWorkspace(
+      workspace,
+      factoryStage,
+      buildAssistantContext.currentModuleId,
+    );
     if (factoryStage === 'build') return {
-      summary: [taskWorkspaceSummary, '【当前建构焦点】', buildAssistantContext.artifactSummary].filter(Boolean).join('\n'),
+      // 当前屏幕焦点必须排在完整工作区之前；长历史产物只提供背景，不能把
+      // 学生此刻选中的函数卡挤到摘要尾部甚至截断。
+      summary: ['【当前建构焦点】', buildAssistantContext.artifactSummary, taskWorkspaceSummary].filter(Boolean).join('\n'),
       currentModule: buildAssistantContext.currentModuleId,
       currentCode: buildAssistantContext.currentCode,
       testFeedback: buildAssistantContext.testFeedback,
     };
     if (factoryStage === 'observe') return {
       summary: [
-        taskWorkspaceSummary,
         '【当前观察焦点】',
         `本轮浏览器已记录运行证据 ${runtimeEvidence.length} 条。`,
+        taskWorkspaceSummary,
       ].join('\n'),
     };
     if (factoryStage === 'decompose') return {
       summary: [
-        taskWorkspaceSummary,
         '【当前功能拆解焦点】',
         `学生正在用功能名称、实现描述和观察引用整理 ${workspace.functions.length} 张功能卡。`,
+        taskWorkspaceSummary,
       ].join('\n'),
     };
     if (factoryStage === 'model') {
       const mechanisms = workspace.path.functionMechanisms ?? {};
       return {
         summary: [
-          taskWorkspaceSummary,
           '【当前功能流程焦点】',
           `正在为功能卡绘制内部实现流程；已保存 ${Object.keys(mechanisms).length} 张流程图。`,
+          taskWorkspaceSummary,
         ].join('\n'),
       };
     }
     const relationCount = workspace.path.diagramEdges?.length ?? Object.values(workspace.path.prerequisites).reduce((sum, ids) => sum + ids.length, 0);
     return {
       summary: [
-        taskWorkspaceSummary,
         '【当前实现路径焦点】',
         `已放置 ${workspace.path.placedCardIds?.length ?? 0} 张卡，建立 ${relationCount} 条有向关系。学生正在判断功能之间的数据与前置依赖。`,
+        taskWorkspaceSummary,
       ].join('\n'),
     };
   }, [buildAssistantContext, factoryStage, runtimeEvidence.length, task]);

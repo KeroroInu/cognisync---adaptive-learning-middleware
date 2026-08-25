@@ -1,6 +1,7 @@
 from app.schemas.chat import ProjectScaffoldContext
 from app.schemas.project_blueprint import BlueprintScaffoldPolicy
 from app.schemas.profile import UserProfile
+from app.services.learning_agent_harness import learning_agent_harness
 from app.services.scaffold_service import (
     BUILD_LEVEL_RULES,
     LEVEL_RULES,
@@ -213,7 +214,19 @@ def test_l3_solution_is_not_returned_without_explicit_confirmation():
 
 def test_fixed_build_levels_return_exact_scaffold_shapes():
     context = scaffold_context(level=0)
-    assert "assert after[0]" in build_controlled_build_response(context, 0)
+    context.testFeedback = "新蛇头坐标不正确"
+    current_code = "def move_snake(snake, direction):\n    return snake"
+    l0 = build_controlled_build_response(
+        context,
+        0,
+        student_message="我的代码哪里有问题",
+        current_code=current_code,
+    )
+    assert l0 is not None
+    assert "移动蛇身" in l0
+    assert "move_snake" in l0
+    assert "新蛇头坐标不正确" in l0
+    assert "assert after[0]" in l0
     assert "new_head =" in build_controlled_build_response(context, 1)
     assert "TODO" in build_controlled_build_response(context, 2)
 
@@ -221,6 +234,57 @@ def test_fixed_build_levels_return_exact_scaffold_shapes():
     context.l3Confirmed = True
     l3 = build_controlled_build_response(context, 3)
     assert l3 is not None and SNAKE_L3_SOLUTIONS["movement"] in l3
+
+
+def test_controlled_build_response_can_identify_the_current_card():
+    response = build_controlled_build_response(
+        scaffold_context(level=0),
+        0,
+        student_message="你知道我问的是哪段吗",
+        current_code="def move_snake(snake, direction):\n    return snake",
+    )
+
+    assert response is not None
+    assert "基础函数卡「移动蛇身」" in response
+    assert "不会跳到其他功能卡" in response
+
+
+def test_learning_agent_harness_scopes_history_by_task_stage_and_function():
+    messages = [
+        {
+            "role": "assistant",
+            "text": "初始化函数旧回复",
+            "scaffoldContext": {"taskId": "task-1", "stage": "build", "currentModule": "initial-state"},
+        },
+        {
+            "role": "assistant",
+            "text": "观察阶段回复",
+            "scaffoldContext": {"taskId": "task-1", "stage": "observe"},
+        },
+        {
+            "role": "user",
+            "text": "移动函数当前问题",
+            "scaffoldContext": {"taskId": "task-1", "stage": "build", "currentModule": "movement"},
+        },
+        {
+            "role": "assistant",
+            "text": "另一个任务的移动回复",
+            "scaffoldContext": {"taskId": "task-2", "stage": "build", "currentModule": "movement"},
+        },
+    ]
+
+    build_turn = learning_agent_harness.prepare_turn(scaffold_context(level=0), messages)
+    assert build_turn.key.serialize() == "task:task-1|stage:build|focus:movement"
+    assert build_turn.focus_title == "移动蛇身"
+    assert build_turn.history == [{"role": "user", "text": "移动函数当前问题"}]
+    assert "初始化函数旧回复" not in build_turn.prompt_section
+
+    observe = scaffold_context(level=0)
+    observe.stage = "observe"
+    observe.currentModule = None
+    observe_turn = learning_agent_harness.prepare_turn(observe, messages)
+    assert observe_turn.history == [{"role": "assistant", "text": "观察阶段回复"}]
+    assert "运行与观察" in observe_turn.prompt_section
 
 
 def test_all_controlled_l3_solutions_pass_the_shared_snake_contract():
