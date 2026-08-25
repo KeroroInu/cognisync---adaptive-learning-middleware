@@ -297,10 +297,9 @@
 .mechanism-selection { padding-bottom: 12px; border-bottom: 1px solid var(--line); }
 .mechanism-card-brief > span { color: #71843b; font-family: 'Google Sans Code', ui-monospace, monospace; font-size: .61rem; font-weight: 900; }
 .mechanism-card-brief h4 { margin: 6px 0 10px; font-size: 1rem; line-height: 1.3; }
-.mechanism-card-brief dl { display: grid; gap: 6px; margin: 0; }
-.mechanism-card-brief dl div { display: grid; grid-template-columns: 35px minmax(0, 1fr); gap: 5px; }
-.mechanism-card-brief dt { color: #71843b; font-family: 'Google Sans Code', ui-monospace, monospace; font-size: .62rem; font-weight: 900; }
-.mechanism-card-brief dd { margin: 0; color: var(--text-secondary); font-size: .68rem; line-height: 1.35; }
+.mechanism-card-source { display: grid; gap: 4px; margin-top: 8px; padding: 8px 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-muted); }
+.mechanism-card-source small { color: #71843b; font-family: 'Google Sans Code', ui-monospace, monospace; font-size: .58rem; font-weight: 900; letter-spacing: .04em; }
+.mechanism-card-source p { margin: 0; color: var(--text-secondary); font-size: .68rem; line-height: 1.45; overflow-wrap: anywhere; }
 .mechanism-knowledge-list { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 9px; }
 .mechanism-knowledge-list span { padding: 4px 7px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface-muted); color: var(--text-secondary); font-size: .59rem; }
 .mechanism-quick-add { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 10px; }

@@ -581,7 +581,7 @@ export const ProjectMechanismStage: React.FC<Props> = ({
         <div>
           <span>03 / FUNCTION MECHANISM</span>
           <h3>{isZh ? '选择一张功能卡，把它内部如何实现画出来' : 'Choose a function and draw how it works inside'}</h3>
-          <p>{isZh ? '这里只思考单个功能的输入、处理、判断与输出；功能卡之间的先后关系留到下一阶段。' : 'Focus on one function’s input, process, decisions and output. Connect functions in the next stage.'}</p>
+          <p>{isZh ? '一次只画一个功能内部的开始、处理、判断与结果。这里不规划功能之间的依赖或建构顺序。' : 'Draw one function’s start, process, decisions and result. Do not plan dependencies or build order here.'}</p>
         </div>
         <div className={`mechanism-progress ${allCompleted ? 'is-complete' : ''}`}>
           {allCompleted ? <Check size={18} /> : <CircleDot size={18} />}
@@ -821,14 +821,13 @@ export const ProjectMechanismStage: React.FC<Props> = ({
             <section className="mechanism-card-brief">
               <span>{isZh ? '当前功能' : 'CURRENT FUNCTION'}</span>
               <h4>{activeCard.responsibility}</h4>
-              <dl>
-                <div><dt>IN</dt><dd>{activeCard.input}</dd></div>
-                <div><dt>OUT</dt><dd>{activeCard.output}</dd></div>
-              </dl>
-              <div className="mechanism-knowledge-list">{activeCard.knowledge.map(item => <span key={item}>{item}</span>)}</div>
-              <div className="mechanism-quick-add">
-                <button type="button" onClick={() => addNode('input-output', `${isZh ? '读取' : 'Read'}：${activeCard.input}`)}>{isZh ? '放入输入' : 'Add input'}</button>
-                <button type="button" onClick={() => addNode('input-output', `${isZh ? '输出' : 'Return'}：${activeCard.output}`)}>{isZh ? '放入输出' : 'Add output'}</button>
+              <div className="mechanism-card-source">
+                <small>{isZh ? '引用观察' : 'OBSERVATION'}</small>
+                <p>{activeCard.observationText}</p>
+              </div>
+              <div className="mechanism-card-source">
+                <small>{isZh ? '我的实现描述' : 'MY DESCRIPTION'}</small>
+                <p>{activeCard.implementation || (isZh ? '这张旧卡还没有实现描述，可以返回功能卡补充。' : 'This older card has no implementation sentence yet.')}</p>
               </div>
             </section>
           ) : null}
@@ -909,7 +908,7 @@ export const ProjectMechanismStage: React.FC<Props> = ({
         <button type="button" onClick={onBack}>{isZh ? '返回功能卡' : 'Back to functions'}</button>
         <span>{isZh ? '每张功能卡的流程会作为后续编码和 AI 提示的依据' : 'Each flow guides later coding and AI scaffolding.'}</span>
         <button type="button" className="is-primary" disabled={!allCompleted} onClick={onContinue}>
-          {isZh ? '进入项目路径规划' : 'Plan the project route'}<ArrowRight size={17} />
+          {isZh ? '进入七函数建构' : 'Build the seven functions'}<ArrowRight size={17} />
         </button>
       </footer>
     </section>

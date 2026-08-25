@@ -73,7 +73,7 @@ const STAGES: Array<{
   { id: 'build', zh: '编码验证', en: 'Build & verify', shortZh: '再建构', shortEn: 'Build', icon: Code2 },
 ];
 
-const PDT_STAGE_IDS = new Set<ProjectStage>(['observe', 'decompose', 'build']);
+const PDT_STAGE_IDS = new Set<ProjectStage>(['observe', 'decompose', 'model', 'build']);
 
 export interface StudentObservationCard {
   id: string;
@@ -137,6 +137,7 @@ export const ProjectFactoryHeader: React.FC<FactoryHeaderProps> = ({
         {visibleStages.map((stage, index) => {
           const Icon = stage.icon;
           const active = stage.id === activeStage;
+          const isFunctionFlow = experimentGroup === 'pdt' && stage.id === 'model';
           return (
             <button
               key={stage.id}
@@ -147,7 +148,7 @@ export const ProjectFactoryHeader: React.FC<FactoryHeaderProps> = ({
             >
               <span className="project-stage-number">{String(index + 1).padStart(2, '0')}</span>
               <Icon size={15} />
-              <strong>{isZh ? stage.shortZh : stage.shortEn}</strong>
+              <strong>{isFunctionFlow ? (isZh ? '画流程' : 'Flow') : (isZh ? stage.shortZh : stage.shortEn)}</strong>
             </button>
           );
         })}

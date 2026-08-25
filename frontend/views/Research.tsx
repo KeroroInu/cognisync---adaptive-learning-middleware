@@ -21,6 +21,7 @@ import {
   type ProjectStage,
 } from '../components/ProjectFactory';
 import { ProjectFunctionStage } from '../components/ProjectFunctionStage';
+import { ProjectMechanismStage } from '../components/ProjectMechanismStage';
 import { ProjectBuildStage, type ProjectBuildAssistantContext } from '../components/ProjectBuildStage';
 import type { SnakeRuntimeEvidence } from '../data/snakeProjectBlueprint';
 import {
@@ -170,11 +171,16 @@ const PYODIDE_BASE_URL = '/pyodide/';
 
 const projectStageKey = (taskId: string) => `cognisync:project-stage:v1:${taskId}`;
 
-const restoreProjectStage = (taskId: string, workspace: SnakeProjectWorkspace | null): ProjectStage => {
+const restoreProjectStage = (
+  taskId: string,
+  workspace: SnakeProjectWorkspace | null,
+  experimentGroup: User['experimentGroup'],
+): ProjectStage => {
   try {
     const stored = window.localStorage.getItem(projectStageKey(taskId));
     if (stored === 'observe' || stored === 'decompose' || stored === 'build') return stored;
-    if (stored === 'model' || stored === 'plan') return 'build';
+    if (stored === 'model') return stored;
+    if (stored === 'plan') return experimentGroup === 'pdt' ? 'build' : stored;
   } catch {
     // localStorage 不可用时仍可进入默认观察阶段。
   }
@@ -489,7 +495,7 @@ export const Research: React.FC<Props> = ({
           workspaceLastSavedSignatureRef.current = workspace ? workspaceSignature(workspace) : '';
           workspacePendingRef.current = null;
           setWorkspaceSaveStatus('saved');
-          setFactoryStage(restoreProjectStage(t.id, workspace));
+          setFactoryStage(restoreProjectStage(t.id, workspace, experimentGroup));
 
           // 优先使用学生已保存的代码，否则用模板原始代码
           setCode(t.code_submitted || t.code_content);
@@ -563,7 +569,19 @@ export const Research: React.FC<Props> = ({
 
   const handleFactoryStageChange = useCallback((stage: ProjectStage) => {
     queueWorkspaceSave(0);
-    const nextStage = experimentGroup === 'pdt' && (stage === 'model' || stage === 'plan') ? 'build' : stage;
+    let nextStage = experimentGroup === 'pdt' && stage === 'plan' ? 'build' : stage;
+    if (experimentGroup === 'pdt' && nextStage === 'build' && factoryStage !== 'build' && task?.id) {
+      const workspace = collectSnakeProjectWorkspace(task.id);
+      const mechanisms = workspace.path.functionMechanisms ?? {};
+      const allFunctionFlowsCompleted = workspace.functions.length > 0
+        && workspace.functions.every(card => Boolean(mechanisms[card.id]?.confirmedAt));
+      if (!allFunctionFlowsCompleted) {
+        nextStage = 'model';
+        setEventNotice(isZh
+          ? '请先完成并记录每张功能卡的内部流程，再进入七函数建构。'
+          : 'Complete and record every function flow before building the seven functions.');
+      }
+    }
     setFactoryStage(nextStage);
     if (task?.id) {
       try {
@@ -572,7 +590,7 @@ export const Research: React.FC<Props> = ({
         // 阶段仍在内存中正常切换；只是不提供刷新恢复。
       }
     }
-  }, [experimentGroup, queueWorkspaceSave, task?.id]);
+  }, [experimentGroup, factoryStage, isZh, queueWorkspaceSave, task?.id]);
 
   // 各阶段的确认动作。刻意**不**挂在 handleFactoryStageChange 上：
   // 那个函数同时服务于「确认进入下一阶段」和「点导航条往回走」，
@@ -619,7 +637,23 @@ export const Research: React.FC<Props> = ({
       ],
     });
     if (!recorded) return;
-    handleFactoryStageChange(experimentGroup === 'pdt' ? 'build' : 'model');
+    handleFactoryStageChange('model');
+  }, [handleFactoryStageChange, reportKeyMoment, task]);
+
+  const confirmModelStage = useCallback(async () => {
+    if (!task) return;
+    const workspace = collectSnakeProjectWorkspace(task.id);
+    const mechanisms = workspace.path.functionMechanisms ?? {};
+    const recorded = await reportKeyMoment({
+      stage: 'model',
+      eventType: 'stage_confirm',
+      detail: {
+        mechanismCount: Object.keys(mechanisms).length,
+        confirmedCount: Object.values(mechanisms).filter(item => item.confirmedAt).length,
+      },
+    });
+    if (!recorded) return;
+    handleFactoryStageChange(experimentGroup === 'pdt' ? 'build' : 'plan');
   }, [experimentGroup, handleFactoryStageChange, reportKeyMoment, task]);
 
   const getScaffoldArtifactContext = useCallback((): ScaffoldArtifactContext => {
@@ -1119,13 +1153,21 @@ export const Research: React.FC<Props> = ({
         />
       )}
 
-      {factoryStage === 'model' && experimentGroup !== 'pdt' && (
-        <ProjectStagePreview
-          language={language}
-          stage="model"
-          onBack={() => handleFactoryStageChange('decompose')}
-          onContinue={() => handleFactoryStageChange('plan')}
-        />
+      {factoryStage === 'model' && (
+        experimentGroup === 'pdt'
+          ? <ProjectMechanismStage
+              language={language}
+              taskId={task.id}
+              onBack={() => handleFactoryStageChange('decompose')}
+              onContinue={() => { void confirmModelStage(); }}
+              onReportKeyMoment={reportKeyMoment}
+            />
+          : <ProjectStagePreview
+              language={language}
+              stage="model"
+              onBack={() => handleFactoryStageChange('decompose')}
+              onContinue={() => handleFactoryStageChange('plan')}
+            />
       )}
 
       {factoryStage === 'plan' && experimentGroup !== 'pdt' && (
@@ -1142,7 +1184,7 @@ export const Research: React.FC<Props> = ({
           language={language}
           theme={theme}
           taskId={task.id}
-          onBack={() => handleFactoryStageChange('decompose')}
+          onBack={() => handleFactoryStageChange('model')}
           onAssistantContextChange={setBuildAssistantContext}
           onReportKeyMoment={reportKeyMoment}
           onReviseEarlierStage={handleFactoryStageChange}
