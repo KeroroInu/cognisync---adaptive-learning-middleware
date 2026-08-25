@@ -11,6 +11,8 @@ import {
   Code2,
   Gamepad2,
   LoaderCircle,
+  PanelLeftClose,
+  PanelLeftOpen,
   Play,
   Plus,
   Power,
@@ -56,7 +58,7 @@ interface Props {
   onBack: () => void;
   onAssistantContextChange?: (context: ProjectBuildAssistantContext) => void;
   onReportKeyMoment?: ReportKeyMoment;
-  onReviseEarlierStage?: (stage: 'observe' | 'decompose') => void;
+  onReviseEarlierStage?: (stage: 'observe' | 'decompose' | 'model') => void;
   onFinalSubmit?: () => void | Promise<void>;
   completing?: boolean;
   completed?: boolean;
@@ -347,16 +349,24 @@ export const ProjectBuildStage: React.FC<Props> = ({
   const functionKey = `cognisync:project-function-cards:v1:${taskId}`;
   const progressKey = `cognisync:project-module-progress:v1:${taskId}`;
   const creativeKey = `cognisync:project-creative-functions:v1:${taskId}`;
+  const sidebarKey = `cognisync:project-build-sidebar:v1:${taskId}`;
   const [cards] = useState<StudentFunctionCard[]>(() => readStoredList(functionKey));
   const [progress, setProgress] = useState<Record<string, StudentModuleProgress>>(() => readStoredObject(progressKey, {}));
   const [creativeFunctions, setCreativeFunctions] = useState<StudentCreativeFunction[]>(() => readStoredList(creativeKey));
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try {
+      return window.localStorage.getItem(sidebarKey) !== 'expanded';
+    } catch {
+      return true;
+    }
+  });
   const creativeFunctionsRef = useRef(creativeFunctions);
   const [selectedNodeId, setSelectedNodeId] = useState(SNAKE_BUILD_FUNCTIONS[0].id);
   const [activeCreativeId, setActiveCreativeId] = useState<string | null>(null);
   const [testMessage, setTestMessage] = useState('');
   const [testRunning, setTestRunning] = useState(false);
   const [lastFailedUnitId, setLastFailedUnitId] = useState<string | null>(null);
-  const [revisingStage, setRevisingStage] = useState<'observe' | 'decompose' | null>(null);
+  const [revisingStage, setRevisingStage] = useState<'observe' | 'decompose' | 'model' | null>(null);
   const [revisionError, setRevisionError] = useState('');
   const [diagnosticRun, setDiagnosticRun] = useState(0);
   const [diagnostics, setDiagnostics] = useState<string[]>([]);
@@ -402,6 +412,14 @@ export const ProjectBuildStage: React.FC<Props> = ({
   useEffect(() => {
     window.localStorage.setItem(creativeKey, JSON.stringify(creativeFunctions));
   }, [creativeFunctions, creativeKey]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(sidebarKey, sidebarCollapsed ? 'collapsed' : 'expanded');
+    } catch {
+      // 侧栏偏好保存失败不影响编码与测试。
+    }
+  }, [sidebarCollapsed, sidebarKey]);
 
   useEffect(() => () => disposePythonModuleRunner(), []);
 
@@ -601,7 +619,7 @@ export const ProjectBuildStage: React.FC<Props> = ({
     setDemonstration(null);
   };
 
-  const reviseEarlierStage = async (stage: 'observe' | 'decompose') => {
+  const reviseEarlierStage = async (stage: 'observe' | 'decompose' | 'model') => {
     if (revisingStage) return;
     const failedUnitId = lastFailedUnitId;
     const failed = failedUnitId ? progress[failedUnitId] : undefined;
@@ -713,46 +731,59 @@ export const ProjectBuildStage: React.FC<Props> = ({
 
         <div className="build-editor-column">
           <header className="build-editor-heading">
-            <div><span>03 / BUILD & VERIFY</span><h3>{isZh ? '七个基础函数' : 'Seven core functions'}</h3></div>
+            <div><span>04 / BUILD & VERIFY</span><h3>{isZh ? '七个基础函数' : 'Seven core functions'}</h3></div>
             <strong>{completedCount}<small>/7</small></strong>
           </header>
 
-          <nav className="student-module-rail" aria-label={isZh ? '七个基础函数' : 'Seven core functions'}>
-            {SNAKE_BUILD_FUNCTIONS.map((node, index) => {
-              const verified = Boolean(resolveProgress(progress, node.id)?.verified);
-              return (
-                <button key={node.id} type="button" className={`${!selectedCreative && selectedNode.id === node.id ? 'is-active' : ''} ${verified ? 'is-verified' : ''}`} onClick={() => { setActiveCreativeId(null); setSelectedNodeId(node.id); setTestMessage(''); }}>
-                  <span>{String(index + 1).padStart(2, '0')}</span>
-                  <p title={isZh ? node.titleZh : node.titleEn}>{isZh ? node.titleZh : node.titleEn}<small>{node.signature}</small></p>
-                  <i>{verified ? <Check size={14} /> : <CircleDot size={14} />}</i>
+          <div className={`build-editor-shell ${sidebarCollapsed ? 'is-sidebar-collapsed' : ''}`}>
+            <aside className="build-function-sidebar">
+              <header>
+                <div><span>EXPLORER</span><strong>{isZh ? '函数卡' : 'Functions'}</strong></div>
+                <button
+                  type="button"
+                  onClick={() => setSidebarCollapsed(value => !value)}
+                  aria-label={sidebarCollapsed ? (isZh ? '展开函数卡侧栏' : 'Expand function sidebar') : (isZh ? '收起函数卡侧栏' : 'Collapse function sidebar')}
+                  title={sidebarCollapsed ? (isZh ? '展开函数卡' : 'Expand functions') : (isZh ? '收起函数卡' : 'Collapse functions')}
+                >
+                  {sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
                 </button>
-              );
-            })}
-          </nav>
+              </header>
 
-          <section className="creative-function-workbench">
-            <header>
-              <div><span>04 / CREATIVE HOOKS</span><h3>{isZh ? '创意功能' : 'Creative functions'}</h3></div>
-              <button type="button" onClick={addCreativeFunction} disabled={completedCount < 7 || creativeFunctions.length >= MAX_CREATIVE_FUNCTIONS} title={creativeFunctions.length >= MAX_CREATIVE_FUNCTIONS ? (isZh ? '每个项目最多 12 张创意卡' : 'Up to 12 creative cards per project') : undefined}><Plus size={15} />{isZh ? '添加创意卡' : 'Add card'}</button>
-            </header>
-            {completedCount < 7 ? (
-              <p>{isZh ? '七个基础函数全部通过后，可以自由添加创意功能。' : 'Pass all seven core functions to add creative features.'}</p>
-            ) : creativeFunctions.length === 0 ? (
-              <p>{isZh ? '基础游戏已完成。添加一张卡，选择它在游戏中的触发时刻。' : 'The core game is complete. Add a card and choose when it runs.'}</p>
-            ) : (
-              <nav aria-label={isZh ? '创意功能卡' : 'Creative function cards'}>
-                {creativeFunctions.map(card => (
-                  <button key={card.id} type="button" className={`${selectedCreative?.id === card.id ? 'is-active' : ''} ${card.enabled ? 'is-enabled' : ''}`} onClick={() => { setActiveCreativeId(card.id); setTestMessage(''); }}>
-                    <span><Power size={13} />{card.enabled ? (isZh ? '已启用' : 'ON') : card.verified ? (isZh ? '待启用' : 'READY') : (isZh ? '待测试' : 'TEST')}</span>
-                    <strong>{card.title}</strong>
-                    <small>{creativeHookLabel(card.hook, language)}</small>
-                  </button>
-                ))}
+              <nav className="student-module-sidebar" aria-label={isZh ? '七个基础函数' : 'Seven core functions'}>
+                {SNAKE_BUILD_FUNCTIONS.map((node, index) => {
+                  const verified = Boolean(resolveProgress(progress, node.id)?.verified);
+                  const title = isZh ? node.titleZh : node.titleEn;
+                  return (
+                    <button key={node.id} type="button" title={sidebarCollapsed ? `${String(index + 1).padStart(2, '0')} ${title}` : undefined} aria-label={`${String(index + 1).padStart(2, '0')} ${title}`} className={`${!selectedCreative && selectedNode.id === node.id ? 'is-active' : ''} ${verified ? 'is-verified' : ''}`} onClick={() => { setActiveCreativeId(null); setSelectedNodeId(node.id); setTestMessage(''); }}>
+                      <span>{String(index + 1).padStart(2, '0')}</span>
+                      <p>{title}<small>{node.signature}</small></p>
+                      <i>{verified ? <Check size={14} /> : <CircleDot size={14} />}</i>
+                    </button>
+                  );
+                })}
               </nav>
-            )}
-          </section>
 
-          {selectedCreative ? (
+              <section className="build-creative-sidebar">
+                <header>
+                  <div><span>CREATIVE</span><strong>{isZh ? '创意卡' : 'Creative'}</strong></div>
+                  <button type="button" onClick={addCreativeFunction} disabled={completedCount < 7 || creativeFunctions.length >= MAX_CREATIVE_FUNCTIONS} aria-label={isZh ? '添加创意卡' : 'Add creative card'} title={completedCount < 7 ? (isZh ? '七个基础函数全部通过后开放' : 'Available after all seven functions pass') : (isZh ? '添加创意卡' : 'Add creative card')}><Plus size={14} /></button>
+                </header>
+                {creativeFunctions.length > 0 ? (
+                  <nav aria-label={isZh ? '创意功能卡' : 'Creative function cards'}>
+                    {creativeFunctions.map((card, index) => (
+                      <button key={card.id} type="button" title={sidebarCollapsed ? card.title : undefined} aria-label={card.title} className={`${selectedCreative?.id === card.id ? 'is-active' : ''} ${card.enabled ? 'is-enabled' : ''}`} onClick={() => { setActiveCreativeId(card.id); setTestMessage(''); }}>
+                        <Power size={13} />
+                        <p><strong>{card.title}</strong><small>{creativeHookLabel(card.hook, language)}</small></p>
+                        <span>{String(index + 1).padStart(2, '0')}</span>
+                      </button>
+                    ))}
+                  </nav>
+                ) : <p>{completedCount < 7 ? (isZh ? '完成 7/7 后开放' : 'Unlocks at 7/7') : (isZh ? '点击 + 添加' : 'Press + to add')}</p>}
+              </section>
+            </aside>
+
+            <div className="build-editor-pane">
+            {selectedCreative ? (
             <article className="module-editor-card creative-editor-card">
               <header>
                 <div>
@@ -831,24 +862,27 @@ export const ProjectBuildStage: React.FC<Props> = ({
               </button>
             </footer>
           </article>
-          )}
+            )}
+            </div>
+          </div>
         </div>
       </div>
 
       {lastFailedUnitId && (
         <div className="build-revision-prompt" role="status">
-          <span>{isZh ? '测试没通过。如果问题出在最初的观察或功能命名，可以回去修订，再回来继续。' : 'If the failed test comes from the observation or function name, revise it and return.'}</span>
+          <span>{isZh ? '测试没通过。如果问题出在观察、功能命名或功能内部流程，可以回去修订，再回来继续。' : 'If the failed test comes from the observation, function name or internal flow, revise it and return.'}</span>
           {revisionError ? <p className="build-revision-error" role="alert">{revisionError}</p> : null}
           <div className="build-revision-actions">
             <button type="button" disabled={revisingStage !== null} onClick={() => void reviseEarlierStage('observe')}>{revisingStage === 'observe' ? (isZh ? '正在记录…' : 'Recording…') : (isZh ? '补充观察' : 'Revise observations')}</button>
             <button type="button" disabled={revisingStage !== null} onClick={() => void reviseEarlierStage('decompose')}>{revisingStage === 'decompose' ? (isZh ? '正在记录…' : 'Recording…') : (isZh ? '修订功能卡' : 'Revise function cards')}</button>
+            <button type="button" disabled={revisingStage !== null} onClick={() => void reviseEarlierStage('model')}>{revisingStage === 'model' ? (isZh ? '正在记录…' : 'Recording…') : (isZh ? '修订功能流程' : 'Revise function flow')}</button>
             <button type="button" disabled={revisingStage !== null} onClick={() => { setRevisionError(''); setLastFailedUnitId(null); }}>{isZh ? '继续在这里改' : 'Keep editing here'}</button>
           </div>
         </div>
       )}
 
       <footer className="build-workspace-footer">
-        <button type="button" onClick={onBack}>{isZh ? '返回功能卡' : 'Back to function cards'}</button>
+        <button type="button" onClick={onBack}>{isZh ? '返回功能流程' : 'Back to function flows'}</button>
         <span>{isZh ? '七个基础函数与已启用创意卡共用浏览器运行器；教师依赖不锁住编码顺序' : 'Core and enabled creative functions share the browser runner; teacher dependencies do not lock order.'}</span>
         <button type="button" className="build-final-submit" onClick={() => {
           if (creativeFunctions.length === 0) addCreativeFunction();

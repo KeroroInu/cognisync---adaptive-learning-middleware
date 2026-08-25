@@ -24,7 +24,7 @@
   min-height: 0;
   flex: 1 1 auto;
   display: grid;
-  grid-template-columns: minmax(390px, .88fr) minmax(560px, 1.12fr);
+  grid-template-columns: minmax(350px, .72fr) minmax(620px, 1.28fr);
   gap: 11px;
 }
 
@@ -108,36 +108,116 @@
 .integration-diagnostics li { display: flex; align-items: flex-start; gap: 5px; color: #9a4b3b; font-size: .58rem; line-height: 1.4; }
 .integration-diagnostics li svg { flex: none; margin-top: 1px; }
 
-.build-editor-column { overflow: hidden; padding: 12px; }
+.build-editor-column { overflow: hidden; padding: 10px; }
 .build-editor-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
 .build-editor-heading > div > span { color: #6e8137; font-family: 'Google Sans Code', ui-monospace, monospace; font-size: .58rem; font-weight: 900; }
-.build-editor-heading h3 { margin: 3px 0 0; font-family: 'Songti SC', 'STSong', 'Noto Serif CJK SC', serif; font-size: clamp(1.35rem, 2vw, 2rem); }
+.build-editor-heading h3 { margin: 3px 0 0; font-family: 'Songti SC', 'STSong', 'Noto Serif CJK SC', serif; font-size: clamp(1.35rem, 2vw, 2rem); line-height: 1.05; }
 .build-editor-heading > strong { font-family: 'Google Sans Code', ui-monospace, monospace; font-size: 1.7rem; }
 .build-editor-heading > strong small { color: var(--text-tertiary); font-size: .62rem; }
 
-.student-module-rail { display: flex; gap: 6px; overflow-x: auto; padding: 1px 1px 6px; }
-.student-module-rail button { min-width: 152px; min-height: 54px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 7px; padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface-muted); color: var(--text-primary); text-align: left; }
-.student-module-rail button.is-active { border-color: #161713; background: color-mix(in srgb, var(--brand-cyan) 28%, var(--surface-strong)); box-shadow: 2px 3px 0 #161713; }
-.student-module-rail button.is-verified i { color: var(--brand-positive); }
-.student-module-rail button > span { color: #6e8137; font-family: 'Google Sans Code', ui-monospace, monospace; font-size: .53rem; font-weight: 900; }
-.student-module-rail button p { min-width: 0; display: grid; gap: 2px; overflow: hidden; margin: 0; font-size: .7rem; font-weight: 750; text-overflow: ellipsis; white-space: nowrap; }
-.student-module-rail button p small { overflow: hidden; color: var(--text-tertiary); font-size: .52rem; font-weight: 650; text-overflow: ellipsis; }
-.student-module-rail button i { display: grid; place-items: center; font-style: normal; }
+/* VS Code 式函数资源管理器：默认折叠，把横向卡片轨道占用的高度还给代码区。 */
+.build-editor-shell {
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: 224px minmax(0, 1fr);
+  gap: 8px;
+  transition: grid-template-columns 160ms ease;
+}
 
-.creative-function-workbench { flex: 0 0 auto; display: grid; gap: 7px; padding: 9px 10px; border: 1px solid var(--line-strong); border-radius: 8px; background: color-mix(in srgb, var(--brand-cyan) 8%, var(--surface-strong)); }
-.creative-function-workbench > header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.creative-function-workbench > header span { color: #6e8137; font-family: 'Google Sans Code', ui-monospace, monospace; font-size: .58rem; font-weight: 900; }
-.creative-function-workbench > header h3 { margin: 2px 0 0; font-size: 1rem; }
-.creative-function-workbench > header button { min-height: 42px; display: inline-flex; align-items: center; gap: 6px; padding: 0 11px; border: 1.5px solid #161713; border-radius: 6px; background: var(--brand-cyan); color: #161713; font-size: .78rem; font-weight: 900; box-shadow: 2px 3px 0 #161713; }
-.creative-function-workbench > header button:disabled { background: var(--surface-muted); color: var(--text-tertiary); box-shadow: none; }
-.creative-function-workbench > p { margin: 0; color: var(--text-secondary); font-size: 1rem; line-height: 1.5; }
-.creative-function-workbench > nav { display: flex; gap: 7px; overflow-x: auto; padding: 1px 1px 4px; }
-.creative-function-workbench > nav > button { min-width: 142px; display: grid; gap: 3px; padding: 8px 9px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface-muted); color: var(--text-primary); text-align: left; }
-.creative-function-workbench > nav > button.is-active { border-color: #161713; background: color-mix(in srgb, var(--brand-cyan) 24%, var(--surface-strong)); box-shadow: 2px 3px 0 #161713; }
-.creative-function-workbench > nav > button > span { display: flex; align-items: center; gap: 4px; color: var(--text-tertiary); font-size: .65rem; font-weight: 850; }
-.creative-function-workbench > nav > button.is-enabled > span { color: var(--brand-positive); }
-.creative-function-workbench > nav strong { overflow: hidden; font-size: .8rem; text-overflow: ellipsis; white-space: nowrap; }
-.creative-function-workbench > nav small { color: var(--text-tertiary); font-size: .7rem; }
+.build-editor-shell.is-sidebar-collapsed { grid-template-columns: 54px minmax(0, 1fr); }
+
+.build-function-sidebar {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--surface-muted) 82%, var(--surface-strong));
+}
+
+.build-function-sidebar > header,
+.build-creative-sidebar > header {
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 7px;
+  padding: 6px 7px 6px 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.build-function-sidebar > header > div,
+.build-creative-sidebar > header > div { min-width: 0; display: grid; gap: 1px; }
+.build-function-sidebar > header span,
+.build-creative-sidebar > header span { color: #6e8137; font-family: 'Google Sans Code', ui-monospace, monospace; font-size: .55rem; font-weight: 900; letter-spacing: .06em; }
+.build-function-sidebar > header strong,
+.build-creative-sidebar > header strong { overflow: hidden; font-size: .72rem; text-overflow: ellipsis; white-space: nowrap; }
+.build-function-sidebar > header button,
+.build-creative-sidebar > header button { width: 28px; height: 28px; flex: none; display: grid; place-items: center; padding: 0; border: 1px solid transparent; border-radius: 4px; background: transparent; color: var(--text-secondary); cursor: pointer; }
+.build-function-sidebar > header button:hover,
+.build-creative-sidebar > header button:hover { border-color: var(--line-strong); background: var(--surface-strong); color: var(--text-primary); }
+.build-creative-sidebar > header button:disabled { cursor: not-allowed; opacity: .35; }
+
+.student-module-sidebar { min-height: 0; display: grid; gap: 3px; overflow: auto; padding: 5px; }
+.student-module-sidebar button {
+  min-width: 0;
+  min-height: 46px;
+  display: grid;
+  grid-template-columns: 25px minmax(0, 1fr) 17px;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 7px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+}
+.student-module-sidebar button:hover { background: var(--surface-strong); }
+.student-module-sidebar button.is-active { border-color: #161713; background: color-mix(in srgb, var(--brand-cyan) 30%, var(--surface-strong)); box-shadow: inset 3px 0 0 #6e8137; }
+.student-module-sidebar button.is-verified i { color: var(--brand-positive); }
+.student-module-sidebar button > span { color: #6e8137; font: 900 .58rem/1 'Google Sans Code', ui-monospace, monospace; }
+.student-module-sidebar button p { min-width: 0; display: grid; gap: 2px; overflow: hidden; margin: 0; font-size: .75rem; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+.student-module-sidebar button p small { overflow: hidden; color: var(--text-tertiary); font: 650 .58rem/1.25 'Google Sans Code', ui-monospace, monospace; text-overflow: ellipsis; }
+.student-module-sidebar button i { display: grid; place-items: center; font-style: normal; }
+
+.build-creative-sidebar { min-height: 0; margin-top: auto; border-top: 1px solid var(--line-strong); background: color-mix(in srgb, var(--brand-cyan) 8%, var(--surface-strong)); }
+.build-creative-sidebar > nav { max-height: 174px; display: grid; gap: 3px; overflow: auto; padding: 5px; }
+.build-creative-sidebar > nav > button { min-width: 0; min-height: 42px; display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; align-items: center; gap: 6px; padding: 5px 7px; border: 1px solid transparent; border-radius: 5px; background: transparent; color: var(--text-primary); text-align: left; cursor: pointer; }
+.build-creative-sidebar > nav > button:hover { background: var(--surface-strong); }
+.build-creative-sidebar > nav > button.is-active { border-color: #161713; background: color-mix(in srgb, var(--brand-cyan) 26%, var(--surface-strong)); }
+.build-creative-sidebar > nav > button.is-enabled > svg { color: var(--brand-positive); }
+.build-creative-sidebar > nav p { min-width: 0; display: grid; gap: 2px; margin: 0; }
+.build-creative-sidebar > nav strong,
+.build-creative-sidebar > nav small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.build-creative-sidebar > nav strong { font-size: .72rem; }
+.build-creative-sidebar > nav small { color: var(--text-tertiary); font-size: .58rem; }
+.build-creative-sidebar > nav > button > span { color: var(--text-tertiary); font: 800 .52rem/1 'Google Sans Code', ui-monospace, monospace; }
+.build-creative-sidebar > p { margin: 0; padding: 9px 10px; color: var(--text-tertiary); font-size: .64rem; line-height: 1.4; }
+
+.build-editor-pane { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.build-editor-pane > .module-editor-card { flex: 1 1 auto; }
+
+.build-editor-shell.is-sidebar-collapsed .build-function-sidebar > header { justify-content: center; padding: 5px; }
+.build-editor-shell.is-sidebar-collapsed .build-function-sidebar > header > div,
+.build-editor-shell.is-sidebar-collapsed .student-module-sidebar button p,
+.build-editor-shell.is-sidebar-collapsed .student-module-sidebar button i,
+.build-editor-shell.is-sidebar-collapsed .build-creative-sidebar > header > div,
+.build-editor-shell.is-sidebar-collapsed .build-creative-sidebar > nav p,
+.build-editor-shell.is-sidebar-collapsed .build-creative-sidebar > nav > button > span,
+.build-editor-shell.is-sidebar-collapsed .build-creative-sidebar > p { display: none; }
+.build-editor-shell.is-sidebar-collapsed .student-module-sidebar { padding: 5px 4px; }
+.build-editor-shell.is-sidebar-collapsed .student-module-sidebar button { min-height: 42px; grid-template-columns: 1fr; justify-items: center; padding: 4px; text-align: center; }
+.build-editor-shell.is-sidebar-collapsed .student-module-sidebar button.is-active { box-shadow: inset 3px 0 0 #6e8137; }
+.build-editor-shell.is-sidebar-collapsed .student-module-sidebar button > span { font-size: .66rem; }
+.build-editor-shell.is-sidebar-collapsed .build-creative-sidebar > header { justify-content: center; padding: 5px; }
+.build-editor-shell.is-sidebar-collapsed .build-creative-sidebar > nav { padding: 4px; }
+.build-editor-shell.is-sidebar-collapsed .build-creative-sidebar > nav > button { min-height: 38px; grid-template-columns: 1fr; justify-items: center; padding: 4px; text-align: center; }
 
 .build-unmapped-notice {
   min-height: 40px;
@@ -187,7 +267,7 @@
 .module-code-header > div:first-child span { overflow: hidden; color: var(--brand-cyan); font-family: 'Google Sans Code', ui-monospace, monospace; font-size: .66rem; text-overflow: ellipsis; white-space: nowrap; }
 .module-code-header > div:last-child { display: flex; gap: 4px; flex: none; }
 .module-code-header > div:last-child span { padding: 2px 5px; border: 1px solid #4d5b46; border-radius: 999px; color: #aebaa7; font-size: .47rem; }
-.module-code-editor { min-height: 110px; overflow: hidden; background: #0d1117; }
+.module-code-editor { min-height: 230px; overflow: hidden; background: #0d1117; }
 .module-code-editor > div,
 .module-code-editor .cm-editor { height: 100%; }
 .module-code-editor .cm-scroller { font-size: 14px; }
@@ -287,6 +367,10 @@
   .build-workspace-main { grid-template-columns: 1fr; }
   .construction-preview { min-height: 520px; }
   .build-editor-column { min-height: 650px; }
+}
+
+@media (max-width: 1320px) and (min-width: 1081px) {
+  .build-workspace-main { grid-template-columns: minmax(330px, .66fr) minmax(600px, 1.34fr); }
 }
 
 @media (max-width: 650px) {
