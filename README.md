@@ -15,7 +15,7 @@
 
 CogniSync 是一个面向**编程课堂教学研究**的项目解构学习与过程诊断平台，也是项目解构式教学（Project Deconstruction Teaching, PDT）的数字化实施载体。系统围绕以下学习主线组织学生端体验：
 
-> 完整项目 → 观察运行 → 解构功能、数据与关系 → 表达理解 → 分步建构 → 验证整合 → 反思留证
+> 完整项目运行与观察 → 命名功能并描述实现 → 单功能流程表达 → 七函数协同建构 → 完整运行与创意扩展
 
 AI 不代替学生完成解构和代码建构，而是在关键节点分析过程信息、提出追问并提供适量支架。当前系统已经提供项目任务、AI 对话、学习者画像、知识图谱、校准、量表、过程记录和研究数据导出等基础能力；专用项目解构工作台是当前迭代的核心方向。
 
@@ -147,11 +147,12 @@ AI 不代替学生完成解构和代码建构，而是在关键节点分析过�
 ## 核心功能
 
 ### 学生端
-- **AI 对话练习**：基于代码填空任务，AI 引导学生思考，不直接给答案
-- **学习画像可视化**：雷达图展示认知 / 情感 / 行为三维度，趋势图在变化点补充 AI 推测的过程情绪信号
-- **知识图谱**：D3.js 可视化个人概念掌握网络
-- **自我校准**：学生可对 AI 评估进行自我修正，系统记录分歧程度
-- **前后测量表**：课前课后填写 42 题问卷（计算思维 / 自我效能 / 学习动机 / 复杂问题解决 / 编程能力 / AI 素养）
+- **单项目直达工作区**：已分组学生登录后直接进入当前课堂项目
+- **项目观察与功能表达**：从真实运行证据创建观察卡、功能卡和单功能流程图
+- **七函数建构**：在浏览器内编写、测试并组合七个基础函数，测试通过后才接入共享游戏
+- **受控创意扩展**：通过安全事件和对象协议实现加速、障碍、炸弹、传送门等奖励或规则变化
+- **阶段感知 AI 支架**：读取当前任务、环节、功能卡、代码和测试反馈，L0—L3 受教师冻结蓝图约束
+- **前后测量表**：按教师发布的量表完成课堂测量
 
 ### 管理后台
 - **数据总览**：用户总数、消息数、活跃度趋势
@@ -575,15 +576,15 @@ C(u,t+1) = α·C(u,t) + (1-α)·f_cog(msg, history)
 #### 系统性能指标
 
 - **并发基线**：以单班 40–50 人同时使用为最低压测目标。
-- **连接控制**：PostgreSQL 连接池、LLM 并发限流、HTTP Keep-Alive 和有界重试均可配置。
-- **前端加载**：学生端与管理端按页面拆包，大型图谱、图表和编程环境按需加载。
-- **验证边界**：响应时间和可承载上限需在目标服务器上通过压测确认，不在文档中预设结论。
+- **浏览器侧运行**：七函数、创意函数和游戏循环由 Pyodide Worker 在学生设备本地执行，不把每帧计算集中到后端。
+- **连接控制**：PostgreSQL 连接池、分析/对话模型各自的并发限制、HTTP Keep-Alive、总超时和有限重试均可配置。
+- **验证边界**：已有研究事件并发测试和 50 并发画像读取冒烟测试；完整聊天链路仍必须在目标服务器与实际模型供应商上压测。
 
 #### 技术选型理由
 
-- **FastAPI**：比 Flask 快 3-4倍，原生支持异步
-- **Neo4j**：图查询性能优势，支持复杂路径推理
-- **React 19**：并发渲染，提升用户体验
+- **FastAPI**：原生异步请求处理，适合数据库和模型 API 等 I/O 密集链路
+- **Neo4j**：保存学生概念节点、掌握度与概念关系
+- **React 19**：承载学生工作台与管理端交互界面
 - **PostgreSQL 15**：成熟的事务支持，丰富的数据类型
 
 ### C. 数据库设计详解
@@ -592,156 +593,116 @@ C(u,t+1) = α·C(u,t) + (1-α)·f_cog(msg, history)
 
 ```sql
 -- 用户表
-users (id, username, email, password_hash, role, created_at)
+users (id, student_id, email, password_hash, role, experiment_group, created_at)
 
--- 学习画像表
-profiles (id, user_id, cognition, affect, behavior, is_calibrated, updated_at)
+-- 学习画像快照
+profile_snapshots (id, user_id, cognition, affect, behavior, source, created_at)
 
 -- 对话消息表
-messages (id, user_id, role, content, timestamp, session_id)
+chat_sessions (id, user_id, created_at)
+chat_messages (id, user_id, session_id, role, text, analysis, timestamp)
 
--- 情感分析结果表
-emotion_analyses (id, message_id, emotion_code, emotion_name,
-                 valence, arousal, confidence, topic, analyzed_at)
+-- 情感过程日志
+emotion_logs (id, user_id, session_id, message_id, emotion_code,
+              intensity, valence, arousal, confidence, created_at)
 
--- 研究任务表
-research_tasks (id, user_id, title, description, code, language,
-               status, created_at, submitted_at)
+-- 研究任务、工作区与冻结蓝图
+research_tasks (id, title, status, target_group, current_blueprint_version_id)
+research_task_submissions (id, task_id, user_id, workspace_data,
+                           blueprint_version_id, started_at, submitted_at)
 
--- 心理量表表
-study_scales (id, user_id, scale_type, responses, scores, completed_at)
+-- 不可覆盖的过程证据
+stage_events / stage_artifacts / artifact_versions / scaffold_events
 ```
 
 #### Neo4j 图数据模型
 
 ```cypher
 // 节点类型
-(:User {id, username})
-(:Concept {name, category, difficulty})
-(:Topic {name, description})
+(:Student {id})
+(:Concept {uid, name, category})
 
 // 关系类型
-(:User)-[:LEARNED {mastery, times, last_learned, avg_emotion}]→(:Concept)
-(:Concept)-[:PREREQUISITE_OF {strength}]→(:Concept)
-(:Concept)-[:RELATED_TO {similarity}]→(:Concept)
+(:Student)-[:INTERACTED_WITH {mastery, count, lastUpdated}]→(:Concept)
+(:Concept)-[:CO_OCCURRED_WITH {count}]→(:Concept)
+(:Concept)-[:PREREQUISITE_OF]→(:Concept)
 
 // 典型查询：获取用户知识图谱
-MATCH (u:User {id: $user_id})-[r:LEARNED]→(c:Concept)
-OPTIONAL MATCH (c)-[rel:RELATED_TO]→(c2:Concept)
-RETURN u, r, c, rel, c2 LIMIT 100
-
-// 推荐下一步学习内容
-MATCH (u:User {id: $user_id})-[r:LEARNED]→(c1:Concept)
-WHERE r.mastery > 0.7
-MATCH (c1)-[:PREREQUISITE_OF]→(c2:Concept)
-WHERE NOT (u)-[:LEARNED]→(c2)
-RETURN c2.name, c2.difficulty
-ORDER BY c2.difficulty ASC LIMIT 5
+MATCH (s:Student {id: $user_id})-[r:INTERACTED_WITH]→(c:Concept)
+RETURN c.uid, c.name, c.category, r.mastery, r.count
+ORDER BY r.lastUpdated DESC
 ```
 
-### D. 系统改进建议
+### D. 当前工程边界与下一步
 
 #### 高优先级 (P0)
 
-1. **chat.py 重构**（backend/app/api/endpoints/chat.py:45-730）
-   - 问题：单函数 685 行，违反单一职责原则
-   - 改进：拆分为独立服务函数
-   ```python
-   async def chat():
-       message = await save_user_message()
-       analysis = await analyze_message(message)
-       await update_profile(analysis)
-       await update_graph(analysis)
-       reply = await generate_reply(analysis)
-       return reply
-   ```
-
-2. **LLM 调用重试机制**（backend/app/services/llm_provider.py）
-   - 问题：无重试，网络抖动导致服务不稳定
-   - 改进：添加指数退避重试
-   ```python
-   from tenacity import retry, stop_after_attempt, wait_exponential
-
-   @retry(stop=stop_after_attempt(3),
-          wait=wait_exponential(multiplier=1, min=2, max=10))
-   async def call_llm(prompt: str):
-       ...
-   ```
-
-3. **学生端路由库缺失**（frontend/App.tsx）
-   - 问题：字符串切换视图，无 URL 同步，无浏览器历史
-   - 改进：迁移到 React Router
-   ```typescript
-   <Routes>
-     <Route path="/" element={<Dashboard />} />
-     <Route path="/chat" element={<Chat />} />
-     <Route path="/graph" element={<Graph />} />
-   </Routes>
-   ```
-
-4. **测试覆盖率极低**
-   - 学生端：0%（无测试文件）
-   - 管理端：~10%
-   - 改进：建立测试金字塔（80% 单元测试 + 15% 集成测试 + 5% E2E）
+1. **聊天链路容量与重构**（`backend/app/api/endpoints/chat.py`）
+   - 当前：该文件同时编排消息、分析、画像、图谱、支架与回复，外部模型等待前必须显式结束只读事务。
+   - 改进：先统一总超时、重试和事务边界并完成课堂压测；之后再做保持行为不变的服务拆分。
+2. **LLM 总超时与单层重试**（`backend/app/services/llm_provider.py`）
+   - 当前：Provider 已有指数退避，聊天端点又做外层重试；两层叠加会在供应商故障时放大请求。
+   - 改进：只保留 Provider 的一层有限重试；分析和回复分别设置明确的总时限。
+3. **学生端保持单项目入口**（`frontend/App.tsx`）
+   - 当前：已分组学生登录后直接进入唯一课堂项目，使用有限状态切换而不是多页面导航。
+   - 边界：除非未来重新开放多个学生页面，否则不为形式统一引入 React Router。
+4. **补完整聊天并发测试**
+   - 当前：后端已有 216 项测试、研究事件真实 PostgreSQL 并发测试和 50 并发画像读取测试；学生端主要依赖类型检查、构建和真实浏览器验收。
+   - 改进：增加 40—50 名独立学生的聊天、保存与事件混合负载；在目标服务器和真实模型供应商上记录 P50/P95、错误率与连接池等待。
 
 #### 中优先级 (P1)
 
-1. **Neo4j 连接稳定性**：添加连接池管理和心跳检测
-2. **情感分析提示词热更新**：从硬编码迁移到数据库/配置文件
-3. **前端组件拆分**：Research.tsx (704行)
-4. **API 文档完善**：补充 Postman Collection 或 API Blueprint
-5. **日志系统升级**：集成 ELK Stack 或 Loki
+1. **对话幂等**：让相同请求 ID 的网络重放复用原结果，不重复写消息、画像和模型调用。
+2. **前端协调器拆分**：逐步拆分 `Research.tsx` 与 `ProjectBuildStage.tsx`，但不与教学流程改动混在同一提交。
+3. **后端协调器拆分**：逐步拆分 `chat.py` 与 `research.py`，保留现有事务和研究证据语义。
+4. **轻量观测**：先记录请求总耗时、模型等待和连接池等待；压测证明需要后再选择监控基础设施。
 
 #### 低优先级 (P2)
 
-1. **数据库索引优化**：为高频查询字段添加索引
-2. **前端性能优化**：代码分割、React.memo、懒加载
-3. **国际化完整支持**：学生端补充 i18n
-4. **监控告警**：集成 Prometheus + Grafana
+1. **多实例部署**：迁移改为独立任务或咨询锁后，再评估多 worker / 多副本。
+2. **缓存或队列**：只有跨进程共享、限流或后台任务被压测证明为瓶颈时才引入 Redis。
 
 ---
 
 ## 附录：核心代码文件清单
 
-### 后端核心文件（15,000+ 行）
+### 后端核心文件
 
 ```
 backend/app/
 ├── api/endpoints/
-│   ├── auth.py (247行) - JWT认证
-│   ├── chat.py (730行) - 对话核心 ⚠️需重构
-│   ├── profile.py (189行) - 画像管理
-│   └── admin/ (12文件, 2000+行) - 管理接口
+│   ├── chat.py - 一轮对话与支架送达编排
+│   ├── research.py - 学生任务、工作区与蓝图接口
+│   └── admin/ - 管理、诊断与研究导出接口
 ├── services/
-│   ├── text_analyzer.py (452行) - 消息分析 ⭐核心
-│   ├── personalization_service.py (580行) - 个性化 ⭐核心
-│   ├── profile_service.py (312行) - 画像更新
-│   ├── graph_service.py (425行) - 知识图谱
-│   ├── llm_provider.py (368行) - LLM抽象
-│   └── emotion_coding.py (156行) - 情感编码
-├── models/sql/ (8文件) - SQLAlchemy模型
-├── schemas/ (10文件) - Pydantic验证
-└── core/ - 配置、数据库、安全
+│   ├── learning_agent_harness.py - 环节、功能卡与历史作用域
+│   ├── scaffold_service.py - 蓝图策略与 L0—L3 边界
+│   ├── research_event_service.py - 过程证据、幂等和版本
+│   ├── text_analyzer.py / profile_service.py - 情感分析与画像
+│   ├── graph_service.py - 知识图谱
+│   └── llm_provider.py / llm_config.py - 模型抽象和连接复用
+├── models/sql/ - SQLAlchemy 模型
+├── schemas/ - Pydantic 契约
+└── core/、db/ - 配置、安全、PostgreSQL 与 Neo4j
 ```
 
 ### 前端核心文件
 
 ```
-frontend/ (学生端, 8,500行)
-├── App.tsx (450行) - 主应用 ⚠️需添加路由
-├── services/
-│   ├── store.ts (231行) - 全局状态
-│   └── api.ts (189行) - API客户端
-└── views/
-    ├── Chat.tsx (385行)
-    ├── Research.tsx (704行) - ⚠️需拆分
-    ├── Graph.tsx (512行) - D3可视化
-    └── Dashboard.tsx (298行)
+frontend/
+├── App.tsx - 登录、分组守卫和唯一项目入口
+├── views/Research.tsx - 项目工作台总协调器
+├── components/ProjectFunctionStage.tsx - 功能卡
+├── components/ProjectMechanismStage.tsx - 单功能流程图
+├── components/ProjectBuildStage.tsx - 七函数与创意扩展
+├── components/ProjectScaffoldAssistant.tsx - 阶段感知 AI
+├── services/pythonModuleRunner.ts - 浏览器安全 Python 运行器
+└── services/stageEvents.ts - 研究过程证据上报
 
-admin-frontend/ (管理端)
-├── App.tsx (120行) - React Router
-├── features/auth/ (3文件) - 认证模块
+admin-frontend/
+├── App.tsx - React Router
+├── features/auth/ - 管理员认证
 └── lib/
-    ├── adminApi.ts (450行)
-    └── apiClient.ts (125行)
+    ├── adminApi.ts - 管理接口
+    └── projectBlueprint.ts - 教师蓝图契约
 ```

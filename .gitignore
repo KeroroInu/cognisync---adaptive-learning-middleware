@@ -98,6 +98,12 @@ edustar比赛材料重新准备/
 htmlcov/
 coverage/
 
+# 独立情感评测实验的本地运行环境与 IDE 产物。
+# 数据集和实验脚本可以保留，解释器、二进制依赖和本机令牌不得进入 Git。
+测试/myenv/
+测试/**/__pycache__/
+测试/.idea/
+
 # General temp / cache files
 .cache/
 tmp/
