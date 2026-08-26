@@ -255,13 +255,7 @@ class PersonalizationService:
         Returns:
             个性化系统提示词
         """
-        # 1. 基础角色定义
-        base_role = {
-            "zh": "你是一个专业的教育助手，帮助学习者理解和掌握知识。",
-            "en": "You are a professional educational assistant helping learners understand and master knowledge."
-        }[language]
-
-        # 2. 根据认知维度调整内容深度
+        # 1. 根据认知维度调整内容深度
         cognition_level = self.get_cognition_level(user_profile.cognition)
         cognition_instruction = {
             "zh": {

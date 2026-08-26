@@ -4,7 +4,6 @@ Graph Service - 知识图谱服务（Neo4j）
 """
 import logging
 from typing import List, Optional, Dict, Any
-from datetime import datetime
 import re
 
 from app.db.neo4j import execute_query, execute_write

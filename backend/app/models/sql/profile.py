@@ -5,11 +5,15 @@ ProfileSnapshot Model - 画像快照表
 import uuid
 import enum
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING
 from sqlalchemy import Integer, ForeignKey, Enum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID, TIMESTAMP
 
 from app.models.sql.base import Base, UUIDMixin
+
+if TYPE_CHECKING:
+    from app.models.sql.user import User
 
 
 class ProfileSource(str, enum.Enum):

@@ -2,7 +2,6 @@
 Profile Endpoint - 学习者画像接口（完整实现）
 """
 import logging
-from uuid import UUID
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 

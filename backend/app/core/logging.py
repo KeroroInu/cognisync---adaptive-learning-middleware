@@ -3,7 +3,6 @@
 """
 import logging
 import sys
-from typing import Any
 import json
 from datetime import datetime, timezone
 

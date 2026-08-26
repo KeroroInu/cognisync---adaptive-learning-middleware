@@ -2,7 +2,7 @@
 Forms API Endpoints - 量表相关接口
 """
 import uuid
-from datetime import datetime, timezone, UTC
+from datetime import datetime, timezone
 from typing import Dict, Any, Generic, TypeVar, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field

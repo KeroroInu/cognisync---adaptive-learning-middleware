@@ -5,7 +5,7 @@ Neo4j 数据库连接管理 - 用于知识图谱存储
 import logging
 from typing import Optional, Dict, Any, List
 from contextlib import asynccontextmanager
-from neo4j import AsyncGraphDatabase, AsyncDriver, AsyncSession
+from neo4j import AsyncGraphDatabase, AsyncDriver
 
 from app.core.config import settings
 

@@ -2,7 +2,7 @@
 Admin 概览 API 端点
 """
 from fastapi import APIRouter, Depends
-from sqlalchemy import text, select, func
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import verify_admin_key

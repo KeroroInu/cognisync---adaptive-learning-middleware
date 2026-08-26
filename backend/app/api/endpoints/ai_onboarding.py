@@ -5,7 +5,6 @@ import uuid
 import json
 from typing import List, Dict, Optional, Any, Generic, TypeVar
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.params import Depends as FastAPIDepends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel, Field
@@ -244,7 +243,7 @@ async def call_llm_for_next_question(session: Dict, user_answer: str) -> Dict:
         llm_response = json.loads(response_text.strip())
         return llm_response
 
-    except json.JSONDecodeError as e:
+    except json.JSONDecodeError:
         # 如果LLM返回格式错误，使用后备问题
         fallback_questions = [
             "太好了！您之前有相关的学习经验吗？",

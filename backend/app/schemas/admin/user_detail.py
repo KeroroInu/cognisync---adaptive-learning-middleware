@@ -4,7 +4,7 @@ Admin 用户详情 Schema
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 from uuid import UUID
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
 class UserDetail(BaseModel):

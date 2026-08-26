@@ -5,12 +5,15 @@ CalibrationLog Model - 校准日志表
 import uuid
 import enum
 from datetime import datetime, timezone
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 from sqlalchemy import Integer, Text, ForeignKey, Enum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID, TIMESTAMP
 
 from app.models.sql.base import Base, UUIDMixin
+
+if TYPE_CHECKING:
+    from app.models.sql.user import User
 
 
 class Dimension(str, enum.Enum):

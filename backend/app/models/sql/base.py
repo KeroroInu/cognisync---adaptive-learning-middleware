@@ -3,7 +3,6 @@ SQLAlchemy Base 和通用 Mixins
 """
 import uuid
 from datetime import datetime, timezone
-from typing import Any
 from sqlalchemy import MetaData
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.dialects.postgresql import UUID, TIMESTAMP

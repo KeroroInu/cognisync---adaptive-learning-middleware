@@ -17,7 +17,6 @@ from app.models.sql.message import ChatMessage
 from app.models.sql.chat_session import ChatSession
 from app.models.sql.scale import ScaleResponse
 from app.schemas.profile import UserProfile, ProfileChange, ProfileEmotionSignal
-from app.schemas.calibration import calculate_conflict_level
 
 logger = logging.getLogger(__name__)
 

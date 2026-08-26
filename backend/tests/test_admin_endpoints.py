@@ -122,7 +122,7 @@ async def test_list_users_empty(admin_client: AsyncClient):
     assert data["data"]["total"] == 0
     assert isinstance(data["data"]["users"], list)
 
-    print(f"\n✅ List users (empty) test passed")
+    print("\n✅ List users (empty) test passed")
 
 
 @pytest.mark.asyncio
@@ -191,7 +191,7 @@ async def test_list_users_pagination(admin_client: AsyncClient, client: AsyncCli
     assert len(data["data"]["users"]) == 1
     assert data["data"]["total"] >= 3
 
-    print(f"\n✅ User pagination test passed")
+    print("\n✅ User pagination test passed")
 
 
 # ==================== 数据分析测试 ====================

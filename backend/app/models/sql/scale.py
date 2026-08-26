@@ -4,12 +4,15 @@ Scale Models - 量表模板和响应
 import uuid
 import enum
 from datetime import datetime, timezone
-from typing import Optional, Dict, Any
-from sqlalchemy import String, Text, Integer, ForeignKey, Enum, Index
+from typing import TYPE_CHECKING, Optional, Dict, Any
+from sqlalchemy import String, Integer, ForeignKey, Enum, Index
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID, TIMESTAMP, JSONB
 
 from app.models.sql.base import Base, UUIDMixin
+
+if TYPE_CHECKING:
+    from app.models.sql.user import User
 
 
 class ScaleStatus(str, enum.Enum):

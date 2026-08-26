@@ -2,7 +2,6 @@
 Logs Endpoint - 日志查询接口（完整实现）
 """
 import logging
-from uuid import UUID
 from typing import List
 from pydantic import BaseModel
 from fastapi import APIRouter, HTTPException, Depends
@@ -14,8 +13,7 @@ from app.schemas.base import SuccessResponse
 from app.schemas.chat import ChatMessage as ChatMessageSchema
 from app.schemas.calibration import CalibrationLogResponse
 from app.models.sql.message import ChatMessage
-from app.models.sql.calibration_log import CalibrationLog, Dimension
-from app.services.profile_service import ProfileService
+from app.models.sql.calibration_log import CalibrationLog
 from app.api.endpoints.auth import ensure_self_scope, get_current_user
 from app.models.sql.user import User
 

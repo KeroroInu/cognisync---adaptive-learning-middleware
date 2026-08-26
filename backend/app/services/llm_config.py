@@ -6,7 +6,6 @@ LLM Config Service - LLM 配置管理
 import json
 import logging
 import inspect
-from typing import Optional
 
 from app.core.config import settings
 from app.services.llm_provider import BaseProvider, OpenAICompatibleProvider, MockProvider
