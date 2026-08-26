@@ -66,9 +66,29 @@
 .construction-board > span { position: relative; border-right: 1px solid rgba(189,245,47,.055); border-bottom: 1px solid rgba(189,245,47,.055); }
 .construction-board > span.is-snake::after,
 .construction-board > span.is-food::after { content: ''; position: absolute; inset: 15%; }
-.construction-board > span.is-snake::after { border: 1px solid #eaffab; border-radius: 22%; background: var(--brand-cyan); }
+.construction-board > span.is-snake::after { z-index: 3; border: 1px solid #eaffab; border-radius: 22%; background: var(--brand-cyan); }
 .construction-board > span.is-head::after { inset: 8%; border-radius: 45% 25% 25% 45%; background: #e7ff8a; box-shadow: 0 0 12px rgba(189,245,47,.55); }
-.construction-board > span.is-food::after { inset: 20%; border: 2px solid #ffca58; border-radius: 50%; background: #e96f4d; }
+.construction-board > span.is-food::after { z-index: 2; inset: 20%; border: 2px solid #ffca58; border-radius: 50%; background: #e96f4d; }
+.construction-object {
+  position: absolute;
+  z-index: 1;
+  inset: 17%;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  color: #f5f4e8;
+  font: 900 clamp(9px, 1.15vw, 15px)/1 'Google Sans Code', ui-monospace, monospace;
+  font-style: normal;
+  text-shadow: 0 1px 1px rgba(0,0,0,.55);
+}
+.construction-object:nth-child(2) { inset: 45% 5% 5% 45%; z-index: 2; font-size: 8px; }
+.construction-object.is-obstacle,
+.construction-object.is-wall { border: 1px solid #c6c2ae; border-radius: 18%; background: #6d7169; }
+.construction-object.is-bomb { border: 2px solid #ffb069; border-radius: 50%; background: #b53d31; box-shadow: 0 0 7px rgba(255,91,54,.68); }
+.construction-object.is-portal { border: 3px solid #78dce8; border-radius: 50%; background: rgba(33,84,96,.46); box-shadow: inset 0 0 0 2px #183f47, 0 0 8px rgba(120,220,232,.56); }
+.construction-object.is-bonus { color: #ffdf70; text-shadow: 0 0 7px rgba(255,208,74,.7); }
+.construction-object.is-shield { color: #a9eff8; text-shadow: 0 0 7px rgba(120,220,232,.65); }
+.construction-object.is-custom { border: 1px solid #d7b3ff; border-radius: 30%; background: #76518f; }
 .construction-over { position: absolute; inset: 0; display: grid; place-items: center; align-content: center; gap: 9px; background: rgba(10,14,10,.82); color: #edf4e6; }
 .construction-over button { min-height: 32px; padding: 0 10px; border: 1px solid var(--brand-cyan); border-radius: 5px; background: var(--brand-cyan); color: #161713; font-size: .62rem; font-weight: 900; }
 
@@ -271,6 +291,64 @@
 .module-code-editor > div,
 .module-code-editor .cm-editor { height: 100%; }
 .module-code-editor .cm-scroller { font-size: 15px; }
+
+.build-terminal {
+  flex: 0 0 auto;
+  border-top: 1px solid #354134;
+  background: #0b100c;
+  color: #dce7d3;
+}
+
+.build-terminal > header {
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 8px;
+  border-bottom: 0;
+  background: #111711;
+}
+
+.build-terminal.is-open > header { border-bottom: 1px solid #354134; }
+
+.build-terminal > header button {
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 6px;
+  border: 0;
+  background: transparent;
+  color: #cbd6c5;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.build-terminal > header button:first-child { flex: 1; justify-content: flex-start; text-align: left; }
+.build-terminal > header button:first-child span { color: #82907d; font: 700 10px/1 'Google Sans Code', ui-monospace, monospace; }
+.build-terminal > header button:first-child svg:last-child { margin-left: auto; }
+.build-terminal > header button:last-child { color: #93a08e; }
+.build-terminal > header button:hover { color: var(--brand-cyan); }
+.build-terminal > header button:disabled { opacity: .35; cursor: default; }
+
+.build-terminal-output {
+  height: 96px;
+  overflow: auto;
+  padding: 8px 11px 10px;
+  font: 12px/1.55 'Google Sans Code', ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+.module-editor-card:has(.build-terminal.is-open) .module-code-editor { min-height: 190px; }
+
+.build-terminal-output p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.build-terminal-output p + p { margin-top: 2px; }
+.build-terminal-output .is-empty { color: #687565; }
+.build-terminal-output .is-command { color: #bdf52f; }
+.build-terminal-output .is-stdout { color: #e7ede3; }
+.build-terminal-output .is-info { color: #9fb68c; }
+.build-terminal-output .is-success { color: #bdf52f; }
+.build-terminal-output .is-error { color: #ff9d87; }
 
 .module-test-bar { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 8px 9px; border-top: 1px solid var(--line-strong); background: var(--surface-muted); }
 .module-test-bar > span { color: var(--text-secondary); font-size: 13px; line-height: 1.45; }

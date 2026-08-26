@@ -144,11 +144,13 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
     size: { width: 0, height: 0 },
   });
   const activeContextKey = stage === 'build' ? (contextKey || 'build-unselected') : stage;
-  const level = levels[activeContextKey] ?? 0;
+  const l3IsConfirmed = stage === 'build' && confirmedL3.has(activeContextKey);
+  // L3 是当前函数卡的持续协作权限，不是只对确认按钮后的第一条回复有效。
+  // 刷新或重新进入建构时，已确认的卡必须继续以 L3 讨论代码，不能悄悄退回 L0。
+  const level = l3IsConfirmed ? 3 : (levels[activeContextKey] ?? 0);
   const stageLabel = STAGE_LABELS[stage];
   const levelLabels = stage === 'build' ? BUILD_LEVEL_LABELS : LEVEL_LABELS;
   const visibleMessages = messages.filter(message => message.contextKey === activeContextKey);
-  const l3IsConfirmed = stage === 'build' && confirmedL3.has(activeContextKey);
   const hasOpenedProject = evidence.some(item => item.type === 'opened');
   const observationStageReady = stage === 'observe' && hasOpenedProject && observationCount >= 2;
 

@@ -1,6 +1,6 @@
 import type { Language } from '../types';
 import type { SnakeCreativeHook, StudentCreativeFunction } from '../data/snakeCreativeFunctions';
-import { CREATIVE_FUNCTION_NAME } from '../data/snakeCreativeFunctions';
+import { CREATIVE_FUNCTION_NAME, usesCreativeEventRouting } from '../data/snakeCreativeFunctions';
 
 export interface PythonModuleTestResult {
   passed: boolean;
@@ -8,6 +8,7 @@ export interface PythonModuleTestResult {
   detail: string;
   durationMs: number;
   preview?: PythonModulePreview;
+  output?: string[];
 }
 
 export interface PythonModulePreview {
@@ -16,6 +17,18 @@ export interface PythonModulePreview {
   direction?: 'up' | 'down' | 'left' | 'right';
   score?: number;
   over?: boolean;
+  interval?: number;
+  objects?: PythonGameObject[];
+}
+
+export interface PythonGameObject {
+  id: string;
+  type: string;
+  position: number[];
+  label?: string;
+  solid?: boolean;
+  active?: boolean;
+  data?: Record<string, string | number | boolean>;
 }
 
 export interface PythonGameState {
@@ -24,10 +37,17 @@ export interface PythonGameState {
   food: number[];
   score: number;
   game_over: boolean;
+  /** Optional game-loop interval in seconds. Creative hooks may adjust it. */
+  interval?: number;
+  /** Safe, renderer-owned objects for obstacles, bombs, portals, bonuses, etc. */
+  objects?: PythonGameObject[];
 }
 
 export interface PythonCreativeHookEvent {
-  type: SnakeCreativeHook;
+  /** Student-facing event name: start/key/before_move/move/eat/loop/end. */
+  type: string;
+  /** Stable internal hook name retained for compatibility and research records. */
+  hook: Exclude<SnakeCreativeHook, 'any'>;
   input?: PythonGameState['direction'] | null;
   scoreBefore?: number;
   scoreAfter?: number;
@@ -42,6 +62,7 @@ export interface PythonCreativeHookError {
 export interface PythonCreativeHookResult {
   state: PythonGameState;
   errors: PythonCreativeHookError[];
+  outputs: Array<{ cardId: string; hook: SnakeCreativeHook; lines: string[] }>;
 }
 
 interface WorkerResponse {
@@ -231,27 +252,32 @@ const createTestHarness = (
   const code = blueprintNodeId === 'game-loop'
     ? sourceBundle({ ...codeByNode, [blueprintNodeId]: studentCode })
     : studentCode;
-  const indentedTests = testCases.split('\n').map(line => line ? `    ${line}` : line).join('\n');
+  const indentedTests = testCases.split('\n').map(line => line ? `        ${line}` : line).join('\n');
   return `
+import contextlib
+import io
 import json
 _result = {'passed': False, 'resultCode': 'UNKNOWN', 'detail': ''}
 _preview = {}
+_output_buffer = io.StringIO()
 def _require(condition, code):
     if not condition:
         raise AssertionError(code)
 try:
-    _namespace = {}
-    exec(${JSON.stringify(code)}, _namespace)
-    _fn = _namespace.get(${JSON.stringify(functionName)})
-    _require(callable(_fn), 'FUNCTION_MISSING')
+    with contextlib.redirect_stdout(_output_buffer), contextlib.redirect_stderr(_output_buffer):
+        _namespace = {}
+        exec(${JSON.stringify(code)}, _namespace)
+        _fn = _namespace.get(${JSON.stringify(functionName)})
+        _require(callable(_fn), 'FUNCTION_MISSING')
 ${indentedTests}
-    _result = {'passed': True, 'resultCode': 'PASSED', 'detail': '', 'preview': _preview}
+        _result = {'passed': True, 'resultCode': 'PASSED', 'detail': '', 'preview': _preview}
 except SyntaxError as _error:
     _result = {'passed': False, 'resultCode': 'SYNTAX_ERROR', 'detail': f'line {_error.lineno}: {_error.msg}'}
 except AssertionError as _error:
     _result = {'passed': False, 'resultCode': str(_error), 'detail': ''}
 except Exception as _error:
     _result = {'passed': False, 'resultCode': 'RUNTIME_ERROR', 'detail': f'{type(_error).__name__}: {_error}'}
+_result['output'] = _output_buffer.getvalue().splitlines()[:200]
 json.dumps(_result, ensure_ascii=False)
 `;
 };
@@ -320,7 +346,7 @@ else:
                 _food_fn = _namespace.get('spawn_food')
                 if callable(_food_fn):
                     _state['food'] = _food_fn(_state['snake'], _board_size)
-    _state = {'snake': _point_list(_state['snake']), 'direction': _state['direction'], 'food': list(_state['food']), 'score': int(_state['score']), 'game_over': bool(_state['game_over'])}
+    _state = {'snake': _point_list(_state['snake']), 'direction': _state['direction'], 'food': list(_state['food']), 'score': int(_state['score']), 'game_over': bool(_state['game_over']), **({'interval': float(_state['interval'])} if 'interval' in _state else {}), **({'objects': _state['objects']} if 'objects' in _state else {})}
 json.dumps(_state, ensure_ascii=False)
 `;
 
@@ -337,12 +363,50 @@ const normalizeGameState = (value: unknown): PythonGameState => {
   if (!validPoint(state.food) || !directions.includes(state.direction as Direction)) throw new Error('invalid-game-state');
   if (!Number.isInteger(state.score) || (state.score ?? -1) < 0 || (state.score ?? 0) > 1_000_000) throw new Error('invalid-game-state');
   if (typeof state.game_over !== 'boolean') throw new Error('invalid-game-state');
+  if (state.interval !== undefined && (
+    typeof state.interval !== 'number'
+    || !Number.isFinite(state.interval)
+    || state.interval < 0.08
+    || state.interval > 2
+  )) throw new Error('invalid-game-state');
+  const rawObjects = state.objects ?? [];
+  if (!Array.isArray(rawObjects) || rawObjects.length > 48) throw new Error('invalid-game-state');
+  const objects: PythonGameObject[] = rawObjects.map((rawObject, index) => {
+    if (!rawObject || typeof rawObject !== 'object') throw new Error('invalid-game-state');
+    const object = rawObject as Partial<PythonGameObject>;
+    const id = String(object.id ?? `object-${index}`).slice(0, 48);
+    const type = String(object.type ?? 'custom').toLowerCase();
+    const label = object.label === undefined ? undefined : String(object.label).slice(0, 4);
+    if (
+      !/^[a-z0-9_-]{1,24}$/.test(type)
+      || !validPoint(object.position)
+      || object.position!.some(coordinate => coordinate < 0 || coordinate >= 12)
+    ) throw new Error('invalid-game-state');
+    const dataEntries = Object.entries(object.data ?? {});
+    if (dataEntries.length > 12 || dataEntries.some(([key, item]) => (
+      !/^[A-Za-z_][A-Za-z0-9_]{0,31}$/.test(key)
+      || !['string', 'number', 'boolean'].includes(typeof item)
+      || (typeof item === 'string' && item.length > 80)
+      || (typeof item === 'number' && !Number.isFinite(item))
+    ))) throw new Error('invalid-game-state');
+    return {
+      id,
+      type,
+      position: [object.position![0], object.position![1]],
+      ...(label === undefined ? {} : { label }),
+      ...(object.solid === undefined ? {} : { solid: Boolean(object.solid) }),
+      ...(object.active === undefined ? {} : { active: Boolean(object.active) }),
+      ...(dataEntries.length === 0 ? {} : { data: Object.fromEntries(dataEntries) }),
+    };
+  });
   return {
     snake: state.snake.map(point => [point[0], point[1]]),
     food: [state.food![0], state.food![1]],
     direction: state.direction as Direction,
     score: state.score!,
     game_over: state.game_over,
+    ...(state.interval === undefined ? {} : { interval: state.interval }),
+    ...(objects.length === 0 ? {} : { objects }),
   };
 };
 
@@ -363,7 +427,27 @@ interface CreativeExecutionResult {
   resultCode: string;
   detail: string;
   state?: unknown;
+  output?: string[];
 }
+
+type RuntimeCreativeHook = Exclude<SnakeCreativeHook, 'any'>;
+
+const CREATIVE_EVENT_TYPES: Record<RuntimeCreativeHook, string> = {
+  game_start: 'start',
+  key_input: 'key',
+  before_move: 'before_move',
+  after_move: 'move',
+  food_eaten: 'eat',
+  loop: 'loop',
+  game_end: 'end',
+};
+
+const RUNTIME_CREATIVE_HOOKS = Object.keys(CREATIVE_EVENT_TYPES) as RuntimeCreativeHook[];
+
+const creativeEvent = (
+  hook: RuntimeCreativeHook,
+  event: Omit<PythonCreativeHookEvent, 'type' | 'hook'> = {},
+): PythonCreativeHookEvent => ({ ...event, type: CREATIVE_EVENT_TYPES[hook], hook });
 
 const createCreativeHarness = (
   code: string,
@@ -372,8 +456,11 @@ const createCreativeHarness = (
 ) => `
 import ast
 import builtins
+import contextlib
+import io
 import json
 _creative_result = {'passed': False, 'resultCode': 'UNKNOWN', 'detail': ''}
+_creative_output = io.StringIO()
 _safe_builtin_names = (
     'abs', 'all', 'any', 'bool', 'dict', 'enumerate', 'float', 'int', 'len',
     'list', 'max', 'min', 'range', 'reversed', 'round', 'set', 'sorted',
@@ -393,18 +480,22 @@ try:
             raise AssertionError('CREATIVE_RESTRICTED')
         if isinstance(_node, ast.Name) and (_node.id.startswith('__') or _node.id in _blocked_names):
             raise AssertionError('CREATIVE_RESTRICTED')
-    _creative_namespace = {'__builtins__': _safe_builtins}
-    exec(${JSON.stringify(code)}, _creative_namespace)
-    _creative_fn = _creative_namespace.get(${JSON.stringify(CREATIVE_FUNCTION_NAME)})
-    if not callable(_creative_fn):
-        raise AssertionError('FUNCTION_MISSING')
-    _creative_state = json.loads(${JSON.stringify(JSON.stringify(state))})
-    _creative_event = json.loads(${JSON.stringify(JSON.stringify(event))})
-    _creative_returned = _creative_fn(_creative_event, _creative_state)
-    if _creative_returned is not None:
-        _creative_state = _creative_returned
+    with contextlib.redirect_stdout(_creative_output), contextlib.redirect_stderr(_creative_output):
+        _creative_namespace = {'__builtins__': _safe_builtins}
+        exec(${JSON.stringify(code)}, _creative_namespace)
+        _creative_fn = _creative_namespace.get(${JSON.stringify(CREATIVE_FUNCTION_NAME)})
+        if not callable(_creative_fn):
+            raise AssertionError('FUNCTION_MISSING')
+        _creative_state = json.loads(${JSON.stringify(JSON.stringify(state))})
+        _creative_event = json.loads(${JSON.stringify(JSON.stringify(event))})
+        _creative_returned = _creative_fn(_creative_event, _creative_state)
+        if _creative_returned is not None:
+            _creative_state = _creative_returned
     if not isinstance(_creative_state, dict):
         raise AssertionError('CREATIVE_RETURN')
+    _allowed_state_keys = {'snake', 'direction', 'food', 'score', 'game_over', 'interval', 'objects'}
+    if any(_key not in _allowed_state_keys for _key in _creative_state):
+        raise AssertionError('CREATIVE_UNSUPPORTED_STATE')
     _creative_result = {'passed': True, 'resultCode': 'PASSED', 'detail': '', 'state': _creative_state}
 except SyntaxError as _error:
     _creative_result = {'passed': False, 'resultCode': 'SYNTAX_ERROR', 'detail': f'line {_error.lineno}: {_error.msg}'}
@@ -412,6 +503,7 @@ except AssertionError as _error:
     _creative_result = {'passed': False, 'resultCode': str(_error), 'detail': ''}
 except Exception as _error:
     _creative_result = {'passed': False, 'resultCode': 'RUNTIME_ERROR', 'detail': f'{type(_error).__name__}: {_error}'}
+_creative_result['output'] = _creative_output.getvalue().splitlines()[:200]
 json.dumps(_creative_result, ensure_ascii=False)
 `;
 
@@ -421,6 +513,8 @@ const SAMPLE_CREATIVE_STATE: PythonGameState = {
   food: [9, 5],
   score: 0,
   game_over: false,
+  interval: 0.36,
+  objects: [],
 };
 
 const executeCreative = async (
@@ -436,20 +530,58 @@ export const runPythonCreativeTest = async (
   hook: SnakeCreativeHook,
 ): Promise<PythonModuleTestResult> => {
   const startedAt = performance.now();
-  const result = await executeCreative(code, SAMPLE_CREATIVE_STATE, { type: hook, input: 'up' });
-  if (result.passed) {
+  const hooks = hook === 'any' || usesCreativeEventRouting(code) ? RUNTIME_CREATIVE_HOOKS : [hook];
+  let state = normalizeGameState(SAMPLE_CREATIVE_STATE);
+  const outputs: string[] = [];
+  let changed = false;
+
+  for (const currentHook of hooks) {
+    const before = JSON.stringify(state);
+    const result = await executeCreative(code, state, creativeEvent(currentHook, { input: 'up' }));
+    if (result.output?.length) outputs.push(...result.output);
+    if (!result.passed) {
+      return { ...result, output: outputs.slice(0, 200), durationMs: Math.round(performance.now() - startedAt) };
+    }
     try {
-      normalizeGameState(result.state);
+      state = normalizeGameState(result.state);
     } catch {
       return {
         passed: false,
         resultCode: 'CREATIVE_STATE',
         detail: '',
+        output: outputs.slice(0, 200),
         durationMs: Math.round(performance.now() - startedAt),
       };
     }
+    changed ||= JSON.stringify(state) !== before;
   }
-  return { ...result, durationMs: Math.round(performance.now() - startedAt) };
+
+  if (!changed) {
+    return {
+      passed: false,
+      resultCode: 'CREATIVE_NO_EFFECT',
+      detail: '',
+      output: outputs.slice(0, 200),
+      durationMs: Math.round(performance.now() - startedAt),
+    };
+  }
+
+  return {
+    passed: true,
+    resultCode: 'PASSED',
+    detail: '',
+    output: outputs.slice(0, 200),
+    preview: {
+      snake: state.snake,
+      food: state.food,
+      direction: state.direction,
+      score: state.score,
+      over: state.game_over,
+      interval: state.interval,
+      objects: state.objects,
+    },
+    durationMs: Math.round(performance.now() - startedAt),
+  };
 };
 
 /**
@@ -458,16 +590,22 @@ export const runPythonCreativeTest = async (
  */
 export const runPythonCreativeHooks = async (
   cards: StudentCreativeFunction[],
-  hook: SnakeCreativeHook,
+  hook: RuntimeCreativeHook,
   state: PythonGameState,
-  event: Omit<PythonCreativeHookEvent, 'type'> = {},
+  event: Omit<PythonCreativeHookEvent, 'type' | 'hook'> = {},
 ): Promise<PythonCreativeHookResult> => {
   let next = normalizeGameState(state);
   const errors: PythonCreativeHookError[] = [];
-  const active = cards.filter(card => card.enabled && card.verified && card.hook === hook);
+  const outputs: PythonCreativeHookResult['outputs'] = [];
+  const active = cards.filter(card => card.enabled && card.verified && (
+    card.hook === 'any'
+    || card.hook === hook
+    || usesCreativeEventRouting(card.code)
+  ));
   for (const card of active) {
     try {
-      const result = await executeCreative(card.code, next, { ...event, type: hook });
+      const result = await executeCreative(card.code, next, creativeEvent(hook, event));
+      if (result.output?.length) outputs.push({ cardId: card.id, hook, lines: result.output });
       if (!result.passed) {
         errors.push({ cardId: card.id, resultCode: result.resultCode, detail: result.detail });
         continue;
@@ -485,7 +623,7 @@ export const runPythonCreativeHooks = async (
       });
     }
   }
-  return { state: next, errors };
+  return { state: next, errors, outputs };
 };
 
 export const disposePythonModuleRunner = () => {
@@ -524,6 +662,8 @@ const RESULT_MESSAGES: Record<string, { zh: string; en: string }> = {
   CREATIVE_RETURN: { zh: '创意函数需要返回游戏状态字典，或返回 None 保持原状态。', en: 'The creative function must return the game-state dictionary or None.' },
   CREATIVE_STATE: { zh: '创意函数返回的状态不符合安全游戏契约。', en: 'The creative function returned a state outside the safe game contract.' },
   CREATIVE_RESTRICTED: { zh: '创意函数只能使用受控状态和基础 Python 表达式，不能访问文件、导入模块或动态执行代码。', en: 'Creative functions can use only the controlled state and basic Python expressions; files, imports and dynamic execution are blocked.' },
+  CREATIVE_UNSUPPORTED_STATE: { zh: '这个顶层状态字段还没有接入游戏。当前可修改 snake、direction、food、score、game_over、interval 和 objects。', en: 'That top-level state field is not connected to the game. You can change snake, direction, food, score, game_over, interval, and objects.' },
+  CREATIVE_NO_EFFECT: { zh: '函数能安全运行，但没有改变任何可观察的游戏状态。请修改状态后再测试。', en: 'The function ran safely but did not change any observable game state. Change the state and test again.' },
   SYNTAX_ERROR: { zh: '代码存在语法错误。', en: 'The code contains a syntax error.' },
   RUNTIME_ERROR: { zh: '代码运行时发生错误。', en: 'The code raised an error while running.' },
 };

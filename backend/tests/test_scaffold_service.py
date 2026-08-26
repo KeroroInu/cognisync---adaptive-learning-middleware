@@ -233,8 +233,46 @@ def test_fixed_build_levels_return_exact_scaffold_shapes():
 
     context.level = 3
     context.l3Confirmed = True
+    context.trigger = "l3_confirmed"
     l3 = build_controlled_build_response(context, 3)
     assert l3 is not None and SNAKE_L3_SOLUTIONS["movement"] in l3
+
+
+def test_confirmed_l3_followup_enters_code_collaboration_instead_of_repeating_answer():
+    context = scaffold_context(level=3)
+    context.trigger = "student_message"
+
+    controlled = build_controlled_build_response(
+        context,
+        3,
+        student_message="为什么这里要去掉蛇尾？",
+        current_code=SNAKE_L3_SOLUTIONS["movement"],
+    )
+    prompt = build_scaffold_prompt(
+        context,
+        UserProfile(cognition=50, affect=50, behavior=50),
+    )
+
+    assert controlled is None
+    assert "已进入 L3 代码协作" in prompt
+    assert "不得退回 L0 式反复定位" in prompt
+    assert SNAKE_L3_SOLUTIONS["movement"] in prompt
+
+
+def test_creative_prompt_exposes_only_the_safe_visible_runner_contract():
+    context = scaffold_context(level=3)
+    context.currentModule = "creative::student-card-1"
+    context.trigger = "student_message"
+
+    prompt = build_scaffold_prompt(
+        context,
+        UserProfile(cognition=50, affect=50, behavior=50),
+    )
+
+    assert "event.type 为 start、key、before_move、move、eat、loop 或 end" in prompt
+    assert "objects 最多 48 个字典" in prompt
+    assert "obstacle/wall、bomb、portal、bonus、shield" in prompt
+    assert "沙箱只暴露 event 与 state" in prompt
 
 
 def test_controlled_build_response_can_identify_the_current_card():

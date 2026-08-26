@@ -213,7 +213,8 @@ async def test_confirmed_creative_l3_prompt_allows_only_current_complete_functio
     response = await client.post("/api/chat", headers=auth_headers, json=payload)
 
     assert response.status_code == 200, response.text
-    assert "可以给当前这一个函数的完整实现" in provider.system_prompt
+    assert "保持代码协作" in provider.system_prompt
+    assert "可以引用、修改、补全和解释完整函数" in provider.system_prompt
     assert "不要越级给完整函数" not in provider.system_prompt
     assert response.json()["data"]["scaffold"]["appliedLevel"] == 3
 

@@ -18,6 +18,7 @@ import {
   Plus,
   Power,
   RotateCcw,
+  SquareTerminal,
   TestTube2,
   Trash2,
 } from 'lucide-react';
@@ -31,6 +32,8 @@ import {
   creativeHookLabel,
   creativeUnitId,
   upgradeCreativeStarterCode,
+  usesCreativeEventRouting,
+  type SnakeCreativeHook,
   type StudentCreativeFunction,
 } from '../data/snakeCreativeFunctions';
 import {
@@ -43,6 +46,7 @@ import {
   runPythonModuleTest,
   stepPythonGame,
   type PythonGameState,
+  type PythonGameObject,
   type PythonModulePreview,
   type PythonCreativeHookError,
 } from '../services/pythonModuleRunner';
@@ -83,6 +87,7 @@ const INITIAL_GAME_STATE: PythonGameState = {
   food: [9, 5],
   score: 0,
   game_over: false,
+  interval: 0.36,
 };
 const OPPOSITE: Record<Direction, Direction> = { up: 'down', down: 'up', left: 'right', right: 'left' };
 const KEY_DIRECTIONS: Record<string, Direction | undefined> = {
@@ -92,6 +97,19 @@ const KEY_DIRECTIONS: Record<string, Direction | undefined> = {
   ArrowRight: 'right', d: 'right', D: 'right',
 };
 const unitId = (nodeId: string) => `base::${nodeId}`;
+
+const OBJECT_GLYPHS: Record<string, string> = {
+  obstacle: '■',
+  wall: '■',
+  bomb: '●',
+  portal: '◎',
+  bonus: '★',
+  shield: '◇',
+};
+
+const objectVisualType = (type: string) => (
+  ['obstacle', 'wall', 'bomb', 'portal', 'bonus', 'shield'].includes(type) ? type : 'custom'
+);
 
 const resolveProgress = (
   progress: Record<string, StudentModuleProgress>,
@@ -116,7 +134,65 @@ interface SnakeBuildPreviewProps {
   diagnosticRun: number;
   onDiagnostic: (messages: string[]) => void;
   onCreativeRuntimeErrors: (errors: PythonCreativeHookError[]) => void;
+  onRuntimeOutput: (source: string, lines: string[]) => void;
 }
+
+type BuildTerminalTone = 'command' | 'stdout' | 'success' | 'error' | 'info';
+
+interface BuildTerminalLine {
+  id: number;
+  tone: BuildTerminalTone;
+  text: string;
+}
+
+interface BuildTerminalProps {
+  language: Language;
+  open: boolean;
+  lines: BuildTerminalLine[];
+  onToggle: () => void;
+  onClear: () => void;
+}
+
+const BuildTerminal: React.FC<BuildTerminalProps> = React.memo(({
+  language,
+  open,
+  lines,
+  onToggle,
+  onClear,
+}) => {
+  const isZh = language === 'zh';
+  const outputRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    outputRef.current?.scrollTo({ top: outputRef.current.scrollHeight });
+  }, [lines, open]);
+
+  return (
+    <section className={`build-terminal ${open ? 'is-open' : ''}`} aria-label={isZh ? 'Python 调试终端' : 'Python debug terminal'}>
+      <header>
+        <button type="button" onClick={onToggle} aria-expanded={open}>
+          <SquareTerminal size={15} />
+          <strong>{isZh ? '终端' : 'Terminal'}</strong>
+          <span>{lines.length > 0 ? `${lines.length}` : (isZh ? '等待运行' : 'Ready')}</span>
+          {open ? <ChevronDown size={15} /> : <ChevronUp size={15} />}
+        </button>
+        <button type="button" onClick={onClear} disabled={lines.length === 0}>
+          {isZh ? '清空' : 'Clear'}
+        </button>
+      </header>
+      {open ? (
+        <div ref={outputRef} className="build-terminal-output" role="log" aria-live="polite">
+          {lines.length === 0 ? (
+            <p className="is-empty">{isZh ? '运行函数或使用 print() 后，输出会显示在这里。' : 'Run a function or use print() to see output here.'}</p>
+          ) : lines.map(line => (
+            <p key={line.id} className={`is-${line.tone}`}>{line.text}</p>
+          ))}
+        </div>
+      ) : null}
+    </section>
+  );
+});
 
 const SnakeBuildPreview: React.FC<SnakeBuildPreviewProps> = React.memo(({
   language,
@@ -127,6 +203,7 @@ const SnakeBuildPreview: React.FC<SnakeBuildPreviewProps> = React.memo(({
   diagnosticRun,
   onDiagnostic,
   onCreativeRuntimeErrors,
+  onRuntimeOutput,
 }) => {
   const isZh = language === 'zh';
   const [game, setGame] = useState<PythonGameState>(INITIAL_GAME_STATE);
@@ -137,8 +214,9 @@ const SnakeBuildPreview: React.FC<SnakeBuildPreviewProps> = React.memo(({
   const boardRef = useRef<HTMLDivElement>(null);
   const creativeRuntimeRef = useRef(creativeFunctions);
   const creativeErrorHandlerRef = useRef(onCreativeRuntimeErrors);
+  const runtimeOutputHandlerRef = useRef(onRuntimeOutput);
   const has = useCallback((id: string) => capabilities.has(id), [capabilities]);
-  const tickMs = Math.max(190, 360 - Math.floor(game.score / 20) * 25);
+  const tickMs = Math.round(Math.min(2, Math.max(0.08, game.interval ?? 0.36)) * 1000);
 
   useEffect(() => {
     creativeRuntimeRef.current = creativeFunctions;
@@ -148,15 +226,23 @@ const SnakeBuildPreview: React.FC<SnakeBuildPreviewProps> = React.memo(({
     creativeErrorHandlerRef.current = onCreativeRuntimeErrors;
   }, [onCreativeRuntimeErrors]);
 
+  useEffect(() => {
+    runtimeOutputHandlerRef.current = onRuntimeOutput;
+  }, [onRuntimeOutput]);
+
   const runCreativeHook = useCallback(async (
-    hook: StudentCreativeFunction['hook'],
+    hook: Exclude<SnakeCreativeHook, 'any'>,
     state: PythonGameState,
     event: { input?: Direction | null; scoreBefore?: number; scoreAfter?: number } = {},
   ) => {
     const result = await runPythonCreativeHooks(creativeRuntimeRef.current, hook, state, event);
     if (result.errors.length > 0) creativeErrorHandlerRef.current(result.errors);
+    result.outputs.forEach(output => {
+      const title = creativeRuntimeRef.current.find(card => card.id === output.cardId)?.title ?? output.cardId;
+      runtimeOutputHandlerRef.current(`${title} · ${creativeHookLabel(output.hook, language)}`, output.lines);
+    });
     return result.state;
-  }, []);
+  }, [language]);
 
   const applyGame = useCallback((next: PythonGameState) => {
     gameRef.current = next;
@@ -172,9 +258,11 @@ const SnakeBuildPreview: React.FC<SnakeBuildPreviewProps> = React.memo(({
       return;
     }
     try {
-      const base = await resetPythonGame(codeByNode);
+      const rawBase = await resetPythonGame(codeByNode);
+      const base = { ...rawBase, interval: rawBase.interval ?? INITIAL_GAME_STATE.interval };
       applyGame(await runCreativeHook('game_start', base));
     } catch (error) {
+      if (error instanceof Error && error.message === 'runner-disposed') return;
       applyGame(INITIAL_GAME_STATE);
       setRuntimeMessage(formatPythonRunnerError(error, language));
     }
@@ -193,6 +281,8 @@ const SnakeBuildPreview: React.FC<SnakeBuildPreviewProps> = React.memo(({
       direction: preview.direction ?? gameRef.current.direction,
       score: preview.score ?? gameRef.current.score,
       game_over: preview.over ?? false,
+      interval: preview.interval ?? gameRef.current.interval,
+      objects: preview.objects ?? gameRef.current.objects,
     };
     applyGame(next);
   }, [applyGame, demonstration]);
@@ -270,6 +360,15 @@ const SnakeBuildPreview: React.FC<SnakeBuildPreviewProps> = React.memo(({
   const cells = useMemo(() => new Map(
     game.snake.map((point, index) => [`${point[0]}:${point[1]}`, index]),
   ), [game.snake]);
+  const objectsByCell = useMemo(() => {
+    const result = new Map<string, PythonGameObject[]>();
+    (game.objects ?? []).forEach(object => {
+      if (object.active === false) return;
+      const key = `${object.position[0]}:${object.position[1]}`;
+      result.set(key, [...(result.get(key) ?? []), object]);
+    });
+    return result;
+  }, [game.objects]);
 
   return (
     <section className="construction-preview">
@@ -298,7 +397,24 @@ const SnakeBuildPreview: React.FC<SnakeBuildPreviewProps> = React.memo(({
           const y = Math.floor(index / BOARD_SIZE);
           const snakeIndex = cells.get(`${x}:${y}`);
           const isFood = game.food[0] === x && game.food[1] === y;
-          return <span key={index} className={`${snakeIndex !== undefined ? 'is-snake' : ''} ${snakeIndex === 0 ? 'is-head' : ''} ${isFood ? 'is-food' : ''}`} />;
+          const cellObjects = objectsByCell.get(`${x}:${y}`) ?? [];
+          return (
+            <span key={index} className={`${snakeIndex !== undefined ? 'is-snake' : ''} ${snakeIndex === 0 ? 'is-head' : ''} ${isFood ? 'is-food' : ''}`}>
+              {cellObjects.slice(0, 2).map((object, objectIndex) => {
+                const visualType = objectVisualType(object.type);
+                return (
+                  <i
+                    key={`${object.id}:${objectIndex}`}
+                    className={`construction-object is-${visualType}`}
+                    title={`${object.type}${object.solid ? ' · solid' : ''}`}
+                    aria-hidden="true"
+                  >
+                    {object.label || OBJECT_GLYPHS[object.type] || '◆'}
+                  </i>
+                );
+              })}
+            </span>
+          );
         })}
         {game.game_over && <div className="construction-over"><strong>{isZh ? '你的碰撞判断结束了游戏' : 'Your collision check ended the game'}</strong><button type="button" onClick={() => void reset()}>{isZh ? '重新运行' : 'Reset'}</button></div>}
       </div>
@@ -339,6 +455,7 @@ export const ProjectBuildStage: React.FC<Props> = ({
   const progressKey = `cognisync:project-module-progress:v1:${taskId}`;
   const creativeKey = `cognisync:project-creative-functions:v1:${taskId}`;
   const sidebarKey = `cognisync:project-build-sidebar:v1:${taskId}`;
+  const terminalKey = `cognisync:project-build-terminal:v1:${taskId}`;
   const [cards] = useState<StudentFunctionCard[]>(() => readStoredList(functionKey));
   const [progress, setProgress] = useState<Record<string, StudentModuleProgress>>(() => readStoredObject(progressKey, {}));
   const [creativeFunctions, setCreativeFunctions] = useState<StudentCreativeFunction[]>(() => (
@@ -354,6 +471,15 @@ export const ProjectBuildStage: React.FC<Props> = ({
       return true;
     }
   });
+  const [terminalOpen, setTerminalOpen] = useState(() => {
+    try {
+      return window.localStorage.getItem(terminalKey) === 'open';
+    } catch {
+      return false;
+    }
+  });
+  const [terminalLines, setTerminalLines] = useState<BuildTerminalLine[]>([]);
+  const terminalLineIdRef = useRef(0);
   const creativeFunctionsRef = useRef(creativeFunctions);
   const [selectedNodeId, setSelectedNodeId] = useState(SNAKE_BUILD_FUNCTIONS[0].id);
   const [activeCreativeId, setActiveCreativeId] = useState<string | null>(null);
@@ -394,6 +520,32 @@ export const ProjectBuildStage: React.FC<Props> = ({
     [creativeRuntimeSnapshot],
   );
 
+  const appendTerminal = useCallback((
+    source: string,
+    tone: BuildTerminalTone,
+    lines: string | string[],
+    reveal = true,
+  ) => {
+    const values = (Array.isArray(lines) ? lines : [lines]).filter(Boolean);
+    if (values.length === 0) return;
+    if (reveal) setTerminalOpen(true);
+    setTerminalLines(current => [
+      ...current,
+      ...values.map(text => ({
+        id: ++terminalLineIdRef.current,
+        tone,
+        text: source ? `[${source}] ${text}` : text,
+      })),
+    ].slice(-180));
+  }, []);
+
+  const handleRuntimeOutput = useCallback((source: string, lines: string[]) => {
+    appendTerminal(source, 'stdout', lines);
+  }, [appendTerminal]);
+
+  const toggleTerminal = useCallback(() => setTerminalOpen(value => !value), []);
+  const clearTerminal = useCallback(() => setTerminalLines([]), []);
+
   const persistCreativeFunctions = useCallback((next: StudentCreativeFunction[]) => {
     creativeFunctionsRef.current = next;
     setCreativeFunctions(next);
@@ -416,6 +568,14 @@ export const ProjectBuildStage: React.FC<Props> = ({
     }
   }, [sidebarCollapsed, sidebarKey]);
 
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(terminalKey, terminalOpen ? 'open' : 'closed');
+    } catch {
+      // 终端展开偏好保存失败不影响代码运行。
+    }
+  }, [terminalKey, terminalOpen]);
+
   useEffect(() => () => disposePythonModuleRunner(), []);
 
   useEffect(() => {
@@ -429,7 +589,9 @@ export const ProjectBuildStage: React.FC<Props> = ({
           || (latestAttempt ? `${latestAttempt.passed ? 'passed' : 'failed'} · ${latestAttempt.resultCode}` : undefined),
         artifactSummary: [
           `当前创意函数：${selectedCreative.title}`,
-          `受控事件钩子：${creativeHookLabel(selectedCreative.hook, language)}`,
+          usesCreativeEventRouting(selectedCreative.code)
+            ? '事件接入：函数使用 event.type/event.hook 自行处理七类受控事件'
+            : `受控事件钩子：${creativeHookLabel(selectedCreative.hook, language)}`,
           `状态：${selectedCreative.enabled ? '已启用' : selectedCreative.verified ? '已通过、未启用' : '待测试'}`,
           `七函数进度：${completedCount}/7`,
         ].join('\n'),
@@ -493,9 +655,15 @@ export const ProjectBuildStage: React.FC<Props> = ({
   const verifyCreativeFunction = async () => {
     if (!selectedCreative || testRunning) return;
     setTestRunning(true);
+    const eventScope = selectedCreative.hook === 'any'
+      || usesCreativeEventRouting(selectedCreative.code)
+      ? 'all-events'
+      : selectedCreative.hook;
+    appendTerminal(selectedCreative.title, 'command', `$ test --events ${eventScope}`);
     setTestMessage(isZh ? '正在浏览器内检查创意函数与受控状态契约。' : 'Checking the creative function against the controlled state contract.');
     try {
       const result = await runPythonCreativeTest(selectedCreative.code, selectedCreative.hook);
+      if (result.output?.length) appendTerminal(selectedCreative.title, 'stdout', result.output);
       const now = new Date().toISOString();
       const attempt = {
         id: createRequestId(), passed: result.passed, resultCode: result.resultCode,
@@ -513,6 +681,22 @@ export const ProjectBuildStage: React.FC<Props> = ({
       setTestMessage(result.passed
         ? (isZh ? '创意函数通过安全检查；你可以决定是否启用。' : 'The creative function passed its safety check. You can now choose whether to enable it.')
         : formatPythonModuleTestResult(result, language));
+      if (result.passed) {
+        appendTerminal(selectedCreative.title, 'success', isZh ? '✓ 安全检查通过，可以启用并在左侧游戏中观察效果。' : '✓ Safety check passed. Enable it and observe the game on the left.');
+        if (result.preview?.interval !== undefined && Math.abs(result.preview.interval - 0.36) > 0.0001) {
+          appendTerminal(selectedCreative.title, 'info', isZh
+            ? `状态变化：interval = ${result.preview.interval.toFixed(2)} 秒（游戏间隔 ${Math.round(result.preview.interval * 1000)} ms）`
+            : `State change: interval = ${result.preview.interval.toFixed(2)}s (${Math.round(result.preview.interval * 1000)}ms game interval)`);
+        }
+        if (result.preview?.objects?.length) {
+          const objectTypes = [...new Set(result.preview.objects.map(object => object.type))].join(', ');
+          appendTerminal(selectedCreative.title, 'info', isZh
+            ? `测试状态生成 ${result.preview.objects.length} 个可视对象（${objectTypes}）；启用后会由左侧统一运行器绘制。`
+            : `Test state generated ${result.preview.objects.length} visible object(s) (${objectTypes}); enable the card to render them in the shared runner.`);
+        }
+      } else {
+        appendTerminal(selectedCreative.title, 'error', `✕ ${formatPythonModuleTestResult(result, language)}`);
+      }
       void onReportKeyMoment?.({
         stage: 'build',
         eventType: 'module_test',
@@ -524,7 +708,9 @@ export const ProjectBuildStage: React.FC<Props> = ({
         artifacts: [creativeCodeArtifact(nextCard, 'structure_edit', result.passed ? undefined : `test failed: ${result.resultCode}`)],
       });
     } catch (error) {
-      setTestMessage(formatPythonRunnerError(error, language));
+      const message = formatPythonRunnerError(error, language);
+      setTestMessage(message);
+      appendTerminal(selectedCreative.title, 'error', `✕ ${message}`);
     } finally {
       setTestRunning(false);
     }
@@ -652,11 +838,14 @@ export const ProjectBuildStage: React.FC<Props> = ({
   const verifyCurrentModule = async () => {
     if (testRunning) return;
     setTestRunning(true);
+    const moduleTitle = isZh ? selectedNode.titleZh : selectedNode.titleEn;
+    appendTerminal(moduleTitle, 'command', `$ test ${selectedNode.signature}`);
     setTestMessage(isZh ? '正在浏览器内运行当前 Python 函数；首次使用需要加载运行环境。' : 'Running this Python function in your browser. The first run loads the runtime.');
     const currentUnitId = unitId(selectedNode.id);
     const cardId = selectedCard?.id ?? currentUnitId;
     try {
       const result = await runPythonModuleTest(selectedNode.id, currentCode, codeByNode);
+      if (result.output?.length) appendTerminal(moduleTitle, 'stdout', result.output);
       const now = new Date().toISOString();
       const attempt = {
         id: createRequestId(), passed: result.passed, resultCode: result.resultCode,
@@ -672,6 +861,11 @@ export const ProjectBuildStage: React.FC<Props> = ({
       };
       setProgress(current => ({ ...current, [currentUnitId]: item }));
       setTestMessage(formatPythonModuleTestResult(result, language));
+      appendTerminal(
+        moduleTitle,
+        result.passed ? 'success' : 'error',
+        `${result.passed ? '✓' : '✕'} ${formatPythonModuleTestResult(result, language)}`,
+      );
       void onReportKeyMoment?.({
         stage: 'build',
         eventType: 'module_test',
@@ -690,7 +884,9 @@ export const ProjectBuildStage: React.FC<Props> = ({
         preview: result.preview,
       }) : null);
     } catch (error) {
-      setTestMessage(formatPythonRunnerError(error, language));
+      const message = formatPythonRunnerError(error, language);
+      setTestMessage(message);
+      appendTerminal(moduleTitle, 'error', `✕ ${message}`);
     } finally {
       setTestRunning(false);
     }
@@ -709,6 +905,7 @@ export const ProjectBuildStage: React.FC<Props> = ({
             demonstration={demonstration}
             onDiagnostic={setDiagnostics}
             onCreativeRuntimeErrors={handleCreativeRuntimeErrors}
+            onRuntimeOutput={handleRuntimeOutput}
           />
           <section className="integration-diagnostics">
             <header>
@@ -792,6 +989,13 @@ export const ProjectBuildStage: React.FC<Props> = ({
                   <ResearchCodeEditor value={selectedCreative.code} onChange={updateCreativeCode} language="python" theme={theme} />
                 </React.Suspense>
               </div>
+              <BuildTerminal
+                language={language}
+                open={terminalOpen}
+                lines={terminalLines}
+                onToggle={toggleTerminal}
+                onClear={clearTerminal}
+              />
               <footer className="module-test-bar creative-test-bar">
                 <span>{testMessage || (isZh ? '从空白模板开始，也可以先向 AI 描述你的创意。' : 'Start from the blank template, or describe your idea to AI first.')}</span>
                 <div className="creative-test-actions">
@@ -830,6 +1034,13 @@ export const ProjectBuildStage: React.FC<Props> = ({
                 <ResearchCodeEditor value={currentCode} onChange={updateCode} language="python" theme={theme} />
               </React.Suspense>
             </div>
+            <BuildTerminal
+              language={language}
+              open={terminalOpen}
+              lines={terminalLines}
+              onToggle={toggleTerminal}
+              onClear={clearTerminal}
+            />
             <footer className="module-test-bar">
               <span>{testMessage || (isZh ? '修改后先测试；通过的版本才会替换左侧游戏。' : 'Test after editing. Only a passing version replaces the game on the left.')}</span>
               <button type="button" onClick={() => void verifyCurrentModule()} disabled={testRunning}>

@@ -894,25 +894,26 @@ async def chat(
         if cross_session_ctx:
             system_prompt += f"\n上次对话涉及：{cross_session_ctx}，如自然可提及。"
 
+        confirmed_build_l3 = bool(
+            scaffold_context
+            and scaffold_context.stage == "build"
+            and scaffold_context.l3Confirmed
+            and scaffold_metadata
+            and scaffold_metadata["level"] == 3
+        )
+
         # 研究模式：注入学生当前代码
         if request.isResearchMode and request.currentCode:
             code_snippet = request.currentCode[:3000]
             lang = request.language or "zh"
-            confirmed_build_l3 = bool(
-                scaffold_context
-                and scaffold_context.stage == "build"
-                and scaffold_context.l3Confirmed
-                and scaffold_metadata
-                and scaffold_metadata["level"] == 3
-            )
             code_context = {
                 "zh": f"\n\n**学生当前代码：**\n```\n{code_snippet}\n```\n" + (
-                    "学生已确认建构 L3；可以给当前这一个函数的完整实现，但不得扩展到其他函数。\n"
+                    "学生已确认建构 L3。此后保持代码协作：直接结合当前代码回答，可以引用、修改、补全和解释完整函数，不要退回只给定位问题；但不得扩展到其他函数。\n"
                     if confirmed_build_l3
                     else "请根据以上代码理解学生进度，严格遵守本轮 L0-L2 边界，不要越级给完整函数。\n"
                 ),
                 "en": f"\n\n**Student's current code:**\n```\n{code_snippet}\n```\n" + (
-                    "The student confirmed build L3. You may give the complete implementation of this function only.\n"
+                    "The student confirmed build L3. Stay in code collaboration: answer from the current code directly and freely quote, modify, complete, or explain this function, without falling back to diagnostic-only hints. Do not expand to other functions.\n"
                     if confirmed_build_l3
                     else "Use the code to understand progress and stay within the current L0-L2 boundary. Do not give a complete function.\n"
                 ),
@@ -974,7 +975,7 @@ async def chat(
                             system_prompt=system_prompt,
                             user_prompt=user_prompt,
                             temperature=0.7,
-                            max_tokens=300
+                            max_tokens=700 if confirmed_build_l3 else 300
                         ),
                         timeout=30.0,
                     )

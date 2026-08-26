@@ -1,6 +1,7 @@
 import type { StudentModuleTestAttempt } from './projectPath';
 
 export type SnakeCreativeHook =
+  | 'any'
   | 'game_start'
   | 'key_input'
   | 'before_move'
@@ -30,6 +31,7 @@ export interface SnakeCreativeHookOption {
 }
 
 export const SNAKE_CREATIVE_HOOKS: SnakeCreativeHookOption[] = [
+  { id: 'any', labelZh: '所有游戏事件', labelEn: 'All game events', descriptionZh: '由函数根据 event.type 自由处理', descriptionEn: 'The function handles events through event.type' },
   { id: 'game_start', labelZh: '游戏开始', labelEn: 'Game start', descriptionZh: '每次重置出初始状态后运行', descriptionEn: 'Runs after every reset' },
   { id: 'key_input', labelZh: '按下方向键', labelEn: 'Key input', descriptionZh: '收到一次有效方向输入时运行', descriptionEn: 'Runs on a valid direction input' },
   { id: 'before_move', labelZh: '移动之前', labelEn: 'Before move', descriptionZh: '基础循环推进前运行', descriptionEn: 'Runs before the core step' },
@@ -64,7 +66,9 @@ export const createStudentCreativeFunction = (
 ): StudentCreativeFunction => ({
   id,
   title: `我的创意 ${index}`,
-  hook: 'after_move',
+  // 新卡不再要求学生额外选择钩子：一个空白函数可以在受控的七类事件上自由发挥。
+  // 旧卡仍保留原 hook，不改变历史行为与研究记录。
+  hook: 'any',
   code: createCreativeStarterCode(),
   enabled: false,
   verified: false,
@@ -73,6 +77,15 @@ export const createStudentCreativeFunction = (
 });
 
 export const creativeUnitId = (id: string) => `creative::${id}`;
+
+/**
+ * 旧卡原本只保存一个 hook。当学生已经在函数内明确读取
+ * event.type/event.hook 时，函数本身就是事件路由器，应接收所有受控事件。
+ * 没有事件判断的历史卡仍严格按原 hook 运行，避免行为扩大。
+ */
+export const usesCreativeEventRouting = (code: string) => (
+  /event\s*(?:\.get\(\s*["'](?:type|hook)["']|\[\s*["'](?:type|hook)["']\s*\])/.test(code)
+);
 
 export const creativeHookLabel = (hook: SnakeCreativeHook, language: 'zh' | 'en') => {
   const option = SNAKE_CREATIVE_HOOKS.find(item => item.id === hook) ?? SNAKE_CREATIVE_HOOKS[0];
