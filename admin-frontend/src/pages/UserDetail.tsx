@@ -3,11 +3,11 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { adminApi } from '../lib/adminApi';
 import type {
   UserDetail as UserDetailType, ChatMessage, ProfileSnapshot,
-  ScaleResponse, CalibrationLog, GraphNode,
+  ScaleResponse, CalibrationLog, GraphNode, GraphEdge,
 } from '../types';
 import {
   ArrowLeft, MessageSquare, TrendingUp, FileText,
-  ArrowUp, ArrowDown, Minus, Brain, Heart, Zap,
+  ArrowUp, ArrowDown, Minus,
   Activity, Network, Download, Loader,
 } from 'lucide-react';
 
@@ -67,26 +67,82 @@ const Delta = ({ curr, prev }: { curr: number; prev: number }) => {
   );
 };
 
-// ── Ring progress ─────────────────────────────────────────────────────────────
-const Ring = ({ value, color, label, Icon }: { value: number; color: string; label: string; Icon: React.ElementType }) => {
-  const r = 36, circ = 2 * Math.PI * r;
+// ── Teacher diagnostic previews ──────────────────────────────────────────────
+const ProfileRadar = ({ profile }: { profile: ProfileSnapshot }) => {
+  const center = { x: 150, y: 116 };
+  const axes = [
+    { key: 'cognition' as const, label: '认知', x: 150, y: 22 },
+    { key: 'affect' as const, label: '情感', x: 254, y: 176 },
+    { key: 'behavior' as const, label: '行为', x: 46, y: 176 },
+  ];
+  const point = (axis: typeof axes[number], ratio: number) => ({
+    x: center.x + (axis.x - center.x) * ratio,
+    y: center.y + (axis.y - center.y) * ratio,
+  });
+  const polygon = (ratio: number) => axes
+    .map(axis => { const p = point(axis, ratio); return `${p.x},${p.y}`; })
+    .join(' ');
+  const values = axes
+    .map(axis => { const p = point(axis, profile[axis.key] / 100); return `${p.x},${p.y}`; })
+    .join(' ');
+
   return (
-    <div className="flex flex-col items-center gap-2">
-      <div className="relative w-20 h-20">
-        <svg className="w-full h-full -rotate-90" viewBox="0 0 88 88">
-          <circle cx="44" cy="44" r={r} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="6" />
-          <circle cx="44" cy="44" r={r} fill="none" stroke={color} strokeWidth="6"
-            strokeLinecap="round"
-            strokeDasharray={`${(value / 100) * circ} ${circ}`}
-            style={{ transition: 'stroke-dasharray 0.6s ease' }} />
-        </svg>
-        <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <Icon size={14} style={{ color }} />
-          <span className="text-sm font-bold mt-0.5">{value}</span>
-        </div>
-      </div>
-      <span className="text-xs font-medium" style={{ color: 'var(--text-light)' }}>{label}</span>
+    <svg viewBox="0 0 300 210" className="w-full max-w-[340px] mx-auto" role="img" aria-label="认知、情感与行为画像雷达图">
+      {[1, .66, .33].map(ratio => <polygon key={ratio} points={polygon(ratio)} fill="none" stroke="var(--glass-border)" strokeWidth="1.5" />)}
+      {axes.map(axis => <line key={axis.key} x1={center.x} y1={center.y} x2={axis.x} y2={axis.y} stroke="var(--glass-border)" />)}
+      <polygon points={values} fill="rgba(183,251,34,.28)" stroke="#71951d" strokeWidth="3" />
+      {axes.map(axis => {
+        const p = point(axis, profile[axis.key] / 100);
+        return <circle key={axis.key} cx={p.x} cy={p.y} r="4" fill="#71951d" />;
+      })}
+      {axes.map(axis => (
+        <text key={axis.key} x={axis.x} y={axis.y + (axis.key === 'cognition' ? -7 : 18)} textAnchor="middle" fill="currentColor" fontSize="13" fontWeight="800">
+          {axis.label} {profile[axis.key]}
+        </text>
+      ))}
+    </svg>
+  );
+};
+
+const KnowledgeGraphPreview = ({ nodes, edges }: { nodes: GraphNode[]; edges: GraphEdge[] }) => {
+  const visible = [...nodes].sort((a, b) => b.frequency - a.frequency).slice(0, 8);
+  const positions = new Map(visible.map((node, index) => {
+    const angle = (Math.PI * 2 * index / Math.max(visible.length, 1)) - Math.PI / 2;
+    return [node.id, { x: 260 + Math.cos(angle) * 185, y: 132 + Math.sin(angle) * 92 }] as const;
+  }));
+  const visibleEdges = edges.filter(edge => positions.has(edge.source) && positions.has(edge.target));
+
+  if (!visible.length) return (
+    <div className="min-h-[220px] grid place-items-center text-center" style={{ color: 'var(--text-light)' }}>
+      <div><Network size={36} className="mx-auto mb-2 opacity-40" /><p>暂无知识图谱数据</p></div>
     </div>
+  );
+
+  return (
+    <svg viewBox="0 0 520 265" className="w-full" role="img" aria-label={`包含 ${nodes.length} 个概念节点的知识图谱预览`}>
+      {visibleEdges.map((edge, index) => {
+        const source = positions.get(edge.source)!;
+        const target = positions.get(edge.target)!;
+        return <line key={`${edge.source}-${edge.target}-${index}`} x1={source.x} y1={source.y} x2={target.x} y2={target.y} stroke="var(--glass-border)" strokeWidth={Math.max(1, edge.weight * 2)} />;
+      })}
+      {!visibleEdges.length && visible.map((node, index) => {
+        if (index === 0) return null;
+        const source = positions.get(visible[0].id)!;
+        const target = positions.get(node.id)!;
+        return <line key={`fallback-${node.id}`} x1={source.x} y1={source.y} x2={target.x} y2={target.y} stroke="var(--glass-border)" strokeDasharray="4 5" />;
+      })}
+      {visible.map(node => {
+        const p = positions.get(node.id)!;
+        const color = node.mastery >= 75 ? '#4d7c0f' : node.mastery >= 50 ? '#6366f1' : node.mastery >= 25 ? '#ca8a04' : '#dc5b45';
+        return (
+          <g key={node.id} transform={`translate(${p.x} ${p.y})`}>
+            <circle r={19 + Math.min(node.frequency, 8)} fill={color} fillOpacity=".18" stroke={color} strokeWidth="2" />
+            <text y="3" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="800">{Math.round(node.mastery)}%</text>
+            <text y="37" textAnchor="middle" fill="currentColor" fontSize="11">{node.name.length > 8 ? `${node.name.slice(0, 8)}…` : node.name}</text>
+          </g>
+        );
+      })}
+    </svg>
   );
 };
 
@@ -112,6 +168,7 @@ export const UserDetail = () => {
   const [scaleResponses, setScaleResponses] = useState<ScaleResponse[]>([]);
   const [calibrationLogs, setCalibrationLogs] = useState<CalibrationLog[]>([]);
   const [graphNodes, setGraphNodes] = useState<GraphNode[]>([]);
+  const [graphEdges, setGraphEdges] = useState<GraphEdge[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState<'messages' | 'profiles' | 'scales' | 'calibration' | 'graph'>('messages');
@@ -138,6 +195,7 @@ export const UserDetail = () => {
       setScaleResponses(scalesRes);
       setCalibrationLogs(calibRes);
       setGraphNodes(graphRes.nodes);
+      setGraphEdges(graphRes.edges);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load user data');
     } finally {
@@ -292,29 +350,51 @@ export const UserDetail = () => {
           </div>
         </div>
 
-        {/* Current profile rings */}
-        {currentProfile && (
-          <div className="mt-6 pt-6 border-t" style={{ borderColor: 'var(--glass-border)' }}>
-            <div className="flex items-center justify-between mb-4">
-              <p className="text-sm font-semibold" style={{ color: 'var(--text-light)' }}>当前画像</p>
-              <span className="text-xs" style={{ color: 'var(--text-light)' }}>
-                更新于 {new Date(currentProfile.created_at).toLocaleString('zh-CN')}
-                {currentProfile.source === 'user' && (
-                  <span className="ml-2 px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-300">用户自评</span>
-                )}
-              </span>
-            </div>
-            <div className="flex justify-around">
-              <Ring value={currentProfile.cognition} color="rgb(99,102,241)" label="认知" Icon={Brain} />
-              <Ring value={currentProfile.affect} color="rgb(168,85,247)" label="情感" Icon={Heart} />
-              <Ring value={currentProfile.behavior} color="rgb(236,72,153)" label="行为" Icon={Zap} />
-            </div>
-          </div>
-        )}
       </div>
 
+      {/* ── Teacher diagnostic window ── */}
+      <section className="glass-card rounded-2xl overflow-hidden stagger-2">
+        <div className="px-6 py-4 flex flex-wrap items-center justify-between gap-3 border-b" style={{ borderColor: 'var(--glass-border)' }}>
+          <div>
+            <p className="text-xs font-bold tracking-widest" style={{ color: 'var(--brand-green)' }}>STUDENT DIAGNOSTIC</p>
+            <h2 className="text-xl font-bold mt-1">学习画像与知识图谱</h2>
+          </div>
+          <span className="text-xs" style={{ color: 'var(--text-light)' }}>基于平台内已记录的学习过程生成</span>
+        </div>
+        <div className="grid lg:grid-cols-2">
+          <div className="p-6 lg:border-r" style={{ borderColor: 'var(--glass-border)' }}>
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <div>
+                <p className="font-semibold">当前学习画像</p>
+                <p className="text-xs mt-1" style={{ color: 'var(--text-light)' }}>
+                  {currentProfile ? `更新于 ${new Date(currentProfile.created_at).toLocaleString('zh-CN')}` : '尚无画像快照'}
+                </p>
+              </div>
+              <button onClick={() => setActiveTab('profiles')} className="px-3 py-2 rounded-lg text-xs font-semibold border" style={{ borderColor: 'var(--glass-border)' }}>
+                查看变化
+              </button>
+            </div>
+            {currentProfile ? <ProfileRadar profile={currentProfile} /> : (
+              <div className="min-h-[210px] grid place-items-center text-sm" style={{ color: 'var(--text-light)' }}>暂无画像数据</div>
+            )}
+          </div>
+          <div className="p-6 border-t lg:border-t-0" style={{ borderColor: 'var(--glass-border)' }}>
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <div>
+                <p className="font-semibold">概念关系图</p>
+                <p className="text-xs mt-1" style={{ color: 'var(--text-light)' }}>{graphNodes.length} 个节点 · {graphEdges.length} 条关系</p>
+              </div>
+              <button onClick={() => setActiveTab('graph')} className="px-3 py-2 rounded-lg text-xs font-semibold border" style={{ borderColor: 'var(--glass-border)' }}>
+                查看节点
+              </button>
+            </div>
+            <KnowledgeGraphPreview nodes={graphNodes} edges={graphEdges} />
+          </div>
+        </div>
+      </section>
+
       {/* ── Tabs ── */}
-      <div className="glass-card rounded-2xl overflow-hidden stagger-2">
+      <div className="glass-card rounded-2xl overflow-hidden stagger-3">
         <div className="flex border-b overflow-x-auto" style={{ borderColor: 'var(--glass-border)' }}>
           {TABS.map(({ key, label, icon: Icon, count }) => (
             <button
