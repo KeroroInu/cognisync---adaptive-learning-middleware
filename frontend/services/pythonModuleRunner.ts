@@ -65,6 +65,23 @@ export interface PythonCreativeHookResult {
   outputs: Array<{ cardId: string; hook: SnakeCreativeHook; lines: string[] }>;
 }
 
+export interface PythonMazeTestResult {
+  passed: boolean;
+  resultCode: string;
+  detail: string;
+  durationMs: number;
+  path: number[][];
+  output: string[];
+}
+
+export interface PythonMazeConfig {
+  boardSize: number;
+  start: number[];
+  goal: number[];
+  walls: number[][];
+  maxSteps?: number;
+}
+
 interface WorkerResponse {
   type: 'runtime-loading' | 'executing' | 'result' | 'error';
   id?: string;
@@ -624,6 +641,82 @@ export const runPythonCreativeHooks = async (
     }
   }
   return { state: next, errors, outputs };
+};
+
+/**
+ * 迁移测试也在同一个无文件、无网络、5 秒上限的 Worker 中运行。
+ * 学生可自由拆函数，但可视化运行器只从 next_move(state) 读取下一步。
+ */
+export const runPythonMazeTest = async (
+  code: string,
+  config: PythonMazeConfig,
+): Promise<PythonMazeTestResult> => {
+  const startedAt = performance.now();
+  const harness = `
+import ast
+import builtins
+import contextlib
+import io
+import json
+_result = {'passed': False, 'resultCode': 'UNKNOWN', 'detail': '', 'path': [], 'output': []}
+_output = io.StringIO()
+try:
+    _source = ${JSON.stringify(code)}
+    _tree = ast.parse(_source)
+    _blocked = {'open', 'exec', 'eval', 'compile', '__import__', 'globals', 'locals', 'vars', 'getattr', 'setattr', 'delattr', 'breakpoint', 'input', 'help'}
+    for _node in ast.walk(_tree):
+        if isinstance(_node, (ast.Import, ast.ImportFrom, ast.Global, ast.Nonlocal)):
+            raise AssertionError('RESTRICTED_CODE')
+        if isinstance(_node, ast.Attribute) and _node.attr.startswith('__'):
+            raise AssertionError('RESTRICTED_CODE')
+        if isinstance(_node, ast.Name) and (_node.id.startswith('__') or _node.id in _blocked):
+            raise AssertionError('RESTRICTED_CODE')
+    _safe_names = ('abs','all','any','bool','dict','enumerate','float','int','len','list','max','min','range','reversed','round','set','sorted','str','sum','tuple','zip')
+    _safe_builtins = {name: getattr(builtins, name) for name in _safe_names}
+    _namespace = {'__builtins__': _safe_builtins}
+    with contextlib.redirect_stdout(_output), contextlib.redirect_stderr(_output):
+        exec(compile(_tree, '<student>', 'exec'), _namespace, _namespace)
+        _next_move = _namespace.get('next_move')
+        if not callable(_next_move):
+            raise AssertionError('FUNCTION_MISSING')
+        _config = json.loads(${JSON.stringify(JSON.stringify(config))})
+        _size = int(_config['boardSize'])
+        _position = list(_config['start'])
+        _goal = list(_config['goal'])
+        _walls = {tuple(point) for point in _config['walls']}
+        _visited = [list(_position)]
+        _path = [list(_position)]
+        _directions = {'up': (0,-1), 'down': (0,1), 'left': (-1,0), 'right': (1,0)}
+        for _step in range(int(_config.get('maxSteps') or 80)):
+            if _position == _goal:
+                break
+            _state = {'position': list(_position), 'goal': list(_goal), 'walls': [list(point) for point in _walls], 'visited': [list(point) for point in _visited], 'steps': _step, 'board_size': _size}
+            _direction = _next_move(_state)
+            if _direction not in _directions:
+                raise AssertionError('INVALID_DIRECTION')
+            _dx, _dy = _directions[_direction]
+            _candidate = [_position[0] + _dx, _position[1] + _dy]
+            if not (0 <= _candidate[0] < _size and 0 <= _candidate[1] < _size):
+                raise AssertionError('OUT_OF_BOUNDS')
+            if tuple(_candidate) in _walls:
+                raise AssertionError('HIT_WALL')
+            _position = _candidate
+            _visited.append(list(_position))
+            _path.append(list(_position))
+        if _position != _goal:
+            raise AssertionError('GOAL_NOT_REACHED')
+    _result = {'passed': True, 'resultCode': 'PASSED', 'detail': '', 'path': _path}
+except SyntaxError as _error:
+    _result = {'passed': False, 'resultCode': 'SYNTAX_ERROR', 'detail': f'line {_error.lineno}: {_error.msg}', 'path': []}
+except AssertionError as _error:
+    _result = {'passed': False, 'resultCode': str(_error), 'detail': '', 'path': locals().get('_path', [])}
+except Exception as _error:
+    _result = {'passed': False, 'resultCode': 'RUNTIME_ERROR', 'detail': f'{type(_error).__name__}: {_error}', 'path': locals().get('_path', [])}
+_result['output'] = _output.getvalue().splitlines()[:200]
+json.dumps(_result, ensure_ascii=False)
+`;
+  const result = await runPythonJson<Omit<PythonMazeTestResult, 'durationMs'>>(harness);
+  return { ...result, durationMs: Math.round(performance.now() - startedAt) };
 };
 
 export const disposePythonModuleRunner = () => {

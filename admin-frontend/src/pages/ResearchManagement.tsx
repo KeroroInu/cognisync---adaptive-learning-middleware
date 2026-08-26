@@ -97,7 +97,7 @@ export const ResearchManagement = () => {
       if (showLoading) setLoading(true);
       setError('');
       const result = await adminApi.getResearchTasks();
-      setTasks(result.tasks);
+      setTasks(result.tasks.filter(task => task.task_kind !== 'transfer_test'));
     } catch (e) {
       setError(e instanceof Error ? e.message : '加载失败');
     } finally {

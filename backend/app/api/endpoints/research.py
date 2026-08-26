@@ -17,6 +17,7 @@ from app.schemas.base import SuccessResponse
 from app.models.sql.research import (
     ProjectBlueprintVersion,
     ResearchTask,
+    ResearchTaskKind,
     ResearchTaskSubmission,
     ResearchTaskStatus,
 )
@@ -69,6 +70,9 @@ class ActiveTaskResponse(BaseModel):
     code_content: str
     language: str
     target_group: str
+    task_kind: str = "learning"
+    test_template: Optional[str] = None
+    ai_enabled: bool = True
     # 当前用户的提交状态（若无提交记录则为默认值）
     is_completed: bool = False
     code_submitted: Optional[str] = None
@@ -147,7 +151,7 @@ class StageEventRequest(BaseModel):
         max_length=100,
         description="前端生成、在网络重试中保持稳定的请求 ID；与当前用户构成幂等键",
     )
-    stage: Literal["observe", "decompose", "model", "plan", "build", "reflect"]
+    stage: Literal["observe", "decompose", "model", "plan", "build", "transfer", "reflect"]
     event_type: Literal[
         "stage_confirm",
         "structure_change",
@@ -206,9 +210,9 @@ class FinalSubmitRequest(BaseModel):
         max_length=100,
         description="前端生成、在整次提交的所有重试中保持稳定的幂等键",
     )
-    # 允许 reflect：STAGE_EVENT_MATRIX 里 final_submit 就是 build/reflect 两个阶段，
-    # 这里不额外收窄，否则以后开放 reflect 阶段还要改两处。
-    stage: Literal["build", "reflect"] = "build"
+    # 建构、迁移测试和反思都可产生最终代码产物；与
+    # STAGE_EVENT_MATRIX 保持同一边界，避免前后端放行而请求模型拒绝。
+    stage: Literal["build", "transfer", "reflect"] = "build"
     code_submitted: str = Field(default="", max_length=200000)
     started_at: Optional[str] = None
     detail: dict = Field(default_factory=dict)
@@ -458,16 +462,18 @@ def _mapping_suggestions(
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
-@router.get("/active-task")
-async def get_active_task(
+async def _get_active_task_by_kind(
+    *,
+    kind: ResearchTaskKind,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> SuccessResponse[ActiveTaskResponse]:
-    """获取当前激活的研究任务"""
+    """按用途读取当前学生可见的活动任务。"""
     result = await db.execute(
         select(ResearchTask)
         .where(
             ResearchTask.status == ResearchTaskStatus.ACTIVE,
+            ResearchTask.task_kind == kind,
             or_(
                 ResearchTask.target_group == "all",
                 ResearchTask.target_group == current_user.experiment_group,
@@ -508,6 +514,9 @@ async def get_active_task(
         code_content=task.code_content,
         language=task.language,
         target_group=task.target_group,
+        task_kind=task.task_kind.value,
+        test_template=task.test_template,
+        ai_enabled=task.ai_enabled,
         is_completed=submission.is_completed if submission else False,
         code_submitted=submission.code_submitted if submission else None,
         workspace_data=submission.workspace_data if submission else None,
@@ -515,6 +524,32 @@ async def get_active_task(
         # 当前只向学生端暴露版本标识，不返回同义表达、标准前置关系、
         # 隐藏测试和支架内部规则；后续按阶段设计专用公开视图。
     ))
+
+
+@router.get("/active-task")
+async def get_active_task(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> SuccessResponse[ActiveTaskResponse]:
+    """获取当前激活的项目学习任务。"""
+    return await _get_active_task_by_kind(
+        kind=ResearchTaskKind.LEARNING,
+        db=db,
+        current_user=current_user,
+    )
+
+
+@router.get("/active-test")
+async def get_active_transfer_test(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> SuccessResponse[ActiveTaskResponse]:
+    """获取教师另行发布的迁移测试；不覆盖项目学习任务。"""
+    return await _get_active_task_by_kind(
+        kind=ResearchTaskKind.TRANSFER_TEST,
+        db=db,
+        current_user=current_user,
+    )
 
 
 @router.post("/tasks/{task_id}/blueprint/function-mapping-suggestions")

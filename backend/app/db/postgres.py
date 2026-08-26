@@ -64,6 +64,9 @@ async def init_db():
         # 迁移：为 research_task_submissions 添加 started_at 列
         await _migrate_research_started_at()
 
+        # 迁移测试与项目学习任务分槽发布，并冻结 AI 权限。
+        await _migrate_research_test_assignments()
+
         # 迁移：为 research_task_submissions 添加项目解构工作台过程数据
         await _migrate_research_workspace_data()
 
@@ -252,6 +255,35 @@ async def _migrate_research_started_at():
         "ALTER TABLE research_task_submissions ADD COLUMN IF NOT EXISTS started_at TIMESTAMP WITH TIME ZONE;",
         "ADD COLUMN started_at to research_task_submissions"
     )
+
+
+async def _migrate_research_test_assignments():
+    """幂等迁移：区分学习任务和迁移测试，保存模板与 AI 权限。"""
+
+    statements = (
+        (
+            "ALTER TABLE research_tasks "
+            "ADD COLUMN IF NOT EXISTS task_kind VARCHAR(30) NOT NULL DEFAULT 'learning';",
+            "ADD research_tasks.task_kind",
+        ),
+        (
+            "ALTER TABLE research_tasks "
+            "ADD COLUMN IF NOT EXISTS test_template VARCHAR(80);",
+            "ADD research_tasks.test_template",
+        ),
+        (
+            "ALTER TABLE research_tasks "
+            "ADD COLUMN IF NOT EXISTS ai_enabled BOOLEAN NOT NULL DEFAULT TRUE;",
+            "ADD research_tasks.ai_enabled",
+        ),
+        (
+            "CREATE INDEX IF NOT EXISTS ix_research_tasks_kind_group_status "
+            "ON research_tasks (task_kind, target_group, status);",
+            "INDEX research task kind/group/status",
+        ),
+    )
+    for sql, label in statements:
+        await _run_migration_sql(sql, label)
 
 
 async def _migrate_research_workspace_data():

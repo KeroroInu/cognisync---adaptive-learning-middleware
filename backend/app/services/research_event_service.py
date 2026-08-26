@@ -117,9 +117,13 @@ STAGE_EVENT_MATRIX: dict[StageEventType, frozenset[ProjectStage]] = {
     # 求助在任何阶段都可能发生，这正是支架依赖分析要观察的。
     StageEventType.HELP_REQUEST: frozenset(ProjectStage),
     # 只有写了代码才谈得上模块测试。
-    StageEventType.MODULE_TEST: frozenset({ProjectStage.BUILD, ProjectStage.REFLECT}),
+    StageEventType.MODULE_TEST: frozenset(
+        {ProjectStage.BUILD, ProjectStage.TRANSFER, ProjectStage.REFLECT}
+    ),
     # 最终提交发生在建构完成之后。
-    StageEventType.FINAL_SUBMIT: frozenset({ProjectStage.BUILD, ProjectStage.REFLECT}),
+    StageEventType.FINAL_SUBMIT: frozenset(
+        {ProjectStage.BUILD, ProjectStage.TRANSFER, ProjectStage.REFLECT}
+    ),
 }
 
 # 每种产物「原生」的阶段，即首次产出该产物的阶段。
@@ -131,7 +135,7 @@ ARTIFACT_NATIVE_STAGES: dict[ArtifactType, frozenset[ProjectStage]] = {
     ),
     ArtifactType.MECHANISM: frozenset({ProjectStage.MODEL}),
     ArtifactType.PATH: frozenset({ProjectStage.PLAN}),
-    ArtifactType.MODULE_CODE: frozenset({ProjectStage.BUILD}),
+    ArtifactType.MODULE_CODE: frozenset({ProjectStage.BUILD, ProjectStage.TRANSFER}),
     ArtifactType.REVISION_NOTE: frozenset({ProjectStage.REFLECT}),
 }
 

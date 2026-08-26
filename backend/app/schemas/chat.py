@@ -73,7 +73,7 @@ class ProjectScaffoldContext(BaseModel):
     requestId: str = Field(..., min_length=1, max_length=100, description="一次支架交互的客户端请求 ID")
     taskId: str = Field(..., min_length=1, max_length=100, description="研究任务 ID")
     taskTitle: Optional[str] = Field(default=None, max_length=200, description="项目名称")
-    stage: Literal["observe", "decompose", "model", "plan", "build"] = Field(
+    stage: Literal["observe", "decompose", "model", "plan", "build", "transfer"] = Field(
         ...,
         description="学生当前所在项目阶段",
     )

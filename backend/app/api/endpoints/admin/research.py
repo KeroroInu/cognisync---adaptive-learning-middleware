@@ -17,6 +17,7 @@ from app.models.sql.research import (
     ProjectBlueprintStatus,
     ProjectBlueprintVersion,
     ResearchTask,
+    ResearchTaskKind,
     ResearchTaskSubmission,
     ResearchTaskStatus,
 )
@@ -39,6 +40,9 @@ class ResearchTaskCreate(BaseModel):
     code_content: str
     language: str = "python"
     target_group: Literal["all", "pdt", "ai_pbl", "lecture", "unassigned"] = "all"
+    task_kind: Literal["learning", "transfer_test"] = "learning"
+    test_template: Optional[Literal["maze_treasure_v1"]] = None
+    ai_enabled: bool = True
 
 
 class ResearchTaskUpdate(BaseModel):
@@ -49,6 +53,9 @@ class ResearchTaskUpdate(BaseModel):
     code_content: Optional[str] = None
     language: Optional[str] = None
     target_group: Optional[Literal["all", "pdt", "ai_pbl", "lecture", "unassigned"]] = None
+    task_kind: Optional[Literal["learning", "transfer_test"]] = None
+    test_template: Optional[Literal["maze_treasure_v1"]] = None
+    ai_enabled: Optional[bool] = None
 
 
 class ResearchTaskItem(BaseModel):
@@ -60,6 +67,9 @@ class ResearchTaskItem(BaseModel):
     code_content: str
     language: str
     target_group: str
+    task_kind: str
+    test_template: Optional[str]
+    ai_enabled: bool
     status: str
     current_blueprint_version_id: Optional[str]
     submissions_count: int
@@ -151,6 +161,9 @@ async def list_research_tasks(
             code_content=task.code_content,
             language=task.language,
             target_group=task.target_group,
+            task_kind=task.task_kind.value,
+            test_template=task.test_template,
+            ai_enabled=task.ai_enabled,
             status=task.status.value,
             current_blueprint_version_id=(
                 str(task.current_blueprint_version_id)
@@ -171,6 +184,8 @@ async def create_research_task(
     db: AsyncSession = Depends(get_db),
 ) -> SuccessResponse[ResearchTaskItem]:
     """创建新研究任务"""
+    if data.task_kind == "transfer_test" and data.test_template != "maze_treasure_v1":
+        raise HTTPException(status_code=422, detail="Transfer test requires maze_treasure_v1")
     task = ResearchTask(
         title=data.title,
         description=data.description,
@@ -179,6 +194,9 @@ async def create_research_task(
         code_content=data.code_content,
         language=data.language,
         target_group=data.target_group,
+        task_kind=ResearchTaskKind(data.task_kind),
+        test_template=data.test_template,
+        ai_enabled=data.ai_enabled,
         status=ResearchTaskStatus.DRAFT,
     )
     db.add(task)
@@ -194,6 +212,9 @@ async def create_research_task(
         code_content=task.code_content,
         language=task.language,
         target_group=task.target_group,
+        task_kind=task.task_kind.value,
+        test_template=task.test_template,
+        ai_enabled=task.ai_enabled,
         status=task.status.value,
         current_blueprint_version_id=None,
         submissions_count=0,
@@ -228,6 +249,27 @@ async def update_research_task(
         task.language = data.language
     if data.target_group is not None:
         task.target_group = data.target_group
+    frozen_assignment_change = (
+        data.task_kind is not None
+        or data.test_template is not None
+        or data.ai_enabled is not None
+    )
+    if frozen_assignment_change and task.status != ResearchTaskStatus.DRAFT:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "PUBLISHED_ASSIGNMENT_FROZEN",
+                "message": "已发布任务的测试类型、模板和 AI 权限已冻结；请新建版本。",
+            },
+        )
+    if data.task_kind is not None:
+        task.task_kind = ResearchTaskKind(data.task_kind)
+    if data.test_template is not None:
+        task.test_template = data.test_template
+    if data.ai_enabled is not None:
+        task.ai_enabled = data.ai_enabled
+    if task.task_kind == ResearchTaskKind.TRANSFER_TEST and task.test_template != "maze_treasure_v1":
+        raise HTTPException(status_code=422, detail="Transfer test requires maze_treasure_v1")
     task.updated_at = datetime.now(timezone.utc)
 
     await db.commit()
@@ -248,6 +290,9 @@ async def update_research_task(
         code_content=task.code_content,
         language=task.language,
         target_group=task.target_group,
+        task_kind=task.task_kind.value,
+        test_template=task.test_template,
+        ai_enabled=task.ai_enabled,
         status=task.status.value,
         current_blueprint_version_id=(
             str(task.current_blueprint_version_id)
@@ -329,12 +374,14 @@ async def activate_research_task(
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
-    # 每个实验条件只保留一个当前任务，互不覆盖其他组。
+    # 每个“实验条件 + 任务用途”只保留一个当前任务。
+    # 发布迁移测试不得归档正在使用的项目学习任务。
     await db.execute(
         update(ResearchTask)
         .where(
             ResearchTask.status == ResearchTaskStatus.ACTIVE,
             ResearchTask.target_group == task.target_group,
+            ResearchTask.task_kind == task.task_kind,
         )
         .where(ResearchTask.id != task_id)
         .values(status=ResearchTaskStatus.ARCHIVED, updated_at=datetime.now(timezone.utc))

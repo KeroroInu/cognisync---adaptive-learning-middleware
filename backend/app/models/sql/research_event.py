@@ -87,6 +87,7 @@ class ProjectStage(str, enum.Enum):
     MODEL = "model"
     PLAN = "plan"
     BUILD = "build"
+    TRANSFER = "transfer"
     REFLECT = "reflect"
 
 

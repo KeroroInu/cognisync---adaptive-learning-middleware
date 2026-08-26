@@ -10,6 +10,7 @@ const Users = lazy(() => import('./pages/Users').then(module => ({ default: modu
 const UserDetail = lazy(() => import('./pages/UserDetail').then(module => ({ default: module.UserDetail })));
 const Scales = lazy(() => import('./pages/Scales').then(module => ({ default: module.Scales })));
 const ResearchManagement = lazy(() => import('./pages/ResearchManagement').then(module => ({ default: module.ResearchManagement })));
+const TestAssignments = lazy(() => import('./pages/TestAssignments').then(module => ({ default: module.TestAssignments })));
 const Conversations = lazy(() => import('./pages/Conversations').then(module => ({ default: module.Conversations })));
 const ConversationDetail = lazy(() => import('./pages/ConversationDetail').then(module => ({ default: module.ConversationDetail })));
 const Exports = lazy(() => import('./pages/Exports').then(module => ({ default: module.Exports })));
@@ -55,6 +56,7 @@ function AdminApp() {
       <Route path="users/:userId" element={<AdminLayout><UserDetail /></AdminLayout>} />
       <Route path="scales" element={<AdminLayout><Scales /></AdminLayout>} />
       <Route path="research" element={<AdminLayout><ResearchManagement /></AdminLayout>} />
+      <Route path="tests" element={<AdminLayout><TestAssignments /></AdminLayout>} />
       <Route path="conversations" element={<AdminLayout><Conversations /></AdminLayout>} />
       <Route path="conversations/:sessionId" element={<AdminLayout><ConversationDetail /></AdminLayout>} />
       <Route path="emotions" element={<AdminLayout><EmotionAnalytics /></AdminLayout>} />

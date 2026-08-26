@@ -194,6 +194,9 @@ export interface ResearchTask {
   code_content: string;
   language: string;
   target_group: 'all' | 'unassigned' | 'pdt' | 'ai_pbl' | 'lecture';
+  task_kind: 'learning' | 'transfer_test';
+  test_template: 'maze_treasure_v1' | null;
+  ai_enabled: boolean;
   status: 'draft' | 'active' | 'archived';
   current_blueprint_version_id: string | null;
   submissions_count?: number;

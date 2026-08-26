@@ -36,8 +36,8 @@ import type {
 } from '../data/projectPath';
 import type { StudentCreativeFunction } from '../data/snakeCreativeFunctions';
 
-/** 后端 ProjectStage 枚举。注意后端比前端多一个 `reflect`。 */
-export type BackendStage = 'observe' | 'decompose' | 'model' | 'plan' | 'build' | 'reflect';
+/** 后端 ProjectStage 枚举。 */
+export type BackendStage = 'observe' | 'decompose' | 'model' | 'plan' | 'build' | 'transfer' | 'reflect';
 
 export type StageEventType =
   | 'stage_confirm'

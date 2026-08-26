@@ -232,6 +232,9 @@ class AdminApiClient {
     code_content: string;
     language: string;
     target_group?: ResearchTask['target_group'];
+    task_kind?: ResearchTask['task_kind'];
+    test_template?: ResearchTask['test_template'];
+    ai_enabled?: boolean;
   }): Promise<ResearchTask> {
     return this.request<ResearchTask>('/research/tasks', {
       method: 'POST',
@@ -247,6 +250,9 @@ class AdminApiClient {
     code_content?: string;
     language?: string;
     target_group?: ResearchTask['target_group'];
+    task_kind?: ResearchTask['task_kind'];
+    test_template?: ResearchTask['test_template'];
+    ai_enabled?: boolean;
   }): Promise<ResearchTask> {
     return this.request<ResearchTask>(`/research/tasks/${taskId}`, {
       method: 'PATCH',

@@ -1,6 +1,6 @@
 import type { Language } from '../types';
 
-export type ProjectStage = 'observe' | 'decompose' | 'model' | 'plan' | 'build';
+export type ProjectStage = 'observe' | 'decompose' | 'model' | 'plan' | 'build' | 'transfer';
 
 export type SnakeRuntimeEvidenceType =
   | 'opened'
@@ -280,6 +280,12 @@ export const STAGE_SCAFFOLDS: Record<ProjectStage, ScaffoldHint[]> = {
       bodyZh: '我会补全导致测试无法推进的最小代码片段，并要求你重新运行、解释和修改。',
       bodyEn: 'I will fill the smallest blocking code fragment, then require you to rerun, explain and revise it.',
     },
+  ],
+  transfer: [
+    { labelZh: '测试定位', labelEn: 'Locate with tests', bodyZh: '先运行当前函数，根据迷宫和终端反馈定位卡住的一步。', bodyEn: 'Run the current function and use the maze and terminal feedback to locate the blocked step.' },
+    { labelZh: '关键代码', labelEn: 'Key code', bodyZh: '聚焦当前函数的一小段关键代码。', bodyEn: 'Focus on one small but important part of the current function.' },
+    { labelZh: '函数结构', labelEn: 'Function structure', bodyZh: '给出接近完整的函数结构，由学生补全并运行。', bodyEn: 'Provide a nearly complete function structure for the student to finish and run.' },
+    { labelZh: '完整函数', labelEn: 'Complete function', bodyZh: '确认后给出当前函数的完整正确实现。', bodyEn: 'After confirmation, provide the complete correct implementation for the current function.' },
   ],
 };
 

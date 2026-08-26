@@ -25,6 +25,7 @@ STAGE_TITLES = {
     "model": {"zh": "功能流程", "en": "Function flow"},
     "plan": {"zh": "实现规划", "en": "Implementation planning"},
     "build": {"zh": "编码验证", "en": "Build and verify"},
+    "transfer": {"zh": "迁移测试", "en": "Transfer test"},
 }
 
 BUILD_FUNCTION_TITLES = {
@@ -78,7 +79,7 @@ class LearningAgentHarness:
     """为项目学习助手装配权威上下文和同作用域记忆。"""
 
     def context_key(self, context: ProjectScaffoldContext) -> LearningContextKey:
-        focus_id = context.currentModule if context.stage == "build" else context.stage
+        focus_id = context.currentModule if context.stage in {"build", "transfer"} else context.stage
         return LearningContextKey(
             task_id=str(context.taskId),
             stage=context.stage,
@@ -87,8 +88,11 @@ class LearningAgentHarness:
 
     def focus_title(self, context: ProjectScaffoldContext, language: str = "zh") -> str:
         lang = "en" if language == "en" else "zh"
-        if context.stage != "build":
+        if context.stage not in {"build", "transfer"}:
             return STAGE_TITLES[context.stage][lang]
+
+        if context.stage == "transfer":
+            return _summary_value(context.artifactSummary, "当前测试函数：") or context.currentModule or STAGE_TITLES[context.stage][lang]
 
         module_id = context.currentModule or "build-unselected"
         creative_title = _summary_value(context.artifactSummary, "当前创意函数：")
@@ -116,7 +120,7 @@ class LearningAgentHarness:
             return False
         if str(metadata.get("stage") or "") != key.stage:
             return False
-        if key.stage != "build":
+        if key.stage not in {"build", "transfer"}:
             return True
         return _one_line(metadata.get("currentModule") or "build-unselected", 300) == key.focus_id
 

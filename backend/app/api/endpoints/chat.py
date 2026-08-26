@@ -135,7 +135,16 @@ async def _resolve_scaffold_task(
     在导出时无法与真实数据区分。
     """
     tid = parse_task_uuid(str(scaffold_context.taskId))
-    return await get_visible_task(db, user, tid, require_active=True)
+    task = await get_visible_task(db, user, tid, require_active=True)
+    if not task.ai_enabled:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "TASK_AI_DISABLED",
+                "message": "教师未为当前测试开启 AI 支架。",
+            },
+        )
+    return task
 
 
 async def _record_help_request_event(
@@ -953,7 +962,7 @@ async def chat(
 
         confirmed_build_l3 = bool(
             scaffold_context
-            and scaffold_context.stage == "build"
+            and scaffold_context.stage in {"build", "transfer"}
             and scaffold_context.l3Confirmed
             and scaffold_metadata
             and scaffold_metadata["level"] == 3

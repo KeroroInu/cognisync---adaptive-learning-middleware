@@ -19,6 +19,18 @@ class ResearchTaskStatus(str, enum.Enum):
     ARCHIVED = "archived"
 
 
+class ResearchTaskKind(str, enum.Enum):
+    """教学任务用途。
+
+    ``learning`` 是现有项目学习主任务；``transfer_test`` 是教师另行
+    发布的迁移测试。两者分开后，发布测试不会归档正在使用的
+    贪吃蛇学习任务。
+    """
+
+    LEARNING = "learning"
+    TRANSFER_TEST = "transfer_test"
+
+
 class ProjectBlueprintStatus(str, enum.Enum):
     """教师项目蓝图版本状态。"""
 
@@ -35,6 +47,12 @@ class ResearchTask(Base, UUIDMixin):
     __table_args__ = (
         Index("ix_research_tasks_status", "status"),
         Index("ix_research_tasks_target_group_status", "target_group", "status"),
+        Index(
+            "ix_research_tasks_kind_group_status",
+            "task_kind",
+            "target_group",
+            "status",
+        ),
         {"comment": "教学研究任务表"},
     )
 
@@ -80,6 +98,26 @@ class ResearchTask(Base, UUIDMixin):
         nullable=False,
         default="all",
         comment="投放实验条件：all | pdt | ai_pbl | lecture | unassigned",
+    )
+
+    task_kind: Mapped[ResearchTaskKind] = mapped_column(
+        Enum(ResearchTaskKind, name="research_task_kind", native_enum=False),
+        nullable=False,
+        default=ResearchTaskKind.LEARNING,
+        comment="任务用途：learning | transfer_test",
+    )
+
+    test_template: Mapped[Optional[str]] = mapped_column(
+        String(80),
+        nullable=True,
+        comment="可视化测试模板；首版仅 maze_treasure_v1",
+    )
+
+    ai_enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        comment="当前任务是否允许学生请求 AI 支架",
     )
 
     status: Mapped[ResearchTaskStatus] = mapped_column(

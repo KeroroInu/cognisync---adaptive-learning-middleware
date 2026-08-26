@@ -110,6 +110,22 @@ def test_unconfirmed_build_l3_stays_at_l2():
     assert resolved["wasClamped"] is True
 
 
+def test_transfer_l3_uses_same_explicit_confirmation_boundary_as_build():
+    unconfirmed = scaffold_context(level=3, l3_confirmed=False)
+    unconfirmed.stage = "transfer"
+    confirmed = scaffold_context(level=3, l3_confirmed=True)
+    confirmed.stage = "transfer"
+
+    assert resolve_scaffold_rule(unconfirmed)["appliedLevel"] == 2
+    assert resolve_scaffold_rule(confirmed)["appliedLevel"] == 3
+    prompt = build_scaffold_prompt(
+        confirmed,
+        UserProfile(cognition=50, affect=50, behavior=50),
+    )
+    assert BUILD_LEVEL_RULES[3] in prompt
+    assert "已进入 L3 代码协作" in prompt
+
+
 def test_workspace_summary_contains_every_student_stage_without_raw_code():
     workspace = {
         "savedAt": "2026-08-14T10:00:00Z",

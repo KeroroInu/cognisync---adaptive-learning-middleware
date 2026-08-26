@@ -69,6 +69,7 @@ const STAGE_LABELS: Record<ProjectStage, { zh: string; en: string }> = {
   model: { zh: '功能流程', en: 'Function flow' },
   plan: { zh: '实现规划', en: 'Implementation planning' },
   build: { zh: '编码验证', en: 'Build and verify' },
+  transfer: { zh: '迁移测试', en: 'Transfer test' },
 };
 
 const LEVEL_LABELS = {
@@ -143,13 +144,14 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
     position: { x: 0, y: 0 },
     size: { width: 0, height: 0 },
   });
-  const activeContextKey = stage === 'build' ? (contextKey || 'build-unselected') : stage;
-  const l3IsConfirmed = stage === 'build' && confirmedL3.has(activeContextKey);
+  const isCodingStage = stage === 'build' || stage === 'transfer';
+  const activeContextKey = isCodingStage ? (contextKey || `${stage}-unselected`) : stage;
+  const l3IsConfirmed = isCodingStage && confirmedL3.has(activeContextKey);
   // L3 是当前函数卡的持续协作权限，不是只对确认按钮后的第一条回复有效。
   // 刷新或重新进入建构时，已确认的卡必须继续以 L3 讨论代码，不能悄悄退回 L0。
   const level = l3IsConfirmed ? 3 : (levels[activeContextKey] ?? 0);
   const stageLabel = STAGE_LABELS[stage];
-  const levelLabels = stage === 'build' ? BUILD_LEVEL_LABELS : LEVEL_LABELS;
+  const levelLabels = isCodingStage ? BUILD_LEVEL_LABELS : LEVEL_LABELS;
   const visibleMessages = messages.filter(message => message.contextKey === activeContextKey);
   const hasOpenedProject = evidence.some(item => item.type === 'opened');
   const observationStageReady = stage === 'observe' && hasOpenedProject && observationCount >= 2;
@@ -223,7 +225,7 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
         message: clean,
         language,
         isResearchMode: true,
-        currentCode: stage === 'build' ? artifactContext.currentCode?.slice(0, 10000) : undefined,
+        currentCode: isCodingStage ? artifactContext.currentCode?.slice(0, 10000) : undefined,
         taskPrompt,
         scaffoldContext: {
           requestId,
@@ -257,7 +259,7 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
     } finally {
       setSending(false);
     }
-  }, [activeContextKey, getArtifactContext, hasOpenedProject, isZh, l3IsConfirmed, language, level, observationCount, observationStageReady, onProfileUpdate, sending, stage, taskId, taskPrompt, taskTitle, userId]);
+  }, [activeContextKey, getArtifactContext, hasOpenedProject, isCodingStage, isZh, l3IsConfirmed, language, level, observationCount, observationStageReady, onProfileUpdate, sending, stage, taskId, taskPrompt, taskTitle, userId]);
 
   const requestHint = () => void submit(
     observationStageReady
@@ -269,13 +271,13 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
 
   const requestMoreSpecific = () => {
     const nextLevel = Math.min(3, level + 1);
-    if (stage === 'build' && nextLevel === 3 && !l3IsConfirmed) {
+    if (isCodingStage && nextLevel === 3 && !l3IsConfirmed) {
       setL3ConfirmationOpen(true);
       return;
     }
     setLevels(current => ({ ...current, [activeContextKey]: nextLevel }));
     void submit(
-      stage === 'build' && nextLevel === 3
+      isCodingStage && nextLevel === 3
         ? (isZh ? '我已确认需要当前函数的完整正确实现。请给出代码，我会自行复制并运行。' : 'I confirmed that I need the complete correct implementation for this function. I will copy and run it myself.')
         : (isZh ? '我尝试后仍然没有推进，请再具体一级。' : 'I am still stuck. Be one level more specific.'),
       'level_up',
@@ -284,7 +286,7 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
   };
 
   const confirmBuildL3 = () => {
-    if (stage !== 'build') return;
+    if (!isCodingStage) return;
     const next = new Set(confirmedL3).add(activeContextKey);
     setConfirmedL3(next);
     setL3ConfirmationOpen(false);
@@ -464,7 +466,7 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
               <span>{message.role === 'assistant' ? <Bot size={16} /> : <MessageCircleMore size={16} />}</span>
               <div>
                 <small>{message.role === 'assistant'
-                  ? `L${message.level} · ${(message.stage === 'build' ? BUILD_LEVEL_LABELS : LEVEL_LABELS)[language][message.level]}${
+                  ? `L${message.level} · ${((message.stage === 'build' || message.stage === 'transfer') ? BUILD_LEVEL_LABELS : LEVEL_LABELS)[language][message.level]}${
                       message.clampedFrom !== undefined
                         ? (isZh
                             ? `（教师蓝图上限，已从 L${message.clampedFrom} 下调）`

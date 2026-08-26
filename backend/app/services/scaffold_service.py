@@ -18,6 +18,7 @@ STAGE_GOALS = {
     "model": "围绕一张功能卡表达内部处理、判断、分支与结果",
     "plan": "根据功能间数据和前置关系形成可执行而非唯一的实现路径",
     "build": "围绕当前基础函数按 L0-L3 提供可复制运行的代码支持，不自动覆盖学生代码",
+    "transfer": "在新的可视化任务中迁移状态、坐标、条件、边界和测试方法",
 }
 
 LEVEL_RULES = {
@@ -376,7 +377,8 @@ def resolve_scaffold_rule(
     require_attempt = True
     max_implementation_level = 3
 
-    if context.stage == "build" and requested_level == 3 and not context.l3Confirmed:
+    coding_stage = context.stage in {"build", "transfer"}
+    if coding_stage and requested_level == 3 and not context.l3Confirmed:
         applied_level = 2
 
     if policy:
@@ -390,7 +392,7 @@ def resolve_scaffold_rule(
             None,
         )
 
-    build_rule = context.stage == "build"
+    build_rule = coding_stage
     return {
         "requestedLevel": requested_level,
         "appliedLevel": applied_level,
@@ -560,7 +562,8 @@ def build_scaffold_prompt(
     resolved = resolve_scaffold_rule(context, policy)
     applied_level = resolved["appliedLevel"]
     stage_goal = resolved["goalZh"]
-    level_rule = BUILD_LEVEL_RULES[applied_level] if context.stage == "build" else LEVEL_RULES[applied_level]
+    coding_stage = context.stage in {"build", "transfer"}
+    level_rule = BUILD_LEVEL_RULES[applied_level] if coding_stage else LEVEL_RULES[applied_level]
     teacher_boundary = resolved["allowedHelpZh"]
     code_limit = resolved["maxCodeLines"] or 0
     upgrade_rule = (
@@ -581,7 +584,7 @@ def build_scaffold_prompt(
         else "观察阶段尚未标记为完成；依据已有证据提供支持，但不要把缺失的工作说成已经完成。"
     )
     confirmed_build_l3 = bool(
-        context.stage == "build"
+        coding_stage
         and applied_level == 3
         and context.l3Confirmed
     )
