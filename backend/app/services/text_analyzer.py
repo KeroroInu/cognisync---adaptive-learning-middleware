@@ -2,6 +2,7 @@
 Text Analyzer - 文本分析服务
 使用 LLM 分析用户消息，提取意图、情感、概念和画像增量
 """
+import asyncio
 import json
 import logging
 import re
@@ -9,6 +10,7 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field, ValidationError
 
+from app.core.config import settings
 from app.schemas.chat import ChatAnalysis, EmotionDetail
 from app.schemas.profile import ProfileDelta, UserProfile
 from app.services.emotion_coding import (
@@ -131,11 +133,14 @@ class TextAnalyzer:
         )
 
         try:
-            llm_response = await self.provider.complete(
-                system_prompt=self.SYSTEM_PROMPT,
-                user_prompt=user_prompt,
-                temperature=0.3,
-                max_tokens=1000,
+            llm_response = await asyncio.wait_for(
+                self.provider.complete(
+                    system_prompt=self.SYSTEM_PROMPT,
+                    user_prompt=user_prompt,
+                    temperature=0.3,
+                    max_tokens=1000,
+                ),
+                timeout=settings.LLM_ANALYSIS_TIMEOUT_SECONDS,
             )
             analysis = self._parse_llm_response(llm_response)
             chat_analysis = self._build_chat_analysis(analysis, current_profile=current_profile)

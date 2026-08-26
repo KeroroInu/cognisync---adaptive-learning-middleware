@@ -1,11 +1,14 @@
 from types import SimpleNamespace
 from uuid import uuid4
 
-from fastapi import FastAPI
+import asyncio
+
+import pytest
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 from app.api.endpoints.auth import get_current_user
-from app.api.endpoints.chat import router
+from app.api.endpoints.chat import _complete_chat_reply, router
 from app.db.postgres import get_db
 from app.schemas.chat import ChatAnalysis, EmotionDetail
 from app.schemas.profile import ProfileDelta, UserProfile
@@ -99,6 +102,7 @@ def test_chat_endpoint_writes_emotion_log(monkeypatch):
 
     class FakeAnalyzer:
         async def analyze(self, user_message, recent_messages=None, current_profile=None):
+            captured["commits_before_analysis"] = db_session.commit_calls
             captured["analyze_args"] = {
                 "user_message": user_message,
                 "recent_messages": recent_messages,
@@ -135,6 +139,7 @@ def test_chat_endpoint_writes_emotion_log(monkeypatch):
 
     class FakeChatProvider:
         async def complete(self, **kwargs):
+            captured["commits_before_chat_provider"] = db_session.commit_calls
             captured["chat_provider"] = kwargs
             return "我们先一起拆解反向传播的步骤。"
 
@@ -198,6 +203,8 @@ def test_chat_endpoint_writes_emotion_log(monkeypatch):
     assert captured["emotion_log"]["message_id"] == db_session.added[0].id
     assert captured["emotion_log"]["analysis"].emotionDetail.code == "E01"
     assert captured["emotion_log"]["current_profile"].cognition == 45
+    assert captured["commits_before_analysis"] >= 2
+    assert captured["commits_before_chat_provider"] > captured["commits_before_analysis"]
     assert db_session.commit_calls >= 3
     assert len(db_session.added) == 2
 
@@ -218,3 +225,28 @@ def test_chat_endpoint_rejects_mismatched_request_user_id():
 
     assert response.status_code == 403
     assert response.json()["detail"] == "Authenticated user does not match request.userId"
+
+
+def test_chat_reply_failure_is_not_retried_by_endpoint_layer():
+    class FailingProvider:
+        def __init__(self):
+            self.calls = 0
+
+        async def complete(self, **kwargs):
+            self.calls += 1
+            raise RuntimeError("upstream unavailable")
+
+    provider = FailingProvider()
+
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(
+            _complete_chat_reply(
+                provider,
+                system_prompt="system",
+                user_prompt="user",
+                max_tokens=300,
+            )
+        )
+
+    assert exc_info.value.status_code == 503
+    assert provider.calls == 1

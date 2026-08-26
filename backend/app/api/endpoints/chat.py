@@ -1,6 +1,7 @@
 """
 Chat Endpoint - 对话接口（完整实现）
 """
+import asyncio
 import logging
 from uuid import UUID
 from datetime import datetime, timedelta, timezone
@@ -10,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.postgres import get_db
+from app.core.config import settings
 from app.schemas.base import SuccessResponse
 from app.schemas.chat import ChatRequest, ChatResponse, ChatScaffoldInfo
 from app.schemas.chat import ChatAnalysis
@@ -46,6 +48,54 @@ from app.services.research_task_service import get_visible_task, parse_task_uuid
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+async def _complete_chat_reply(
+    provider,
+    *,
+    system_prompt: str,
+    user_prompt: str,
+    max_tokens: int,
+) -> str:
+    """在单一总预算内生成回复。
+
+    provider 负责针对 429/5xx 的有界重试；端点层不叠加第二层
+    重试，以免一次学生操作被放大为多次上游请求。
+    """
+    try:
+        reply = await asyncio.wait_for(
+            provider.complete(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                temperature=0.7,
+                max_tokens=max_tokens,
+            ),
+            timeout=settings.LLM_CHAT_TIMEOUT_SECONDS,
+        )
+    except asyncio.CancelledError:
+        raise
+    except HTTPException:
+        raise
+    except asyncio.TimeoutError as exc:
+        logger.warning("LLM chat generation timed out: %s", exc)
+        raise HTTPException(
+            status_code=503,
+            detail="AI service temporarily unavailable, please retry",
+        ) from exc
+    except Exception as exc:
+        logger.warning("LLM chat generation failed: %s", exc)
+        raise HTTPException(
+            status_code=503,
+            detail="AI service temporarily unavailable, please retry",
+        ) from exc
+
+    if not reply.strip():
+        logger.warning("LLM chat generation returned an empty reply")
+        raise HTTPException(
+            status_code=503,
+            detail="AI service temporarily unavailable, please retry",
+        )
+    return reply
 
 
 async def get_or_create_active_session(db: AsyncSession, user_id: UUID) -> ChatSession:
@@ -479,6 +529,8 @@ async def get_greeting(
         name_part = f"，{user_name}" if user_name else ""
 
         context = await get_cross_session_context(db, user_id)
+        # SELECT 也会打开事务；调用外部模型前主动释放数据库连接。
+        await db.commit()
 
         if not context:
             # 新用户或继续当前会话 - 简洁问候（带用户名）
@@ -496,7 +548,6 @@ async def get_greeting(
             if language == "zh"
             else f"You are a warm learning companion. Greet {user_name or 'the user'} with one short friendly sentence that naturally references their previous topic. Keep it under 30 words."
         )
-        import asyncio
         greeting = await asyncio.wait_for(
             llm.complete(
                 system_prompt=system,
@@ -504,7 +555,7 @@ async def get_greeting(
                 temperature=0.8,
                 max_tokens=100
             ),
-            timeout=15.0,
+            timeout=settings.LLM_ANALYSIS_TIMEOUT_SECONDS,
         )
 
         return {"success": True, "data": {"message": greeting.strip(), "hasContext": True}}
@@ -768,6 +819,9 @@ async def chat(
             if agent_turn
             else learning_agent_harness.scope_history(raw_recent_messages, None, 20)
         )
+        # 历史查询已经完全投影到内存。文本分析可能等待外部模型，
+        # 不应在这段时间占用连接池中的事务连接。
+        await db.commit()
         is_student_authored = not scaffold_context or scaffold_context.trigger == "student_message"
 
         # 只有学生亲自输入的文本才参与情感/画像分析。按钮生成的固定句子只表示
@@ -891,6 +945,9 @@ async def chat(
         # 注入跨会话上下文（让 AI 能自然引用上次讨论内容）
         # 项目智能体使用任务作用域记忆；普通自由对话才允许引用跨会话主题。
         cross_session_ctx = None if scaffold_context else await get_cross_session_context(db, user_id)
+        if not scaffold_context:
+            # 自由对话的跨会话摘要也是一次 SELECT，在模型生成前结束读事务。
+            await db.commit()
         if cross_session_ctx:
             system_prompt += f"\n上次对话涉及：{cross_session_ctx}，如自然可提及。"
 
@@ -955,7 +1012,6 @@ async def chat(
 
         # 固定七函数的 L0-L3 都由服务端按等级返回受控代码，避免模型越级或改写
         # 已通过本地行为检查的完整函数；其他项目与阶段仍走 LLM。
-        import asyncio
         assistant_reply = ""
         if scaffold_context and scaffold_metadata:
             assistant_reply = build_controlled_scaffold_response(
@@ -965,35 +1021,14 @@ async def chat(
                 student_message=request.message,
                 current_code=request.currentCode,
             ) or ""
-        last_llm_error: Optional[BaseException] = None
         if not assistant_reply:
             llm_provider = get_chat_provider()
-            for attempt in range(2):
-                try:
-                    assistant_reply = await asyncio.wait_for(
-                        llm_provider.complete(
-                            system_prompt=system_prompt,
-                            user_prompt=user_prompt,
-                            temperature=0.7,
-                            max_tokens=700 if confirmed_build_l3 else 300
-                        ),
-                        timeout=30.0,
-                    )
-                    break
-                except asyncio.CancelledError:
-                    # 客户端断开或服务关闭：不要当作 LLM 故障重试，直接向上传播
-                    raise
-                except HTTPException:
-                    # 不要把上游的业务异常误判为 LLM 故障而重试
-                    raise
-                except (asyncio.TimeoutError, Exception) as llm_err:
-                    last_llm_error = llm_err
-                    logger.warning(f"LLM attempt {attempt + 1} failed: {llm_err}")
-                    if attempt == 0:
-                        await asyncio.sleep(1)
-        if not assistant_reply:
-            logger.error(f"LLM failed after retries: {last_llm_error}")
-            raise HTTPException(status_code=503, detail="AI service temporarily unavailable, please retry")
+            assistant_reply = await _complete_chat_reply(
+                llm_provider,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                max_tokens=700 if confirmed_build_l3 else 300,
+            )
 
         logger.info(f"AI reply generated: {len(assistant_reply)} characters")
 

@@ -40,6 +40,21 @@ class BrokenProvider(BaseProvider):
         return True
 
 
+class BlockingProvider(BaseProvider):
+    async def complete(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        temperature: float = 0.7,
+        max_tokens: int = 1000,
+    ) -> str:
+        await asyncio.sleep(1)
+        return "{}"
+
+    async def health_check(self) -> bool:
+        return True
+
+
 def run_async(coro):
     return asyncio.run(coro)
 
@@ -195,6 +210,19 @@ def test_invalid_llm_response_falls_back_and_keeps_emotion_detail():
     assert result.emotionDetail is not None
     assert result.emotionDetail.code == "E08"
     assert result.delta.behavior > 0
+
+
+def test_analysis_timeout_falls_back_without_waiting_for_provider(monkeypatch):
+    monkeypatch.setattr(
+        "app.services.text_analyzer.settings.LLM_ANALYSIS_TIMEOUT_SECONDS",
+        0.01,
+    )
+    analyzer = TextAnalyzer(provider=BlockingProvider())
+
+    result = run_async(analyzer.analyze("我不理解这段代码"))
+
+    assert result.intent == "help-seeking"
+    assert result.emotion == "confused"
 
 
 def test_detected_concepts_are_trimmed_before_graph_persistence():

@@ -73,6 +73,18 @@ class Settings(BaseSettings):
     DEEPSEEK_BASE_URL: str = "https://api.deepseek.com/v1"
     DEEPSEEK_MODEL: str = "deepseek-chat"
     LLM_TIMEOUT_SECONDS: int = Field(default=45, ge=5, le=180)
+    LLM_ANALYSIS_TIMEOUT_SECONDS: int = Field(
+        default=15,
+        ge=3,
+        le=60,
+        description="单轮文本分析的总时间预算；超时后降级到规则分析",
+    )
+    LLM_CHAT_TIMEOUT_SECONDS: int = Field(
+        default=30,
+        ge=5,
+        le=120,
+        description="单轮对话生成的总时间预算",
+    )
     LLM_MAX_CONCURRENCY: int = Field(default=12, ge=1, le=100)
     LLM_MAX_RETRIES: int = Field(default=2, ge=0, le=5)
 
