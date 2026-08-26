@@ -4,11 +4,12 @@
  */
 
 export const resolveApiBaseUrl = (
-  isProduction: boolean,
-  configuredUrl?: string,
+  _isProduction: boolean,
+  _configuredUrl?: string,
 ): string => {
-  if (isProduction) return '/api';
-  return configuredUrl?.trim() || '/api';
+  // 管理端始终走同源 /api。开发环境的后端地址由 Vite 代理控制，
+  // 避免本机 .env 中的绝对 URL 绕过代理并触发 CORS 配置漂移。
+  return '/api';
 };
 
 const API_BASE_URL = resolveApiBaseUrl(

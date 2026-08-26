@@ -6,8 +6,8 @@ describe('resolveApiBaseUrl', () => {
     expect(resolveApiBaseUrl(true, 'http://localhost:8000/api')).toBe('/api');
   });
 
-  it('keeps a custom development target when explicitly configured', () => {
-    expect(resolveApiBaseUrl(false, 'http://localhost:8000/api')).toBe('http://localhost:8000/api');
+  it('keeps development requests on the same-origin proxy even with a legacy absolute URL', () => {
+    expect(resolveApiBaseUrl(false, 'http://localhost:8000/api')).toBe('/api');
   });
 
   it('falls back to the unified path when no target is configured', () => {
