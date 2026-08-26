@@ -105,6 +105,8 @@ async def init_db():
             await _seed_test_student()
         # 种子：默认量表 v1.0（幂等，已存在则跳过）
         await _seed_default_scale()
+        # 种子：学校实验固定使用的学习项目与迁移测试（只补缺失项）
+        await _seed_experiment_tasks()
 
     except Exception as e:
         logger.error(f"❌ Database initialization failed: {e}")
@@ -811,6 +813,66 @@ async def _seed_test_student():
         session.add(student)
         await session.commit()
         logger.info("✅ Test student created: student_id='%s'", TEST_STUDENT_ID)
+
+
+async def _seed_experiment_tasks(session_factory=async_session_factory):
+    """幂等补齐学校实验的两个固定项目，不覆盖教师已有设置。"""
+    from sqlalchemy import select
+    from app.models.sql.research import (
+        ResearchTask,
+        ResearchTaskKind,
+        ResearchTaskStatus,
+    )
+
+    async with session_factory() as session:
+        learning_task = await session.scalar(
+            select(ResearchTask)
+            .where(ResearchTask.task_kind == ResearchTaskKind.LEARNING)
+            .order_by(ResearchTask.created_at.asc())
+            .limit(1)
+        )
+        if learning_task is None:
+            session.add(ResearchTask(
+                title="贪吃蛇项目工坊",
+                description="运行完整项目，从观察中命名功能，再通过七个基础函数完成建构与创意扩展。",
+                instructions="按项目工作台的观察、功能、流程与建构顺序完成学习。",
+                ai_prompt="根据学生当前阶段、已保存产物、当前功能卡与测试结果提供 L0—L3 渐进支架。",
+                code_content="# CogniSync 贪吃蛇项目由浏览器受控运行器执行。",
+                language="python",
+                target_group="all",
+                task_kind=ResearchTaskKind.LEARNING,
+                ai_enabled=True,
+                status=ResearchTaskStatus.ACTIVE,
+            ))
+            logger.info("✅ Seeded fixed learning project: 贪吃蛇项目工坊")
+
+        transfer_task = await session.scalar(
+            select(ResearchTask)
+            .where(ResearchTask.task_kind == ResearchTaskKind.TRANSFER_TEST)
+            .order_by(ResearchTask.created_at.asc())
+            .limit(1)
+        )
+        if transfer_task is None:
+            session.add(ResearchTask(
+                title="迷宫寻宝迁移测试",
+                description="在可视化迷宫中让角色避开墙壁并到达宝箱。",
+                instructions="运用已学会的函数化思维，自己拆分并添加解决问题所需的函数。",
+                ai_prompt="引导学生迁移已学会的函数化思维；只根据当前函数、代码与测试结果提供支架。",
+                code_content=(
+                    "def next_move(state):\n"
+                    "    # 读取 position、goal、walls 与 visited\n"
+                    "    return 'right'"
+                ),
+                language="python",
+                target_group="all",
+                task_kind=ResearchTaskKind.TRANSFER_TEST,
+                test_template="maze_treasure_v1",
+                ai_enabled=True,
+                status=ResearchTaskStatus.DRAFT,
+            ))
+            logger.info("✅ Seeded fixed transfer test: 迷宫寻宝迁移测试")
+
+        await session.commit()
 
 
 async def _seed_default_scale():

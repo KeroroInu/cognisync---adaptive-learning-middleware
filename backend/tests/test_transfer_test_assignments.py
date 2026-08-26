@@ -7,7 +7,9 @@ import pytest
 from sqlalchemy import func, select, text
 
 from app.models.sql.message import ChatMessage
+from app.models.sql.research import ResearchTask, ResearchTaskKind
 from app.models.sql.research_event import ScaffoldEvent, StageEvent
+from app.db.postgres import _seed_experiment_tasks
 
 
 async def _create_admin_task(admin_client, **overrides) -> dict:
@@ -21,6 +23,27 @@ async def _create_admin_task(admin_client, **overrides) -> dict:
     response = await admin_client.post("/api/admin/research/tasks", json=payload)
     assert response.status_code == 200, response.text
     return response.json()["data"]
+
+
+@pytest.mark.asyncio
+async def test_fixed_experiment_catalog_is_seeded_once(test_db):
+    await _seed_experiment_tasks(test_db)
+    await _seed_experiment_tasks(test_db)
+
+    async with test_db() as session:
+        tasks = (await session.execute(select(ResearchTask))).scalars().all()
+
+    assert len(tasks) == 2
+    assert {task.task_kind for task in tasks} == {
+        ResearchTaskKind.LEARNING,
+        ResearchTaskKind.TRANSFER_TEST,
+    }
+    transfer = next(
+        task for task in tasks
+        if task.task_kind == ResearchTaskKind.TRANSFER_TEST
+    )
+    assert transfer.test_template == "maze_treasure_v1"
+    assert transfer.title == "迷宫寻宝迁移测试"
 
 
 @pytest.mark.asyncio
