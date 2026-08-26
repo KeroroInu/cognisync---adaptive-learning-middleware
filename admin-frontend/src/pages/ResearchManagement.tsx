@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Plus, Archive, Trash2, Users, ChevronDown, ChevronUp, Loader, Upload, X, CheckCircle, Download, GitBranch } from 'lucide-react';
+import { Archive, Trash2, Users, ChevronDown, ChevronUp, Loader, X, CheckCircle, Download, GitBranch } from 'lucide-react';
 import { adminApi } from '../lib/adminApi';
 import type { ResearchTask, ResearchTaskSubmission } from '../types';
 import { ResearchBlueprintEditor } from './ResearchBlueprintEditor';
@@ -45,15 +45,6 @@ const downloadResearchCSV = (submissions: ResearchTaskSubmission[], taskTitle: s
   document.body.removeChild(a); URL.revokeObjectURL(url);
 };
 
-const LANGUAGES = [
-  { value: 'python', label: 'Python' },
-  { value: 'javascript', label: 'JavaScript' },
-  { value: 'java', label: 'Java' },
-  { value: 'cpp', label: 'C++' },
-  { value: 'go', label: 'Go' },
-  { value: 'other', label: 'Other' },
-];
-
 const STATUS_LABEL: Record<string, string> = { active: '活跃', draft: '草稿', archived: '已归档' };
 const TARGET_GROUPS: Array<{ value: ResearchTask['target_group']; label: string }> = [
   { value: 'all', label: '全部实验组（公共任务）' },
@@ -67,7 +58,6 @@ export const ResearchManagement = () => {
   const [tasks, setTasks] = useState<ResearchTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
-  const [showCreateModal, setShowCreateModal] = useState(false);
   const [submissionsModal, setSubmissionsModal] = useState<{
     task: ResearchTask;
     submissions: ResearchTaskSubmission[];
@@ -78,26 +68,17 @@ export const ResearchManagement = () => {
   const [deletingSubmissions, setDeletingSubmissions] = useState(false);
   const [blueprintTask, setBlueprintTask] = useState<ResearchTask | null>(null);
 
-  // Create form state
-  const [form, setForm] = useState({
-    title: '',
-    description: '',
-    instructions: '',
-    ai_prompt: '',
-    code_content: '',
-    language: 'python',
-    target_group: 'all' as ResearchTask['target_group'],
-  });
-  const [creating, setCreating] = useState(false);
   const [exportingRow, setExportingRow] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadTasks = async (showLoading = true) => {
     try {
       if (showLoading) setLoading(true);
       setError('');
       const result = await adminApi.getResearchTasks();
-      setTasks(result.tasks.filter(task => task.task_kind !== 'transfer_test'));
+      setTasks(result.tasks
+        .filter(task => task.task_kind === 'learning')
+        .sort((a, b) => a.created_at.localeCompare(b.created_at))
+        .slice(0, 1));
     } catch (e) {
       setError(e instanceof Error ? e.message : '加载失败');
     } finally {
@@ -106,39 +87,6 @@ export const ResearchManagement = () => {
   };
 
   useEffect(() => { loadTasks(); }, []);
-
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      setForm(f => ({ ...f, code_content: ev.target?.result as string || '' }));
-    };
-    reader.readAsText(file);
-  };
-
-  const handleCreate = async () => {
-    if (!form.title.trim() || !form.code_content.trim()) return;
-    try {
-      setCreating(true);
-      await adminApi.createResearchTask({
-        title: form.title,
-        description: form.description || undefined,
-        instructions: form.instructions || undefined,
-        ai_prompt: form.ai_prompt || undefined,
-        code_content: form.code_content,
-        language: form.language,
-        target_group: form.target_group,
-      });
-      setShowCreateModal(false);
-      setForm({ title: '', description: '', instructions: '', ai_prompt: '', code_content: '', language: 'python', target_group: 'all' });
-      await loadTasks();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : '创建失败');
-    } finally {
-      setCreating(false);
-    }
-  };
 
   const handleActivate = async (taskId: string) => {
     try {
@@ -155,17 +103,6 @@ export const ResearchManagement = () => {
       await loadTasks();
     } catch (e) {
       setError(e instanceof Error ? e.message : '归档失败');
-    }
-  };
-
-  const handleDelete = async (e: React.MouseEvent, taskId: string) => {
-    e.stopPropagation();
-    if (!confirm('确定要删除这个任务吗？所有学生提交记录也会被删除。')) return;
-    try {
-      await adminApi.deleteResearchTask(taskId);
-      await loadTasks();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : '删除失败');
     }
   };
 
@@ -220,18 +157,12 @@ export const ResearchManagement = () => {
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="glass-card rounded-2xl p-6 flex items-center justify-between gap-6">
         <div>
-          <h1 className="text-3xl font-bold mb-2">教学研究</h1>
-          <p style={{ color: 'var(--text-secondary)' }}>配置项目任务、教师参考蓝图与学生过程数据</p>
+          <p className="text-xs font-bold tracking-widest mb-2" style={{ color: 'var(--brand-green)' }}>PROJECT 01 / LEARNING</p>
+          <h1 className="text-3xl font-bold mb-2">贪吃蛇学习项目</h1>
+          <p style={{ color: 'var(--text-secondary)' }}>本次实验固定使用该项目。教师可管理蓝图、发布状态与过程数据，不再创建其他学习任务。</p>
         </div>
-        <button
-          onClick={() => setShowCreateModal(true)}
-          className="flex items-center gap-2 px-6 py-3 rounded-xl font-medium bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:shadow-lg hover:scale-105 transition-all duration-300"
-        >
-          <Plus size={20} />
-          创建任务
-        </button>
       </div>
 
       {/* Error Message */}
@@ -260,7 +191,7 @@ export const ResearchManagement = () => {
               {tasks.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
-                    暂无研究任务，点击「创建任务」建立第一个项目任务
+                    固定贪吃蛇项目尚未就绪；后端重启后会自动补齐，不需要教师手工创建。
                   </td>
                 </tr>
               ) : (
@@ -346,13 +277,6 @@ export const ResearchManagement = () => {
                             ? <Loader size={14} className="animate-spin" />
                             : <Download size={14} />}
                         </button>
-                        <button
-                          onClick={(e) => handleDelete(e, task.id)}
-                          className="p-2 rounded-lg bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-800 transition-colors"
-                          title="删除任务"
-                        >
-                          <Trash2 size={14} />
-                        </button>
                       </div>
                     </td>
                   </tr>
@@ -362,157 +286,6 @@ export const ResearchManagement = () => {
           </table>
         </div>
       </div>
-
-      {/* Create Task Modal — rendered via portal to escape layout overflow */}
-      {showCreateModal && createPortal(
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 overflow-y-auto">
-          <div className="flex min-h-full items-center justify-center p-4">
-          <div className="glass-card rounded-2xl p-6 w-full max-w-2xl">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold">创建研究任务</h2>
-              <button
-                onClick={() => { setShowCreateModal(false); setForm({ title: '', description: '', instructions: '', ai_prompt: '', code_content: '', language: 'python', target_group: 'all' }); }}
-                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium mb-1">任务标题 *</label>
-                <input
-                  type="text"
-                  value={form.title}
-                  onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-                  style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)' }}
-                  placeholder="例：Python 列表推导式填空练习"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-1">任务描述</label>
-                <textarea
-                  value={form.description}
-                  onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-                  rows={2}
-                  className="w-full px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 resize-none"
-                  style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)' }}
-                  placeholder="简短描述任务目的..."
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-1">给学生的说明</label>
-                <textarea
-                  value={form.instructions}
-                  onChange={e => setForm(f => ({ ...f, instructions: e.target.value }))}
-                  rows={2}
-                  className="w-full px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 resize-none"
-                  style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)' }}
-                  placeholder="例：请填写所有标注 TODO 的空白处，完成后点击「完成任务」。"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-1">
-                  AI 教学提示
-                  <span className="ml-1.5 text-xs font-normal" style={{ color: 'var(--text-light)' }}>
-                    （告诉 AI 本节课的教学目标，让它更有针对性地引导学生）
-                  </span>
-                </label>
-                <textarea
-                  value={form.ai_prompt}
-                  onChange={e => setForm(f => ({ ...f, ai_prompt: e.target.value }))}
-                  rows={4}
-                  className="w-full px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 resize-none"
-                  style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)' }}
-                  placeholder="例：本节课讲解 Python 列表推导式。学生应理解列表推导式的语法，能将 for 循环改写为推导式，并知道何时使用条件过滤。请引导学生自己发现规律，不要直接给出答案。"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-1">投放实验组 *</label>
-                <select
-                  value={form.target_group}
-                  onChange={e => setForm(f => ({ ...f, target_group: e.target.value as ResearchTask['target_group'] }))}
-                  className="w-full px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-                  style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)' }}
-                >
-                  {TARGET_GROUPS.map(group => <option key={group.value} value={group.value}>{group.label}</option>)}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-1">编程语言 *</label>
-                <select
-                  value={form.language}
-                  onChange={e => setForm(f => ({ ...f, language: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-                  style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)' }}
-                >
-                  {LANGUAGES.map(l => (
-                    <option key={l.value} value={l.value}>{l.label}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block text-sm font-medium">代码内容 *</label>
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="flex items-center gap-1 text-xs text-indigo-600 dark:text-indigo-400 hover:underline transition-colors"
-                  >
-                    <Upload size={13} />
-                    上传文件
-                  </button>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept=".py,.js,.ts,.java,.cpp,.c,.go,.txt"
-                    className="hidden"
-                    onChange={handleFileUpload}
-                  />
-                </div>
-                <textarea
-                  value={form.code_content}
-                  onChange={e => setForm(f => ({ ...f, code_content: e.target.value }))}
-                  rows={12}
-                  className="w-full px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 font-mono text-sm resize-none"
-                  style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)' }}
-                  placeholder="# 在此粘贴代码，或点击「上传文件」&#10;&#10;def bubble_sort(arr):&#10;    # TODO: 实现冒泡排序&#10;    pass"
-                />
-                <p className="text-xs mt-1" style={{ color: 'var(--text-light)' }}>
-                  支持直接粘贴代码，也可上传 .py / .js / .java / .cpp 等文件
-                </p>
-              </div>
-            </div>
-
-            <div className="flex gap-3 mt-6">
-              <button
-                onClick={() => { setShowCreateModal(false); setForm({ title: '', description: '', instructions: '', ai_prompt: '', code_content: '', language: 'python', target_group: 'all' }); }}
-                className="flex-1 px-4 py-2 rounded-lg border hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
-                style={{ borderColor: 'var(--glass-border)' }}
-              >
-                取消
-              </button>
-              <button
-                onClick={handleCreate}
-                disabled={creating || !form.title.trim() || !form.code_content.trim()}
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors"
-              >
-                {creating ? <Loader size={16} className="animate-spin" /> : <Plus size={16} />}
-                {creating ? '创建中...' : '创建任务'}
-              </button>
-            </div>
-          </div>
-          </div>
-        </div>,
-        document.body
-      )}
 
       {/* Submissions Modal — rendered via portal to escape layout overflow */}
       {submissionsModal && createPortal(

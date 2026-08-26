@@ -45,8 +45,8 @@ export const AdminLayout = ({ children }: AdminLayoutProps) => {
     { path: '/conversations', icon: MessageSquare, label: t('nav.conversations') },
     { path: '/emotions', icon: HeartPulse, label: t('nav.emotions') },
     { path: '/scales', icon: FileText, label: t('nav.scales') },
-    { path: '/research', icon: FlaskConical, label: t('nav.research') },
-    { path: '/tests', icon: ClipboardCheck, label: '布置测试' },
+    { path: '/research', icon: FlaskConical, label: '贪吃蛇项目' },
+    { path: '/tests', icon: ClipboardCheck, label: '迁移测试' },
     { path: '/exports', icon: Download, label: t('nav.exports') },
     { path: '/config', icon: Settings2, label: t('nav.modelConfig') },
   ];
