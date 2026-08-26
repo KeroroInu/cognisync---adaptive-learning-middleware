@@ -101,7 +101,13 @@ class ResearchTask(Base, UUIDMixin):
     )
 
     task_kind: Mapped[ResearchTaskKind] = mapped_column(
-        Enum(ResearchTaskKind, name="research_task_kind", native_enum=False),
+        Enum(
+            ResearchTaskKind,
+            name="research_task_kind",
+            native_enum=False,
+            values_callable=lambda enum_cls: [item.value for item in enum_cls],
+            validate_strings=True,
+        ),
         nullable=False,
         default=ResearchTaskKind.LEARNING,
         comment="任务用途：learning | transfer_test",

@@ -26,8 +26,12 @@ import type {
   EmotionTrendResponse,
   EmotionUserDetailResponse,
 } from '../types';
+import { resolveApiBaseUrl } from './apiClient';
 
-const BASE_URL = (import.meta.env.VITE_API_BASE_URL as string) || '/api';
+const BASE_URL = resolveApiBaseUrl(
+  import.meta.env.PROD,
+  import.meta.env.VITE_API_BASE_URL,
+);
 
 class AdminApiClient {
   private getAuthHeaders(includeJsonContentType: boolean = true): Record<string, string> {

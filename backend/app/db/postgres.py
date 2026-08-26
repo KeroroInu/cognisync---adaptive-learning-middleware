@@ -267,6 +267,11 @@ async def _migrate_research_test_assignments():
             "ADD research_tasks.task_kind",
         ),
         (
+            "UPDATE research_tasks SET task_kind = lower(task_kind) "
+            "WHERE task_kind IN ('LEARNING', 'TRANSFER_TEST');",
+            "NORMALIZE research_tasks.task_kind values",
+        ),
+        (
             "ALTER TABLE research_tasks "
             "ADD COLUMN IF NOT EXISTS test_template VARCHAR(80);",
             "ADD research_tasks.test_template",

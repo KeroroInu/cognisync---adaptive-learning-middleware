@@ -4,7 +4,7 @@ from __future__ import annotations
 import uuid
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 
 from app.models.sql.message import ChatMessage
 from app.models.sql.research_event import ScaffoldEvent, StageEvent
@@ -21,6 +21,37 @@ async def _create_admin_task(admin_client, **overrides) -> dict:
     response = await admin_client.post("/api/admin/research/tasks", json=payload)
     assert response.status_code == 200, response.text
     return response.json()["data"]
+
+
+@pytest.mark.asyncio
+async def test_task_list_reads_lowercase_kind_from_existing_database(
+    test_db, admin_client
+):
+    """历史迁移会把 task_kind 作为小写字符串写入数据库。"""
+    task_id = uuid.uuid4()
+    async with test_db() as session:
+        await session.execute(
+            text(
+                """
+                INSERT INTO research_tasks (
+                    id, title, code_content, language, target_group, task_kind,
+                    ai_enabled, status, created_at, updated_at
+                ) VALUES (
+                    :id, 'existing learning task', 'print(1)', 'python', 'all',
+                    'learning', TRUE, 'DRAFT', now(), now()
+                )
+                """
+            ),
+            {"id": task_id},
+        )
+        await session.commit()
+
+    response = await admin_client.get("/api/admin/research/tasks")
+
+    assert response.status_code == 200, response.text
+    tasks = response.json()["data"]["tasks"]
+    assert tasks[0]["id"] == str(task_id)
+    assert tasks[0]["task_kind"] == "learning"
 
 
 @pytest.mark.asyncio
