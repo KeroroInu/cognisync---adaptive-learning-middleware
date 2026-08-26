@@ -349,6 +349,15 @@ git diff --check                            passed
 - 真实浏览器 `kero` 验收（`1280×720`）：存量“加速”卡使用 `event.type == "eat"` 且保留历史 `after_move` hook，兼容路由后本地测试通过；真实控制蛇吃到食物，得分 `000 → 010`、间隔 `360ms → 324ms`。同一卡临时产生 4 个对象，棋盘实际绘制“墙”、炸弹、传送门和奖励星；验收后已恢复原加速代码、重新测试并启用，没有保留临时对象代码。
 - 验证：后端 `pytest -q` 为 `216 passed, 4 existing warnings`；改动文件 Ruff 通过；学生端 `tsc --noEmit` 与生产构建通过；管理端生产构建通过；学生端只有既有 Monaco `>500 KB` 分包警告。
 
+#### 2026-08-26 仓库清理与聊天容量边界修复（Codex）
+
+- 已将误纳入 Git 的 `测试/myenv/` 本地 Conda/Python 环境从版本跟踪中移除，并加入 `.gitignore`；本地环境文件保留可用，没有改写 Git 历史。历史提交中曾包含一个 token 形态文件，新 HEAD 已不再跟踪，但远端历史仍需后续单独决定是否轮换密钥与清理历史。
+- 删除了已证实无引用的旧 `ProjectPathStage` 与两个学生画像组件；`ProjectMechanismStage` 保留，它是学生必须完成的“单个功能内部流程图”，不得再与已放弃的建构路径规划混淆。
+- 修复聊天事务边界：历史消息和跨会话上下文读取后，在等待外部模型前显式结束只读事务，避免全班齐发时用模型等待占满 PostgreSQL 连接池。
+- 文本分析和对话生成分别使用 `LLM_ANALYSIS_TIMEOUT_SECONDS=15` 与 `LLM_CHAT_TIMEOUT_SECONDS=30` 整轮预算。重试只由 provider 层统一处理，端点不再叠加第二层两次重试，避免上游故障时把一轮学生操作放大为最多六次请求。分析超时使用原有规则降级；对话最终失败仍返回 503，不伪造建议。
+- 新增真实 PostgreSQL 的 40 名独立学生聊天并发测试。所有请求同时停在可控模型等待点时，连接池 `checkedout()==0`，释放后 40 个完整聊天请求均返回 200。这证明数据库事务边界，**不证明真实 DeepSeek 供应商容量**；正式学校实验前仍需在目标服务器记录 P50/P95、错误率与模型排队时间。
+- 验证：后端 `219 passed, 4 existing warnings`；改动文件 Ruff、`git diff --check` 通过。
+
 ## 必读文件（按顺序）
 
 后续讨论智能体架构、学校实验或论文方法部分时，先读 `docs/LEARNING_AGENT_HARNESS_ARCHITECTURE.md`；该文档区分了当前实现、论文可用表述、待验证主张和未来规划/多智能体演进。
@@ -372,14 +381,12 @@ git diff --check                            passed
 17. `frontend/components/ProjectFactory.tsx`
 18. `frontend/components/ProjectFunctionStage.tsx`
 19. `frontend/components/ProjectMechanismStage.tsx`
-20. `frontend/components/ProjectPathStage.tsx`
-21. `frontend/components/ProjectBuildStage.tsx`
-22. `frontend/components/ProjectScaffoldAssistant.tsx`
-23. `frontend/data/projectPath.ts`
-24. `frontend/data/snakeProjectBlueprint.ts`
-25. `frontend/data/snakeProjectDemo.ts`
-26. `admin-frontend/src/pages/ResearchManagement.tsx`
-27. `admin-frontend/src/lib/projectBlueprint.ts`
+20. `frontend/components/ProjectBuildStage.tsx`
+21. `frontend/components/ProjectScaffoldAssistant.tsx`
+22. `frontend/data/snakeProjectBlueprint.ts`
+23. `frontend/data/snakeProjectDemo.ts`
+24. `admin-frontend/src/pages/ResearchManagement.tsx`
+25. `admin-frontend/src/lib/projectBlueprint.ts`
 
 ## 任务 1（研究证据链）当前状态
 
