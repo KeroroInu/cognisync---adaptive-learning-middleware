@@ -208,184 +208,259 @@ async def test_published_test_conditions_are_frozen(admin_client):
     assert response.status_code == 409
     assert response.json()["detail"]["code"] == "PUBLISHED_ASSIGNMENT_FROZEN"
 
+async def _create_stage_event(client, auth_headers, task_id, passed=True, code="def next_move(state):\n    return 'up'", include_bundle=True, stage="transfer", event_type="module_test"):
+    artifacts = [
+        {
+            "artifact_type": "module_code",
+            "artifact_key": "next-move",
+            "content": {"title": "决定下一步", "code": code},
+            "change_source": "test_revision",
+        }
+    ]
+    if include_bundle:
+        artifacts.append({
+            "artifact_type": "module_code",
+            "artifact_key": "maze-bundle",
+            "content": {"code": code, "passed": passed},
+            "change_source": "test_revision"
+        })
+
+    req = await client.post(
+        f"/api/research/tasks/{task_id}/stage-events",
+        headers=auth_headers,
+        json={
+            "request_id": str(uuid.uuid4()),
+            "stage": stage,
+            "event_type": event_type,
+            "detail": {"passed": passed},
+            "artifacts": artifacts,
+        },
+    )
+    assert req.status_code == 200, req.text
+    return req.json()["data"]["event_id"]
 
 @pytest.mark.asyncio
-async def test_transfer_module_test_and_final_submit_are_valid_evidence(
-    admin_client, client, auth_headers
-):
-    transfer = await _create_admin_task(
-        admin_client,
-        task_kind="transfer_test",
-        test_template="maze_treasure_v1",
-    )
-    await admin_client.post(f"/api/admin/research/tasks/{transfer['id']}/activate")
-    artifact = {
-        "artifact_type": "module_code",
-        "artifact_key": "next-move",
-        "content": {"title": "决定下一步", "code": "def next_move(state):\n    return 'up'"},
-        "change_source": "test_revision",
-    }
-    tested = await client.post(
-        f"/api/research/tasks/{transfer['id']}/stage-events",
-        headers=auth_headers,
-        json={
-            "request_id": str(uuid.uuid4()),
-            "stage": "transfer",
-            "event_type": "module_test",
-            "detail": {"passed": False, "resultCode": "HIT_WALL"},
-            "artifacts": [artifact],
-        },
-    )
-    assert tested.status_code == 200, tested.text
+async def test_submit_without_last_test_passed(client, auth_headers, admin_client):
+    transfer_task = await _create_admin_task(admin_client, task_kind="transfer_test", test_template="maze_treasure_v1")
+    await admin_client.post(f"/api/admin/research/tasks/{transfer_task['id']}/activate")
 
-    # Create a valid test evidence event first
-    test_event_req = await client.post(
-        f"/api/research/tasks/{transfer['id']}/events",
-        headers=auth_headers,
-        json={
-            "request_id": str(uuid.uuid4()),
-            "stage": "transfer",
-            "event_type": "module_test",
-            "detail": {"passed": True},
-            "artifacts": [
-                {**artifact, "change_source": "test_revision"},
-                {
-                    "artifact_type": "module_code",
-                    "artifact_key": "maze-bundle",
-                    "content": {"code": artifact["content"]["code"], "passed": True},
-                    "change_source": "test_revision"
-                }
-            ],
-        },
-    )
-    assert test_event_req.status_code == 200
-    test_event_id = test_event_req.json()["data"]["event_id"]
-
-    submitted = await client.post(
-        f"/api/research/tasks/{transfer['id']}/final-submit",
-        headers=auth_headers,
-        json={
-            "request_id": str(uuid.uuid4()),
-            "stage": "transfer",
-            "code_submitted": artifact["content"]["code"],
-            "detail": {"lastTestPassed": True, "testEventId": test_event_id},
-            "artifacts": [{**artifact, "change_source": "stage_confirm"}],
-        },
-    )
-    assert submitted.status_code == 200, submitted.text
-    assert submitted.json()["data"]["completed"] is True
-    assert submitted.json()["data"]["stage"] == "transfer"
-
-@pytest.mark.asyncio
-async def test_transfer_final_submit_rejects_unpassed_test(
-    admin_client, client, auth_headers
-):
-    transfer = await _create_admin_task(
-        admin_client,
-        task_kind="transfer_test",
-        test_template="maze_treasure_v1",
-    )
-    await admin_client.post(f"/api/admin/research/tasks/{transfer['id']}/activate")
-    artifact = {
-        "artifact_type": "module_code",
-        "artifact_key": "next-move",
-        "content": {"title": "决定下一步", "code": "def next_move(state):\n    return 'up'"},
-        "change_source": "stage_confirm",
-    }
-
-    # Attempting to submit with lastTestPassed: False
+    code = "def next_move(state):\n    return 'up'"
     failed_submit = await client.post(
-        f"/api/research/tasks/{transfer['id']}/final-submit",
+        f"/api/research/tasks/{transfer_task['id']}/final-submit",
         headers=auth_headers,
         json={
             "request_id": str(uuid.uuid4()),
             "stage": "transfer",
-            "code_submitted": artifact["content"]["code"],
+            "code_submitted": code,
             "detail": {"lastTestPassed": False},
-            "artifacts": [artifact],
+            "artifacts": [],
         },
     )
     assert failed_submit.status_code == 422
     assert "must be passed" in failed_submit.json()["detail"]
 
-    # Attempting to submit without lastTestPassed
-    missing_submit = await client.post(
-        f"/api/research/tasks/{transfer['id']}/final-submit",
+@pytest.mark.asyncio
+async def test_submit_with_invalid_event_id_format(client, auth_headers, admin_client):
+    transfer_task = await _create_admin_task(admin_client, task_kind="transfer_test", test_template="maze_treasure_v1")
+    await admin_client.post(f"/api/admin/research/tasks/{transfer_task['id']}/activate")
+    code = "def next_move(state):\n    return 'up'"
+    req = await client.post(
+        f"/api/research/tasks/{transfer_task['id']}/final-submit",
         headers=auth_headers,
         json={
             "request_id": str(uuid.uuid4()),
             "stage": "transfer",
-            "code_submitted": artifact["content"]["code"],
-            "detail": {},
-            "artifacts": [artifact],
+            "code_submitted": code,
+            "detail": {"lastTestPassed": True, "testEventId": "not-a-uuid"},
+            "artifacts": [],
         },
     )
-    assert missing_submit.status_code == 422
-    assert "must be passed" in missing_submit.json()["detail"]
+    assert req.status_code == 422
+    assert "format" in req.json()["detail"].lower()
 
-    # Attempting to submit without testEventId
-    missing_event_id = await client.post(
-        f"/api/research/tasks/{transfer['id']}/final-submit",
+@pytest.mark.asyncio
+async def test_submit_with_nonexistent_uuid(client, auth_headers, admin_client):
+    transfer_task = await _create_admin_task(admin_client, task_kind="transfer_test", test_template="maze_treasure_v1")
+    await admin_client.post(f"/api/admin/research/tasks/{transfer_task['id']}/activate")
+    code = "def next_move(state):\n    return 'up'"
+    req = await client.post(
+        f"/api/research/tasks/{transfer_task['id']}/final-submit",
         headers=auth_headers,
         json={
             "request_id": str(uuid.uuid4()),
             "stage": "transfer",
-            "code_submitted": artifact["content"]["code"],
-            "detail": {"lastTestPassed": True},
-            "artifacts": [artifact],
+            "code_submitted": code,
+            "detail": {"lastTestPassed": True, "testEventId": str(uuid.uuid4())},
+            "artifacts": [],
         },
     )
-    assert missing_event_id.status_code == 422
-    assert "Missing test evidence event id" in missing_event_id.json()["detail"]
+    assert req.status_code == 422
+    assert "invalid test evidence" in req.json()["detail"].lower()
 
-    # Attempting to submit with invalid testEventId
-    invalid_event_id = await client.post(
-        f"/api/research/tasks/{transfer['id']}/final-submit",
+@pytest.mark.asyncio
+async def test_submit_with_unpassed_event(client, auth_headers, admin_client):
+    transfer_task = await _create_admin_task(admin_client, task_kind="transfer_test", test_template="maze_treasure_v1")
+    await admin_client.post(f"/api/admin/research/tasks/{transfer_task['id']}/activate")
+    code = "def next_move(state):\n    return 'up'"
+    event_id = await _create_stage_event(client, auth_headers, transfer_task['id'], passed=False, code=code)
+    req = await client.post(
+        f"/api/research/tasks/{transfer_task['id']}/final-submit",
         headers=auth_headers,
         json={
             "request_id": str(uuid.uuid4()),
             "stage": "transfer",
-            "code_submitted": artifact["content"]["code"],
-            "detail": {"lastTestPassed": True, "testEventId": "not-a-real-id"},
-            "artifacts": [artifact],
+            "code_submitted": code,
+            "detail": {"lastTestPassed": True, "testEventId": event_id},
+            "artifacts": [],
         },
     )
-    assert invalid_event_id.status_code == 422
-    assert "Invalid test evidence" in invalid_event_id.json()["detail"]
+    assert req.status_code == 422
+    assert "did not pass" in req.json()["detail"].lower()
 
-    # Attempting to submit with modified code
-    # Create valid evidence first
-    test_event_req = await client.post(
-        f"/api/research/tasks/{transfer['id']}/events",
+@pytest.mark.asyncio
+async def test_submit_missing_maze_bundle(client, auth_headers, admin_client):
+    transfer_task = await _create_admin_task(admin_client, task_kind="transfer_test", test_template="maze_treasure_v1")
+    await admin_client.post(f"/api/admin/research/tasks/{transfer_task['id']}/activate")
+    code = "def next_move(state):\n    return 'up'"
+    event_id = await _create_stage_event(client, auth_headers, transfer_task['id'], passed=True, code=code, include_bundle=False)
+    req = await client.post(
+        f"/api/research/tasks/{transfer_task['id']}/final-submit",
         headers=auth_headers,
         json={
             "request_id": str(uuid.uuid4()),
             "stage": "transfer",
-            "event_type": "module_test",
-            "detail": {"passed": True},
-            "artifacts": [
-                {
-                    "artifact_type": "module_code",
-                    "artifact_key": "maze-bundle",
-                    "content": {"code": "old code", "passed": True},
-                    "change_source": "test_revision"
-                }
-            ],
+            "code_submitted": code,
+            "detail": {"lastTestPassed": True, "testEventId": event_id},
+            "artifacts": [],
         },
     )
-    assert test_event_req.status_code == 200
-    test_event_id = test_event_req.json()["data"]["event_id"]
+    assert req.status_code == 422
+    assert "missing maze-bundle" in req.json()["detail"].lower()
 
-    modified_code_submit = await client.post(
-        f"/api/research/tasks/{transfer['id']}/final-submit",
+@pytest.mark.asyncio
+async def test_submit_code_mismatch(client, auth_headers, admin_client):
+    transfer_task = await _create_admin_task(admin_client, task_kind="transfer_test", test_template="maze_treasure_v1")
+    await admin_client.post(f"/api/admin/research/tasks/{transfer_task['id']}/activate")
+    code = "def next_move(state):\n    return 'up'"
+    event_id = await _create_stage_event(client, auth_headers, transfer_task['id'], passed=True, code="old code")
+    req = await client.post(
+        f"/api/research/tasks/{transfer_task['id']}/final-submit",
         headers=auth_headers,
         json={
             "request_id": str(uuid.uuid4()),
             "stage": "transfer",
-            "code_submitted": artifact["content"]["code"],
-            "detail": {"lastTestPassed": True, "testEventId": test_event_id},
-            "artifacts": [artifact],
+            "code_submitted": code,
+            "detail": {"lastTestPassed": True, "testEventId": event_id},
+            "artifacts": [],
         },
     )
-    assert modified_code_submit.status_code == 422
-    assert "does not match test evidence" in modified_code_submit.json()["detail"]
+    assert req.status_code == 422
+    assert "does not match test evidence" in req.json()["detail"].lower()
+
+@pytest.mark.asyncio
+async def test_submit_success_and_idempotency(client, auth_headers, admin_client):
+    transfer_task = await _create_admin_task(admin_client, task_kind="transfer_test", test_template="maze_treasure_v1")
+    await admin_client.post(f"/api/admin/research/tasks/{transfer_task['id']}/activate")
+    code = "def next_move(state):\n    return 'up'"
+    event_id = await _create_stage_event(client, auth_headers, transfer_task['id'], passed=True, code=code)
+
+    req_id = str(uuid.uuid4())
+    payload = {
+        "request_id": req_id,
+        "stage": "transfer",
+        "code_submitted": code,
+        "detail": {"lastTestPassed": True, "testEventId": event_id},
+        "artifacts": [],
+    }
+
+    req1 = await client.post(
+        f"/api/research/tasks/{transfer_task['id']}/final-submit",
+        headers=auth_headers,
+        json=payload,
+    )
+    assert req1.status_code == 200
+    assert req1.json()["data"]["completed"] is True
+
+    req2 = await client.post(
+        f"/api/research/tasks/{transfer_task['id']}/final-submit",
+        headers=auth_headers,
+        json=payload,
+    )
+    assert req2.status_code == 200
+    assert req2.json()["data"]["completed"] is True
+    assert req2.json()["data"]["replayed"] is True
+
+@pytest.mark.asyncio
+async def test_submit_with_wrong_task_event(client, auth_headers, admin_client):
+    task1 = await _create_admin_task(admin_client, task_kind="transfer_test", test_template="maze_treasure_v1")
+    await admin_client.post(f"/api/admin/research/tasks/{task1['id']}/activate")
+
+    code = "def next_move(state):\n    return 'up'"
+    event_id = await _create_stage_event(client, auth_headers, task1['id'], passed=True, code=code)
+
+    task2 = await _create_admin_task(admin_client, task_kind="transfer_test", test_template="maze_treasure_v1")
+    await admin_client.post(f"/api/admin/research/tasks/{task2['id']}/activate")
+
+    req = await client.post(
+        f"/api/research/tasks/{task2['id']}/final-submit",
+        headers=auth_headers,
+        json={
+            "request_id": str(uuid.uuid4()),
+            "stage": "transfer",
+            "code_submitted": code,
+            "detail": {"lastTestPassed": True, "testEventId": event_id},
+            "artifacts": [],
+        },
+    )
+    assert req.status_code == 422
+    assert "invalid test evidence" in req.json()["detail"].lower()
+
+@pytest.mark.asyncio
+async def test_submit_with_other_users_event(client, auth_headers, admin_client, test_db):
+    from app.api.endpoints.auth import create_access_token
+    from app.models.sql.user import User
+    from app.models.sql.profile import ProfileSnapshot
+    import uuid
+
+    transfer_task = await _create_admin_task(admin_client, task_kind="transfer_test", test_template="maze_treasure_v1")
+    await admin_client.post(f"/api/admin/research/tasks/{transfer_task['id']}/activate")
+
+    # Create another user
+    other_user_id = uuid.uuid4()
+    async with test_db() as session:
+        other_user = User(
+            id=other_user_id,
+            student_id="other_student",
+            name="Other",
+            onboarding_mode="scale",
+            is_active=True,
+        )
+        session.add(other_user)
+        session.add(ProfileSnapshot(
+            user_id=other_user_id,
+            source="system",
+            cognition=0,
+            affect=0,
+            behavior=0
+        ))
+        await session.commit()
+
+    other_token = create_access_token(str(other_user_id))
+    other_headers = {"Authorization": f"Bearer {other_token}"}
+
+    code = "def next_move(state):\n    return 'up'"
+    event_id = await _create_stage_event(client, other_headers, transfer_task['id'], passed=True, code=code)
+
+    req = await client.post(
+        f"/api/research/tasks/{transfer_task['id']}/final-submit",
+        headers=auth_headers,
+        json={
+            "request_id": str(uuid.uuid4()),
+            "stage": "transfer",
+            "code_submitted": code,
+            "detail": {"lastTestPassed": True, "testEventId": event_id},
+            "artifacts": [],
+        },
+    )
+    assert req.status_code == 422
+    assert "invalid test evidence" in req.json()["detail"].lower()

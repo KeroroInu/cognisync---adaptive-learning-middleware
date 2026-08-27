@@ -2,6 +2,7 @@
 用户端研究任务 API 端点
 """
 import uuid
+from uuid import UUID
 import json
 import re
 from datetime import datetime, timezone
@@ -1008,33 +1009,41 @@ async def final_submit_task(
                 detail="Transfer test must be passed before submission",
             )
 
-        test_event_id = data.detail.get("testEventId")
-        if not test_event_id:
+        test_event_id_str = data.detail.get("testEventId")
+        if not test_event_id_str:
             raise HTTPException(status_code=422, detail="Missing test evidence event id")
 
+        try:
+            test_event_uuid = UUID(test_event_id_str)
+        except ValueError:
+            raise HTTPException(status_code=422, detail="Invalid test evidence event id format")
+
+        # JOIN to find the exact historical artifact version associated with that test event
         test_event = await db.execute(
-            select(StageEvent)
+            select(StageEvent, ArtifactVersion)
+            .join(StageEventArtifact, StageEvent.id == StageEventArtifact.event_id)
+            .join(ArtifactVersion, StageEventArtifact.artifact_version_id == ArtifactVersion.id)
+            .join(StageArtifact, ArtifactVersion.artifact_id == StageArtifact.id)
             .where(
-                StageEvent.id == test_event_id,
+                StageEvent.id == test_event_uuid,
                 StageEvent.user_id == current_user.id,
-                StageEvent.task_id == task_id,
+                StageEvent.task_id == tid,
                 StageEvent.stage == ProjectStage.TRANSFER,
-                StageEvent.event_type == StageEventType.MODULE_TEST
+                StageEvent.event_type == StageEventType.MODULE_TEST,
+                StageArtifact.artifact_key == "maze-bundle"
             )
         )
-        test_event = test_event.scalar_one_or_none()
+        row = test_event.first()
 
-        if not test_event:
-            raise HTTPException(status_code=422, detail="Invalid test evidence")
+        if not row:
+            raise HTTPException(status_code=422, detail="Invalid test evidence or missing maze-bundle")
 
-        if not test_event.detail.get("passed"):
+        event_obj, version_obj = row
+
+        if not event_obj.detail.get("passed"):
             raise HTTPException(status_code=422, detail="Test evidence shows test did not pass")
 
-        maze_bundle = next((a for a in test_event.artifacts if a.artifact_key == "maze-bundle"), None)
-        if not maze_bundle:
-            raise HTTPException(status_code=422, detail="Test evidence missing maze-bundle artifact")
-
-        if maze_bundle.content.get("code") != data.code_submitted:
+        if version_obj.content.get("code") != data.code_submitted:
             raise HTTPException(status_code=422, detail="Submitted code does not match test evidence")
 
     _validate_event_request(stage, event_type, data.detail, artifact_inputs)

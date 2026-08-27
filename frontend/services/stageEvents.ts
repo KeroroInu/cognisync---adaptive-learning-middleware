@@ -86,7 +86,7 @@ export type StageEventOutcome =
   | { status: 'not-found' }
   | { status: 'failed'; message: string };
 
-export const isStageEventPersisted = (outcome: StageEventOutcome): boolean =>
+export const isStageEventPersisted = (outcome: StageEventOutcome): outcome is Extract<StageEventOutcome, { data: StageEventResponse }> =>
   outcome.status === 'recorded' || outcome.status === 'replayed';
 
 export type FinalSubmissionOutcome =
@@ -100,7 +100,7 @@ export type FinalSubmissionOutcome =
   | { status: 'not-found' }
   | { status: 'failed'; message: string };
 
-export const isFinalSubmissionPersisted = (outcome: FinalSubmissionOutcome): boolean =>
+export const isFinalSubmissionPersisted = (outcome: FinalSubmissionOutcome): outcome is Extract<FinalSubmissionOutcome, { data: FinalSubmitResponse }> =>
   outcome.status === 'recorded' || outcome.status === 'replayed';
 
 /**

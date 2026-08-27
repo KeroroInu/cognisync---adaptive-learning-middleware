@@ -5,6 +5,7 @@ import { saveResearchProgress, saveResearchWorkspace } from '../services/api';
 import { createRequestId, isFinalSubmissionPersisted, isStageEventPersisted, reportFinalSubmission, reportStageEvent } from '../services/stageEvents';
 import { formatPythonRunnerError, runPythonMazeTest, type PythonMazeTestResult } from '../services/pythonModuleRunner';
 import { bundleMazeFunctions, createMazeTransferWorkspace, generateCodeSignature, isMazeTransferWorkspace, MAZE_TRANSFER_CONFIG, migrateWorkspace, type MazeTransferWorkspace } from '../data/mazeTransfer';
+import { SerializedSaveQueue } from '../utils/serializeSave';
 import { ProjectScaffoldAssistant } from './ProjectScaffoldAssistant';
 import './TransferTestWorkspace.css';
 
@@ -57,23 +58,24 @@ export const TransferTestWorkspace: React.FC<Props> = ({ task, language, theme, 
   const pathSet = useMemo(() => new Map((result?.path ?? []).map((point, index) => [`${point[0]}-${point[1]}`, index])), [result]);
   const wallSet = useMemo(() => new Set(MAZE_TRANSFER_CONFIG.walls.map(point => `${point[0]}-${point[1]}`)), []);
 
-  const savePromiseRef = useRef<Promise<boolean>>(Promise.resolve(true));
+  const saveQueue = useMemo(() => new SerializedSaveQueue<MazeTransferWorkspace>(), []);
   const isUnmounted = useRef(false);
 
   useEffect(() => {
+    isUnmounted.current = false;
     return () => {
       isUnmounted.current = true;
     };
   }, []);
 
   const persist = useCallback((next: MazeTransferWorkspace, keepalive = false): Promise<boolean> => {
-    const runSave = async () => {
+    const runSave = async (data: MazeTransferWorkspace) => {
       if (!keepalive && !isUnmounted.current) setSaveLabel('保存中');
       try {
-        const bundle = bundleMazeFunctions(next);
+        const bundle = bundleMazeFunctions(data);
         await Promise.all([
-          saveResearchWorkspace(task.id, { ...next }, { keepalive }),
-          saveResearchProgress(task.id, bundle, new Date(next.startedAt).toISOString(), { keepalive }),
+          saveResearchWorkspace(task.id, { ...data }, { keepalive }),
+          saveResearchProgress(task.id, bundle, new Date(data.startedAt).toISOString(), { keepalive }),
         ]);
         if (!keepalive && !isUnmounted.current) setSaveLabel('已保存');
         return true;
@@ -83,9 +85,8 @@ export const TransferTestWorkspace: React.FC<Props> = ({ task, language, theme, 
       }
     };
 
-    savePromiseRef.current = savePromiseRef.current.then(runSave).catch(() => runSave());
-    return savePromiseRef.current;
-  }, [task.id]);
+    return saveQueue.enqueue(runSave, next);
+  }, [task.id, saveQueue]);
 
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
@@ -95,7 +96,8 @@ export const TransferTestWorkspace: React.FC<Props> = ({ task, language, theme, 
       }
     };
     const handlePageHide = () => {
-      void persist(workspace, true);
+      saveResearchWorkspace(task.id, { ...workspace }, { keepalive: true }).catch(() => {});
+      saveResearchProgress(task.id, bundledCode, startedAtIso, { keepalive: true }).catch(() => {});
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
     window.addEventListener('pagehide', handlePageHide);
@@ -103,7 +105,7 @@ export const TransferTestWorkspace: React.FC<Props> = ({ task, language, theme, 
       window.removeEventListener('beforeunload', handleBeforeUnload);
       window.removeEventListener('pagehide', handlePageHide);
     };
-  }, [persist, workspace, saveLabel]);
+  }, [task.id, workspace, saveLabel]);
 
   useEffect(() => {
     if (saveTimer.current) clearTimeout(saveTimer.current);
@@ -161,7 +163,7 @@ export const TransferTestWorkspace: React.FC<Props> = ({ task, language, theme, 
       });
 
       if (isStageEventPersisted(eventOutcome)) {
-        nextWorkspace.lastTestEventId = eventOutcome.event_id;
+        nextWorkspace.lastTestEventId = eventOutcome.data.event_id;
       } else {
         setNotice(isZh ? '测试结果已记录，但本次过程事件未成功上报。' : 'The result was recorded, but this test event failed to report.');
       }
