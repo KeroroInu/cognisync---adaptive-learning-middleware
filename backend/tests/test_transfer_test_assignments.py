@@ -245,10 +245,57 @@ async def test_transfer_module_test_and_final_submit_are_valid_evidence(
             "request_id": str(uuid.uuid4()),
             "stage": "transfer",
             "code_submitted": artifact["content"]["code"],
-            "detail": {"lastTestPassed": False},
+            "detail": {"lastTestPassed": True},
             "artifacts": [{**artifact, "change_source": "stage_confirm"}],
         },
     )
     assert submitted.status_code == 200, submitted.text
     assert submitted.json()["data"]["completed"] is True
     assert submitted.json()["data"]["stage"] == "transfer"
+
+@pytest.mark.asyncio
+async def test_transfer_final_submit_rejects_unpassed_test(
+    admin_client, client, auth_headers
+):
+    transfer = await _create_admin_task(
+        admin_client,
+        task_kind="transfer_test",
+        test_template="maze_treasure_v1",
+    )
+    await admin_client.post(f"/api/admin/research/tasks/{transfer['id']}/activate")
+    artifact = {
+        "artifact_type": "module_code",
+        "artifact_key": "next-move",
+        "content": {"title": "决定下一步", "code": "def next_move(state):\n    return 'up'"},
+        "change_source": "stage_confirm",
+    }
+    
+    # Attempting to submit with lastTestPassed: False
+    failed_submit = await client.post(
+        f"/api/research/tasks/{transfer['id']}/final-submit",
+        headers=auth_headers,
+        json={
+            "request_id": str(uuid.uuid4()),
+            "stage": "transfer",
+            "code_submitted": artifact["content"]["code"],
+            "detail": {"lastTestPassed": False},
+            "artifacts": [artifact],
+        },
+    )
+    assert failed_submit.status_code == 422
+    assert "must be passed" in failed_submit.json()["detail"]
+    
+    # Attempting to submit without lastTestPassed
+    missing_submit = await client.post(
+        f"/api/research/tasks/{transfer['id']}/final-submit",
+        headers=auth_headers,
+        json={
+            "request_id": str(uuid.uuid4()),
+            "stage": "transfer",
+            "code_submitted": artifact["content"]["code"],
+            "detail": {},
+            "artifacts": [artifact],
+        },
+    )
+    assert missing_submit.status_code == 422
+    assert "must be passed" in missing_submit.json()["detail"]

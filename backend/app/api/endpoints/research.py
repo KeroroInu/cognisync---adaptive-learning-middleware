@@ -999,6 +999,14 @@ async def final_submit_task(
     stage = ProjectStage(data.stage)
     event_type = StageEventType.FINAL_SUBMIT
     artifact_inputs = _build_artifact_inputs(data.artifacts)
+    
+    if stage == ProjectStage.TRANSFER:
+        if not data.detail.get("lastTestPassed"):
+            raise HTTPException(
+                status_code=422,
+                detail="Transfer test must be passed before submission",
+            )
+            
     _validate_event_request(stage, event_type, data.detail, artifact_inputs)
 
     started_at = _parse_client_timestamp(data.started_at)
