@@ -199,9 +199,9 @@ async def seed_scale_templates():
         print(f"✅ 成功创建量表模板：{TEMPLATE_NAME}")
         print(f"   ID: {template_id}")
         print(f"   题目数: {total_items}（CT×7 + SE×6 + LM×6 + CPS×8 + PA×6 + AIL×8）")
-        print(f"   反向计分题: cps5")
-        print(f"   CAB 映射: Cognition←CT+CPS+AIL  Affect←SE+LM  Behavior←PA")
-        print(f"   状态: ACTIVE")
+        print("   反向计分题: cps5")
+        print("   CAB 映射: Cognition←CT+CPS+AIL  Affect←SE+LM  Behavior←PA")
+        print("   状态: ACTIVE")
 
     await engine.dispose()
 

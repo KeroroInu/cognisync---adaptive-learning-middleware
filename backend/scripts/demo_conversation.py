@@ -4,7 +4,6 @@ Demo Script - 演示对话 → 画像更新 → 图谱更新的完整流程
 """
 import asyncio
 import logging
-from uuid import UUID
 from app.core.logging import setup_logging
 from app.db.postgres import init_db as init_postgres_db, close_db as close_postgres_db, get_db
 from app.db.neo4j import init_db as init_neo4j_db, close_db as close_neo4j_db
@@ -148,7 +147,7 @@ async def demo_conversation():
 
             # 3. 更新知识图谱
             if analysis.detectedConcepts:
-                logger.info(f"\n🕸️  更新知识图谱...")
+                logger.info("\n🕸️  更新知识图谱...")
                 upsert_result = await graph_service.upsert_concepts(
                     user_id=str(user_id),
                     concepts=analysis.detectedConcepts
@@ -179,7 +178,7 @@ async def demo_conversation():
         logger.info(f"   情感: {initial_profile.affect} → {final_profile.affect} (变化: {final_profile.affect - initial_profile.affect:+3})")
         logger.info(f"   行为: {initial_profile.behavior} → {final_profile.behavior} (变化: {final_profile.behavior - initial_profile.behavior:+3})")
 
-        logger.info(f"\n🕸️  知识图谱总结:")
+        logger.info("\n🕸️  知识图谱总结:")
         logger.info(f"   总概念数: {len(final_graph.nodes)}")
         logger.info(f"   总边数:   {len(final_graph.edges)}")
 
@@ -222,7 +221,7 @@ async def demo_conversation():
             )
 
             if updated_node:
-                logger.info(f"✅ 节点已更新:")
+                logger.info("✅ 节点已更新:")
                 logger.info(f"   概念: {updated_node.name}")
                 logger.info(f"   掌握度: {first_node.mastery:.1f}% → {updated_node.mastery:.1f}%")
                 logger.info(f"   频次: {updated_node.frequency}/10")

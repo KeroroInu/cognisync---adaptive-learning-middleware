@@ -100,7 +100,7 @@ async def test_configured_provider():
         analyzer = TextAnalyzer(provider=provider)
         result = await analyzer.analyze("我想学习机器学习")
 
-        logger.info(f"✅ Analysis successful:")
+        logger.info("✅ Analysis successful:")
         logger.info(f"   Intent: {result.intent}")
         logger.info(f"   Emotion: {result.emotion}")
 

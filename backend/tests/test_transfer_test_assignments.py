@@ -238,6 +238,29 @@ async def test_transfer_module_test_and_final_submit_are_valid_evidence(
     )
     assert tested.status_code == 200, tested.text
 
+    # Create a valid test evidence event first
+    test_event_req = await client.post(
+        f"/api/research/tasks/{transfer['id']}/events",
+        headers=auth_headers,
+        json={
+            "request_id": str(uuid.uuid4()),
+            "stage": "transfer",
+            "event_type": "module_test",
+            "detail": {"passed": True},
+            "artifacts": [
+                {**artifact, "change_source": "test_revision"},
+                {
+                    "artifact_type": "module_code",
+                    "artifact_key": "maze-bundle",
+                    "content": {"code": artifact["content"]["code"], "passed": True},
+                    "change_source": "test_revision"
+                }
+            ],
+        },
+    )
+    assert test_event_req.status_code == 200
+    test_event_id = test_event_req.json()["data"]["event_id"]
+
     submitted = await client.post(
         f"/api/research/tasks/{transfer['id']}/final-submit",
         headers=auth_headers,
@@ -245,7 +268,7 @@ async def test_transfer_module_test_and_final_submit_are_valid_evidence(
             "request_id": str(uuid.uuid4()),
             "stage": "transfer",
             "code_submitted": artifact["content"]["code"],
-            "detail": {"lastTestPassed": True},
+            "detail": {"lastTestPassed": True, "testEventId": test_event_id},
             "artifacts": [{**artifact, "change_source": "stage_confirm"}],
         },
     )
@@ -269,7 +292,7 @@ async def test_transfer_final_submit_rejects_unpassed_test(
         "content": {"title": "决定下一步", "code": "def next_move(state):\n    return 'up'"},
         "change_source": "stage_confirm",
     }
-    
+
     # Attempting to submit with lastTestPassed: False
     failed_submit = await client.post(
         f"/api/research/tasks/{transfer['id']}/final-submit",
@@ -284,7 +307,7 @@ async def test_transfer_final_submit_rejects_unpassed_test(
     )
     assert failed_submit.status_code == 422
     assert "must be passed" in failed_submit.json()["detail"]
-    
+
     # Attempting to submit without lastTestPassed
     missing_submit = await client.post(
         f"/api/research/tasks/{transfer['id']}/final-submit",
@@ -299,3 +322,70 @@ async def test_transfer_final_submit_rejects_unpassed_test(
     )
     assert missing_submit.status_code == 422
     assert "must be passed" in missing_submit.json()["detail"]
+
+    # Attempting to submit without testEventId
+    missing_event_id = await client.post(
+        f"/api/research/tasks/{transfer['id']}/final-submit",
+        headers=auth_headers,
+        json={
+            "request_id": str(uuid.uuid4()),
+            "stage": "transfer",
+            "code_submitted": artifact["content"]["code"],
+            "detail": {"lastTestPassed": True},
+            "artifacts": [artifact],
+        },
+    )
+    assert missing_event_id.status_code == 422
+    assert "Missing test evidence event id" in missing_event_id.json()["detail"]
+
+    # Attempting to submit with invalid testEventId
+    invalid_event_id = await client.post(
+        f"/api/research/tasks/{transfer['id']}/final-submit",
+        headers=auth_headers,
+        json={
+            "request_id": str(uuid.uuid4()),
+            "stage": "transfer",
+            "code_submitted": artifact["content"]["code"],
+            "detail": {"lastTestPassed": True, "testEventId": "not-a-real-id"},
+            "artifacts": [artifact],
+        },
+    )
+    assert invalid_event_id.status_code == 422
+    assert "Invalid test evidence" in invalid_event_id.json()["detail"]
+
+    # Attempting to submit with modified code
+    # Create valid evidence first
+    test_event_req = await client.post(
+        f"/api/research/tasks/{transfer['id']}/events",
+        headers=auth_headers,
+        json={
+            "request_id": str(uuid.uuid4()),
+            "stage": "transfer",
+            "event_type": "module_test",
+            "detail": {"passed": True},
+            "artifacts": [
+                {
+                    "artifact_type": "module_code",
+                    "artifact_key": "maze-bundle",
+                    "content": {"code": "old code", "passed": True},
+                    "change_source": "test_revision"
+                }
+            ],
+        },
+    )
+    assert test_event_req.status_code == 200
+    test_event_id = test_event_req.json()["data"]["event_id"]
+
+    modified_code_submit = await client.post(
+        f"/api/research/tasks/{transfer['id']}/final-submit",
+        headers=auth_headers,
+        json={
+            "request_id": str(uuid.uuid4()),
+            "stage": "transfer",
+            "code_submitted": artifact["content"]["code"],
+            "detail": {"lastTestPassed": True, "testEventId": test_event_id},
+            "artifacts": [artifact],
+        },
+    )
+    assert modified_code_submit.status_code == 422
+    assert "does not match test evidence" in modified_code_submit.json()["detail"]

@@ -6,7 +6,6 @@ import asyncio
 import logging
 from typing import List, Dict, Any
 from app.db.neo4j import init_db, close_db, execute_write, execute_query
-from app.core.config import settings
 from app.core.logging import setup_logging
 
 setup_logging()
