@@ -7,6 +7,14 @@ from app.db.postgres import engine
 from app.models.sql.base import Base
 
 # 导入所有模型以确保它们被注册
+from app.models.sql.user import User
+from app.models.sql.message import ChatMessage
+from app.models.sql.profile import ProfileSnapshot
+from app.models.sql.calibration_log import CalibrationLog
+from app.models.sql.chat_session import ChatSession
+from app.models.sql.scale import ScaleTemplate, ScaleResponse
+from app.models.sql.onboarding import OnboardingSession
+from app.models.sql.behavior_log import BehaviorLog
 
 
 async def init_db():

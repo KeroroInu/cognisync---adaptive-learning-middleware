@@ -125,7 +125,7 @@ async def test_chat_response():
             max_tokens=500
         )
 
-        logger.info("   ✅ DeepSeek 回复:\n")
+        logger.info(f"   ✅ DeepSeek 回复:\n")
         logger.info(f"   {response}\n")
         return True
 
