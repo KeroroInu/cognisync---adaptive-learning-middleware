@@ -28,7 +28,7 @@ describe('SerializedSaveQueue', () => {
 
     // 第一次保存延迟；
     const p1 = queue.enqueue(mockSave, 1);
-    
+
     // 第二次保存排队；
     const p2 = queue.enqueue(mockSave, 2);
 
@@ -77,7 +77,7 @@ describe('SerializedSaveQueue', () => {
 
     // Fail the first save
     deferred1.reject(new Error('Network error'));
-    
+
     const result1 = await p1;
     // The queue wrapper catches errors and returns false
     expect(result1).toBe(false);
@@ -89,5 +89,16 @@ describe('SerializedSaveQueue', () => {
     deferred2.resolve(true);
     const result2 = await p2;
     expect(result2).toBe(true);
+  });
+
+  it('should abort pending saves if destroyed', async () => {
+    const queue = new SerializedSaveQueue<number>();
+    const mockSave = vi.fn().mockResolvedValue(true);
+
+    queue.destroy();
+
+    const result = await queue.enqueue(mockSave, 1);
+    expect(result).toBe(false);
+    expect(mockSave).not.toHaveBeenCalled();
   });
 });

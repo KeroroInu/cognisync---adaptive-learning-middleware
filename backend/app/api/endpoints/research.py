@@ -1015,7 +1015,7 @@ async def final_submit_task(
 
         try:
             test_event_uuid = UUID(test_event_id_str)
-        except ValueError:
+        except (ValueError, TypeError, AttributeError):
             raise HTTPException(status_code=422, detail="Invalid test evidence event id format")
 
         # JOIN to find the exact historical artifact version associated with that test event

@@ -96,6 +96,7 @@ export const TransferTestWorkspace: React.FC<Props> = ({ task, language, theme, 
       }
     };
     const handlePageHide = () => {
+      saveQueue.destroy();
       saveResearchWorkspace(task.id, { ...workspace }, { keepalive: true }).catch(() => {});
       saveResearchProgress(task.id, bundledCode, startedAtIso, { keepalive: true }).catch(() => {});
     };
