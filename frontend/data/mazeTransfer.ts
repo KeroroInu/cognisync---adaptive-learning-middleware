@@ -28,6 +28,8 @@ export interface MazeTransferWorkspace {
   activeCardId: string;
   lastResult?: { passed: boolean; resultCode: string; path: number[][]; testedAt: string };
   savedAt: string;
+  startedAt: number;
+  lastPassedSignature?: string;
 }
 
 export const createMazeTransferWorkspace = (task: ResearchTask): MazeTransferWorkspace => ({
@@ -35,6 +37,7 @@ export const createMazeTransferWorkspace = (task: ResearchTask): MazeTransferWor
   cards: [{ id: 'next-move', title: '决定下一步', code: task.code_submitted || task.code_content, fixed: true }],
   activeCardId: 'next-move',
   savedAt: new Date().toISOString(),
+  startedAt: Date.now(),
 });
 
 export const isMazeTransferWorkspace = (value: unknown): value is MazeTransferWorkspace => {
@@ -45,6 +48,16 @@ export const isMazeTransferWorkspace = (value: unknown): value is MazeTransferWo
     && item.cards.length > 0
     && item.cards.every(card => card && typeof card.id === 'string' && typeof card.title === 'string' && typeof card.code === 'string')
     && typeof item.activeCardId === 'string';
+};
+
+export const generateCodeSignature = (code: string): string => {
+  let hash = 0;
+  for (let i = 0; i < code.length; i++) {
+    const char = code.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash;
+  }
+  return hash.toString(36);
 };
 
 export const bundleMazeFunctions = (workspace: MazeTransferWorkspace) => workspace.cards

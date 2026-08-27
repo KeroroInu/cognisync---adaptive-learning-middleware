@@ -4,7 +4,7 @@ import type { Language, ResearchTask, UserProfile } from '../types';
 import { saveResearchProgress, saveResearchWorkspace } from '../services/api';
 import { createRequestId, isFinalSubmissionPersisted, isStageEventPersisted, reportFinalSubmission, reportStageEvent } from '../services/stageEvents';
 import { formatPythonRunnerError, runPythonMazeTest, type PythonMazeTestResult } from '../services/pythonModuleRunner';
-import { bundleMazeFunctions, createMazeTransferWorkspace, isMazeTransferWorkspace, MAZE_TRANSFER_CONFIG, type MazeTransferWorkspace } from '../data/mazeTransfer';
+import { bundleMazeFunctions, createMazeTransferWorkspace, generateCodeSignature, isMazeTransferWorkspace, MAZE_TRANSFER_CONFIG, type MazeTransferWorkspace } from '../data/mazeTransfer';
 import { ProjectScaffoldAssistant } from './ProjectScaffoldAssistant';
 import './TransferTestWorkspace.css';
 
@@ -31,9 +31,13 @@ const resultText = (result: PythonMazeTestResult | null, isZh: boolean) => {
 
 export const TransferTestWorkspace: React.FC<Props> = ({ task, language, theme, userId, onUpdateProfile, onLogout }) => {
   const isZh = language === 'zh';
-  const [workspace, setWorkspace] = useState<MazeTransferWorkspace>(() => (
-    isMazeTransferWorkspace(task.workspace_data) ? task.workspace_data : createMazeTransferWorkspace(task)
-  ));
+  const [workspace, setWorkspace] = useState<MazeTransferWorkspace>(() => {
+    let initial = isMazeTransferWorkspace(task.workspace_data) ? task.workspace_data : createMazeTransferWorkspace(task);
+    if (!initial.startedAt) {
+      initial = { ...initial, startedAt: Date.now() };
+    }
+    return initial;
+  });
   const [railOpen, setRailOpen] = useState(true);
   const [terminalOpen, setTerminalOpen] = useState(true);
   const [assistantOpen, setAssistantOpen] = useState(false);
@@ -47,27 +51,67 @@ export const TransferTestWorkspace: React.FC<Props> = ({ task, language, theme, 
   const [saveLabel, setSaveLabel] = useState('已保存');
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const submitAttempt = useRef<{ signature: string; requestId: string } | null>(null);
-  const startedAt = useRef(new Date().toISOString());
   const activeCard = workspace.cards.find(card => card.id === workspace.activeCardId) ?? workspace.cards[0];
   const bundledCode = useMemo(() => bundleMazeFunctions(workspace), [workspace]);
+  const currentSignature = useMemo(() => generateCodeSignature(bundledCode), [bundledCode]);
+  const isTestPassed = workspace.lastResult?.passed && workspace.lastPassedSignature === currentSignature;
+  const startedAtIso = useMemo(() => new Date(workspace.startedAt).toISOString(), [workspace.startedAt]);
+  
   const pathSet = useMemo(() => new Map((result?.path ?? []).map((point, index) => [`${point[0]}-${point[1]}`, index])), [result]);
   const wallSet = useMemo(() => new Set(MAZE_TRANSFER_CONFIG.walls.map(point => `${point[0]}-${point[1]}`)), []);
 
-  const persist = useCallback(async (next: MazeTransferWorkspace) => {
-    setSaveLabel('保存中');
-    try {
-      const bundle = bundleMazeFunctions(next);
-      await Promise.all([
-        saveResearchWorkspace(task.id, { ...next }),
-        saveResearchProgress(task.id, bundle, startedAt.current),
-      ]);
-      setSaveLabel('已保存');
-      return true;
-    } catch {
-      setSaveLabel('保存失败');
-      return false;
-    }
+  const saveQueue = useRef<MazeTransferWorkspace[]>([]);
+  const isSaving = useRef(false);
+
+  const persist = useCallback((next: MazeTransferWorkspace): Promise<boolean> => {
+    return new Promise((resolve) => {
+      saveQueue.current.push(next);
+      
+      const processQueue = async () => {
+        if (isSaving.current) return;
+        if (saveQueue.current.length === 0) {
+          resolve(true);
+          return;
+        }
+        isSaving.current = true;
+        setSaveLabel('保存中');
+        
+        const target = saveQueue.current[saveQueue.current.length - 1];
+        saveQueue.current = [];
+        
+        try {
+          const bundle = bundleMazeFunctions(target);
+          await Promise.all([
+            saveResearchWorkspace(task.id, { ...target }),
+            saveResearchProgress(task.id, bundle, new Date(target.startedAt).toISOString()),
+          ]);
+          setSaveLabel('已保存');
+          resolve(true);
+        } catch {
+          setSaveLabel('保存失败');
+          resolve(false);
+        } finally {
+          isSaving.current = false;
+          if (saveQueue.current.length > 0) {
+            processQueue();
+          }
+        }
+      };
+      
+      void processQueue();
+    });
   }, [task.id]);
+
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (saveQueue.current.length > 0 || isSaving.current) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, []);
 
   useEffect(() => {
     if (saveTimer.current) clearTimeout(saveTimer.current);
@@ -107,9 +151,11 @@ export const TransferTestWorkspace: React.FC<Props> = ({ task, language, theme, 
     try {
       const nextResult = await runPythonMazeTest(bundledCode, MAZE_TRANSFER_CONFIG);
       setResult(nextResult);
+      const passed = nextResult.passed;
       const nextWorkspace: MazeTransferWorkspace = {
         ...workspace,
-        lastResult: { passed: nextResult.passed, resultCode: nextResult.resultCode, path: nextResult.path, testedAt: new Date().toISOString() },
+        lastResult: { passed: passed, resultCode: nextResult.resultCode, path: nextResult.path, testedAt: new Date().toISOString() },
+        lastPassedSignature: passed ? currentSignature : undefined,
         savedAt: new Date().toISOString(),
       };
       setWorkspace(nextWorkspace);
@@ -120,8 +166,8 @@ export const TransferTestWorkspace: React.FC<Props> = ({ task, language, theme, 
       }
       const eventOutcome = await reportStageEvent(task.id, {
         request_id: createRequestId(), stage: 'transfer', event_type: 'module_test',
-        detail: { passed: nextResult.passed, resultCode: nextResult.resultCode, cardCount: workspace.cards.length, pathLength: nextResult.path.length },
-        artifacts: [{ artifact_type: 'module_code', artifact_key: activeCard.id, content: { title: activeCard.title, code: activeCard.code, verified: nextResult.passed }, change_source: 'test_revision' }],
+        detail: { passed: passed, resultCode: nextResult.resultCode, cardCount: workspace.cards.length, pathLength: nextResult.path.length },
+        artifacts: [{ artifact_type: 'module_code', artifact_key: activeCard.id, content: { title: activeCard.title, code: activeCard.code, verified: passed }, change_source: 'test_revision' }],
       });
       if (!isStageEventPersisted(eventOutcome)) {
         setNotice(isZh ? '测试结果已保存，但本次过程事件没有记录成功，可再运行一次。' : 'The result was saved, but this test event was not recorded. You can run it again.');
@@ -135,6 +181,12 @@ export const TransferTestWorkspace: React.FC<Props> = ({ task, language, theme, 
 
   const submit = async () => {
     if (submitting || completed) return;
+    
+    if (!isTestPassed) {
+      setNotice(isZh ? '请先测试代码并确保通过迷宫，且测试后未修改代码，才能提交。' : 'Please run the test and ensure it passes without subsequent code changes before submitting.');
+      return;
+    }
+    
     setSubmitting(true);
     setNotice('');
     try {
@@ -143,14 +195,14 @@ export const TransferTestWorkspace: React.FC<Props> = ({ task, language, theme, 
         setNotice(isZh ? '工作区还没有保存成功，暂时不能提交。' : 'The workspace has not saved yet, so it cannot be submitted.');
         return;
       }
-      const signature = JSON.stringify({ taskId: task.id, bundledCode, startedAt: startedAt.current, resultCode: result?.resultCode });
+      const signature = JSON.stringify({ taskId: task.id, bundledCode, startedAt: startedAtIso, resultCode: result?.resultCode });
       if (!submitAttempt.current || submitAttempt.current.signature !== signature) {
         submitAttempt.current = { signature, requestId: createRequestId() };
       }
       const outcome = await reportFinalSubmission(task.id, {
-        request_id: submitAttempt.current.requestId, stage: 'transfer', code_submitted: bundledCode, started_at: startedAt.current,
-        detail: { cardCount: workspace.cards.length, lastTestPassed: Boolean(result?.passed), testTemplate: task.test_template },
-        artifacts: workspace.cards.map(card => ({ artifact_type: 'module_code', artifact_key: card.id, content: { title: card.title, code: card.code, verified: Boolean(result?.passed) }, change_source: 'stage_confirm' })),
+        request_id: submitAttempt.current.requestId, stage: 'transfer', code_submitted: bundledCode, started_at: startedAtIso,
+        detail: { cardCount: workspace.cards.length, lastTestPassed: true, codeSignature: currentSignature, testTemplate: task.test_template },
+        artifacts: workspace.cards.map(card => ({ artifact_type: 'module_code', artifact_key: card.id, content: { title: card.title, code: card.code, verified: true }, change_source: 'stage_confirm' })),
       });
       if (isFinalSubmissionPersisted(outcome)) {
         submitAttempt.current = null;
@@ -224,7 +276,7 @@ export const TransferTestWorkspace: React.FC<Props> = ({ task, language, theme, 
               <button className="transfer-terminal-button" type="button" onClick={() => setTerminalOpen(value => !value)}><Terminal size={16} />{terminalOpen ? '隐藏终端' : '显示终端'}</button>
               <div>
                 <button className="transfer-run-button" type="button" disabled={running || completed} onClick={() => void run()}>{running ? <LoaderCircle className="animate-spin" size={17} /> : <Play size={17} />}测试并运行</button>
-                <button className="transfer-submit-button" type="button" disabled={submitting || completed} onClick={() => void submit()}>{submitting ? <LoaderCircle className="animate-spin" size={17} /> : completed ? <Check size={17} /> : <Send size={17} />}{completed ? '已提交' : '提交测试'}</button>
+                <button className={`transfer-submit-button ${!isTestPassed && !completed ? 'is-disabled' : ''}`} type="button" disabled={submitting || completed} onClick={() => void submit()}>{submitting ? <LoaderCircle className="animate-spin" size={17} /> : completed ? <Check size={17} /> : <Send size={17} />}{completed ? '已提交' : '提交测试'}</button>
               </div>
             </footer>
           </div>
