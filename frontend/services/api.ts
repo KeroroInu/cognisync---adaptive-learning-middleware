@@ -687,11 +687,17 @@ export async function getActiveTransferTest(): Promise<ResearchTask | null> {
 /**
  * 自动保存学生代码进度
  */
-export async function saveResearchProgress(taskId: string, code: string, startedAt?: string): Promise<void> {
+export async function saveResearchProgress(
+  taskId: string,
+  code: string,
+  startedAt?: string,
+  options?: { keepalive?: boolean }
+): Promise<void> {
   const response = await fetch(`${API_BASE_URL}/api/research/tasks/${taskId}/save-progress`, {
     method: 'POST',
     headers: getHeaders(true),
     body: JSON.stringify({ code_submitted: code, started_at: startedAt }),
+    keepalive: options?.keepalive,
   });
   if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 }

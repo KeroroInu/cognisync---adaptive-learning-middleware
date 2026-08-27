@@ -30,6 +30,7 @@ export interface MazeTransferWorkspace {
   savedAt: string;
   startedAt: number;
   lastPassedSignature?: string;
+  lastTestEventId?: string;
 }
 
 export const createMazeTransferWorkspace = (task: ResearchTask): MazeTransferWorkspace => ({
@@ -48,6 +49,15 @@ export const isMazeTransferWorkspace = (value: unknown): value is MazeTransferWo
     && item.cards.length > 0
     && item.cards.every(card => card && typeof card.id === 'string' && typeof card.title === 'string' && typeof card.code === 'string')
     && typeof item.activeCardId === 'string';
+};
+
+export const migrateWorkspace = (initial: any): MazeTransferWorkspace => {
+  const ws = { ...initial };
+  const now = Date.now();
+  if (typeof ws.startedAt !== 'number' || isNaN(ws.startedAt) || ws.startedAt <= 0 || ws.startedAt > now) {
+    ws.startedAt = now;
+  }
+  return ws as MazeTransferWorkspace;
 };
 
 export const generateCodeSignature = (code: string): string => {
