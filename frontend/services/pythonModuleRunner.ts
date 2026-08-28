@@ -789,6 +789,7 @@ import io
 import json
 import random
 _creative_result = {'passed': False, 'resultCode': 'UNKNOWN', 'detail': ''}
+_creative_detail = ''
 _creative_output = io.StringIO()
 # 种子由平台注入：同一 seed 与同一事件序号必然得到同一随机序列。
 _creative_rng = random.Random(${JSON.stringify(seed)} * 1000003 + ${JSON.stringify(sequence)})
@@ -833,13 +834,16 @@ try:
     if not isinstance(_creative_state, dict):
         raise AssertionError('CREATIVE_RETURN')
     _allowed_state_keys = {${CREATIVE_STATE_KEYS.map(key => `'${key}'`).join(', ')}}
-    if any(_key not in _allowed_state_keys for _key in _creative_state):
+    # 指出**具体哪个字段**不被支持：只说「有个字段不行」会让学生逐行猜。
+    _unsupported_keys = sorted(_key for _key in _creative_state if _key not in _allowed_state_keys)
+    if _unsupported_keys:
+        _creative_detail = '不支持的字段：' + '、'.join(_unsupported_keys[:5])
         raise AssertionError('CREATIVE_UNSUPPORTED_STATE')
     _creative_result = {'passed': True, 'resultCode': 'PASSED', 'detail': '', 'state': _creative_state}
 except SyntaxError as _error:
     _creative_result = {'passed': False, 'resultCode': 'SYNTAX_ERROR', 'detail': f'line {_error.lineno}: {_error.msg}'}
 except AssertionError as _error:
-    _creative_result = {'passed': False, 'resultCode': str(_error), 'detail': ''}
+    _creative_result = {'passed': False, 'resultCode': str(_error), 'detail': _creative_detail}
 except Exception as _error:
     _creative_result = {'passed': False, 'resultCode': 'RUNTIME_ERROR', 'detail': f'{type(_error).__name__}: {_error}'}
 _creative_result['output'] = _creative_output.getvalue().splitlines()[:200]
@@ -1150,8 +1154,8 @@ const RESULT_MESSAGES: Record<string, { zh: string; en: string }> = {
   CREATIVE_RETURN: { zh: '创意函数需要返回游戏状态字典，或返回 None 保持原状态。', en: 'The creative function must return the game-state dictionary or None.' },
   CREATIVE_STATE: { zh: '创意函数返回的状态不符合安全游戏契约。', en: 'The creative function returned a state outside the safe game contract.' },
   CREATIVE_RESTRICTED: { zh: '创意函数只能使用受控状态和基础 Python 表达式，不能访问文件、导入模块或动态执行代码。', en: 'Creative functions can use only the controlled state and basic Python expressions; files, imports and dynamic execution are blocked.' },
-  CREATIVE_UNSUPPORTED_STATE: { zh: '这个顶层状态字段还没有接入游戏。当前可修改 snake、direction、food、score、game_over、interval 和 objects。', en: 'That top-level state field is not connected to the game. You can change snake, direction, food, score, game_over, interval, and objects.' },
-  CREATIVE_NO_EFFECT: { zh: '函数能安全运行，但没有改变任何可观察的游戏状态。请修改状态后再测试。', en: 'The function ran safely but did not change any observable game state. Change the state and test again.' },
+  CREATIVE_UNSUPPORTED_STATE: { zh: '这个顶层状态字段还没有接入游戏。当前可修改 snake、direction、food、score、game_over、interval、objects 和 timers；需要计数或倒计时请用 set_timer 和 timer_ready，需要新的画面元素请用 add_object。', en: 'That top-level state field is not connected to the game. You can change snake, direction, food, score, game_over, interval, objects and timers; use set_timer/timer_ready for counters and add_object for new visuals.' },
+  CREATIVE_NO_EFFECT: { zh: '函数能安全运行，但七个事件跑完都没有改变可观察的游戏状态。注意测试的起始画面里没有任何自定义对象：如果你的功能要对某个对象做出反应，需要先在游戏开始事件里用 add_object 把它放进画面。', en: 'The function ran safely but changed no observable state across all seven events. Note the test starts with no custom objects: if your feature reacts to an object, create it first with add_object on the start event.' },
   SYNTAX_ERROR: { zh: '代码存在语法错误。', en: 'The code contains a syntax error.' },
   RUNTIME_ERROR: { zh: '代码运行时发生错误。', en: 'The code raised an error while running.' },
 };

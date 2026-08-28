@@ -258,9 +258,21 @@ def creative_feature(event, state):
   });
 
   it('rejects a state key that the runner cannot render', () => {
-    expect(runSandbox(`def creative_feature(event, state):
+    const result = runSandbox(`def creative_feature(event, state):
     state['weather'] = 'rain'
-    return state`).resultCode).toBe('CREATIVE_UNSUPPORTED_STATE');
+    return state`);
+    expect(result.resultCode).toBe('CREATIVE_UNSUPPORTED_STATE');
+    // 必须指出具体是哪个字段，否则学生只能逐行猜
+    expect(result.detail).toContain('weather');
+  });
+
+  it('names every unsupported key, which is how the bomb_count counter fails', () => {
+    // 真实课堂案例：学生把倒计时存进自造的顶层字段，代码看起来没问题却永远不生效
+    const result = runSandbox(`def creative_feature(event, state):
+    state['bomb_count'] = 0
+    return state`);
+    expect(result.resultCode).toBe('CREATIVE_UNSUPPORTED_STATE');
+    expect(result.detail).toContain('bomb_count');
   });
 
   it('accepts timers as a first-class v2 state key', () => {
