@@ -461,6 +461,14 @@ const CREATIVE_EVENT_TYPES: Record<RuntimeCreativeHook, string> = {
 
 const RUNTIME_CREATIVE_HOOKS = Object.keys(CREATIVE_EVENT_TYPES) as RuntimeCreativeHook[];
 
+export const CREATIVE_SAFE_BUILTIN_NAMES = [
+  'abs', 'all', 'any', 'bool', 'dict', 'enumerate', 'float', 'int', 'len',
+  'list', 'max', 'min', 'print', 'range', 'reversed', 'round', 'set', 'sorted',
+  'str', 'sum', 'tuple', 'zip',
+] as const;
+
+const CREATIVE_OUTPUT_MAX_CHARS = 16_000;
+
 const creativeEvent = (
   hook: RuntimeCreativeHook,
   event: Omit<PythonCreativeHookEvent, 'type' | 'hook'> = {},
@@ -478,12 +486,17 @@ import io
 import json
 _creative_result = {'passed': False, 'resultCode': 'UNKNOWN', 'detail': ''}
 _creative_output = io.StringIO()
-_safe_builtin_names = (
-    'abs', 'all', 'any', 'bool', 'dict', 'enumerate', 'float', 'int', 'len',
-    'list', 'max', 'min', 'range', 'reversed', 'round', 'set', 'sorted',
-    'str', 'sum', 'tuple', 'zip'
-)
+_safe_builtin_names = (${CREATIVE_SAFE_BUILTIN_NAMES.map(name => `'${name}'`).join(', ')})
 _safe_builtins = {name: getattr(builtins, name) for name in _safe_builtin_names}
+def _safe_print(*values, sep=' ', end='\\n'):
+    if not isinstance(sep, str) or not isinstance(end, str):
+        raise TypeError('print separator and ending must be strings')
+    remaining = ${CREATIVE_OUTPUT_MAX_CHARS} - _creative_output.tell()
+    if remaining <= 0:
+        return
+    text = sep.join(str(value) for value in values) + end
+    _creative_output.write(text[:remaining])
+_safe_builtins['print'] = _safe_print
 try:
     _creative_tree = ast.parse(${JSON.stringify(code)})
     _blocked_names = {

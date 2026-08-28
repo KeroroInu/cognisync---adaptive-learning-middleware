@@ -35,6 +35,17 @@ BUILD_LEVEL_RULES = {
     3: "L3 完整函数：学生明确确认后，给出当前函数经过平台行为检查的完整正确实现；不自动覆盖编辑器，也不要求学生解释原错误。",
 }
 
+CREATIVE_BUILD_LEVEL_RULES = {
+    0: (
+        "L0 创意诊断：只给能够直接放进当前 creative_feature(event, state) 中运行的测试、断言或打印代码；"
+        "必须读取本轮 event/state，不得给独立测试文件、运行器未开放的名称或脱离当前状态的硬编码棋盘结论。"
+        "print 可用且输出会显示在终端；纯诊断不会通过创意启用检查。"
+    ),
+    1: BUILD_LEVEL_RULES[1],
+    2: BUILD_LEVEL_RULES[2],
+    3: BUILD_LEVEL_RULES[3],
+}
+
 BUILD_MAX_CODE_LINES = {0: 8, 1: 5, 2: 40, 3: 100}
 
 OBSERVE_READY_MARKER = "【观察阶段状态】"
@@ -393,6 +404,10 @@ def resolve_scaffold_rule(
         )
 
     build_rule = coding_stage
+    creative_rule = bool(
+        context.stage == "build"
+        and (context.currentModule or "").startswith("creative::")
+    )
     return {
         "requestedLevel": requested_level,
         "appliedLevel": applied_level,
@@ -402,7 +417,15 @@ def resolve_scaffold_rule(
             if build_rule
             else (configured.goalZh if configured else STAGE_GOALS[context.stage])
         ),
-        "allowedHelpZh": BUILD_LEVEL_RULES[applied_level] if build_rule else (configured.allowedHelpZh if configured else LEVEL_RULES[applied_level]),
+        "allowedHelpZh": (
+            CREATIVE_BUILD_LEVEL_RULES[applied_level]
+            if creative_rule
+            else BUILD_LEVEL_RULES[applied_level]
+            if build_rule
+            else configured.allowedHelpZh
+            if configured
+            else LEVEL_RULES[applied_level]
+        ),
         "maxCodeLines": BUILD_MAX_CODE_LINES[applied_level] if build_rule else (configured.maxCodeLines if configured else 0),
         "requireAttemptBeforeUpgrade": require_attempt,
         "coreImplementationMaxLevel": max_implementation_level,
@@ -563,7 +586,17 @@ def build_scaffold_prompt(
     applied_level = resolved["appliedLevel"]
     stage_goal = resolved["goalZh"]
     coding_stage = context.stage in {"build", "transfer"}
-    level_rule = BUILD_LEVEL_RULES[applied_level] if coding_stage else LEVEL_RULES[applied_level]
+    creative_stage = bool(
+        context.stage == "build"
+        and (context.currentModule or "").startswith("creative::")
+    )
+    level_rule = (
+        CREATIVE_BUILD_LEVEL_RULES[applied_level]
+        if creative_stage
+        else BUILD_LEVEL_RULES[applied_level]
+        if coding_stage
+        else LEVEL_RULES[applied_level]
+    )
     teacher_boundary = resolved["allowedHelpZh"]
     code_limit = resolved["maxCodeLines"] or 0
     upgrade_rule = (
@@ -590,7 +623,11 @@ def build_scaffold_prompt(
     )
     verified_reference = SNAKE_L3_SOLUTIONS.get(context.currentModule or "")
     creative_contract_en = (
-        "This is a creative function. The sandbox exposes event and state only. event.type is one of start, key, before_move, move, eat, loop, or end; event.hook keeps the internal hook name. Supported top-level state fields are snake, direction, "
+        "This is a creative function. Student code must stay inside creative_feature(event, state). The sandbox exposes event and state; "
+        "safe basic builtins include print, and printed lines appear in the terminal. L0 diagnostics must inspect the live event/state instead of "
+        "using a standalone test file, unavailable names, or a hard-coded board conclusion. A print-only diagnostic can run but does not pass the enable gate because that gate requires an observable state change. "
+        "Coordinates in state are JSON arrays such as [3, 5], not Python tuples; state['snake'] is a list of those arrays. "
+        "event.type is one of start, key, before_move, move, eat, loop, or end; event.hook keeps the internal hook name. Supported top-level state fields are snake, direction, "
         "food, score, game_over, interval (0.08-2 seconds), and objects. objects is a list of up to 48 dictionaries with id, type, "
         "position [x,y], optional label/solid/active, and primitive data. The shared runner visibly renders obstacle/wall, bomb, portal, "
         "bonus, shield, and custom types; the student's hook code defines their behavior by updating the same safe state."
@@ -598,7 +635,10 @@ def build_scaffold_prompt(
         else "This is a fixed foundation function, not a creative hook."
     )
     creative_contract_zh = (
-        "这是创意函数。沙箱只暴露 event 与 state。event.type 为 start、key、before_move、move、eat、loop 或 end，event.hook 保留内部钩子名。"
+        "这是创意函数。学生代码必须写在 creative_feature(event, state) 内；沙箱提供 event、state 与包含 print 在内的安全基础函数，打印内容会显示在终端。"
+        "L0 诊断必须读取本轮真实 event/state，不得给独立测试文件、运行器未开放的名称或脱离当前状态的硬编码棋盘结论。"
+        "纯打印诊断可以运行，但不会通过要求产生可观察状态变化的启用检查。state 中的坐标是 [3, 5] 这样的 JSON 列表，不是 (3, 5) 元组；snake 是这些坐标列表组成的数组。"
+        "event.type 为 start、key、before_move、move、eat、loop 或 end，event.hook 保留内部钩子名。"
         "state 顶层可使用 snake、direction、food、score、game_over、interval（0.08—2 秒）"
         "和 objects。objects 最多 48 个字典，包含 id、type、position [x,y]，可选 label/solid/active 与基础类型 data。"
         "统一运行器会绘制 obstacle/wall、bomb、portal、bonus、shield 和自定义类型；学生在同一钩子内修改安全状态来定义它们的行为。"

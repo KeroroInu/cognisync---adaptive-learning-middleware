@@ -288,7 +288,28 @@ def test_creative_prompt_exposes_only_the_safe_visible_runner_contract():
     assert "event.type 为 start、key、before_move、move、eat、loop 或 end" in prompt
     assert "objects 最多 48 个字典" in prompt
     assert "obstacle/wall、bomb、portal、bonus、shield" in prompt
-    assert "沙箱只暴露 event 与 state" in prompt
+    assert "creative_feature(event, state)" in prompt
+    assert "包含 print 在内的安全基础函数" in prompt
+    assert "L0 诊断必须读取本轮真实 event/state" in prompt
+    assert "纯打印诊断可以运行" in prompt
+    assert "不会通过" in prompt
+    assert "JSON 列表，不是 (3, 5) 元组" in prompt
+
+
+def test_creative_l0_rule_rejects_detached_or_unavailable_diagnostics():
+    context = scaffold_context(level=0)
+    context.currentModule = "creative::student-card-1"
+    context.trigger = "student_message"
+
+    prompt = build_scaffold_prompt(
+        context,
+        UserProfile(cognition=50, affect=50, behavior=50),
+    )
+
+    assert "直接放进当前 creative_feature(event, state) 中运行" in prompt
+    assert "必须读取本轮 event/state" in prompt
+    assert "不得给独立测试文件" in prompt
+    assert "脱离当前状态的硬编码棋盘结论" in prompt
 
 
 def test_controlled_build_response_can_identify_the_current_card():
