@@ -1,7 +1,7 @@
 import type { Language } from '../types';
 import type { SnakeCreativeHook, StudentCreativeFunction } from '../data/snakeCreativeFunctions';
 import { CREATIVE_FUNCTION_NAME, usesCreativeEventRouting } from '../data/snakeCreativeFunctions';
-import { CREATIVE_HOOK_EVENT_TYPES, CREATIVE_STATE_KEYS_V1 } from '../data/creativeCapabilities';
+import { CREATIVE_HELPERS, CREATIVE_HOOK_EVENT_TYPES, CREATIVE_STATE_KEYS, SCENE_LIMITS, SCENE_TYPE_PATTERN, TIMER_ID_PATTERN } from '../data/creativeCapabilities';
 
 export interface PythonModuleTestResult {
   passed: boolean;
@@ -10,6 +10,8 @@ export interface PythonModuleTestResult {
   durationMs: number;
   preview?: PythonModulePreview;
   output?: string[];
+  /** 本次测试使用的随机种子，进入研究证据以便复现 */
+  seed?: number;
 }
 
 export interface PythonModulePreview {
@@ -42,6 +44,8 @@ export interface PythonGameState {
   interval?: number;
   /** Safe, renderer-owned objects for obstacles, bombs, portals, bonuses, etc. */
   objects?: PythonGameObject[];
+  /** V2: per-tick countdown timers keyed by student-chosen ids. */
+  timers?: Record<string, number>;
 }
 
 export interface PythonCreativeHookEvent {
@@ -364,7 +368,9 @@ else:
                 _food_fn = _namespace.get('spawn_food')
                 if callable(_food_fn):
                     _state['food'] = _food_fn(_state['snake'], _board_size)
-    _state = {'snake': _point_list(_state['snake']), 'direction': _state['direction'], 'food': list(_state['food']), 'score': int(_state['score']), 'game_over': bool(_state['game_over']), **({'interval': float(_state['interval'])} if 'interval' in _state else {}), **({'objects': _state['objects']} if 'objects' in _state else {})}
+    # objects 与 timers 在基础循环中原样保留：它们由创意钩子维护，
+    # 基础七函数不认识这些字段，重建状态时丢掉会让计时器每帧被清空。
+    _state = {'snake': _point_list(_state['snake']), 'direction': _state['direction'], 'food': list(_state['food']), 'score': int(_state['score']), 'game_over': bool(_state['game_over']), **({'interval': float(_state['interval'])} if 'interval' in _state else {}), **({'objects': _state['objects']} if 'objects' in _state else {}), **({'timers': _state['timers']} if 'timers' in _state else {})}
 json.dumps(_state, ensure_ascii=False)
 `;
 
@@ -388,7 +394,7 @@ const normalizeGameState = (value: unknown): PythonGameState => {
     || state.interval > 2
   )) throw new Error('invalid-game-state');
   const rawObjects = state.objects ?? [];
-  if (!Array.isArray(rawObjects) || rawObjects.length > 48) throw new Error('invalid-game-state');
+  if (!Array.isArray(rawObjects) || rawObjects.length > SCENE_LIMITS.maxObjects) throw new Error('invalid-game-state');
   const objects: PythonGameObject[] = rawObjects.map((rawObject, index) => {
     if (!rawObject || typeof rawObject !== 'object') throw new Error('invalid-game-state');
     const object = rawObject as Partial<PythonGameObject>;
@@ -396,7 +402,7 @@ const normalizeGameState = (value: unknown): PythonGameState => {
     const type = String(object.type ?? 'custom').toLowerCase();
     const label = object.label === undefined ? undefined : String(object.label).slice(0, 4);
     if (
-      !/^[a-z0-9_-]{1,24}$/.test(type)
+      !SCENE_TYPE_PATTERN.test(type)
       || !validPoint(object.position)
       || object.position!.some(coordinate => coordinate < 0 || coordinate >= 12)
     ) throw new Error('invalid-game-state');
@@ -417,6 +423,23 @@ const normalizeGameState = (value: unknown): PythonGameState => {
       ...(dataEntries.length === 0 ? {} : { data: Object.fromEntries(dataEntries) }),
     };
   });
+  // 计时器：键名比 V1 的 data 键更严（排除 __ 开头），避免按键赋值造成原型污染。
+  const rawTimers = state.timers;
+  const timers: Record<string, number> = Object.create(null);
+  if (rawTimers !== undefined) {
+    if (!rawTimers || typeof rawTimers !== 'object' || Array.isArray(rawTimers)) throw new Error('invalid-game-state');
+    const timerEntries = Object.entries(rawTimers);
+    if (timerEntries.length > SCENE_LIMITS.maxTimers) throw new Error('invalid-game-state');
+    timerEntries.forEach(([id, ticks]) => {
+      if (
+        !TIMER_ID_PATTERN.test(id)
+        || !Number.isInteger(ticks)
+        || (ticks as number) < 0
+        || (ticks as number) > SCENE_LIMITS.maxTimerTicks
+      ) throw new Error('invalid-game-state');
+      timers[id] = ticks as number;
+    });
+  }
   return {
     snake: state.snake.map(point => [point[0], point[1]]),
     food: [state.food![0], state.food![1]],
@@ -425,6 +448,7 @@ const normalizeGameState = (value: unknown): PythonGameState => {
     game_over: state.game_over,
     ...(state.interval === undefined ? {} : { interval: state.interval }),
     ...(objects.length === 0 ? {} : { objects }),
+    ...(Object.keys(timers).length === 0 ? {} : { timers: { ...timers } }),
   };
 };
 
@@ -469,18 +493,219 @@ const creativeEvent = (
   event: Omit<PythonCreativeHookEvent, 'type' | 'hook'> = {},
 ): PythonCreativeHookEvent => ({ ...event, type: CREATIVE_EVENT_TYPES[hook], hook });
 
+/**
+ * 注入沙箱的确定性帮助函数（Creative Capability API V2）。
+ *
+ * 它们在 Python 内部实现并显式放进创意命名空间：学生无需 `import`，
+ * 也无法通过它们触达文件、网络或宿主对象。随机来自平台注入的种子，
+ * 因此「同一代码 + 同一初始状态 + 同一事件序列 + 同一 seed」结果可复现。
+ *
+ * 上限直接来自能力注册表，避免 Python 侧和 TypeScript 侧各写一套数字。
+ */
+const creativeHelperSource = () => `
+_board_size = ${SCENE_LIMITS.boardSize}
+_max_objects = ${SCENE_LIMITS.maxObjects}
+_max_label_chars = ${SCENE_LIMITS.maxLabelChars}
+_max_timers = ${SCENE_LIMITS.maxTimers}
+_max_timer_ticks = ${SCENE_LIMITS.maxTimerTicks}
+_max_id_chars = ${SCENE_LIMITS.maxIdChars}
+
+def _is_int(value):
+    return isinstance(value, int) and not isinstance(value, bool)
+
+def _in_board(x, y):
+    return 0 <= x < _board_size and 0 <= y < _board_size
+
+def _as_point(value):
+    if isinstance(value, (list, tuple)) and len(value) == 2:
+        x, y = value
+        if _is_int(x) and _is_int(y) and _in_board(x, y):
+            return [int(x), int(y)]
+    return None
+
+def _cell_key(value):
+    if isinstance(value, (list, tuple)) and len(value) == 2:
+        x, y = value
+        if _is_int(x) and _is_int(y):
+            return (int(x), int(y))
+    return None
+
+def _state_objects(state):
+    if not isinstance(state, dict):
+        raise TypeError('state must be the dictionary given to creative_feature')
+    objects = state.get('objects')
+    if not isinstance(objects, list):
+        objects = []
+        state['objects'] = objects
+    return objects
+
+def _state_timers(state):
+    if not isinstance(state, dict):
+        raise TypeError('state must be the dictionary given to creative_feature')
+    timers = state.get('timers')
+    if not isinstance(timers, dict):
+        timers = {}
+        state['timers'] = timers
+    return timers
+
+def randint(min_value, max_value):
+    if not _is_int(min_value) or not _is_int(max_value):
+        raise TypeError('randint(min_value, max_value) needs two integers')
+    if min_value > max_value:
+        raise ValueError('randint needs min_value <= max_value')
+    if max_value - min_value > 1000000:
+        raise ValueError('randint range is too large')
+    return _creative_rng.randint(min_value, max_value)
+
+def choice(items):
+    if not isinstance(items, (list, tuple)) or len(items) == 0:
+        raise ValueError('choice(items) needs a non-empty list')
+    return items[_creative_rng.randrange(len(items))]
+
+def random_empty_cell(state):
+    occupied = set()
+    if isinstance(state, dict):
+        for point in state.get('snake') or []:
+            key = _cell_key(point)
+            if key is not None:
+                occupied.add(key)
+        food_key = _cell_key(state.get('food'))
+        if food_key is not None:
+            occupied.add(food_key)
+        for item in _state_objects(state):
+            if isinstance(item, dict) and item.get('solid'):
+                key = _cell_key(item.get('position'))
+                if key is not None:
+                    occupied.add(key)
+    free = [
+        [x, y]
+        for y in range(_board_size)
+        for x in range(_board_size)
+        if (x, y) not in occupied
+    ]
+    if not free:
+        return None
+    return list(free[_creative_rng.randrange(len(free))])
+
+def _is_type_name(value):
+    if not isinstance(value, str) or not 1 <= len(value) <= 24:
+        return False
+    for character in value:
+        if not (character.islower() and character.isalpha()) and not character.isdigit() and character not in '_-':
+            return False
+    return True
+
+def _next_object_id(objects, type_value):
+    taken = {item.get('id') for item in objects if isinstance(item, dict)}
+    index = 1
+    while True:
+        candidate = type_value + '-' + str(index)
+        if candidate not in taken:
+            return candidate
+        index += 1
+
+def add_object(state, object_spec):
+    """按场景对象协议新增一个对象。上限或字段非法时返回 None，且不写入状态。"""
+    objects = _state_objects(state)
+    if not isinstance(object_spec, dict) or len(objects) >= _max_objects:
+        return None
+    position = _as_point(object_spec.get('position'))
+    if position is None:
+        return None
+    type_value = object_spec.get('type', 'custom')
+    if not _is_type_name(type_value):
+        return None
+    object_id = object_spec.get('id')
+    if object_id is None:
+        object_id = _next_object_id(objects, type_value)
+    if not isinstance(object_id, str) or not 1 <= len(object_id) <= _max_id_chars:
+        return None
+    new_object = {'id': object_id, 'type': type_value, 'position': position}
+    label = object_spec.get('label')
+    if label is not None:
+        if not isinstance(label, str):
+            return None
+        new_object['label'] = label[:_max_label_chars]
+    for flag in ('solid', 'active'):
+        if object_spec.get(flag) is not None:
+            new_object[flag] = bool(object_spec.get(flag))
+    # 表现字段原样带过，由主线程按 Schema 复核；这里不放行未知字段。
+    for field in ('shape', 'size', 'color', 'strokeColor', 'opacity', 'rotation', 'zIndex', 'animation', 'data'):
+        if object_spec.get(field) is not None:
+            new_object[field] = object_spec.get(field)
+    objects.append(new_object)
+    return new_object
+
+def remove_object(state, object_id):
+    objects = _state_objects(state)
+    for index, item in enumerate(objects):
+        if isinstance(item, dict) and item.get('id') == object_id:
+            del objects[index]
+            return True
+    return False
+
+def move_object(state, object_id, position):
+    target = _as_point(position)
+    if target is None:
+        return False
+    for item in _state_objects(state):
+        if isinstance(item, dict) and item.get('id') == object_id:
+            item['position'] = target
+            return True
+    return False
+
+def find_objects(state, object_type=None):
+    """返回状态中的对象本体；修改返回项即修改状态，主线程仍会复核。"""
+    objects = _state_objects(state)
+    if object_type is None:
+        return [item for item in objects if isinstance(item, dict)]
+    return [item for item in objects if isinstance(item, dict) and item.get('type') == object_type]
+
+def _is_timer_id(value):
+    if not isinstance(value, str) or not 1 <= len(value) <= 32 or value.startswith('__'):
+        return False
+    for character in value:
+        if not character.isalnum() and character not in '_-':
+            return False
+        if character.isalnum() and not character.isascii():
+            return False
+    return True
+
+def set_timer(state, timer_id, ticks):
+    """设置一个按帧倒数的计时器；平台在每个游戏帧减一。"""
+    timers = _state_timers(state)
+    if not _is_timer_id(timer_id) or not _is_int(ticks):
+        return False
+    if ticks < 0 or ticks > _max_timer_ticks:
+        return False
+    if timer_id not in timers and len(timers) >= _max_timers:
+        return False
+    timers[timer_id] = int(ticks)
+    return True
+
+def timer_ready(state, timer_id):
+    timers = _state_timers(state)
+    value = timers.get(timer_id)
+    return _is_int(value) and value <= 0
+`;
+
 const createCreativeHarness = (
   code: string,
   state: PythonGameState,
   event: PythonCreativeHookEvent,
+  seed: number,
+  sequence: number,
 ) => `
 import ast
 import builtins
 import contextlib
 import io
 import json
+import random
 _creative_result = {'passed': False, 'resultCode': 'UNKNOWN', 'detail': ''}
 _creative_output = io.StringIO()
+# 种子由平台注入：同一 seed 与同一事件序号必然得到同一随机序列。
+_creative_rng = random.Random(${JSON.stringify(seed)} * 1000003 + ${JSON.stringify(sequence)})
 _safe_builtin_names = (${CREATIVE_SAFE_BUILTIN_NAMES.map(name => `'${name}'`).join(', ')})
 _safe_builtins = {name: getattr(builtins, name) for name in _safe_builtin_names}
 def _safe_print(*values, sep=' ', end='\\n'):
@@ -492,6 +717,8 @@ def _safe_print(*values, sep=' ', end='\\n'):
     text = sep.join(str(value) for value in values) + end
     _creative_output.write(text[:remaining])
 _safe_builtins['print'] = _safe_print
+${creativeHelperSource()}
+_creative_helpers = {${CREATIVE_HELPERS.map(helper => `'${helper.name}': ${helper.name}`).join(', ')}}
 try:
     _creative_tree = ast.parse(${JSON.stringify(code)})
     _blocked_names = {
@@ -507,6 +734,7 @@ try:
             raise AssertionError('CREATIVE_RESTRICTED')
     with contextlib.redirect_stdout(_creative_output), contextlib.redirect_stderr(_creative_output):
         _creative_namespace = {'__builtins__': _safe_builtins}
+        _creative_namespace.update(_creative_helpers)
         exec(${JSON.stringify(code)}, _creative_namespace)
         _creative_fn = _creative_namespace.get(${JSON.stringify(CREATIVE_FUNCTION_NAME)})
         if not callable(_creative_fn):
@@ -518,7 +746,7 @@ try:
             _creative_state = _creative_returned
     if not isinstance(_creative_state, dict):
         raise AssertionError('CREATIVE_RETURN')
-    _allowed_state_keys = {${CREATIVE_STATE_KEYS_V1.map(key => `'${key}'`).join(', ')}}
+    _allowed_state_keys = {${CREATIVE_STATE_KEYS.map(key => `'${key}'`).join(', ')}}
     if any(_key not in _allowed_state_keys for _key in _creative_state):
         raise AssertionError('CREATIVE_UNSUPPORTED_STATE')
     _creative_result = {'passed': True, 'resultCode': 'PASSED', 'detail': '', 'state': _creative_state}
@@ -529,8 +757,12 @@ except AssertionError as _error:
 except Exception as _error:
     _creative_result = {'passed': False, 'resultCode': 'RUNTIME_ERROR', 'detail': f'{type(_error).__name__}: {_error}'}
 _creative_result['output'] = _creative_output.getvalue().splitlines()[:200]
-json.dumps(_creative_result, ensure_ascii=False)
+_creative_payload = json.dumps(_creative_result, ensure_ascii=False)
+_creative_payload
 `;
+
+/** 供测试生成与真实运行完全一致的沙箱源码，不额外维护第二套模板。 */
+export const buildCreativeHarnessSource = createCreativeHarness;
 
 const SAMPLE_CREATIVE_STATE: PythonGameState = {
   snake: [[6, 5], [5, 5], [4, 5]],
@@ -542,17 +774,55 @@ const SAMPLE_CREATIVE_STATE: PythonGameState = {
   objects: [],
 };
 
+/**
+ * 确定性随机的种子与序号。
+ *
+ * seed 固定一局游戏，sequence 随每次创意函数执行递增：同一 seed 下事件序列
+ * 相同就得到相同的随机序列，便于复现学生提交的运行证据。seed 会随测试结果
+ * 一起记录，不只存在浏览器内存里。
+ */
+const DEFAULT_CREATIVE_SEED = 20260828;
+let creativeSeed = DEFAULT_CREATIVE_SEED;
+let creativeSequence = 0;
+
+export const getCreativeSeed = () => creativeSeed;
+
+/** 开始新一局时设定种子并重置序号；不传则沿用当前种子。 */
+export const setCreativeSeed = (seed: number = creativeSeed) => {
+  creativeSeed = Number.isSafeInteger(seed) ? Math.abs(seed) % 2_147_483_647 : DEFAULT_CREATIVE_SEED;
+  creativeSequence = 0;
+  return creativeSeed;
+};
+
 const executeCreative = async (
   code: string,
   state: PythonGameState,
   event: PythonCreativeHookEvent,
+  seed: number = creativeSeed,
+  sequence: number = creativeSequence++,
 ): Promise<CreativeExecutionResult> => runPythonJson<CreativeExecutionResult>(
-  createCreativeHarness(code, state, event),
+  createCreativeHarness(code, state, event, seed, sequence),
 );
+
+/**
+ * 平台按帧推进计时器：每个游戏帧把所有计时器减一，最低到 0。
+ * 由平台而不是学生代码负责，保证不同卡片看到的是同一条时间线。
+ */
+export const advanceCreativeTimers = (state: PythonGameState): PythonGameState => {
+  const timers = state.timers;
+  if (!timers) return state;
+  const entries = Object.entries(timers);
+  if (entries.length === 0) return state;
+  return {
+    ...state,
+    timers: Object.fromEntries(entries.map(([id, ticks]) => [id, Math.max(0, ticks - 1)])),
+  };
+};
 
 export const runPythonCreativeTest = async (
   code: string,
   hook: SnakeCreativeHook,
+  seed: number = creativeSeed,
 ): Promise<PythonModuleTestResult> => {
   const startedAt = performance.now();
   const hooks = hook === 'any' || usesCreativeEventRouting(code) ? RUNTIME_CREATIVE_HOOKS : [hook];
@@ -560,12 +830,14 @@ export const runPythonCreativeTest = async (
   const outputs: string[] = [];
   let changed = false;
 
-  for (const currentHook of hooks) {
+  // 测试从固定序号开始：同一份代码和同一个 seed 每次得到同样的测试结论，
+  // 学生不会因为「上一张卡刚好消耗了随机序列」而看到时好时坏的结果。
+  for (const [index, currentHook] of hooks.entries()) {
     const before = JSON.stringify(state);
-    const result = await executeCreative(code, state, creativeEvent(currentHook, { input: 'up' }));
+    const result = await executeCreative(code, state, creativeEvent(currentHook, { input: 'up' }), seed, index);
     if (result.output?.length) outputs.push(...result.output);
     if (!result.passed) {
-      return { ...result, output: outputs.slice(0, 200), durationMs: Math.round(performance.now() - startedAt) };
+      return { ...result, seed, output: outputs.slice(0, 200), durationMs: Math.round(performance.now() - startedAt) };
     }
     try {
       state = normalizeGameState(result.state);
@@ -574,6 +846,7 @@ export const runPythonCreativeTest = async (
         passed: false,
         resultCode: 'CREATIVE_STATE',
         detail: '',
+        seed,
         output: outputs.slice(0, 200),
         durationMs: Math.round(performance.now() - startedAt),
       };
@@ -586,6 +859,7 @@ export const runPythonCreativeTest = async (
       passed: false,
       resultCode: 'CREATIVE_NO_EFFECT',
       detail: '',
+      seed,
       output: outputs.slice(0, 200),
       durationMs: Math.round(performance.now() - startedAt),
     };
@@ -595,6 +869,7 @@ export const runPythonCreativeTest = async (
     passed: true,
     resultCode: 'PASSED',
     detail: '',
+    seed,
     output: outputs.slice(0, 200),
     preview: {
       snake: state.snake,

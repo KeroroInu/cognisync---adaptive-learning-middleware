@@ -40,10 +40,12 @@ import {
   disposePythonModuleRunner,
   formatPythonModuleTestResult,
   formatPythonRunnerError,
+  advanceCreativeTimers,
   resetPythonGame,
   runPythonCreativeHooks,
   runPythonCreativeTest,
   runPythonModuleTest,
+  setCreativeSeed,
   stepPythonGame,
   type PythonGameState,
   type PythonGameObject,
@@ -258,6 +260,8 @@ const SnakeBuildPreview: React.FC<SnakeBuildPreviewProps> = React.memo(({
       return;
     }
     try {
+      // 每局开始重置随机序号：同一 seed 下事件序列相同则随机结果可复现。
+      setCreativeSeed();
       const rawBase = await resetPythonGame(codeByNode);
       const base = { ...rawBase, interval: rawBase.interval ?? INITIAL_GAME_STATE.interval };
       applyGame(await runCreativeHook('game_start', base));
@@ -283,6 +287,7 @@ const SnakeBuildPreview: React.FC<SnakeBuildPreviewProps> = React.memo(({
       game_over: preview.over ?? false,
       interval: preview.interval ?? gameRef.current.interval,
       objects: preview.objects ?? gameRef.current.objects,
+      timers: gameRef.current.timers,
     };
     applyGame(next);
   }, [applyGame, demonstration]);
@@ -293,7 +298,8 @@ const SnakeBuildPreview: React.FC<SnakeBuildPreviewProps> = React.memo(({
     const timer = window.setTimeout(async () => {
       try {
         const userInput = inputRef.current;
-        let before = gameRef.current;
+        // 计时器由平台每帧统一减一，保证所有创意卡看到同一条时间线。
+        let before = advanceCreativeTimers(gameRef.current);
         if (userInput) before = await runCreativeHook('key_input', before, { input: userInput });
         before = await runCreativeHook('before_move', before, { input: userInput });
         const scoreBefore = before.score;
