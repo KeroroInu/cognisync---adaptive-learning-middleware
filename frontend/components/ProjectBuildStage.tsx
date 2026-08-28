@@ -52,6 +52,8 @@ import {
   type PythonModulePreview,
   type PythonCreativeHookError,
 } from '../services/pythonModuleRunner';
+import { SCENE_LIMITS } from '../data/creativeCapabilities';
+import { sceneObjectClassName, sceneObjectStyle } from '../data/sceneRenderer';
 import type { StudentFunctionCard } from './ProjectFunctionStage';
 import { creativeCodeArtifact, createRequestId, moduleCodeArtifact, type ReportKeyMoment } from '../services/stageEvents';
 import './ProjectBuildStage.css';
@@ -108,10 +110,6 @@ const OBJECT_GLYPHS: Record<string, string> = {
   bonus: '★',
   shield: '◇',
 };
-
-const objectVisualType = (type: string) => (
-  ['obstacle', 'wall', 'bomb', 'portal', 'bonus', 'shield'].includes(type) ? type : 'custom'
-);
 
 const resolveProgress = (
   progress: Record<string, StudentModuleProgress>,
@@ -406,19 +404,17 @@ const SnakeBuildPreview: React.FC<SnakeBuildPreviewProps> = React.memo(({
           const cellObjects = objectsByCell.get(`${x}:${y}`) ?? [];
           return (
             <span key={index} className={`${snakeIndex !== undefined ? 'is-snake' : ''} ${snakeIndex === 0 ? 'is-head' : ''} ${isFood ? 'is-food' : ''}`}>
-              {cellObjects.slice(0, 2).map((object, objectIndex) => {
-                const visualType = objectVisualType(object.type);
-                return (
-                  <i
-                    key={`${object.id}:${objectIndex}`}
-                    className={`construction-object is-${visualType}`}
-                    title={`${object.type}${object.solid ? ' · solid' : ''}`}
-                    aria-hidden="true"
-                  >
-                    {object.label || OBJECT_GLYPHS[object.type] || '◆'}
-                  </i>
-                );
-              })}
+              {cellObjects.slice(0, SCENE_LIMITS.maxObjectsPerCell).map((object, objectIndex) => (
+                <i
+                  key={`${object.id}:${objectIndex}`}
+                  className={sceneObjectClassName(object)}
+                  style={sceneObjectStyle(object)}
+                  title={`${object.type}${object.solid ? ' · solid' : ''}`}
+                  aria-hidden="true"
+                >
+                  {object.label || (object.shape ? '' : OBJECT_GLYPHS[object.type] || '◆')}
+                </i>
+              ))}
             </span>
           );
         })}

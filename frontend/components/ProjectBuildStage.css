@@ -89,7 +89,39 @@
 .construction-object.is-bonus { color: #ffdf70; text-shadow: 0 0 7px rgba(255,208,74,.7); }
 .construction-object.is-shield { color: #a9eff8; text-shadow: 0 0 7px rgba(120,220,232,.65); }
 .construction-object.is-custom { border: 1px solid #d7b3ff; border-radius: 30%; background: #76518f; }
-.construction-over { position: absolute; inset: 0; display: grid; place-items: center; align-content: center; gap: 9px; background: rgba(10,14,10,.82); color: #edf4e6; }
+
+/* ── 通用场景对象（V2）────────────────────────────────────────────────────
+   形状、颜色、大小、透明度、旋转和层级由校验过的内联样式提供；
+   这里只负责「哪些表现是被允许的」以及受控动画。未使用新字段的旧对象
+   仍走上面的 is-<type> 皮肤，画面与 V1 一致。 */
+.construction-object.has-shape-text { border: 0; background: none; box-shadow: none; }
+.construction-object.has-shape-line { box-shadow: none; }
+
+.construction-object.is-anim-pulse { animation: construction-object-pulse 1.1s ease-in-out infinite; }
+.construction-object.is-anim-blink { animation: construction-object-blink .8s steps(2, end) infinite; }
+.construction-object.is-anim-spin { animation: construction-object-spin 1.8s linear infinite; }
+
+@keyframes construction-object-pulse {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.45); }
+}
+@keyframes construction-object-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .25; }
+}
+@keyframes construction-object-spin {
+  from { rotate: 0deg; }
+  to { rotate: 360deg; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .construction-object.is-anim-pulse,
+  .construction-object.is-anim-blink,
+  .construction-object.is-anim-spin { animation: none; }
+}
+
+/* 结束遮罩必须盖住学生对象：对象最高可用 z-index 10（zIndex 9 + 1）。 */
+.construction-over { position: absolute; inset: 0; z-index: 20; display: grid; place-items: center; align-content: center; gap: 9px; background: rgba(10,14,10,.82); color: #edf4e6; }
 .construction-over button { min-height: 32px; padding: 0 10px; border: 1px solid var(--brand-cyan); border-radius: 5px; background: var(--brand-cyan); color: #161713; font-size: .62rem; font-weight: 900; }
 
 .construction-controls { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 8px; padding-top: 10px; }

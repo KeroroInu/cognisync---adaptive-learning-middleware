@@ -1,7 +1,19 @@
 import type { Language } from '../types';
 import type { SnakeCreativeHook, StudentCreativeFunction } from '../data/snakeCreativeFunctions';
 import { CREATIVE_FUNCTION_NAME, usesCreativeEventRouting } from '../data/snakeCreativeFunctions';
-import { CREATIVE_HELPERS, CREATIVE_HOOK_EVENT_TYPES, CREATIVE_STATE_KEYS, SCENE_LIMITS, SCENE_TYPE_PATTERN, TIMER_ID_PATTERN } from '../data/creativeCapabilities';
+import {
+  CREATIVE_HELPERS,
+  CREATIVE_HOOK_EVENT_TYPES,
+  CREATIVE_STATE_KEYS,
+  SCENE_ANIMATIONS,
+  SCENE_LIMITS,
+  SCENE_SHAPES,
+  SCENE_TYPE_PATTERN,
+  TIMER_ID_PATTERN,
+  isSafeSceneColor,
+  type SceneAnimation,
+  type SceneShape,
+} from '../data/creativeCapabilities';
 
 export interface PythonModuleTestResult {
   passed: boolean;
@@ -24,6 +36,10 @@ export interface PythonModulePreview {
   objects?: PythonGameObject[];
 }
 
+/**
+ * 场景对象。V1 字段保持不变，V2 只新增可选表现字段；
+ * 旧对象不写新字段时渲染结果与 V1 完全一致。
+ */
 export interface PythonGameObject {
   id: string;
   type: string;
@@ -32,6 +48,14 @@ export interface PythonGameObject {
   solid?: boolean;
   active?: boolean;
   data?: Record<string, string | number | boolean>;
+  shape?: SceneShape;
+  size?: number[];
+  color?: string;
+  strokeColor?: string;
+  opacity?: number;
+  rotation?: number;
+  zIndex?: number;
+  animation?: SceneAnimation;
 }
 
 export interface PythonGameState {
@@ -420,6 +444,53 @@ export const validateSceneState = (value: unknown): PythonGameState => {
       || (typeof item === 'string' && item.length > 80)
       || (typeof item === 'number' && !Number.isFinite(item))
     ))) throw new Error('invalid-game-state');
+    // V2 表现字段：逐项校验后才允许进入渲染层。
+    // 任何一项越界就拒绝整帧，而不是「悄悄丢掉这个字段」——
+    // 后者会让学生看到「代码跑通了但画面没变」，无从排查。
+    const numberInRange = (value: unknown, min: number, max: number) => (
+      typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max
+    );
+    const optional = <T,>(value: unknown, ok: (input: unknown) => boolean, map: (input: unknown) => T) => {
+      if (value === undefined || value === null) return undefined;
+      if (!ok(value)) throw new Error('invalid-game-state');
+      return map(value);
+    };
+
+    const shape = optional<SceneShape>(
+      object.shape,
+      value => (SCENE_SHAPES as readonly string[]).includes(value as string),
+      value => value as SceneShape,
+    );
+    const animation = optional<SceneAnimation>(
+      object.animation,
+      value => (SCENE_ANIMATIONS as readonly string[]).includes(value as string),
+      value => value as SceneAnimation,
+    );
+    const color = optional<string>(object.color, isSafeSceneColor, value => value as string);
+    const strokeColor = optional<string>(object.strokeColor, isSafeSceneColor, value => value as string);
+    const opacity = optional<number>(
+      object.opacity,
+      value => numberInRange(value, SCENE_LIMITS.minOpacity, SCENE_LIMITS.maxOpacity),
+      value => value as number,
+    );
+    const rotation = optional<number>(
+      object.rotation,
+      value => numberInRange(value, SCENE_LIMITS.minRotation, SCENE_LIMITS.maxRotation),
+      value => value as number,
+    );
+    const zIndex = optional<number>(
+      object.zIndex,
+      value => Number.isInteger(value) && numberInRange(value, SCENE_LIMITS.minZIndex, SCENE_LIMITS.maxZIndex),
+      value => value as number,
+    );
+    const size = optional<number[]>(
+      object.size,
+      value => Array.isArray(value)
+        && value.length === 2
+        && value.every(item => numberInRange(item, SCENE_LIMITS.minSize, SCENE_LIMITS.maxSize)),
+      value => [(value as number[])[0], (value as number[])[1]],
+    );
+
     return {
       id,
       type,
@@ -428,6 +499,14 @@ export const validateSceneState = (value: unknown): PythonGameState => {
       ...(object.solid === undefined ? {} : { solid: Boolean(object.solid) }),
       ...(object.active === undefined ? {} : { active: Boolean(object.active) }),
       ...(dataEntries.length === 0 ? {} : { data: Object.fromEntries(dataEntries) }),
+      ...(shape === undefined ? {} : { shape }),
+      ...(size === undefined ? {} : { size }),
+      ...(color === undefined ? {} : { color }),
+      ...(strokeColor === undefined ? {} : { strokeColor }),
+      ...(opacity === undefined ? {} : { opacity }),
+      ...(rotation === undefined ? {} : { rotation }),
+      ...(zIndex === undefined ? {} : { zIndex }),
+      ...(animation === undefined ? {} : { animation }),
     };
   });
   // 计时器：键名比 V1 的 data 键更严（排除 __ 开头），避免按键赋值造成原型污染。
