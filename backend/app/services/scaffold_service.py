@@ -9,6 +9,10 @@ from typing import Any
 from app.schemas.chat import ProjectScaffoldContext
 from app.schemas.project_blueprint import BlueprintScaffoldPolicy
 from app.schemas.profile import UserProfile
+from app.services.creative_capability import (
+    creative_contract_en as creative_contract_text_en,
+    creative_contract_zh as creative_contract_text_zh,
+)
 from app.services.learning_agent_harness import BUILD_FUNCTION_TITLES
 
 
@@ -43,7 +47,14 @@ CREATIVE_BUILD_LEVEL_RULES = {
     ),
     1: BUILD_LEVEL_RULES[1],
     2: BUILD_LEVEL_RULES[2],
-    3: BUILD_LEVEL_RULES[3],
+    # 创意功能没有教师标准答案，因此这里不能沿用基础函数那句「平台验证过的正确实现」。
+    # 学生已经确认进入 L3 时必须直接给完整函数，退回追问会让 L3 名存实亡。
+    3: (
+        "L3 完整函数：学生已明确确认。直接给出当前创意函数的完整实现，"
+        "只使用运行器真实存在的事件、顶层状态字段和帮助函数；写入未开放的顶层字段会被运行器拒绝，不要给这类代码。"
+        "不得退回 L0 式反复追问，也不要求学生解释原错误。"
+        "创意功能没有教师标准答案，是否成立以本地测试和游戏中的可观察变化为准。"
+    ),
 }
 
 BUILD_MAX_CODE_LINES = {0: 8, 1: 5, 2: 40, 3: 100}
@@ -622,26 +633,16 @@ def build_scaffold_prompt(
         and context.l3Confirmed
     )
     verified_reference = SNAKE_L3_SOLUTIONS.get(context.currentModule or "")
+    # 创意契约由 creative_capability 统一维护，与前端能力注册表同源。
+    # 早期这段文字直接写在 Prompt 里，沙箱新增 timers 和帮助函数后没有同步，
+    # 结果 Agent 会建议 state['bomb_count'] 这类必然被拒绝的写法。
     creative_contract_en = (
-        "This is a creative function. Student code must stay inside creative_feature(event, state). The sandbox exposes event and state; "
-        "safe basic builtins include print, and printed lines appear in the terminal. L0 diagnostics must inspect the live event/state instead of "
-        "using a standalone test file, unavailable names, or a hard-coded board conclusion. A print-only diagnostic can run but does not pass the enable gate because that gate requires an observable state change. "
-        "Coordinates in state are JSON arrays such as [3, 5], not Python tuples; state['snake'] is a list of those arrays. "
-        "event.type is one of start, key, before_move, move, eat, loop, or end; event.hook keeps the internal hook name. Supported top-level state fields are snake, direction, "
-        "food, score, game_over, interval (0.08-2 seconds), and objects. objects is a list of up to 48 dictionaries with id, type, "
-        "position [x,y], optional label/solid/active, and primitive data. The shared runner visibly renders obstacle/wall, bomb, portal, "
-        "bonus, shield, and custom types; the student's hook code defines their behavior by updating the same safe state."
+        creative_contract_text_en()
         if (context.currentModule or "").startswith("creative::")
         else "This is a fixed foundation function, not a creative hook."
     )
     creative_contract_zh = (
-        "这是创意函数。学生代码必须写在 creative_feature(event, state) 内；沙箱提供 event、state 与包含 print 在内的安全基础函数，打印内容会显示在终端。"
-        "L0 诊断必须读取本轮真实 event/state，不得给独立测试文件、运行器未开放的名称或脱离当前状态的硬编码棋盘结论。"
-        "纯打印诊断可以运行，但不会通过要求产生可观察状态变化的启用检查。state 中的坐标是 [3, 5] 这样的 JSON 列表，不是 (3, 5) 元组；snake 是这些坐标列表组成的数组。"
-        "event.type 为 start、key、before_move、move、eat、loop 或 end，event.hook 保留内部钩子名。"
-        "state 顶层可使用 snake、direction、food、score、game_over、interval（0.08—2 秒）"
-        "和 objects。objects 最多 48 个字典，包含 id、type、position [x,y]，可选 label/solid/active 与基础类型 data。"
-        "统一运行器会绘制 obstacle/wall、bomb、portal、bonus、shield 和自定义类型；学生在同一钩子内修改安全状态来定义它们的行为。"
+        creative_contract_text_zh()
         if (context.currentModule or "").startswith("creative::")
         else "当前是固定基础函数，不是创意钩子。"
     )
@@ -649,14 +650,25 @@ def build_scaffold_prompt(
         "L3 code collaboration is active for this function. Answer the student's code question directly: you may quote, modify, "
         "complete, compare, and explain the full current function. Do not retreat to L0-style diagnostic questioning and do not "
         "withhold code merely to preserve discovery. Keep the scope to this one function."
-        + (f"\nPlatform-verified reference for this function:\n```python\n{verified_reference}\n```" if verified_reference else "")
+        + (
+            f"\nPlatform-verified reference for this function:\n```python\n{verified_reference}\n```"
+            if verified_reference
+            # 创意函数没有教师参考实现；不说清楚这一点，模型容易因为「找不到标准答案」
+            # 而退回提问，L3 就形同虚设。
+            else "\nThis function has no platform reference implementation. Build the complete function from the "
+            "student's current code and the real runner capabilities instead of asking further diagnostic questions."
+        )
         if confirmed_build_l3
         else "L3 code collaboration is not active; follow the applied L0-L2 boundary."
     )
     l3_collaboration_rule_zh = (
         "当前函数已进入 L3 代码协作。直接回答学生对代码的具体问题：可以引用、修改、补全、比较和解释当前完整函数；"
         "不得退回 L0 式反复定位，不得为了维持探索感而故意隐去代码。范围只限当前这一个函数。"
-        + (f"\n当前函数的平台验证参考实现：\n```python\n{verified_reference}\n```" if verified_reference else "")
+        + (
+            f"\n当前函数的平台验证参考实现：\n```python\n{verified_reference}\n```"
+            if verified_reference
+            else "\n当前函数没有平台参考实现，请基于学生现有代码和运行器真实能力直接给出完整实现，不要改成继续追问。"
+        )
         if confirmed_build_l3
         else "当前尚未进入 L3 代码协作，按本轮实际 L0-L2 边界回答。"
     )

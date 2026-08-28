@@ -285,15 +285,27 @@ def test_creative_prompt_exposes_only_the_safe_visible_runner_contract():
         UserProfile(cognition=50, affect=50, behavior=50),
     )
 
-    assert "event.type 为 start、key、before_move、move、eat、loop 或 end" in prompt
-    assert "objects 最多 48 个字典" in prompt
-    assert "obstacle/wall、bomb、portal、bonus、shield" in prompt
+    assert "event.type 取值：start、key、before_move、move、eat、loop、end" in prompt
+    assert "objects 最多 48 个" in prompt
     assert "creative_feature(event, state)" in prompt
-    assert "包含 print 在内的安全基础函数" in prompt
-    assert "L0 诊断必须读取本轮真实 event/state" in prompt
-    assert "纯打印诊断可以运行" in prompt
+    assert "print" in prompt
+    assert "纯 print 诊断可以运行" in prompt
     assert "不会通过" in prompt
     assert "JSON 列表，不是 (3, 5) 元组" in prompt
+
+    # 2026-08-28 事故：沙箱新增 timers 与帮助函数后 Prompt 没同步，
+    # Agent 顺着学生自造的 state['bomb_count'] 讨论了一整轮，而那个字段
+    # 会被运行器直接拒绝。以下四条把根因钉住。
+    assert "顶层状态**只有**这些字段可写" in prompt
+    assert "bomb_count" in prompt and "CREATIVE_UNSUPPORTED_STATE" in prompt
+    assert "set_timer(state, timer_id, ticks)" in prompt
+    assert "平台不会自动生成任何创意对象" in prompt
+
+    # 能力协议可以公开，但教师资产不行。
+    # 注意不能笼统地断言「标准答案」三个字不出现：L3 创意规则里有一句
+    # 「创意功能没有教师标准答案」，那是否定句，不是泄漏。
+    assert "隐藏测试" not in prompt
+    assert "同义表达" not in prompt
 
 
 def test_creative_l0_rule_rejects_detached_or_unavailable_diagnostics():
