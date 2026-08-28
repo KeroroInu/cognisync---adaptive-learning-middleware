@@ -1,6 +1,7 @@
 import type { Language } from '../types';
 import type { SnakeCreativeHook, StudentCreativeFunction } from '../data/snakeCreativeFunctions';
 import { CREATIVE_FUNCTION_NAME, usesCreativeEventRouting } from '../data/snakeCreativeFunctions';
+import { CREATIVE_HOOK_EVENT_TYPES, CREATIVE_STATE_KEYS_V1 } from '../data/creativeCapabilities';
 
 export interface PythonModuleTestResult {
   passed: boolean;
@@ -449,15 +450,9 @@ interface CreativeExecutionResult {
 
 type RuntimeCreativeHook = Exclude<SnakeCreativeHook, 'any'>;
 
-const CREATIVE_EVENT_TYPES: Record<RuntimeCreativeHook, string> = {
-  game_start: 'start',
-  key_input: 'key',
-  before_move: 'before_move',
-  after_move: 'move',
-  food_eaten: 'eat',
-  loop: 'loop',
-  game_end: 'end',
-};
+// 事件表来自能力注册表：运行器、渲染器和后续 Agent 校验共用同一份契约，
+// 避免「Prompt 里写了、沙箱里没有」这类不可运行的名称。
+const CREATIVE_EVENT_TYPES: Record<RuntimeCreativeHook, string> = CREATIVE_HOOK_EVENT_TYPES;
 
 const RUNTIME_CREATIVE_HOOKS = Object.keys(CREATIVE_EVENT_TYPES) as RuntimeCreativeHook[];
 
@@ -523,7 +518,7 @@ try:
             _creative_state = _creative_returned
     if not isinstance(_creative_state, dict):
         raise AssertionError('CREATIVE_RETURN')
-    _allowed_state_keys = {'snake', 'direction', 'food', 'score', 'game_over', 'interval', 'objects'}
+    _allowed_state_keys = {${CREATIVE_STATE_KEYS_V1.map(key => `'${key}'`).join(', ')}}
     if any(_key not in _allowed_state_keys for _key in _creative_state):
         raise AssertionError('CREATIVE_UNSUPPORTED_STATE')
     _creative_result = {'passed': True, 'resultCode': 'PASSED', 'detail': '', 'state': _creative_state}
