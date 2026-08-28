@@ -374,7 +374,14 @@ else:
 json.dumps(_state, ensure_ascii=False)
 `;
 
-const normalizeGameState = (value: unknown): PythonGameState => {
+/**
+ * 主线程状态校验：**不信任 Worker 返回值**。
+ *
+ * Worker 里跑的是学生代码，返回值可能超界、超量、带上运行器不认识的字段，
+ * 也可能是恶意构造的对象。任何一项不合规就抛错，由调用方决定是隔离这张
+ * 创意卡还是停止这一帧；绝不把未校验的数据交给渲染层。
+ */
+export const validateSceneState = (value: unknown): PythonGameState => {
   if (!value || typeof value !== 'object') throw new Error('invalid-game-state');
   const state = value as Partial<PythonGameState>;
   const directions: Direction[] = ['up', 'down', 'left', 'right'];
@@ -455,16 +462,16 @@ const normalizeGameState = (value: unknown): PythonGameState => {
 type Direction = PythonGameState['direction'];
 
 export const resetPythonGame = async (codeByNode: Record<string, string>) => (
-  normalizeGameState(await runPythonJson<unknown>(createGameHarness('reset', codeByNode)))
+  validateSceneState(await runPythonJson<unknown>(createGameHarness('reset', codeByNode)))
 );
 
 export const stepPythonGame = (
   codeByNode: Record<string, string>,
   state: PythonGameState,
   userInput: PythonGameState['direction'] | null,
-) => runPythonJson<unknown>(createGameHarness('step', codeByNode, state, userInput)).then(normalizeGameState);
+) => runPythonJson<unknown>(createGameHarness('step', codeByNode, state, userInput)).then(validateSceneState);
 
-interface CreativeExecutionResult {
+export interface CreativeExecutionResult {
   passed: boolean;
   resultCode: string;
   detail: string;
@@ -826,7 +833,7 @@ export const runPythonCreativeTest = async (
 ): Promise<PythonModuleTestResult> => {
   const startedAt = performance.now();
   const hooks = hook === 'any' || usesCreativeEventRouting(code) ? RUNTIME_CREATIVE_HOOKS : [hook];
-  let state = normalizeGameState(SAMPLE_CREATIVE_STATE);
+  let state = validateSceneState(SAMPLE_CREATIVE_STATE);
   const outputs: string[] = [];
   let changed = false;
 
@@ -840,7 +847,7 @@ export const runPythonCreativeTest = async (
       return { ...result, seed, output: outputs.slice(0, 200), durationMs: Math.round(performance.now() - startedAt) };
     }
     try {
-      state = normalizeGameState(result.state);
+      state = validateSceneState(result.state);
     } catch {
       return {
         passed: false,
@@ -888,13 +895,26 @@ export const runPythonCreativeTest = async (
  * 逐卡执行同一事件上的创意函数。每张卡单独进入 Worker 调用：普通异常在 Python
  * 内捕获；无限循环只会让当前卡超时并重启 Worker，下一张卡和基础游戏继续运行。
  */
-export const runPythonCreativeHooks = async (
+export type CreativeCardExecutor = (
+  code: string,
+  state: PythonGameState,
+  event: PythonCreativeHookEvent,
+) => Promise<CreativeExecutionResult>;
+
+/**
+ * 逐卡装配的纯逻辑部分，执行器可注入，便于在没有 Pyodide 的环境下验证隔离行为。
+ *
+ * 隔离规则：一张卡失败（异常、超时、返回非法状态）只记录它自己的错误，
+ * 其余卡片和基础游戏继续使用最后一次**通过校验**的状态。
+ */
+export const applyCreativeCards = async (
   cards: StudentCreativeFunction[],
   hook: RuntimeCreativeHook,
   state: PythonGameState,
   event: Omit<PythonCreativeHookEvent, 'type' | 'hook'> = {},
+  execute: CreativeCardExecutor,
 ): Promise<PythonCreativeHookResult> => {
-  let next = normalizeGameState(state);
+  let next = validateSceneState(state);
   const errors: PythonCreativeHookError[] = [];
   const outputs: PythonCreativeHookResult['outputs'] = [];
   const active = cards.filter(card => card.enabled && card.verified && (
@@ -904,14 +924,14 @@ export const runPythonCreativeHooks = async (
   ));
   for (const card of active) {
     try {
-      const result = await executeCreative(card.code, next, creativeEvent(hook, event));
+      const result = await execute(card.code, next, creativeEvent(hook, event));
       if (result.output?.length) outputs.push({ cardId: card.id, hook, lines: result.output });
       if (!result.passed) {
         errors.push({ cardId: card.id, resultCode: result.resultCode, detail: result.detail });
         continue;
       }
       try {
-        next = normalizeGameState(result.state);
+        next = validateSceneState(result.state);
       } catch {
         errors.push({ cardId: card.id, resultCode: 'CREATIVE_STATE', detail: '' });
       }
@@ -925,6 +945,19 @@ export const runPythonCreativeHooks = async (
   }
   return { state: next, errors, outputs };
 };
+
+export const runPythonCreativeHooks = (
+  cards: StudentCreativeFunction[],
+  hook: RuntimeCreativeHook,
+  state: PythonGameState,
+  event: Omit<PythonCreativeHookEvent, 'type' | 'hook'> = {},
+): Promise<PythonCreativeHookResult> => applyCreativeCards(
+  cards,
+  hook,
+  state,
+  event,
+  (code, cardState, cardEvent) => executeCreative(code, cardState, cardEvent),
+);
 
 /**
  * 迁移测试也在同一个无文件、无网络、5 秒上限的 Worker 中运行。
