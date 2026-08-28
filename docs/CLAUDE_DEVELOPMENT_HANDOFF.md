@@ -3,7 +3,7 @@
 > 交接分支：`codex/final-quasi-experiment-dev`
 > 起点：提交 `7bd2ce4 feat: complete traceable project learning workflow`。
 > 产品定位：CogniSync——AI 时代的项目解构式编程学习平台；从解构，到建构。
-> 最新产品裁定：2026-08-25。若旧文档、旧组件或历史测试与本节冲突，以本节和 `docs/PROJECT_WORKBENCH_V02.md` 顶部“最新设计裁定”为准。
+> 最新产品裁定：2026-08-28。若旧文档、旧组件或历史测试与本节冲突，以本节、`docs/PROJECT_WORKBENCH_V02.md` 顶部“最新设计裁定”和 `docs/CREATIVE_RUNTIME_V2_DEVELOPMENT_HANDOFF.md` 为准。
 
 ## 可直接复制给 Claude 的提示词
 
@@ -372,6 +372,8 @@ git diff --check                            passed
 
 后续讨论智能体架构、学校实验或论文方法部分时，先读 `docs/LEARNING_AGENT_HARNESS_ARCHITECTURE.md`；该文档区分了当前实现、论文可用表述、待验证主张和未来规划/多智能体演进。
 
+2026-08-28 起开发“学生 Python 创意逻辑 + 通用浏览器渲染 + Agent 个性化模板 + DeepSeek API 调度优化”时，必须再完整阅读 `docs/CREATIVE_RUNTIME_V2_DEVELOPMENT_HANDOFF.md`。该文件是下一阶段方案，不代表功能已经实现；开发必须按其中提交边界逐项完成。
+
 1. `AGENTS.md`（若当前环境提供）
 2. `docs/TASK1_REVIEW_HANDOFF.md`（研究证据链的三方滚动记录，改动前必读）
 3. `docs/PROJECT_WORKBENCH_V02.md`
@@ -448,9 +450,8 @@ git diff --check                            passed
 - 本地 `snakeProjectBlueprint.ts` 仍用于旧任务兼容和浏览器测试模板，不能把它重新当成所有任务的教师答案源；
 - 建构进度已支持 `cardId::blueprintNodeId` 单元键，并兼容旧 `cardId` 键；后续迁移必须保持读取兼容；
 - `ResearchCodeEditor` 构建块仍较大，但已按阶段懒加载；在没有性能数据前不要为了消除 Vite 警告引入复杂依赖；
-- Pyodide 仍来自公共 CDN，是正式部署前必须解决的问题；
-- 学生端**没有任何前端测试运行器**（`package.json` 只有 `dev`/`build`/`preview`/`type-check`）。
-  前端改动目前只能靠 `tsc --noEmit` 和人工核查，引入测试框架需要先确认；
+- Pyodide 已由前端构建脚本下载为本地静态资源；正式部署仍需验证缓存策略、无外部 CDN 和学校机房首次加载；
+- 学生端已引入 Vitest 并开始覆盖运行器纯逻辑；后续创意能力、确定性随机和场景协议必须继续补行为测试，不能只依赖 `tsc` 与构建；
 - 重复提交检测的 `RAISE EXCEPTION` 在 `init_db` 中执行，一条历史重复行会阻止后端启动。
   不删数据是刻意的，但这个检查更适合放进一次性运维任务；处理脚本是
   `scripts/repair_duplicate_submissions.sql`；
