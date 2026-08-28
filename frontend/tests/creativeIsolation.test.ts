@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   applyCreativeCards,
+  describeCreativeRuntimeError,
   validateSceneState,
   type CreativeExecutionResult,
   type PythonGameState,
@@ -235,5 +236,28 @@ describe('per-card isolation', () => {
       scoreBefore: 0,
       scoreAfter: 10,
     });
+  });
+
+  it('carries the runner detail into the isolation banner, not just the code', async () => {
+    // 运行器知道是哪个字段被拒绝；界面早先只取 resultCode，学生看到光秃秃的
+    // CREATIVE_UNSUPPORTED_STATE，只能逐行猜。测试路径能看到字段名而运行时
+    // 看不到，是同一次修复漏接的一半。
+    const execute = vi.fn().mockResolvedValue({
+      passed: false,
+      resultCode: 'CREATIVE_UNSUPPORTED_STATE',
+      detail: '不支持的字段：bomb_time',
+      state: VALID,
+    });
+
+    const result = await applyCreativeCards([card('a')], 'loop', VALID, {}, execute);
+
+    expect(result.errors[0].detail).toBe('不支持的字段：bomb_time');
+    expect(describeCreativeRuntimeError(result.errors[0]))
+      .toBe('CREATIVE_UNSUPPORTED_STATE · 不支持的字段：bomb_time');
+  });
+
+  it('falls back to the bare code when the runner has no detail', () => {
+    expect(describeCreativeRuntimeError({ cardId: 'a', resultCode: 'execution-timeout', detail: '' }))
+      .toBe('execution-timeout');
   });
 });

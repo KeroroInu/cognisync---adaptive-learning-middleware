@@ -37,6 +37,7 @@ import {
   type StudentCreativeFunction,
 } from '../data/snakeCreativeFunctions';
 import {
+  describeCreativeRuntimeError,
   disposePythonModuleRunner,
   formatPythonModuleTestResult,
   formatPythonRunnerError,
@@ -751,7 +752,7 @@ export const ProjectBuildStage: React.FC<Props> = ({
       return error ? {
         ...card,
         enabled: false,
-        lastRuntimeError: error.resultCode,
+        lastRuntimeError: describeCreativeRuntimeError(error),
         updatedAt: new Date().toISOString(),
       } : card;
     });

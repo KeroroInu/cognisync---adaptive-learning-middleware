@@ -1166,6 +1166,17 @@ export const formatPythonModuleTestResult = (result: PythonModuleTestResult, lan
   return result.detail ? `${message} ${result.detail}` : message;
 };
 
+/**
+ * 运行时被隔离的创意卡在界面上显示什么。
+ *
+ * 运行器已经算出「是哪个字段、哪个对象」被拒绝（`detail`），但横幅早先只回传
+ * `resultCode`，学生看到的是一个光秃秃的错误码，只能逐行猜——bomb_count、
+ * bomb_time 这类自造顶层字段之所以反复出现，就是因为这条反馈断在这里。
+ */
+export const describeCreativeRuntimeError = (error: PythonCreativeHookError): string => (
+  error.detail ? `${error.resultCode} · ${error.detail}` : error.resultCode
+);
+
 export const formatPythonRunnerError = (error: unknown, language: Language) => {
   const code = error instanceof Error ? error.message : String(error);
   if (code === 'runtime-load-timeout') return language === 'zh' ? 'Python 测试环境加载超时，请检查网络后重试。' : 'The Python test runtime timed out while loading.';
