@@ -35,6 +35,16 @@ export const CREATIVE_EVENT_TYPES = [
 
 export type CreativeEventType = typeof CREATIVE_EVENT_TYPES[number];
 
+/**
+ * 代码执行前即可确定的契约错误。
+ *
+ * 这两类错误不能依赖样例棋盘是否刚好走到对应分支，否则测试会给出假绿勾。
+ */
+export const CREATIVE_PREFLIGHT_RESULT_CODES = [
+  'CREATIVE_UNSUPPORTED_STATE',
+  'CREATIVE_UNKNOWN_EVENT',
+] as const;
+
 /** 内部钩子名 → 学生可见事件名。两边都要保持稳定：历史卡按 hook 存储。 */
 export const CREATIVE_HOOK_EVENT_TYPES = {
   game_start: 'start',

@@ -88,6 +88,13 @@ def test_contract_warns_that_invented_state_fields_are_rejected(contract: str):
 
 
 @pytest.mark.parametrize("contract", [creative_contract_zh(), creative_contract_en()])
+def test_contract_explains_preflight_checks_for_dormant_branches(contract: str):
+    assert "CREATIVE_UNKNOWN_EVENT" in contract
+    assert "timer" in contract
+    assert "dynamic" in contract.lower() or "动态" in contract
+
+
+@pytest.mark.parametrize("contract", [creative_contract_zh(), creative_contract_en()])
 def test_contract_states_that_the_platform_never_spawns_objects(contract: str):
     assert "add_object" in contract
 

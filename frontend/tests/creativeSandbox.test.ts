@@ -275,6 +275,82 @@ def creative_feature(event, state):
     expect(result.detail).toContain('bomb_count');
   });
 
+  it.each([
+    ["state['bomb_time'] = 3", 'assign'],
+    ["state['bomb_time'] += 1", 'augmented assign'],
+    ["state['bomb_time']: int = 3", 'annotated assign'],
+    ["state.setdefault('bomb_time', 3)", 'setdefault'],
+    ["state.update({'bomb_time': 3})", 'dict update'],
+    ["state.update(bomb_time=3)", 'keyword update'],
+  ])('rejects a literal unsupported state write before an unreachable branch runs: %s (%s)', (write) => {
+    const result = runSandbox(`def creative_feature(event, state):
+    if event.get('type') == 'move' and state['snake'][0] == [3, 3]:
+        ${write}
+    add_object(state, {'type': 'bomb', 'position': [3, 3]})
+    return state`);
+    expect(result.resultCode).toBe('CREATIVE_UNSUPPORTED_STATE');
+    expect(result.detail).toContain('bomb_time');
+  });
+
+  it('does not pretend an unknown event name is a valid dormant branch', () => {
+    const result = runSandbox(`def creative_feature(event, state):
+    if event.get('type') == 'timer':
+        state['score'] += 1
+    add_object(state, {'type': 'bomb', 'position': [3, 3]})
+    return state`);
+    expect(result.resultCode).toBe('CREATIVE_UNKNOWN_EVENT');
+    expect(result.detail).toContain('event.type=timer');
+    expect(result.detail).toContain('start');
+    expect(result.detail).toContain('end');
+  });
+
+  it('validates literal event sets and the internal hook vocabulary', () => {
+    expect(runSandbox(`def creative_feature(event, state):
+    if event['type'] in ('eat', 'timer'):
+        pass
+    state['score'] = 1
+    return state`).resultCode).toBe('CREATIVE_UNKNOWN_EVENT');
+
+    const badHook = runSandbox(`def creative_feature(event, state):
+    if event.get('hook') == 'timer':
+        pass
+    state['score'] = 1
+    return state`);
+    expect(badHook.resultCode).toBe('CREATIVE_UNKNOWN_EVENT');
+    expect(badHook.detail).toContain('event.hook=timer');
+    expect(badHook.detail).toContain('food_eaten');
+  });
+
+  it('accepts every published event type and hook name', () => {
+    const eventTypes = ['start', 'key', 'before_move', 'move', 'eat', 'loop', 'end'];
+    const hooks = ['game_start', 'key_input', 'before_move', 'after_move', 'food_eaten', 'loop', 'game_end'];
+    eventTypes.forEach(name => {
+      expect(runSandbox(`def creative_feature(event, state):
+    if event.get('type') == '${name}':
+        pass
+    state['score'] = 1
+    return state`).resultCode).toBe('PASSED');
+    });
+    hooks.forEach(name => {
+      expect(runSandbox(`def creative_feature(event, state):
+    if event.get('hook') == '${name}':
+        pass
+    state['score'] = 1
+    return state`).resultCode).toBe('PASSED');
+    });
+  });
+
+  it('leaves dynamic state keys to the existing runtime check without a static false positive', () => {
+    const result = runSandbox(`def creative_feature(event, state):
+    key = 'bomb_time'
+    if event.get('type') == 'move':
+        state[key] = 3
+    state['score'] = 1
+    return state`);
+    expect(result.resultCode).toBe('PASSED');
+    expect(result.state?.score).toBe(1);
+  });
+
   it('accepts timers as a first-class v2 state key', () => {
     expect(runSandbox(`def creative_feature(event, state):
     set_timer(state, 'x', 1)

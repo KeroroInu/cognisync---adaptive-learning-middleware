@@ -2,6 +2,7 @@ import type { Language } from '../types';
 import type { SnakeCreativeHook, StudentCreativeFunction } from '../data/snakeCreativeFunctions';
 import { CREATIVE_FUNCTION_NAME, usesCreativeEventRouting } from '../data/snakeCreativeFunctions';
 import {
+  CREATIVE_EVENT_TYPES as CREATIVE_PUBLIC_EVENT_TYPES,
   CREATIVE_HELPERS,
   CREATIVE_HOOK_EVENT_TYPES,
   CREATIVE_STATE_KEYS,
@@ -808,10 +809,62 @@ ${creativeHelperSource()}
 _creative_helpers = {${CREATIVE_HELPERS.map(helper => `'${helper.name}': ${helper.name}`).join(', ')}}
 try:
     _creative_tree = ast.parse(${JSON.stringify(code)})
+    _allowed_state_keys = {${CREATIVE_STATE_KEYS.map(key => `'${key}'`).join(', ')}}
+    _allowed_event_types = {${CREATIVE_PUBLIC_EVENT_TYPES.map(eventType => `'${eventType}'`).join(', ')}}
+    _allowed_event_hooks = {${Object.keys(CREATIVE_HOOK_EVENT_TYPES).map(hook => `'${hook}'`).join(', ')}}
     _blocked_names = {
         'open', 'exec', 'eval', 'compile', '__import__', 'globals', 'locals',
         'vars', 'getattr', 'setattr', 'delattr', 'breakpoint', 'input', 'help'
     }
+    def _literal_string(_node):
+        return _node.value if isinstance(_node, ast.Constant) and isinstance(_node.value, str) else None
+
+    def _literal_strings(_node):
+        _single = _literal_string(_node)
+        if _single is not None:
+            return [_single]
+        if isinstance(_node, (ast.Tuple, ast.List, ast.Set)):
+            _values = [_literal_string(_item) for _item in _node.elts]
+            return _values if all(_value is not None for _value in _values) else []
+        return []
+
+    def _state_subscript_key(_node):
+        if not isinstance(_node, ast.Subscript):
+            return None
+        if not isinstance(_node.value, ast.Name) or _node.value.id != 'state':
+            return None
+        return _literal_string(_node.slice)
+
+    def _event_field(_node):
+        if isinstance(_node, ast.Subscript):
+            if isinstance(_node.value, ast.Name) and _node.value.id == 'event':
+                _field = _literal_string(_node.slice)
+                return _field if _field in ('type', 'hook') else None
+        if isinstance(_node, ast.Call) and isinstance(_node.func, ast.Attribute):
+            if (
+                isinstance(_node.func.value, ast.Name)
+                and _node.func.value.id == 'event'
+                and _node.func.attr == 'get'
+                and _node.args
+            ):
+                _field = _literal_string(_node.args[0])
+                return _field if _field in ('type', 'hook') else None
+        return None
+
+    def _reject_state_key(_key):
+        global _creative_detail
+        if _key is not None and _key not in _allowed_state_keys:
+            _creative_detail = '不支持的字段：' + _key
+            raise AssertionError('CREATIVE_UNSUPPORTED_STATE')
+
+    def _reject_event_name(_field, _name):
+        global _creative_detail
+        _allowed = _allowed_event_types if _field == 'type' else _allowed_event_hooks
+        if _name not in _allowed:
+            _label = 'event.type' if _field == 'type' else 'event.hook'
+            _creative_detail = _label + '=' + _name + '；可用：' + '、'.join(sorted(_allowed))
+            raise AssertionError('CREATIVE_UNKNOWN_EVENT')
+
     for _node in ast.walk(_creative_tree):
         if isinstance(_node, (ast.Import, ast.ImportFrom)):
             raise AssertionError('CREATIVE_RESTRICTED')
@@ -819,6 +872,37 @@ try:
             raise AssertionError('CREATIVE_RESTRICTED')
         if isinstance(_node, ast.Name) and (_node.id.startswith('__') or _node.id in _blocked_names):
             raise AssertionError('CREATIVE_RESTRICTED')
+        # 静态拒绝字面量非法顶层写入。即使对应分支在样例棋盘上没有执行，
+        # 也不能让一份运行时必然会被契约拒绝的代码拿到测试绿勾。
+        if isinstance(_node, ast.Assign):
+            for _target in _node.targets:
+                _reject_state_key(_state_subscript_key(_target))
+        elif isinstance(_node, (ast.AugAssign, ast.AnnAssign)):
+            _reject_state_key(_state_subscript_key(_node.target))
+        elif isinstance(_node, ast.Call) and isinstance(_node.func, ast.Attribute):
+            if isinstance(_node.func.value, ast.Name) and _node.func.value.id == 'state':
+                if _node.func.attr == 'setdefault' and _node.args:
+                    _reject_state_key(_literal_string(_node.args[0]))
+                elif _node.func.attr == 'update':
+                    for _argument in _node.args:
+                        if isinstance(_argument, ast.Dict):
+                            for _key_node in _argument.keys:
+                                _reject_state_key(_literal_string(_key_node) if _key_node is not None else None)
+                    for _keyword in _node.keywords:
+                        _reject_state_key(_keyword.arg)
+        # event.type / event.hook 的字面量比较同样不依赖运行路径。变量形式
+        # 保持动态检查，避免静态扫描误杀学生的合法表达式。
+        if isinstance(_node, ast.Compare):
+            _operands = [_node.left, *_node.comparators]
+            for _left, _right in zip(_operands, _operands[1:]):
+                _left_field = _event_field(_left)
+                _right_field = _event_field(_right)
+                if _left_field:
+                    for _name in _literal_strings(_right):
+                        _reject_event_name(_left_field, _name)
+                if _right_field:
+                    for _name in _literal_strings(_left):
+                        _reject_event_name(_right_field, _name)
     with contextlib.redirect_stdout(_creative_output), contextlib.redirect_stderr(_creative_output):
         _creative_namespace = {'__builtins__': _safe_builtins}
         _creative_namespace.update(_creative_helpers)
@@ -833,7 +917,6 @@ try:
             _creative_state = _creative_returned
     if not isinstance(_creative_state, dict):
         raise AssertionError('CREATIVE_RETURN')
-    _allowed_state_keys = {${CREATIVE_STATE_KEYS.map(key => `'${key}'`).join(', ')}}
     # 指出**具体哪个字段**不被支持：只说「有个字段不行」会让学生逐行猜。
     _unsupported_keys = sorted(_key for _key in _creative_state if _key not in _allowed_state_keys)
     if _unsupported_keys:
@@ -1155,6 +1238,7 @@ const RESULT_MESSAGES: Record<string, { zh: string; en: string }> = {
   CREATIVE_STATE: { zh: '创意函数返回的状态不符合安全游戏契约。', en: 'The creative function returned a state outside the safe game contract.' },
   CREATIVE_RESTRICTED: { zh: '创意函数只能使用受控状态和基础 Python 表达式，不能访问文件、导入模块或动态执行代码。', en: 'Creative functions can use only the controlled state and basic Python expressions; files, imports and dynamic execution are blocked.' },
   CREATIVE_UNSUPPORTED_STATE: { zh: '这个顶层状态字段还没有接入游戏。当前可修改 snake、direction、food、score、game_over、interval、objects 和 timers；需要计数或倒计时请用 set_timer 和 timer_ready，需要新的画面元素请用 add_object。', en: 'That top-level state field is not connected to the game. You can change snake, direction, food, score, game_over, interval, objects and timers; use set_timer/timer_ready for counters and add_object for new visuals.' },
+  CREATIVE_UNKNOWN_EVENT: { zh: '代码比较了运行器不会发送的事件名。请改用提示中列出的 event.type 或 event.hook。', en: 'The code compares an event name that the runner never sends. Use one of the listed event.type or event.hook values.' },
   CREATIVE_NO_EFFECT: { zh: '函数能安全运行，但七个事件跑完都没有改变可观察的游戏状态。注意测试的起始画面里没有任何自定义对象：如果你的功能要对某个对象做出反应，需要先在游戏开始事件里用 add_object 把它放进画面。', en: 'The function ran safely but changed no observable state across all seven events. Note the test starts with no custom objects: if your feature reacts to an object, create it first with add_object on the start event.' },
   SYNTAX_ERROR: { zh: '代码存在语法错误。', en: 'The code contains a syntax error.' },
   RUNTIME_ERROR: { zh: '代码运行时发生错误。', en: 'The code raised an error while running.' },

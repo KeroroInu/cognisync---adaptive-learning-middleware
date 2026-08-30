@@ -300,6 +300,8 @@ def test_creative_prompt_exposes_only_the_safe_visible_runner_contract():
     assert "bomb_count" in prompt and "CREATIVE_UNSUPPORTED_STATE" in prompt
     assert "set_timer(state, timer_id, ticks)" in prompt
     assert "平台不会自动生成任何创意对象" in prompt
+    assert "CREATIVE_UNKNOWN_EVENT" in prompt
+    assert "字面量顶层写入会在执行前静态检查" in prompt
 
     # 能力协议可以公开，但教师资产不行。
     # 注意不能笼统地断言「标准答案」三个字不出现：L3 创意规则里有一句
