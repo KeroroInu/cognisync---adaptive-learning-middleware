@@ -1,10 +1,10 @@
 # 创意卡「测试通过但运行时炸卡」缺陷问题单
 
-> 文档状态：**问题报告，未实施修复**
+> 文档状态：**已修复并通过回归测试**
 > 适用分支：`codex/final-quasi-experiment-dev`
 > 复现基线：`89f383f fix: show the rejected field in the runtime isolation banner`
 > 发现方式：2026-08-29 真实浏览器试用（kero 手动测试贪吃蛇创意卡「炸弹」）
-> 处理约定：本单交由 Codex 实施；Claude 本轮只做了问题定位与证据固化，未改动测试判定逻辑。
+> 修复提交：`f2ca6b2 fix: reject dormant creative contract violations`
 
 ---
 
@@ -168,3 +168,28 @@ const SAMPLE_CREATIVE_STATE: PythonGameState = {
 记录的 `passed: true` 与实际可运行性不一致）。
 
 因此这个缺陷的优先级应高于 §9 后续各项能力扩展。
+
+---
+
+## 7. Codex 修复记录（2026-08-30）
+
+已按本单建议在创意代码执行前增加 AST 契约扫描：
+
+- 字面量非法顶层写入在分支尚未执行时也会返回 `CREATIVE_UNSUPPORTED_STATE`，覆盖普通赋值、增强赋值、注解赋值、`setdefault` 和字面量 `update`；
+- `event.type` 与 `event.hook` 的未知字面量比较返回 `CREATIVE_UNKNOWN_EVENT`，detail 点名错误值并列出对应合法值；
+- 动态键继续交给运行时状态校验，避免静态分析误判；
+- 后端 Agent 能力契约同步说明预检语义，未放宽顶层状态、文件、网络或动态执行权限。
+
+验证结果：
+
+```text
+frontend  Vitest                 90 passed（真实 CPython 沙箱用例未跳过）
+frontend  type-check             passed
+frontend  production build       passed
+backend   targeted tests         40 passed
+backend   full pytest            256 passed, 4 existing warnings
+backend   changed-file Ruff      passed
+git       diff --check           passed
+```
+
+尚未做真实浏览器验收；本轮没有修改页面布局或交互入口，浏览器仍需重点确认错误文案在测试终端中完整显示，且原炸弹代码不再出现绿色通过。
