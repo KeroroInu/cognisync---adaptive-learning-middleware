@@ -110,16 +110,16 @@ def test_unconfirmed_build_l3_stays_at_l2():
     assert resolved["wasClamped"] is True
 
 
-def test_transfer_l3_uses_same_explicit_confirmation_boundary_as_build():
-    unconfirmed = scaffold_context(level=3, l3_confirmed=False)
+def test_transfer_ai_is_open_at_l3_without_confirmation():
+    unconfirmed = scaffold_context(level=0, l3_confirmed=False)
     unconfirmed.stage = "transfer"
-    confirmed = scaffold_context(level=3, l3_confirmed=True)
-    confirmed.stage = "transfer"
 
-    assert resolve_scaffold_rule(unconfirmed)["appliedLevel"] == 2
-    assert resolve_scaffold_rule(confirmed)["appliedLevel"] == 3
+    resolved = resolve_scaffold_rule(unconfirmed)
+    assert resolved["requestedLevel"] == 3
+    assert resolved["appliedLevel"] == 3
+    assert resolved["wasClamped"] is False
     prompt = build_scaffold_prompt(
-        confirmed,
+        unconfirmed,
         UserProfile(cognition=50, affect=50, behavior=50),
     )
     assert BUILD_LEVEL_RULES[3] in prompt
@@ -419,6 +419,54 @@ def test_learning_agent_harness_scopes_history_by_task_stage_and_function():
     observe_turn = learning_agent_harness.prepare_turn(observe, messages)
     assert observe_turn.history == [{"role": "assistant", "text": "观察阶段回复"}]
     assert "运行与观察" in observe_turn.prompt_section
+
+
+def test_learner_support_compiles_graph_and_frozen_curriculum_into_runnable_l2_plan():
+    context = scaffold_context(level=2)
+    context.currentModule = "movement"
+    support = learning_agent_harness.prepare_learner_support(
+        context,
+        UserProfile(cognition=42, affect=55, behavior=48),
+        [
+            {"name": "列表", "mastery": 38, "frequency": 6, "isFlagged": True},
+            {"name": "网页爬虫", "mastery": 90, "frequency": 9, "isFlagged": False},
+        ],
+        [
+            {"nodeId": "movement", "label": "列表添加与切片", "responsibility": "student_core"},
+            {"nodeId": "movement", "label": "坐标运算", "responsibility": "student_core"},
+            {"nodeId": "collision", "label": "布尔表达式", "responsibility": "student_core"},
+        ],
+        applied_level=2,
+        curriculum_version_id="blueprint-v2",
+    )
+
+    assert support.template_density == "guided"
+    assert support.curriculum_concepts == ("列表添加与切片", "坐标运算")
+    assert support.graph_evidence[0]["name"] == "列表"
+    assert "网页爬虫" not in support.prompt_section
+    assert "可运行骨架" in support.prompt_section
+    assert "TODO 未完成前也必须语法正确" in support.prompt_section
+    assert support.metadata()["textbookRetrievalEnabled"] is False
+
+
+def test_learner_support_never_uses_profile_to_override_level():
+    context = scaffold_context(level=0)
+    support = learning_agent_harness.prepare_learner_support(
+        context,
+        UserProfile(cognition=5, affect=10, behavior=5),
+        [{"name": "列表", "mastery": 10, "frequency": 2}],
+        [{"nodeId": "movement", "label": "列表", "responsibility": "student_core"}],
+        applied_level=0,
+        curriculum_version_id="blueprint-v2",
+    )
+    prompt = build_scaffold_prompt(
+        context,
+        UserProfile(cognition=5, affect=10, behavior=5),
+        learner_support=support,
+    )
+
+    assert "不能因为画像计划而扩展成完整模板" in prompt
+    assert BUILD_LEVEL_RULES[0] in prompt
 
 
 def test_all_controlled_l3_solutions_pass_the_shared_snake_contract():

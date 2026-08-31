@@ -145,8 +145,11 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
     size: { width: 0, height: 0 },
   });
   const isCodingStage = stage === 'build' || stage === 'transfer';
+  const isOpenTransfer = stage === 'transfer';
   const activeContextKey = isCodingStage ? (contextKey || `${stage}-unselected`) : stage;
-  const l3IsConfirmed = isCodingStage && confirmedL3.has(activeContextKey);
+  // 正式迁移测试用统一空白骨架测量人智协作表现；教师开启 AI 后直接
+  // 放开当前函数的完整代码讨论，不再把学习阶段的逐级解锁带进后测。
+  const l3IsConfirmed = isOpenTransfer || (isCodingStage && confirmedL3.has(activeContextKey));
   // L3 是当前函数卡的持续协作权限，不是只对确认按钮后的第一条回复有效。
   // 刷新或重新进入建构时，已确认的卡必须继续以 L3 讨论代码，不能悄悄退回 L0。
   const level = l3IsConfirmed ? 3 : (levels[activeContextKey] ?? 0);

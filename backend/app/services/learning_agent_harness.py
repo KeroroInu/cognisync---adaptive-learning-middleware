@@ -17,6 +17,7 @@ import re
 from typing import Any, Mapping, Sequence
 
 from app.schemas.chat import ProjectScaffoldContext
+from app.schemas.profile import UserProfile
 
 
 STAGE_TITLES = {
@@ -73,6 +74,57 @@ class PreparedLearningTurn:
     focus_title: str
     history: list[dict[str, str]]
     prompt_section: str
+
+
+@dataclass(frozen=True)
+class PreparedLearnerSupport:
+    """画像、知识证据和冻结课程边界编译出的本轮支架计划。
+
+    这不是模型对学生能力的判定，也不会改变 L0—L3。它只决定模板里
+    保留多少可运行的外围代码、多少 TODO，以及注释需要多具体。
+    """
+
+    context_version: str
+    template_density: str
+    curriculum_source: str
+    curriculum_version_id: str | None
+    curriculum_concepts: tuple[str, ...]
+    graph_evidence: tuple[dict[str, Any], ...]
+    prompt_section: str
+
+    def metadata(self) -> dict[str, Any]:
+        return {
+            "contextVersion": self.context_version,
+            "templateDensity": self.template_density,
+            "curriculumSource": self.curriculum_source,
+            "curriculumVersionId": self.curriculum_version_id,
+            "curriculumConcepts": list(self.curriculum_concepts),
+            "graphEvidence": [dict(item) for item in self.graph_evidence],
+            "textbookRetrievalEnabled": False,
+        }
+
+
+LEARNER_SUPPORT_CONTEXT_VERSION = "learner-support-v1"
+
+
+def _concept_key(value: Any) -> str:
+    return re.sub(r"[^0-9A-Za-z\u4e00-\u9fff]+", "", str(value or "")).lower()
+
+
+def _concepts_overlap(graph_name: str, curriculum_label: str) -> bool:
+    graph_key = _concept_key(graph_name)
+    curriculum_key = _concept_key(curriculum_label)
+    if not graph_key or not curriculum_key:
+        return False
+    return graph_key == curriculum_key or graph_key in curriculum_key or curriculum_key in graph_key
+
+
+def _mastery(value: Any) -> float | None:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return max(0.0, min(100.0, number))
 
 
 class LearningAgentHarness:
@@ -178,6 +230,146 @@ COGNISYNC_AGENT_CONTEXT
             key=key,
             focus_title=focus_title,
             history=history,
+            prompt_section=prompt_section,
+        )
+
+    def prepare_learner_support(
+        self,
+        context: ProjectScaffoldContext,
+        profile: UserProfile,
+        knowledge_graph: Sequence[Mapping[str, Any]],
+        curriculum: Sequence[Mapping[str, Any]],
+        *,
+        applied_level: int,
+        curriculum_version_id: str | None,
+        language: str = "zh",
+    ) -> PreparedLearnerSupport:
+        """把已有学生数据编译成小而可审计的支架上下文。
+
+        不在这里调用模型、查询数据库或生成最终代码。这样同一份证据始终
+        得到同一支架计划，也不会为每轮模板增加第二次 DeepSeek 请求。
+        """
+
+        lang = "en" if language == "en" else "zh"
+        module_id = context.currentModule or ""
+        relevant_rows = [
+            row for row in curriculum
+            if not module_id
+            or module_id.startswith("creative::")
+            or context.stage == "transfer"
+            or str(row.get("nodeId") or "") == module_id
+        ]
+        curriculum_concepts: list[str] = []
+        for row in relevant_rows:
+            label = _one_line(row.get("label"), 80)
+            if label and label not in curriculum_concepts:
+                curriculum_concepts.append(label)
+        curriculum_concepts = curriculum_concepts[:12]
+
+        matched: list[dict[str, Any]] = []
+        for node in knowledge_graph:
+            name = _one_line(node.get("name"), 80)
+            if not name:
+                continue
+            if curriculum_concepts and not any(
+                _concepts_overlap(name, label) for label in curriculum_concepts
+            ):
+                continue
+            mastery = _mastery(node.get("mastery"))
+            matched.append({
+                "name": name,
+                "mastery": round(mastery, 1) if mastery is not None else None,
+                "flagged": bool(node.get("isFlagged")),
+                "frequency": max(0, min(10, int(node.get("frequency") or 0))),
+            })
+        matched.sort(key=lambda item: (
+            not item["flagged"],
+            item["mastery"] is None,
+            item["mastery"] if item["mastery"] is not None else 101,
+            -item["frequency"],
+        ))
+        graph_evidence = tuple(matched[:6])
+
+        measured = [item["mastery"] for item in graph_evidence if item["mastery"] is not None]
+        has_fragile_evidence = any(
+            item["flagged"] or (item["mastery"] is not None and item["mastery"] < 45)
+            for item in graph_evidence
+        )
+        average_mastery = sum(measured) / len(measured) if measured else None
+        if profile.cognition <= 35 or has_fragile_evidence:
+            density = "guided"
+        elif average_mastery is not None and average_mastery >= 70 and profile.behavior >= 65:
+            density = "open"
+        else:
+            density = "balanced"
+
+        curriculum_source = "frozen_blueprint_knowledge" if curriculum_concepts else "task_objective_only"
+        if lang == "en":
+            density_rule = {
+                "guided": "Keep the surrounding plumbing complete and runnable; leave only 1–2 small conceptual TODOs with concrete comments.",
+                "balanced": "Provide a runnable scaffold with 2–3 focused TODOs and concise concept comments.",
+                "open": "Keep only the required signature and safe setup; leave the student more room to organize the key logic.",
+            }[density]
+            concepts = ", ".join(curriculum_concepts) or "No versioned textbook excerpt is published; use only the task objective and basic Python already visible in this task."
+            evidence = "; ".join(
+                f"{item['name']}={item['mastery'] if item['mastery'] is not None else 'unknown'}"
+                for item in graph_evidence
+            ) or "no matching graph evidence"
+            level_rule = (
+                "At L2, when a template is requested or the editor is blank, return one runnable current-function scaffold with comments, safe defaults and TODOs."
+                if applied_level == 2
+                else "At L3, do not intentionally hide code; provide the complete current function when it helps the student's request."
+                if applied_level == 3
+                else "The current L0/L1 boundary still applies; do not expand this support plan into a full template."
+            )
+            prompt_section = f"""
+
+COGNISYNC_LEARNER_SUPPORT_CONTEXT
+This is a deterministic support plan, not an ability label and not permission to change the learning goal or L0–L3 level.
+Template density: {density}. {density_rule}
+Approved course concepts for this focus: {concepts}
+Relevant graph evidence: {evidence}
+{level_rule}
+Generated code must use only the real runner contract, remain runnable before TODOs are completed, and may use a fenced Python block despite the general conversational formatting rule.
+No versioned textbook retrieval is enabled. Do not claim to quote a textbook or introduce advanced material outside the approved concepts.
+"""
+        else:
+            density_rule = {
+                "guided": "外围接口和装配代码保持完整可运行，只留 1—2 个较小的概念性 TODO，并用具体注释说明要判断什么。",
+                "balanced": "给出可运行骨架，保留 2—3 个聚焦 TODO，并用简短注释连接相关概念。",
+                "open": "只保留必要函数签名和安全初始化，让学生自行组织更多关键逻辑。",
+            }[density]
+            concepts = "、".join(curriculum_concepts) or "尚未发布版本化教材片段；只能使用当前任务目标中已经出现的基础 Python。"
+            evidence = "；".join(
+                f"{item['name']}={item['mastery'] if item['mastery'] is not None else '未知'}"
+                for item in graph_evidence
+            ) or "没有匹配到可用的知识图谱证据"
+            level_rule = (
+                "本轮为 L2：学生要求模板或编辑器为空时，给一份当前函数的可运行骨架，包含注释、安全默认值和少量 TODO。"
+                if applied_level == 2
+                else "本轮为 L3：不得故意隐藏关键代码；学生需要时直接围绕当前函数给出完整实现并继续讨论。"
+                if applied_level == 3
+                else "本轮仍受 L0/L1 边界约束，不能因为画像计划而扩展成完整模板。"
+            )
+            prompt_section = f"""
+
+COGNISYNC_LEARNER_SUPPORT_CONTEXT
+这是服务端依据已有证据生成的确定性支架计划，不是学生能力标签，也不能改变学习目标或 L0—L3等级。
+模板密度：{density}。{density_rule}
+当前焦点允许使用的课程概念：{concepts}
+相关知识图谱证据：{evidence}
+{level_rule}
+生成代码只能调用真实运行器能力；TODO 未完成前也必须语法正确、能够运行。需要给代码时可以使用 Python 代码块，不受通用“纯对话格式”限制。
+当前没有启用版本化教材检索。不得声称引用了教材，也不得引入上述课程概念之外的进阶内容。
+"""
+
+        return PreparedLearnerSupport(
+            context_version=LEARNER_SUPPORT_CONTEXT_VERSION,
+            template_density=density,
+            curriculum_source=curriculum_source,
+            curriculum_version_id=curriculum_version_id,
+            curriculum_concepts=tuple(curriculum_concepts),
+            graph_evidence=graph_evidence,
             prompt_section=prompt_section,
         )
 

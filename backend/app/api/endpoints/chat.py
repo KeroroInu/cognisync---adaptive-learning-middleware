@@ -24,7 +24,12 @@ from app.services.llm_config import get_chat_provider
 from app.services.learning_agent_harness import learning_agent_harness
 from app.models.sql.message import ChatMessage, MessageRole
 from app.models.sql.chat_session import ChatSession
-from app.models.sql.research import ProjectBlueprintVersion, ResearchTask, ResearchTaskSubmission
+from app.models.sql.research import (
+    ProjectBlueprintVersion,
+    ResearchTask,
+    ResearchTaskKind,
+    ResearchTaskSubmission,
+)
 from app.models.sql.research_event import (
     ProjectStage,
     ScaffoldDeliveryStatus,
@@ -201,7 +206,7 @@ async def _load_scaffold_workspace_context(
     db: AsyncSession,
     user_id: UUID,
     task: ResearchTask,
-) -> tuple[str, BlueprintScaffoldPolicy | None, str | None]:
+) -> tuple[str, BlueprintScaffoldPolicy | None, str | None, list[dict[str, str]]]:
     """读取当前学生的任务快照和冻结蓝图支架策略。
 
     已开始任务的学生继续使用首次绑定的蓝图版本；尚无提交记录时才
@@ -233,7 +238,7 @@ async def _load_scaffold_workspace_context(
         blueprint_id = task.current_blueprint_version_id
 
     if blueprint_id is None:
-        return summarize_project_workspace(workspace), None, None
+        return summarize_project_workspace(workspace), None, None, []
 
     raw_config = await db.scalar(
         select(ProjectBlueprintVersion.config).where(
@@ -242,10 +247,20 @@ async def _load_scaffold_workspace_context(
         )
     )
     if not raw_config:
-        return summarize_project_workspace(workspace), None, str(blueprint_id)
+        return summarize_project_workspace(workspace), None, str(blueprint_id), []
 
     try:
-        policy = ProjectBlueprintConfig.model_validate(raw_config).scaffoldPolicy
+        blueprint = ProjectBlueprintConfig.model_validate(raw_config)
+        policy = blueprint.scaffoldPolicy
+        curriculum = [
+            {
+                "nodeId": node.id,
+                "label": item.labelZh,
+                "responsibility": item.responsibility,
+            }
+            for node in blueprint.nodes
+            for item in node.knowledge
+        ]
     except Exception as validation_error:
         logger.warning(
             "Failed to validate scaffold policy for blueprint %s: %s",
@@ -253,8 +268,9 @@ async def _load_scaffold_workspace_context(
             validation_error,
         )
         policy = None
+        curriculum = []
 
-    return summarize_project_workspace(workspace), policy, str(blueprint_id)
+    return summarize_project_workspace(workspace), policy, str(blueprint_id), curriculum
 
 
 def _calculate_mastery_delta(analysis) -> float:
@@ -743,15 +759,27 @@ async def chat(
         scaffold_metadata = None
         scaffold_policy = None
         scaffold_blueprint_version_id = None
+        scaffold_curriculum: list[dict[str, str]] = []
         scaffold_task = None
         if scaffold_context:
             # 先授权再加载：不可见任务 404、归档任务 409，绝不静默降级成
             # task_id 为空的研究事件。
             scaffold_task = await _resolve_scaffold_task(db, current_user, scaffold_context)
+            # 正式迁移测试的 AI 是任务条件，不再沿用学习阶段逐级解锁。
+            # 教师开启 AI 后，所有学生仍从同一空白骨架开始，但助手从第一轮
+            # 就具有当前函数的完整代码协作权限。
+            if (
+                scaffold_context.stage == "transfer"
+                and scaffold_task.task_kind == ResearchTaskKind.TRANSFER_TEST
+            ):
+                scaffold_context = scaffold_context.model_copy(
+                    update={"level": 3, "l3Confirmed": True},
+                )
             (
                 database_summary,
                 scaffold_policy,
                 scaffold_blueprint_version_id,
+                scaffold_curriculum,
             ) = await _load_scaffold_workspace_context(
                 db,
                 user_id,
@@ -923,7 +951,10 @@ async def chat(
                     {
                         "name": n.name,
                         "category": n.category or "通用",
-                        "importance": min(1.0, n.frequency / 10.0)
+                        "importance": min(1.0, n.frequency / 10.0),
+                        "mastery": n.mastery,
+                        "frequency": n.frequency,
+                        "isFlagged": bool(n.isFlagged),
                     }
                     for n in graph_data.nodes
                 ]
@@ -941,14 +972,30 @@ async def chat(
             language=request.language or "zh"
         )
 
+        learner_support = None
         if scaffold_context:
+            learner_support = learning_agent_harness.prepare_learner_support(
+                scaffold_context,
+                updated_profile,
+                current_graph,
+                scaffold_curriculum,
+                applied_level=int(scaffold_metadata["level"]) if scaffold_metadata else scaffold_context.level,
+                curriculum_version_id=scaffold_blueprint_version_id,
+                language=request.language or "zh",
+            )
+            if scaffold_metadata:
+                scaffold_metadata["learnerSupport"] = learner_support.metadata()
+                # 用户消息先落库是为了让求助行为在模型失败时也可追踪；支架计划
+                # 要在图谱读取后才能形成，因此这里重设完整 JSONB，供本轮复建。
+                user_message.analysis = {"scaffoldContext": scaffold_metadata}
             if agent_turn:
                 system_prompt += agent_turn.prompt_section
             system_prompt += build_scaffold_prompt(
                 scaffold_context,
-                current_profile,
+                updated_profile,
                 request.language or "zh",
                 scaffold_policy,
+                learner_support,
             )
 
         # 注入跨会话上下文（让 AI 能自然引用上次讨论内容）

@@ -13,7 +13,7 @@ from app.services.creative_capability import (
     creative_contract_en as creative_contract_text_en,
     creative_contract_zh as creative_contract_text_zh,
 )
-from app.services.learning_agent_harness import BUILD_FUNCTION_TITLES
+from app.services.learning_agent_harness import BUILD_FUNCTION_TITLES, PreparedLearnerSupport
 
 
 STAGE_GOALS = {
@@ -393,14 +393,18 @@ def resolve_scaffold_rule(
     旧冻结蓝图中的“最多 5 行”继续保留用于历史解释，但不再把新建构 L3 降到 L2。
     """
 
-    requested_level = context.level
+    # 正式迁移测试的实验条件由教师任务开关决定；一旦后端允许进入
+    # transfer 支架，学生从第一轮就拥有当前函数的完整协作权限。
+    # 权限在这里统一归一化，避免其他入口绕过 chat 端点时退回 L2。
+    transfer_open = context.stage == "transfer"
+    requested_level = 3 if transfer_open else context.level
     applied_level = requested_level
     configured = None
     require_attempt = True
     max_implementation_level = 3
 
     coding_stage = context.stage in {"build", "transfer"}
-    if coding_stage and requested_level == 3 and not context.l3Confirmed:
+    if coding_stage and requested_level == 3 and not (context.l3Confirmed or transfer_open):
         applied_level = 2
 
     if policy:
@@ -591,6 +595,7 @@ def build_scaffold_prompt(
     profile: UserProfile,
     language: str = "zh",
     policy: BlueprintScaffoldPolicy | None = None,
+    learner_support: PreparedLearnerSupport | None = None,
 ) -> str:
     adaptation = build_profile_adaptation(profile)
     resolved = resolve_scaffold_rule(context, policy)
@@ -630,7 +635,7 @@ def build_scaffold_prompt(
     confirmed_build_l3 = bool(
         coding_stage
         and applied_level == 3
-        and context.l3Confirmed
+        and (context.l3Confirmed or context.stage == "transfer")
     )
     verified_reference = SNAKE_L3_SOLUTIONS.get(context.currentModule or "")
     # 创意契约由 creative_capability 统一维护，与前端能力注册表同源。
@@ -672,12 +677,23 @@ def build_scaffold_prompt(
         if confirmed_build_l3
         else "当前尚未进入 L3 代码协作，按本轮实际 L0-L2 边界回答。"
     )
+    learner_support_section = learner_support.prompt_section if learner_support else ""
+    level_source_en = (
+        f"the formal test condition authorizes level L{resolved['requestedLevel']}"
+        if context.stage == "transfer"
+        else f"the student explicitly requested level L{resolved['requestedLevel']}"
+    )
+    level_source_zh = (
+        f"正式测试条件授权 L{resolved['requestedLevel']}"
+        if context.stage == "transfer"
+        else f"本轮明确请求 L{resolved['requestedLevel']}"
+    )
 
     if language == "en":
         return f"""
 
 COGNISYNC_SCAFFOLD_MODE
-You are supporting a project-deconstruction programming task. The student is at stage `{context.stage}` and explicitly requested level L{context.level}. The applied teacher-policy boundary is L{applied_level}. Never change levels on your own; only an explicit teacher-policy limit may restrict the request, and that distinction must not be hidden.
+You are supporting a project-deconstruction programming task. The student is at stage `{context.stage}` and {level_source_en}. The applied teacher/task-policy boundary is L{applied_level}. Never change levels on your own; only an explicit teacher or task policy may set or restrict the level, and that distinction must not be hidden.
 Stage goal: {stage_goal}
 Universal level boundary: {level_rule}
 Teacher blueprint boundary: {teacher_boundary}
@@ -691,13 +707,14 @@ Current module: {context.currentModule or "none"}
 Latest test feedback: {context.testFeedback or "none"}
 Profile adaptation: {adaptation['cognitionInstruction']}; {adaptation['affectInstruction']}; {adaptation['behaviorInstruction']}.
 The profile may change wording and step size only. It must not be treated as ability ranking and must not change the requested L0-L3 boundary.
+{learner_support_section}
 Reply in natural conversation without headings. Give one focused suggestion and end with one concrete action or check. Stay under 120 words.
 """
 
     return f"""
 
 COGNISYNC_SCAFFOLD_MODE
-你正在支持“项目解构式编程学习”。学生当前位于【{context.stage}】阶段，本轮明确请求 L{context.level}，教师蓝图实际允许到 L{applied_level}。除教师蓝图的明确限制外，不得擅自升降等级；如请求被限制，不得隐瞒这一差异。
+你正在支持“项目解构式编程学习”。学生当前位于【{context.stage}】阶段，{level_source_zh}，教师或任务策略实际允许到 L{applied_level}。不得擅自升降等级；如等级由正式测试条件直接开放或受到限制，均不得隐瞒这一差异。
 阶段目标：{stage_goal}。
 通用等级边界：{level_rule}
 教师蓝图边界：{teacher_boundary}
@@ -711,6 +728,7 @@ L3 代码协作规则：{l3_collaboration_rule_zh}
 最近测试反馈：{context.testFeedback or '无'}
 画像适配方式：{adaptation['cognitionInstruction']}；{adaptation['affectInstruction']}；{adaptation['behaviorInstruction']}。
 学生画像只能改变表达方式、支架颗粒度和互动节奏，不能被解释为能力排名，也不能突破本轮 L0-L3 边界。
+{learner_support_section}
 请用自然对话回复，不写标题，不堆砌鼓励。只处理当前一个卡点，结尾给一个学生马上可以完成的动作或检查。控制在180字以内。
 """
 
