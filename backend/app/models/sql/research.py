@@ -22,9 +22,8 @@ class ResearchTaskStatus(str, enum.Enum):
 class ResearchTaskKind(str, enum.Enum):
     """教学任务用途。
 
-    ``learning`` 是现有项目学习主任务；``transfer_test`` 是教师另行
-    发布的迁移测试。两者分开后，发布测试不会归档正在使用的
-    贪吃蛇学习任务。
+    ``learning`` 是当前项目学习主任务；``transfer_test`` 仅为读取
+    2026-09-04 前产生的网页迁移任务与研究证据而保留。
     """
 
     LEARNING = "learning"
@@ -110,13 +109,13 @@ class ResearchTask(Base, UUIDMixin):
         ),
         nullable=False,
         default=ResearchTaskKind.LEARNING,
-        comment="任务用途：learning | transfer_test",
+        comment="任务用途：当前使用 learning；transfer_test 仅历史兼容",
     )
 
     test_template: Mapped[Optional[str]] = mapped_column(
         String(80),
         nullable=True,
-        comment="可视化测试模板；首版仅 maze_treasure_v1",
+        comment="历史网页迁移模板标识；当前不再创建",
     )
 
     ai_enabled: Mapped[bool] = mapped_column(

@@ -4,12 +4,10 @@ import type { ChatMessage, Language, User, UserProfile, ResearchTask } from '../
 import {
   sendChatMessage,
   getActiveResearchTask,
-  getActiveTransferTest,
   saveResearchProgress,
   saveResearchWorkspace,
   reopenResearchTask,
 } from '../services/api';
-import { TransferTestWorkspace } from '../components/TransferTestWorkspace';
 import { SnakeProjectDemo } from '../components/SnakeProjectDemo';
 import {
   ProjectScaffoldAssistant,
@@ -505,14 +503,9 @@ export const Research: React.FC<Props> = ({
   useEffect(() => {
     const loadTask = async () => {
       try {
-        const t = await getActiveTransferTest() ?? await getActiveResearchTask();
+        const t = await getActiveResearchTask();
         setTask(t);
         if (t) {
-          if (t.task_kind === 'transfer_test') {
-            setCode(t.code_submitted || t.code_content);
-            setCompleted(Boolean(t.is_completed));
-            return;
-          }
           let workspace = isSnakeProjectWorkspace(t.workspace_data) ? t.workspace_data : null;
           // kero 是开发验收账号：首次进入时自动生成一套完整蓝图，并写入账号记录。
           if (!workspace && studentId === 'kero' && experimentGroup === 'pdt') {
@@ -1131,19 +1124,6 @@ export const Research: React.FC<Props> = ({
   }
 
   // ── Render ──────────────────────────────────────────────────────────────
-
-  if (task.task_kind === 'transfer_test') {
-    return (
-      <TransferTestWorkspace
-        task={task}
-        language={language}
-        theme={theme}
-        userId={userId}
-        onUpdateProfile={onUpdateProfile}
-        onLogout={onLogout}
-      />
-    );
-  }
 
   return (
     <div className="project-factory">

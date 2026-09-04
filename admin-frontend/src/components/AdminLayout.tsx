@@ -7,7 +7,6 @@ import {
   MessageSquare,
   FileText,
   FlaskConical,
-  ClipboardCheck,
   Download,
   Settings2,
   HeartPulse,
@@ -46,7 +45,6 @@ export const AdminLayout = ({ children }: AdminLayoutProps) => {
     { path: '/emotions', icon: HeartPulse, label: t('nav.emotions') },
     { path: '/scales', icon: FileText, label: t('nav.scales') },
     { path: '/research', icon: FlaskConical, label: '贪吃蛇项目' },
-    { path: '/tests', icon: ClipboardCheck, label: '迁移测试' },
     { path: '/exports', icon: Download, label: t('nav.exports') },
     { path: '/config', icon: Settings2, label: t('nav.modelConfig') },
   ];

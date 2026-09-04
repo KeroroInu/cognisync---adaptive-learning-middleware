@@ -541,19 +541,6 @@ async def get_active_task(
     )
 
 
-@router.get("/active-test")
-async def get_active_transfer_test(
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-) -> SuccessResponse[ActiveTaskResponse]:
-    """获取教师另行发布的迁移测试；不覆盖项目学习任务。"""
-    return await _get_active_task_by_kind(
-        kind=ResearchTaskKind.TRANSFER_TEST,
-        db=db,
-        current_user=current_user,
-    )
-
-
 @router.post("/tasks/{task_id}/blueprint/function-mapping-suggestions")
 async def suggest_function_mapping(
     task_id: str,

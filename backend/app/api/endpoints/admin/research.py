@@ -40,8 +40,8 @@ class ResearchTaskCreate(BaseModel):
     code_content: str
     language: str = "python"
     target_group: Literal["all", "pdt", "ai_pbl", "lecture", "unassigned"] = "all"
-    task_kind: Literal["learning", "transfer_test"] = "learning"
-    test_template: Optional[Literal["maze_treasure_v1"]] = None
+    task_kind: Literal["learning"] = "learning"
+    test_template: None = None
     ai_enabled: bool = True
 
 
@@ -53,8 +53,8 @@ class ResearchTaskUpdate(BaseModel):
     code_content: Optional[str] = None
     language: Optional[str] = None
     target_group: Optional[Literal["all", "pdt", "ai_pbl", "lecture", "unassigned"]] = None
-    task_kind: Optional[Literal["learning", "transfer_test"]] = None
-    test_template: Optional[Literal["maze_treasure_v1"]] = None
+    task_kind: Optional[Literal["learning"]] = None
+    test_template: None = None
     ai_enabled: Optional[bool] = None
 
 
@@ -184,8 +184,6 @@ async def create_research_task(
     db: AsyncSession = Depends(get_db),
 ) -> SuccessResponse[ResearchTaskItem]:
     """创建新研究任务"""
-    if data.task_kind == "transfer_test" and data.test_template != "maze_treasure_v1":
-        raise HTTPException(status_code=422, detail="Transfer test requires maze_treasure_v1")
     task = ResearchTask(
         title=data.title,
         description=data.description,
@@ -268,8 +266,6 @@ async def update_research_task(
         task.test_template = data.test_template
     if data.ai_enabled is not None:
         task.ai_enabled = data.ai_enabled
-    if task.task_kind == ResearchTaskKind.TRANSFER_TEST and task.test_template != "maze_treasure_v1":
-        raise HTTPException(status_code=422, detail="Transfer test requires maze_treasure_v1")
     task.updated_at = datetime.now(timezone.utc)
 
     await db.commit()
@@ -373,9 +369,16 @@ async def activate_research_task(
     task = task_result.scalar_one_or_none()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
+    if task.task_kind == ResearchTaskKind.TRANSFER_TEST:
+        raise HTTPException(
+            status_code=410,
+            detail={
+                "code": "TRANSFER_TEST_RETIRED",
+                "message": "网页迁移任务已退出当前实验，历史记录仍可读取。",
+            },
+        )
 
-    # 每个“实验条件 + 任务用途”只保留一个当前任务。
-    # 发布迁移测试不得归档正在使用的项目学习任务。
+    # 每个实验条件只保留一个当前学习任务。
     await db.execute(
         update(ResearchTask)
         .where(

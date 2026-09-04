@@ -672,19 +672,6 @@ export async function getActiveResearchTask(): Promise<ResearchTask | null> {
 }
 
 /**
- * 获取教师当前发布给该学生的迁移测试。测试与学习任务可同时激活。
- */
-export async function getActiveTransferTest(): Promise<ResearchTask | null> {
-  const response = await fetch(`${API_BASE_URL}/api/research/active-test`, {
-    headers: getHeaders(true),
-  });
-  if (response.status === 404) return null;
-  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-  const result = await response.json();
-  return (result.data ?? result) as ResearchTask;
-}
-
-/**
  * 自动保存学生代码进度
  */
 export async function saveResearchProgress(
