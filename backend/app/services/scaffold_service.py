@@ -160,7 +160,8 @@ SNAKE_L2_STRUCTURES = {
     "initial-state": """def create_initial_state(board_size=12, initial_length=3):
     y = board_size // 2
     head_x = max(initial_length - 1, board_size // 2)
-    # TODO: 按 head_x、y 和 initial_length 生成蛇身坐标列表
+    # TODO: 生成连续的蛇身坐标
+    snake = []
     return snake, 'right', 0""",
     "direction-input": """def change_direction(current_direction, next_direction):
     opposite = {'up': 'down', 'down': 'up', 'left': 'right', 'right': 'left'}
@@ -173,7 +174,8 @@ SNAKE_L2_STRUCTURES = {
     dx, dy = delta[direction]
     head_x, head_y = snake[0]
     new_head = (head_x + dx, head_y + dy)
-    # TODO: 把新蛇头放到最前面，并移除旧蛇尾后返回
+    # TODO: 新蛇头放前面，去掉蛇尾
+    return snake
 """,
     "food-spawn": """def spawn_food(snake, board_size):
     import random
@@ -181,18 +183,21 @@ SNAKE_L2_STRUCTURES = {
                   if (x, y) not in snake]
     if not free_cells:
         raise ValueError('No free cell for food')
-    # TODO: 从 free_cells 随机返回一个坐标
+    # TODO: 随机选择一个空格
+    return free_cells[0]
 """,
     "eat-grow-score": """def apply_food_effect(snake, food, score):
     if snake[0] == food:
         grown_snake = [*snake, snake[-1]]
-        # TODO: 返回增长后的蛇身、新得分和需要新食物的标记
+        # TODO: 返回蛇身、新分数和 True
+        return snake, score, False
     return snake, score, False""",
     "collision": """def check_collision(snake, board_size):
     head_x, head_y = snake[0]
     outside = head_x < 0 or head_x >= board_size or head_y < 0 or head_y >= board_size
     hit_self = snake[0] in snake[1:]
-    # TODO: 组合两个判断并返回布尔值
+    # TODO: 返回两个判断的结果
+    return False
 """,
     "game-loop": """def step_game(state, user_input):
     if state['game_over']:
@@ -203,7 +208,81 @@ SNAKE_L2_STRUCTURES = {
     state['game_over'] = check_collision(state['snake'], 12)
     if state['game_over']:
         return state
-    # TODO: 调用进食函数；需要时生成新食物
+    # TODO: 处理进食，需要时生成食物
+    return state""",
+}
+
+SNAKE_L2_BALANCED_STRUCTURES = {
+    "initial-state": """def create_initial_state(board_size=12, initial_length=3):
+    # TODO: 算出蛇头的横、纵坐标
+    head_x, y = 0, 0
+    # TODO: 生成连续的蛇身坐标
+    snake = []
+    return snake, 'right', 0""",
+    "direction-input": """def change_direction(current_direction, next_direction):
+    opposite = {'up': 'down', 'down': 'up', 'left': 'right', 'right': 'left'}
+    # TODO: 先检查输入是否有效
+    # TODO: 再阻止直接反向
+    return current_direction""",
+    "movement": """def move_snake(snake, direction):
+    delta = {'up': (0, -1), 'down': (0, 1), 'left': (-1, 0), 'right': (1, 0)}
+    # TODO: 读取方向变化量和蛇头
+    # TODO: 生成并放入新蛇头
+    return snake""",
+    "food-spawn": """def spawn_food(snake, board_size):
+    import random
+    # TODO: 找出没有蛇身的空格
+    free_cells = []
+    if not free_cells:
+        return snake[0]
+    # TODO: 随机选择一个空格
+    return free_cells[0]""",
+    "eat-grow-score": """def apply_food_effect(snake, food, score):
+    # TODO: 判断蛇头是否碰到食物
+    # TODO: 碰到后增长并加分
+    return snake, score, False""",
+    "collision": """def check_collision(snake, board_size):
+    # TODO: 判断蛇头是否出界
+    outside = False
+    # TODO: 判断蛇头是否碰到蛇身
+    hit_self = False
+    return outside or hit_self""",
+    "game-loop": """def step_game(state, user_input):
+    if state['game_over']:
+        return state
+    # TODO: 更新方向、移动并检查碰撞
+    # TODO: 处理进食，需要时生成食物
+    return state""",
+}
+
+SNAKE_L2_OPEN_STRUCTURES = {
+    "initial-state": """def create_initial_state(board_size=12, initial_length=3):
+    # TODO: 确定蛇头位置
+    # TODO: 生成蛇身列表
+    return [], 'right', 0""",
+    "direction-input": """def change_direction(current_direction, next_direction):
+    # TODO: 检查输入是否合法
+    # TODO: 阻止直接反向
+    return current_direction""",
+    "movement": """def move_snake(snake, direction):
+    # TODO: 根据方向计算新蛇头
+    # TODO: 更新蛇身列表
+    return snake""",
+    "food-spawn": """def spawn_food(snake, board_size):
+    # TODO: 找出所有空格
+    # TODO: 随机选择一个空格
+    return snake[0]""",
+    "eat-grow-score": """def apply_food_effect(snake, food, score):
+    # TODO: 判断是否吃到食物
+    # TODO: 更新蛇身和分数
+    return snake, score, False""",
+    "collision": """def check_collision(snake, board_size):
+    # TODO: 判断是否出界
+    # TODO: 判断是否碰到蛇身
+    return False""",
+    "game-loop": """def step_game(state, user_input):
+    # TODO: 更新方向并移动
+    # TODO: 检查碰撞和进食
     return state""",
 }
 
@@ -215,6 +294,7 @@ def build_controlled_build_response(
     *,
     student_message: str = "",
     current_code: str | None = None,
+    learner_support: PreparedLearnerSupport | None = None,
 ) -> str | None:
     """Build a level-exact response for the seven fixed browser functions."""
 
@@ -277,23 +357,41 @@ def build_controlled_build_response(
             return None
         confirmed = build_confirmed_l3_response(context, language)
         return "\n".join(focus_lines + ([confirmed] if confirmed else [])) if confirmed else None
-    content = (
-        SNAKE_L0_CHECKS[node_id]
-        if applied_level == 0
-        else SNAKE_L1_SNIPPETS[node_id]
-        if applied_level == 1
-        else SNAKE_L2_STRUCTURES[node_id]
-    )
+    density = learner_support.template_density if learner_support else "guided"
+    if applied_level == 0:
+        content = SNAKE_L0_CHECKS[node_id]
+    elif applied_level == 1:
+        content = SNAKE_L1_SNIPPETS[node_id]
+    else:
+        content = (
+            SNAKE_L2_OPEN_STRUCTURES[node_id]
+            if density == "open"
+            else SNAKE_L2_BALANCED_STRUCTURES[node_id]
+            if density == "balanced"
+            else SNAKE_L2_STRUCTURES[node_id]
+        )
     introductions = {
         "zh": {
             0: "先不要改实现。把这段定位代码放在函数后运行，只看打印和断言停在哪里：",
             1: "当前卡点只需要下面这几行关键写法；把它放回你自己的函数结构中：",
-            2: "这是当前函数接近完整的结构，只保留了一个明确空位：",
+            2: (
+                "这是当前函数的可运行骨架，留下了 2—3 个关键空位："
+                if density == "open"
+                else "这是当前函数的可运行骨架，留下了两个关键空位："
+                if density == "balanced"
+                else "这是当前函数接近完整的可运行结构，只留一个关键空位："
+            ),
         },
         "en": {
             0: "Do not change the implementation yet. Run this diagnostic code after the function and see which print or assertion stops:",
             1: "Only these key lines are needed for the current blocker; place them into your own function:",
-            2: "This is a nearly complete structure for the current function, with one explicit gap left:",
+            2: (
+                "This runnable scaffold leaves 2–3 focused gaps:"
+                if density == "open"
+                else "This runnable scaffold leaves two focused gaps:"
+                if density == "balanced"
+                else "This nearly complete runnable structure leaves one focused gap:"
+            ),
         },
     }
     closing = "运行后把新的测试反馈告诉我。" if language == "zh" else "Run it, then share the new test feedback."
@@ -307,6 +405,7 @@ def build_controlled_scaffold_response(
     *,
     student_message: str = "",
     current_code: str | None = None,
+    learner_support: PreparedLearnerSupport | None = None,
 ) -> str | None:
     """Return deterministic replies where workflow state must beat model inference."""
 
@@ -357,6 +456,7 @@ def build_controlled_scaffold_response(
         language,
         student_message=student_message,
         current_code=current_code,
+        learner_support=learner_support,
     )
 
 

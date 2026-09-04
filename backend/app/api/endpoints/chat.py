@@ -865,11 +865,17 @@ async def chat(
         # 求助行为，不能被误当成学生情绪或认知证据污染画像。
         if is_student_authored:
             analyzer = TextAnalyzer()
-            analysis = await analyzer.analyze(
-                user_message=request.message,
-                recent_messages=recent_messages,
-                current_profile=current_profile,
-            )
+            if scaffold_context and settings.LLM_PROJECT_TEXT_ANALYSIS == "rules":
+                analysis = analyzer.analyze_with_rules(
+                    request.message,
+                    current_profile=current_profile,
+                )
+            else:
+                analysis = await analyzer.analyze(
+                    user_message=request.message,
+                    recent_messages=recent_messages,
+                    current_profile=current_profile,
+                )
         else:
             analysis = ChatAnalysis(
                 intent="scaffold-request",
@@ -1076,6 +1082,7 @@ async def chat(
                 request.language or "zh",
                 student_message=request.message,
                 current_code=request.currentCode,
+                learner_support=learner_support,
             ) or ""
         if not assistant_reply:
             llm_provider = get_chat_provider()

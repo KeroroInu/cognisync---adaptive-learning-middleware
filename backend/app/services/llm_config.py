@@ -73,7 +73,7 @@ def _get_role_config(role: str) -> dict:
         return {"provider": "mock"}
 
 
-def _build_provider(config: dict) -> BaseProvider:
+def _build_provider(config: dict, role: str) -> BaseProvider:
     """根据配置字典构建 LLM Provider 实例"""
     provider_type = config.get("provider", "mock")
 
@@ -92,6 +92,9 @@ def _build_provider(config: dict) -> BaseProvider:
         base_url=base_url,
         api_key=api_key,
         model=model,
+        request_role=role,
+        # 学生最终可见的回复优先；画像分析只能使用空闲容量。
+        request_priority=0 if role == "chat" else 10,
     )
 
 
@@ -107,7 +110,7 @@ def _get_cached_provider(role: str) -> BaseProvider:
     if cached and cached[0] == signature:
         return cached[1]
 
-    provider = _build_provider(config)
+    provider = _build_provider(config, role)
     _provider_cache[role] = (signature, provider)
     return provider
 

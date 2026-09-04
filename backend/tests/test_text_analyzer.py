@@ -225,6 +225,22 @@ def test_analysis_timeout_falls_back_without_waiting_for_provider(monkeypatch):
     assert result.emotion == "confused"
 
 
+def test_rule_analysis_never_calls_the_provider():
+    class MustNotRunProvider(BaseProvider):
+        async def complete(self, *args, **kwargs):
+            raise AssertionError("project rule analysis must not call the model")
+
+        async def health_check(self) -> bool:
+            return True
+
+    analyzer = TextAnalyzer(provider=MustNotRunProvider())
+    result = analyzer.analyze_with_rules("我的列表循环为什么没有移动？")
+
+    assert result.intent == "help-seeking"
+    assert "列表" in result.detectedConcepts
+    assert "循环" in result.detectedConcepts
+
+
 def test_detected_concepts_are_trimmed_before_graph_persistence():
     analyzer = TextAnalyzer(
         provider=StaticProvider(

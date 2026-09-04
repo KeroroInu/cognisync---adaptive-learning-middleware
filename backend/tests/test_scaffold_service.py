@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 from app.schemas.chat import ProjectScaffoldContext
 from app.schemas.project_blueprint import BlueprintScaffoldPolicy
 from app.schemas.profile import UserProfile
@@ -252,6 +254,50 @@ def test_fixed_build_levels_return_exact_scaffold_shapes():
     context.trigger = "l3_confirmed"
     l3 = build_controlled_build_response(context, 3)
     assert l3 is not None and SNAKE_L3_SOLUTIONS["movement"] in l3
+
+
+def test_l2_templates_are_runnable_and_change_density_from_learner_evidence():
+    context = scaffold_context(level=2)
+    sample_calls = {
+        "initial-state": lambda ns: ns["create_initial_state"](),
+        "direction-input": lambda ns: ns["change_direction"]("right", "left"),
+        "movement": lambda ns: ns["move_snake"]([(2, 2), (1, 2)], "right"),
+        "food-spawn": lambda ns: ns["spawn_food"]([(1, 1)], 4),
+        "eat-grow-score": lambda ns: ns["apply_food_effect"]([(2, 2)], (2, 2), 0),
+        "collision": lambda ns: ns["check_collision"]([(2, 2)], 12),
+        "game-loop": lambda ns: ns["step_game"](
+            {
+                "snake": [(2, 2), (1, 2)],
+                "direction": "right",
+                "food": (8, 8),
+                "score": 0,
+                "game_over": False,
+            },
+            None,
+        ),
+    }
+    for node_id in SNAKE_L3_SOLUTIONS:
+        context.currentModule = node_id
+        responses = {}
+        for density in ("guided", "balanced", "open"):
+            response = build_controlled_build_response(
+                context,
+                2,
+                learner_support=SimpleNamespace(template_density=density),
+            )
+            assert response is not None
+            code = response.split("```python\n", 1)[1].split("```", 1)[0]
+            compile(code, f"<{node_id}-{density}>", "exec")
+            namespace: dict = {}
+            for solution in SNAKE_L3_SOLUTIONS.values():
+                exec(solution, namespace)
+            exec(code, namespace)
+            sample_calls[node_id](namespace)
+            responses[density] = code
+
+        assert responses["guided"] != responses["balanced"]
+        assert responses["balanced"] != responses["open"]
+        assert responses["guided"].count("TODO") <= responses["open"].count("TODO")
 
 
 def test_confirmed_l3_followup_enters_code_collaboration_instead_of_repeating_answer():

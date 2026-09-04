@@ -3,8 +3,13 @@ LLM Provider - 统一的 LLM 接口封装
 支持 OpenAI、Ollama、LM Studio 等 OpenAI 兼容接口，以及 Mock 模式
 """
 import asyncio
+from contextlib import asynccontextmanager
+from dataclasses import dataclass, field
+import heapq
+import itertools
 import logging
 import random
+from time import perf_counter
 from abc import ABC, abstractmethod
 from typing import Dict, Any
 import httpx
@@ -14,6 +19,100 @@ import re
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(order=True)
+class _GateWaiter:
+    priority: int
+    sequence: int
+    future: asyncio.Future[None] = field(compare=False)
+
+
+class SharedLLMConcurrencyGate:
+    """同一后端进程内所有模型角色共用的并发预算。
+
+    数字越小优先级越高；同优先级保持先来先服务。等待者取消时只标记
+    Future，释放槽位时惰性跳过，避免在线程外修改优先队列。
+    """
+
+    def __init__(self, limit: int):
+        self.limit = max(1, limit)
+        self._active = 0
+        self._waiters: list[_GateWaiter] = []
+        self._sequence = itertools.count()
+        self._lock = asyncio.Lock()
+
+    @property
+    def active(self) -> int:
+        return self._active
+
+    @property
+    def waiting(self) -> int:
+        return sum(not item.future.done() for item in self._waiters)
+
+    async def acquire(self, priority: int = 0) -> float:
+        started = perf_counter()
+        loop = asyncio.get_running_loop()
+        waiter: _GateWaiter | None = None
+        async with self._lock:
+            if self._active < self.limit and not self._waiters:
+                self._active += 1
+                return 0.0
+            waiter = _GateWaiter(priority, next(self._sequence), loop.create_future())
+            heapq.heappush(self._waiters, waiter)
+
+        try:
+            await waiter.future
+        except BaseException:
+            async with self._lock:
+                granted = waiter.future.done() and not waiter.future.cancelled()
+                if granted:
+                    self._active = max(0, self._active - 1)
+                else:
+                    waiter.future.cancel()
+                self._wake_waiters()
+            raise
+        return (perf_counter() - started) * 1000
+
+    async def release(self) -> None:
+        async with self._lock:
+            self._active = max(0, self._active - 1)
+            self._wake_waiters()
+
+    def _wake_waiters(self) -> None:
+        while self._active < self.limit and self._waiters:
+            waiter = heapq.heappop(self._waiters)
+            if waiter.future.done():
+                continue
+            self._active += 1
+            waiter.future.set_result(None)
+
+    @asynccontextmanager
+    async def slot(self, priority: int = 0):
+        wait_ms = await self.acquire(priority)
+        try:
+            yield wait_ms
+        finally:
+            await self.release()
+
+
+_shared_gate_loop: asyncio.AbstractEventLoop | None = None
+_shared_gate: SharedLLMConcurrencyGate | None = None
+
+
+def get_shared_llm_gate() -> SharedLLMConcurrencyGate:
+    """按事件循环复用一个闸门；测试切换事件循环时自动重建。"""
+
+    global _shared_gate_loop, _shared_gate
+    loop = asyncio.get_running_loop()
+    if (
+        _shared_gate is None
+        or _shared_gate_loop is not loop
+        or _shared_gate.limit != settings.LLM_MAX_CONCURRENCY
+    ):
+        _shared_gate_loop = loop
+        _shared_gate = SharedLLMConcurrencyGate(settings.LLM_MAX_CONCURRENCY)
+    return _shared_gate
 
 
 class BaseProvider(ABC):
@@ -59,12 +158,15 @@ class OpenAICompatibleProvider(BaseProvider):
         api_key: str,
         model: str,
         timeout: int = 60,
+        request_role: str = "chat",
+        request_priority: int = 0,
     ):
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.model = model
         self.timeout = timeout
-        self._semaphore = asyncio.Semaphore(settings.LLM_MAX_CONCURRENCY)
+        self.request_role = request_role
+        self.request_priority = request_priority
 
         # 创建 HTTP 客户端
         self.client = httpx.AsyncClient(
@@ -101,21 +203,30 @@ class OpenAICompatibleProvider(BaseProvider):
         }
 
         try:
-            async with self._semaphore:
-                response: httpx.Response | None = None
-                for attempt in range(settings.LLM_MAX_RETRIES + 1):
+            response: httpx.Response | None = None
+            total_wait_ms = 0.0
+            upstream_ms = 0.0
+            retry_count = 0
+            for attempt in range(settings.LLM_MAX_RETRIES + 1):
+                gate = get_shared_llm_gate()
+                async with gate.slot(self.request_priority) as wait_ms:
+                    total_wait_ms += wait_ms
+                    request_started = perf_counter()
                     response = await self.client.post(
                         f"{self.base_url}/chat/completions",
                         json=payload,
                     )
-                    if response.status_code not in {429, 500, 502, 503, 504}:
-                        break
-                    if attempt < settings.LLM_MAX_RETRIES:
-                        retry_after = response.headers.get("Retry-After")
-                        delay = float(retry_after) if retry_after and retry_after.isdigit() else (0.5 * (2 ** attempt) + random.random() * 0.25)
-                        await asyncio.sleep(min(delay, 5.0))
-                assert response is not None
-                response.raise_for_status()
+                    upstream_ms += (perf_counter() - request_started) * 1000
+                if response.status_code not in {429, 500, 502, 503, 504}:
+                    break
+                if attempt < settings.LLM_MAX_RETRIES:
+                    retry_count += 1
+                    retry_after = response.headers.get("Retry-After")
+                    delay = float(retry_after) if retry_after and retry_after.isdigit() else (0.5 * (2 ** attempt) + random.random() * 0.25)
+                    # 退避不占共享槽位，后到的学生回复可以继续推进。
+                    await asyncio.sleep(min(delay, 5.0))
+            assert response is not None
+            response.raise_for_status()
 
             data = response.json()
 
@@ -125,6 +236,16 @@ class OpenAICompatibleProvider(BaseProvider):
             logger.debug(
                 f"LLM response received: {len(content)} chars, "
                 f"model={self.model}, tokens={data.get('usage', {})}"
+            )
+            logger.info(
+                "LLM request complete role=%s model=%s status=%s queue_wait_ms=%.1f "
+                "upstream_ms=%.1f retries=%s",
+                self.request_role,
+                self.model,
+                response.status_code,
+                total_wait_ms,
+                upstream_ms,
+                retry_count,
             )
 
             return content
@@ -145,14 +266,15 @@ class OpenAICompatibleProvider(BaseProvider):
         """检查 LLM API 是否可用"""
         try:
             # 发送一个简单的请求测试连接
-            response = await self.client.post(
-                f"{self.base_url}/chat/completions",
-                json={
-                    "model": self.model,
-                    "messages": [{"role": "user", "content": "Hi"}],
-                    "max_tokens": 5,
-                },
-            )
+            async with get_shared_llm_gate().slot(priority=20):
+                response = await self.client.post(
+                    f"{self.base_url}/chat/completions",
+                    json={
+                        "model": self.model,
+                        "messages": [{"role": "user", "content": "Hi"}],
+                        "max_tokens": 5,
+                    },
+                )
             response.raise_for_status()
             return True
 

@@ -87,6 +87,13 @@ class Settings(BaseSettings):
     )
     LLM_MAX_CONCURRENCY: int = Field(default=12, ge=1, le=100)
     LLM_MAX_RETRIES: int = Field(default=2, ge=0, le=5)
+    LLM_PROJECT_TEXT_ANALYSIS: Literal["rules", "model"] = Field(
+        default="rules",
+        description=(
+            "项目支架对话的画像分析方式。rules 避免每轮额外调用模型；"
+            "model 仅用于研究者明确需要模型编码时。"
+        ),
+    )
 
     # Admin 管理员配置
     ADMIN_KEY: str = Field(

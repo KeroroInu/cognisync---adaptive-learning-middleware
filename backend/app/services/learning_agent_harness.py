@@ -306,9 +306,9 @@ COGNISYNC_AGENT_CONTEXT
         curriculum_source = "frozen_blueprint_knowledge" if curriculum_concepts else "task_objective_only"
         if lang == "en":
             density_rule = {
-                "guided": "Keep the surrounding plumbing complete and runnable; leave only 1–2 small conceptual TODOs with concrete comments.",
-                "balanced": "Provide a runnable scaffold with 2–3 focused TODOs and concise concept comments.",
-                "open": "Keep only the required signature and safe setup; leave the student more room to organize the key logic.",
+                "guided": "Keep the surrounding plumbing runnable; leave 1–2 small conceptual TODOs with short comments.",
+                "balanced": "Provide a runnable scaffold with 2 focused TODOs and short comments.",
+                "open": "Keep the signature and safe fallback; leave 2–3 focused TODOs for the student.",
             }[density]
             concepts = ", ".join(curriculum_concepts) or "No versioned textbook excerpt is published; use only the task objective and basic Python already visible in this task."
             evidence = "; ".join(
@@ -331,13 +331,14 @@ Approved course concepts for this focus: {concepts}
 Relevant graph evidence: {evidence}
 {level_rule}
 Generated code must use only the real runner contract, remain runnable before TODOs are completed, and may use a fenced Python block despite the general conversational formatting rule.
+Keep comments to one short purpose statement per TODO. Do not use long docstrings or explain syntax in paragraphs inside the code. Prefer variables, assignment, lists, conditions, loops and simple function calls; runner-provided dictionary access may be shown but must not become an extra student task.
 No versioned textbook retrieval is enabled. Do not claim to quote a textbook or introduce advanced material outside the approved concepts.
 """
         else:
             density_rule = {
-                "guided": "外围接口和装配代码保持完整可运行，只留 1—2 个较小的概念性 TODO，并用具体注释说明要判断什么。",
-                "balanced": "给出可运行骨架，保留 2—3 个聚焦 TODO，并用简短注释连接相关概念。",
-                "open": "只保留必要函数签名和安全初始化，让学生自行组织更多关键逻辑。",
+                "guided": "外围代码保持可运行，只留 1—2 个小 TODO，用短注释说明目的。",
+                "balanced": "给出可运行骨架，保留 2 个聚焦 TODO，每条注释只说一个目的。",
+                "open": "保留函数签名和安全返回，留下 2—3 个聚焦 TODO。",
             }[density]
             concepts = "、".join(curriculum_concepts) or "尚未发布版本化教材片段；只能使用当前任务目标中已经出现的基础 Python。"
             evidence = "；".join(
@@ -360,6 +361,7 @@ COGNISYNC_LEARNER_SUPPORT_CONTEXT
 相关知识图谱证据：{evidence}
 {level_rule}
 生成代码只能调用真实运行器能力；TODO 未完成前也必须语法正确、能够运行。需要给代码时可以使用 Python 代码块，不受通用“纯对话格式”限制。
+代码注释每条只写一句简短用途，不写长段说明或长文档字符串。优先使用变量、赋值、列表、条件、循环和简单函数调用；运行器已经提供的字典访问可以展示，但不要把理解框架接口变成额外学习任务。
 当前没有启用版本化教材检索。不得声称引用了教材，也不得引入上述课程概念之外的进阶内容。
 """
 

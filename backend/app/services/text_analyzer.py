@@ -153,16 +153,29 @@ class TextAnalyzer:
             return chat_analysis
         except Exception as exc:
             logger.warning("LLM analysis failed, falling back to rule-based: %s", exc)
-            fallback = self._fallback_rule_based(user_message)
-            analysis = AnalysisResult(
-                intent=fallback["intent"],
-                emotion=fallback["emotion"],
-                detectedConcepts=fallback["detectedConcepts"],
-                delta=ProfileDelta(**fallback["delta"]),
-                evidence=Evidence(spans=[], confidence=0.55),
-                emotionDetail=EmotionDetail(**fallback["emotionDetail"]),
-            )
-            return self._build_chat_analysis(analysis, current_profile=current_profile)
+            return self.analyze_with_rules(user_message, current_profile=current_profile)
+
+    def analyze_with_rules(
+        self,
+        user_message: str,
+        current_profile: Optional[UserProfile] = None,
+    ) -> ChatAnalysis:
+        """不调用外部模型，快速生成可审计的低置信度分析。
+
+        项目支架已有阶段、代码、测试和事件等更直接的过程证据。默认使用
+        这一路径，避免一次学生求助先做画像模型调用、再做回复模型调用。
+        """
+
+        fallback = self._fallback_rule_based(user_message)
+        analysis = AnalysisResult(
+            intent=fallback["intent"],
+            emotion=fallback["emotion"],
+            detectedConcepts=fallback["detectedConcepts"],
+            delta=ProfileDelta(**fallback["delta"]),
+            evidence=Evidence(spans=[], confidence=0.55),
+            emotionDetail=EmotionDetail(**fallback["emotionDetail"]),
+        )
+        return self._build_chat_analysis(analysis, current_profile=current_profile)
 
     def _build_user_prompt(
         self,
@@ -520,6 +533,15 @@ class TextAnalyzer:
             )
 
         concepts = [
+            "变量",
+            "赋值",
+            "字符串",
+            "列表",
+            "条件判断",
+            "分支",
+            "循环",
+            "坐标",
+            "函数",
             "神经网络",
             "反向传播",
             "梯度下降",
