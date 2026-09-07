@@ -1,5 +1,7 @@
 # CogniSync 后续开发交接（给 Claude）
 
+> 2026-09-07 增量：课堂点评、教材摘要检索与低负担填空模板见 [课堂点评与轻量教材支架](CLASSROOM_NOTES_AND_TEXTBOOK_SUPPORT.md)。本轮不新增学生表单；新量表、最终两组配置和课堂效果验证尚未完成，不得把旧历史章节当成这些事项已经实现的证明。
+
 > 交接分支：`codex/final-quasi-experiment-dev`
 > 起点：提交 `7bd2ce4 feat: complete traceable project learning workflow`。
 > 产品定位：CogniSync——AI 时代的项目解构式编程学习平台；从解构，到建构。

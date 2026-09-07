@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { adminApi } from '../lib/adminApi';
+import { TeacherNotes } from '../components/TeacherNotes';
 import type {
   UserDetail as UserDetailType, ChatMessage, ProfileSnapshot,
   ScaleResponse, CalibrationLog, GraphNode, GraphEdge,
@@ -171,7 +172,7 @@ export const UserDetail = () => {
   const [graphEdges, setGraphEdges] = useState<GraphEdge[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [activeTab, setActiveTab] = useState<'messages' | 'profiles' | 'scales' | 'calibration' | 'graph'>('messages');
+  const [activeTab, setActiveTab] = useState<'notes' | 'messages' | 'profiles' | 'scales' | 'calibration' | 'graph'>('notes');
   const [profileFilter, setProfileFilter] = useState<'all' | 'system' | 'user'>('all');
   const [expandedScales, setExpandedScales] = useState<Set<string>>(new Set());
   const [exporting, setExporting] = useState<string | null>(null);
@@ -275,6 +276,7 @@ export const UserDetail = () => {
   const initials = (userDetail.name || userDetail.student_id || '').slice(0, 2).toUpperCase();
 
   const TABS = [
+    { key: 'notes', label: '课堂点评', icon: FileText, count: null },
     { key: 'messages', label: '对话记录', icon: MessageSquare, count: messages.length },
     { key: 'profiles', label: '画像变化', icon: TrendingUp, count: profiles.length },
     { key: 'scales', label: '量表评分', icon: FileText, count: scaleResponses.length },
@@ -410,16 +412,17 @@ export const UserDetail = () => {
               <div className="flex items-center justify-center gap-2">
                 <Icon size={16} />
                 <span>{label}</span>
-                <span className="px-1.5 py-0.5 rounded text-xs"
+                {count !== null && <span className="px-1.5 py-0.5 rounded text-xs"
                   style={{ backgroundColor: 'var(--bg-tertiary)' }}>
                   {count}
-                </span>
+                </span>}
               </div>
             </button>
           ))}
         </div>
 
         <div className="p-6">
+          {activeTab === 'notes' && userId && <TeacherNotes key={userId} userId={userId} />}
 
           {/* ════ MESSAGES TAB ════ */}
           {activeTab === 'messages' && (

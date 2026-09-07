@@ -211,9 +211,8 @@ async def delete_user(
     from app.models.sql.profile import ProfileSnapshot
     from sqlalchemy import delete as sql_delete
 
-    # 上面的证据统计只覆盖 stage_artifacts / stage_events / scaffold_events
-    # 三张按 user_id 归属的表。但删除用户还会删掉他的聊天消息，而这些消息
-    # 可能被**其他记录**（例如同一会话里的支架事件）以 RESTRICT 引用。
+    # 上面的统计覆盖直接归属的研究记录与课堂备注，但聊天消息也可能
+    # 被其他记录（例如同一会话里的支架事件）以 RESTRICT 引用。
     # 让数据库兜底，并把 IntegrityError 翻译成与上面一致的 409。
     try:
         await db.execute(sql_delete(ChatMessage).where(ChatMessage.user_id == uid))
@@ -243,6 +242,7 @@ async def _count_research_evidence(
 ) -> dict:
     """统计某个学生或任务名下的不可覆盖研究证据条数。"""
     from app.models.sql.research_event import ScaffoldEvent, StageArtifact, StageEvent
+    from app.models.sql.teacher_note import TeacherNote
 
     counts: dict = {}
     for key, model in (
@@ -257,7 +257,12 @@ async def _count_research_evidence(
             stmt = stmt.where(model.task_id == task_id)
         counts[key] = int(await db.scalar(stmt) or 0)
 
-    counts["total"] = counts["artifacts"] + counts["stageEvents"] + counts["scaffoldEvents"]
+    counts["teacherNotes"] = 0
+    if user_id is not None and task_id is None:
+        counts["teacherNotes"] = int(await db.scalar(select(func.count(TeacherNote.id)).where(
+            or_(TeacherNote.student_id == user_id, TeacherNote.teacher_id == user_id)
+        )) or 0)
+    counts["total"] = counts["artifacts"] + counts["stageEvents"] + counts["scaffoldEvents"] + counts["teacherNotes"]
     return counts
 
 

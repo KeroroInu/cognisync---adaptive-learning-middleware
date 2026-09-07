@@ -406,3 +406,32 @@ export interface EmotionUserDetailResponse {
   summary: EmotionUserSummary;
   logs: EmotionUserLogItem[];
 }
+export interface TeacherNoteEvidence {
+  id: string;
+  task_title: string;
+  stage: string;
+  event_type: string;
+  created_at: string;
+}
+
+export interface TeacherNoteInput {
+  request_id: string;
+  lesson_date: string;
+  lesson_label: string;
+  observation: string;
+  interpretation: string;
+  next_step: string;
+  evidence_ids: string[];
+  supersedes_id: string | null;
+}
+
+export interface TeacherNote extends Omit<TeacherNoteInput, 'request_id' | 'evidence_ids'> {
+  id: string;
+  student_id: string;
+  teacher_id: string;
+  teacher_name: string;
+  group_snapshot: string;
+  class_snapshot: string;
+  created_at: string;
+  evidence: { event_id: string; task_id: string; stage: string; event_type: string; created_at: string }[];
+}

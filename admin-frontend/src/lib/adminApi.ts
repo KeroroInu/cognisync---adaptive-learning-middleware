@@ -1,4 +1,5 @@
 import type {
+  TeacherNote, TeacherNoteInput, TeacherNoteEvidence,
   ApiResponse,
   OverviewStats,
   User,
@@ -83,6 +84,18 @@ class AdminApiClient {
   }
 
   // Overview
+  async getTeacherNotes(userId: string, offset = 0): Promise<{ notes: TeacherNote[]; has_more: boolean }> {
+    return this.request(`/users/${encodeURIComponent(userId)}/teacher-notes?offset=${offset}`);
+  }
+
+  async getTeacherNoteEvidence(userId: string): Promise<{ events: TeacherNoteEvidence[] }> {
+    return this.request(`/users/${encodeURIComponent(userId)}/teacher-note-evidence`);
+  }
+
+  async createTeacherNote(userId: string, body: TeacherNoteInput): Promise<TeacherNote> {
+    return this.request(`/users/${encodeURIComponent(userId)}/teacher-notes`, { method: 'POST', body: JSON.stringify(body) });
+  }
+
   async getOverview(): Promise<OverviewStats> {
     return this.request<OverviewStats>('/overview');
   }
