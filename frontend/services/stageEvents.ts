@@ -35,6 +35,7 @@ import type {
   StudentPathPlan,
 } from '../data/projectPath';
 import type { StudentCreativeFunction } from '../data/snakeCreativeFunctions';
+import { captureCurrentSession } from '../data/workspaceScope';
 
 /** 后端 ProjectStage 枚举。 */
 export type BackendStage = 'observe' | 'decompose' | 'model' | 'plan' | 'build' | 'transfer' | 'reflect';
@@ -175,9 +176,11 @@ export async function reportStageEvent(
   body: StageEventRequestBody,
   options?: { keepalive?: boolean },
 ): Promise<StageEventOutcome> {
+  const sessionIsCurrent = captureCurrentSession();
   let lastMessage = '';
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
+    if (!sessionIsCurrent()) return { status: 'failed', message: '账号已切换或退出，请重新登录后操作' };
     try {
       // 每次重试都重发同一个 body 对象，保证语义指纹一致。
       const result = await postStageEvent(taskId, body, options);
@@ -206,9 +209,11 @@ export async function reportFinalSubmission(
   taskId: string,
   body: FinalSubmitRequestBody,
 ): Promise<FinalSubmissionOutcome> {
+  const sessionIsCurrent = captureCurrentSession();
   let lastMessage = '';
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
+    if (!sessionIsCurrent()) return { status: 'failed', message: '账号已切换或退出，请重新登录后操作' };
     try {
       const result = await postFinalResearchSubmission(taskId, body);
       return result.replayed

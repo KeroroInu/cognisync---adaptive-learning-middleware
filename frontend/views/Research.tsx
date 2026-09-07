@@ -51,6 +51,8 @@ import {
   type StageEventType,
 } from '../services/stageEvents';
 
+import { createWorkspaceScope, captureCurrentSession } from '../data/workspaceScope';
+
 const ResearchCodeEditor = React.lazy(() => import('../components/ResearchCodeEditor'));
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -65,7 +67,7 @@ interface Props {
   onLogout: () => void;
   language: Language;
   theme: 'light' | 'dark';
-  userId?: string;
+  userId: string;
   studentId?: string;
   experimentGroup: User['experimentGroup'];
 }
@@ -219,8 +221,21 @@ export const Research: React.FC<Props> = ({
   studentId,
   experimentGroup,
 }) => {
+  const sessionIsCurrent = useRef(captureCurrentSession()).current;
+  const mountedRef = useRef(true);
+  const canUseSession = useCallback(() => mountedRef.current && sessionIsCurrent(), [sessionIsCurrent]);
+  useEffect(() => {
+    mountedRef.current = true;
+    const onSessionChanged = (event: StorageEvent) => {
+      if ((!event.key || event.key === 'cognisync-token') && !sessionIsCurrent()) window.location.reload();
+    };
+    window.addEventListener('storage', onSessionChanged);
+    return () => { mountedRef.current = false; window.removeEventListener('storage', onSessionChanged); };
+  }, [sessionIsCurrent]);
+
   // Task / code state
   const [task, setTask] = useState<ResearchTask | null>(null);
+  const storageScope = task ? createWorkspaceScope(userId, task.id) : '';
   const [loadingTask, setLoadingTask] = useState(true);
   const [code, setCode] = useState('');
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved');
@@ -320,7 +335,7 @@ export const Research: React.FC<Props> = ({
       : (isZh ? '过程已暂存' : 'Progress saved');
 
   const flushWorkspaceQueue = useCallback(async (keepalive = false): Promise<void> => {
-    if (!task || experimentGroup !== 'pdt') return;
+    if (!task || experimentGroup !== 'pdt' || !canUseSession()) return;
 
     // 已经有一轮在跑时**等它结束**，而不是直接返回。
     //
@@ -345,7 +360,7 @@ export const Research: React.FC<Props> = ({
     let release: () => void = () => {};
     workspaceSaveRunningRef.current = new Promise<void>(resolve => { release = resolve; });
     try {
-      while (workspacePendingRef.current) {
+      while (workspacePendingRef.current && canUseSession()) {
         const snapshot = workspacePendingRef.current;
         const signature = workspaceSignature(snapshot);
         workspacePendingRef.current = null;
@@ -355,6 +370,7 @@ export const Research: React.FC<Props> = ({
           await saveResearchWorkspace(task.id, snapshot, { keepalive });
           workspaceLastSavedSignatureRef.current = signature;
         } catch {
+          if (!canUseSession()) return;
           workspacePendingRef.current ??= snapshot;
           setWorkspaceSaveStatus('error');
           if (workspaceRetryTimerRef.current) clearTimeout(workspaceRetryTimerRef.current);
@@ -370,15 +386,15 @@ export const Research: React.FC<Props> = ({
       workspaceSaveRunningRef.current = null;
       release();
     }
-  }, [experimentGroup, task]);
+  }, [experimentGroup, task, canUseSession]);
 
   useEffect(() => {
     flushWorkspaceRef.current = flushWorkspaceQueue;
   }, [flushWorkspaceQueue]);
 
   const queueWorkspaceSave = useCallback((delay = WORKSPACE_SAVE_DEBOUNCE_MS) => {
-    if (!task || experimentGroup !== 'pdt') return;
-    const snapshot = collectSnakeProjectWorkspace(task.id);
+    if (!task || loadingTask || experimentGroup !== 'pdt' || !canUseSession()) return;
+    const snapshot = collectSnakeProjectWorkspace(storageScope);
     const signature = workspaceSignature(snapshot);
     const pendingSignature = workspacePendingRef.current
       ? workspaceSignature(workspacePendingRef.current)
@@ -395,7 +411,7 @@ export const Research: React.FC<Props> = ({
       workspaceSaveTimerRef.current = null;
       void flushWorkspaceRef.current();
     }, delay);
-  }, [experimentGroup, task]);
+  }, [experimentGroup, task, storageScope, canUseSession, loadingTask]);
 
   // ── 关键教学事件上报 ────────────────────────────────────────────────────
   //
@@ -417,6 +433,7 @@ export const Research: React.FC<Props> = ({
       keepalive?: boolean;
     },
   ): Promise<boolean> => {
+    if (!canUseSession()) return false;
     if (!task || experimentGroup !== 'pdt') return true;
 
     // 先确保快照落库。失败时不写事件，并如实告知学生。
@@ -438,6 +455,7 @@ export const Research: React.FC<Props> = ({
       }
     }
 
+    if (!canUseSession()) return false;
     const outcome = await reportStageEvent(
       task.id,
       {
@@ -496,7 +514,7 @@ export const Research: React.FC<Props> = ({
           : 'This step was not recorded. Your work is saved; you can confirm again later.');
     }
     return false;
-  }, [experimentGroup, isZh, queueWorkspaceSave, task]);
+  }, [experimentGroup, isZh, queueWorkspaceSave, task, storageScope, canUseSession]);
 
   // ── Load task ──────────────────────────────────────────────────────────
 
@@ -504,12 +522,14 @@ export const Research: React.FC<Props> = ({
     const loadTask = async () => {
       try {
         const t = await getActiveResearchTask();
+        if (!canUseSession()) return;
         setTask(t);
         if (t) {
+          const scope = createWorkspaceScope(userId, t.id);
           let workspace = isSnakeProjectWorkspace(t.workspace_data) ? t.workspace_data : null;
           // kero 是开发验收账号：首次进入时自动生成一套完整蓝图，并写入账号记录。
           if (!workspace && studentId === 'kero' && experimentGroup === 'pdt') {
-            const demo = seedSnakeProjectDemo(t.id);
+            const demo = seedSnakeProjectDemo(scope);
             workspace = demo.workspace;
             await saveResearchWorkspace(t.id, workspace);
           } else if (workspace && studentId === 'kero' && experimentGroup === 'pdt' && (
@@ -526,15 +546,17 @@ export const Research: React.FC<Props> = ({
               savedAt: new Date().toISOString(),
             };
             await saveResearchWorkspace(t.id, workspace);
-            hydrateSnakeProjectWorkspace(t.id, workspace);
-          } else if (workspace) {
-            hydrateSnakeProjectWorkspace(t.id, workspace);
           }
 
+          if (!canUseSession()) return;
           workspaceLastSavedSignatureRef.current = workspace ? workspaceSignature(workspace) : '';
+          // Only this learner's namespaced cache may recover an unsynced draft.
+          // Legacy task-only keys have no provable owner and are never imported.
+          workspace ??= collectSnakeProjectWorkspace(scope);
+          hydrateSnakeProjectWorkspace(scope, workspace);
           workspacePendingRef.current = null;
           setWorkspaceSaveStatus('saved');
-          setFactoryStage(restoreProjectStage(t.id, workspace, experimentGroup));
+          setFactoryStage(restoreProjectStage(scope, workspace, experimentGroup));
 
           // 优先使用学生已保存的代码，否则用模板原始代码
           setCode(t.code_submitted || t.code_content);
@@ -553,14 +575,14 @@ export const Research: React.FC<Props> = ({
       } catch {
         setTask(null);
       } finally {
-        setLoadingTask(false);
+        if (canUseSession()) setLoadingTask(false);
       }
     };
     void loadTask();
-  }, [experimentGroup, studentId]);
+  }, [experimentGroup, studentId, userId, canUseSession]);
 
   useEffect(() => {
-    if (!task || experimentGroup !== 'pdt') return;
+    if (!task || experimentGroup !== 'pdt' || !canUseSession()) return;
     const interval = window.setInterval(() => queueWorkspaceSave(), WORKSPACE_CHECK_INTERVAL_MS);
     const flushBeforeLeaving = () => {
       queueWorkspaceSave(0);
@@ -576,11 +598,13 @@ export const Research: React.FC<Props> = ({
       window.removeEventListener('pagehide', flushBeforeLeaving);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [experimentGroup, queueWorkspaceSave, task]);
+  }, [experimentGroup, queueWorkspaceSave, task, storageScope, canUseSession]);
 
   useEffect(() => () => {
     if (workspaceSaveTimerRef.current) clearTimeout(workspaceSaveTimerRef.current);
     if (workspaceRetryTimerRef.current) clearTimeout(workspaceRetryTimerRef.current);
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    workspacePendingRef.current = null;
   }, []);
 
   const handleSnakeEvidence = useCallback((event: SnakeRuntimeEvidence) => {
@@ -597,20 +621,20 @@ export const Research: React.FC<Props> = ({
       const next = [...current, event].slice(-30);
       if (task?.id) {
         try {
-          window.localStorage.setItem(`cognisync:snake-runtime-evidence:v1:${task.id}`, JSON.stringify(next));
+          window.localStorage.setItem(`cognisync:snake-runtime-evidence:v1:${storageScope}`, JSON.stringify(next));
         } catch {
           // Runtime evidence persistence must not interrupt project operation.
         }
       }
       return next;
     });
-  }, [task?.id]);
+  }, [task?.id, storageScope]);
 
   const handleFactoryStageChange = useCallback((stage: ProjectStage) => {
     queueWorkspaceSave(0);
     let nextStage = experimentGroup === 'pdt' && stage === 'plan' ? 'build' : stage;
     if (experimentGroup === 'pdt' && nextStage === 'build' && factoryStage !== 'build' && task?.id) {
-      const workspace = collectSnakeProjectWorkspace(task.id);
+      const workspace = collectSnakeProjectWorkspace(storageScope);
       const mechanisms = workspace.path.functionMechanisms ?? {};
       const allFunctionFlowsCompleted = workspace.functions.length > 0
         && workspace.functions.every(card => hasBasicFunctionFlow(mechanisms[card.id]));
@@ -624,12 +648,12 @@ export const Research: React.FC<Props> = ({
     setFactoryStage(nextStage);
     if (task?.id) {
       try {
-        window.localStorage.setItem(projectStageKey(task.id), nextStage);
+        window.localStorage.setItem(projectStageKey(storageScope), nextStage);
       } catch {
         // 阶段仍在内存中正常切换；只是不提供刷新恢复。
       }
     }
-  }, [experimentGroup, factoryStage, isZh, queueWorkspaceSave, task?.id]);
+  }, [experimentGroup, factoryStage, isZh, queueWorkspaceSave, task?.id, storageScope]);
 
   // 各阶段的确认动作。刻意**不**挂在 handleFactoryStageChange 上：
   // 那个函数同时服务于「确认进入下一阶段」和「点导航条往回走」，
@@ -642,7 +666,7 @@ export const Research: React.FC<Props> = ({
 
   const confirmObserveStage = useCallback(async () => {
     if (!task) return;
-    const workspace = collectSnakeProjectWorkspace(task.id);
+    const workspace = collectSnakeProjectWorkspace(storageScope);
     const recorded = await reportKeyMoment({
       stage: 'observe',
       eventType: 'stage_confirm',
@@ -654,11 +678,11 @@ export const Research: React.FC<Props> = ({
     });
     if (!recorded) return;
     handleFactoryStageChange('decompose');
-  }, [handleFactoryStageChange, reportKeyMoment, task]);
+  }, [handleFactoryStageChange, reportKeyMoment, task, storageScope]);
 
   const confirmDecomposeStage = useCallback(async () => {
     if (!task) return;
-    const workspace = collectSnakeProjectWorkspace(task.id);
+    const workspace = collectSnakeProjectWorkspace(storageScope);
     const recorded = await reportKeyMoment({
       stage: 'decompose',
       eventType: 'stage_confirm',
@@ -677,11 +701,11 @@ export const Research: React.FC<Props> = ({
     });
     if (!recorded) return;
     handleFactoryStageChange('model');
-  }, [handleFactoryStageChange, reportKeyMoment, task]);
+  }, [handleFactoryStageChange, reportKeyMoment, task, storageScope]);
 
   const confirmModelStage = useCallback(async () => {
     if (!task) return;
-    const workspace = collectSnakeProjectWorkspace(task.id);
+    const workspace = collectSnakeProjectWorkspace(storageScope);
     const mechanisms = workspace.path.functionMechanisms ?? {};
     const recorded = await reportKeyMoment({
       stage: 'model',
@@ -693,11 +717,11 @@ export const Research: React.FC<Props> = ({
     });
     if (!recorded) return;
     handleFactoryStageChange(experimentGroup === 'pdt' ? 'build' : 'plan');
-  }, [experimentGroup, handleFactoryStageChange, reportKeyMoment, task]);
+  }, [experimentGroup, handleFactoryStageChange, reportKeyMoment, task, storageScope]);
 
   const getScaffoldArtifactContext = useCallback((): ScaffoldArtifactContext => {
     if (!task) return { summary: '' };
-    const workspace = collectSnakeProjectWorkspace(task.id);
+    const workspace = collectSnakeProjectWorkspace(storageScope);
     const taskWorkspaceSummary = summarizeStudentTaskWorkspace(
       workspace,
       factoryStage,
@@ -743,7 +767,7 @@ export const Research: React.FC<Props> = ({
         taskWorkspaceSummary,
       ].join('\n'),
     };
-  }, [buildAssistantContext, factoryStage, runtimeEvidence.length, task]);
+  }, [buildAssistantContext, factoryStage, runtimeEvidence.length, task, storageScope]);
 
   // ── Auto-scroll chat ────────────────────────────────────────────────────
 
@@ -787,6 +811,7 @@ export const Research: React.FC<Props> = ({
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     if (!task) return;
     saveTimerRef.current = setTimeout(async () => {
+      if (!canUseSession()) return;
       setSaveStatus('saving');
       try {
         await saveResearchProgress(task.id, value, startTimeRef.current ? new Date(startTimeRef.current).toISOString() : undefined);
@@ -795,13 +820,13 @@ export const Research: React.FC<Props> = ({
         setSaveStatus('unsaved');
       }
     }, 2000);
-  }, [task]);
+  }, [task, canUseSession]);
 
   // ── Chat submit ─────────────────────────────────────────────────────────
 
   const handleChatSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || !task) return;
+    if (!input.trim() || !task || !canUseSession()) return;
     const userText = input;
     setInput('');
     setChatError(null);
@@ -824,6 +849,7 @@ export const Research: React.FC<Props> = ({
         currentCode: code,
         taskPrompt: task.ai_prompt ?? undefined,
       });
+      if (!canUseSession()) return;
       const assistantMsg: ChatMessage = {
         id: `msg_${Date.now() + 1}`,
         role: 'assistant',
@@ -843,7 +869,7 @@ export const Research: React.FC<Props> = ({
   // ── Complete task ───────────────────────────────────────────────────────
 
   const handleComplete = async () => {
-    if (!task || completing || completed) return;
+    if (!task || completing || completed || !canUseSession()) return;
     setCompleting(true);
     setCompleteError(null);
     try {
@@ -853,7 +879,7 @@ export const Research: React.FC<Props> = ({
       let submitted = code;
       let workspace: SnakeProjectWorkspace | null = null;
       if (experimentGroup === 'pdt') {
-        workspace = collectSnakeProjectWorkspace(task.id);
+        workspace = collectSnakeProjectWorkspace(storageScope);
         const byCard = new Map(workspace.functions.map(card => [card.id, card.responsibility]));
         const ordered = workspace.path.orderedCardIds.length > 0
           ? workspace.path.orderedCardIds
@@ -925,6 +951,7 @@ export const Research: React.FC<Props> = ({
         finalSubmitAttemptRef.current = { signature, requestId: createRequestId() };
       }
 
+      if (!canUseSession()) return;
       const outcome = await reportFinalSubmission(task.id, {
         request_id: finalSubmitAttemptRef.current.requestId,
         stage: 'build',
@@ -1191,7 +1218,7 @@ export const Research: React.FC<Props> = ({
       {factoryStage === 'observe' && (
         <ProjectObservationStage
           language={language}
-          taskId={task.id}
+          storageScope={storageScope}
           evidence={runtimeEvidence}
           scaffoldCompletion={scaffoldCompletion}
           onOpenProject={() => setDemoOpen(true)}
@@ -1204,6 +1231,7 @@ export const Research: React.FC<Props> = ({
         <ProjectFunctionStage
           language={language}
           taskId={task.id}
+          storageScope={storageScope}
           onBack={() => handleFactoryStageChange('observe')}
           onContinue={() => { void confirmDecomposeStage(); }}
         />
@@ -1213,7 +1241,7 @@ export const Research: React.FC<Props> = ({
         experimentGroup === 'pdt'
           ? <ProjectMechanismStage
               language={language}
-              taskId={task.id}
+              storageScope={storageScope}
               onBack={() => handleFactoryStageChange('decompose')}
               onContinue={() => { void confirmModelStage(); }}
               onReportKeyMoment={reportKeyMoment}
@@ -1239,7 +1267,7 @@ export const Research: React.FC<Props> = ({
         <ProjectBuildStage
           language={language}
           theme={theme}
-          taskId={task.id}
+          storageScope={storageScope}
           onBack={() => handleFactoryStageChange('model')}
           onAssistantContextChange={setBuildAssistantContext}
           onReportKeyMoment={reportKeyMoment}

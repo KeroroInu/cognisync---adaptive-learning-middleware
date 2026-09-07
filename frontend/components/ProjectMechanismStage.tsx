@@ -37,7 +37,7 @@ import './ProjectMechanismStage.css';
 
 interface Props {
   language: Language;
-  taskId: string;
+  storageScope: string;
   onBack: () => void;
   onContinue: () => void;
   /** 上报关键教学事件。由 Research.tsx 注入，内部已处理幂等键与重试。 */
@@ -126,14 +126,14 @@ const getHandlePosition = (
 
 export const ProjectMechanismStage: React.FC<Props> = ({
   language,
-  taskId,
+  storageScope,
   onBack,
   onContinue,
   onReportKeyMoment,
 }) => {
   const isZh = language === 'zh';
-  const functionKey = `cognisync:project-function-cards:v1:${taskId}`;
-  const pathKey = `cognisync:project-path-plan:v1:${taskId}`;
+  const functionKey = `cognisync:project-function-cards:v1:${storageScope}`;
+  const pathKey = `cognisync:project-path-plan:v1:${storageScope}`;
   const [cards] = useState<StudentFunctionCard[]>(() => readStoredList(functionKey));
   const [plan, setPlan] = useState<StudentPathPlan>(() => {
     const initial = createInitialPathPlan(readStoredList<StudentFunctionCard>(functionKey));

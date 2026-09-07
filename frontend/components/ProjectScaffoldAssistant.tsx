@@ -14,6 +14,7 @@ import {
 import type { Language, UserProfile } from '../types';
 import { sendChatMessage } from '../services/api';
 import { createRequestId } from '../services/stageEvents';
+import { captureCurrentSession, createWorkspaceScope } from '../data/workspaceScope';
 import { formatSnakeEvidence, type ProjectStage, type SnakeRuntimeEvidence } from '../data/snakeProjectBlueprint';
 import './ProjectScaffoldAssistant.css';
 
@@ -35,7 +36,7 @@ interface Props {
   taskId: string;
   taskTitle: string;
   taskPrompt?: string;
-  userId?: string;
+  userId: string;
   stage: ProjectStage;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -123,6 +124,8 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
   onProfileUpdate,
   onApplyCompletion,
 }) => {
+  const storageScope = createWorkspaceScope(userId, taskId);
+  const sessionIsCurrent = useRef(captureCurrentSession()).current;
   const isZh = language === 'zh';
   const [position, setPosition] = useState<Position>(getDefaultPosition);
   const [panelSize, setPanelSize] = useState<PanelSize>(getDefaultSize);
@@ -131,7 +134,7 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
-  const [confirmedL3, setConfirmedL3] = useState<Set<string>>(() => readConfirmedL3(taskId));
+  const [confirmedL3, setConfirmedL3] = useState<Set<string>>(() => readConfirmedL3(storageScope));
   const [l3ConfirmationOpen, setL3ConfirmationOpen] = useState(false);
   const panelRef = useRef<HTMLElement>(null);
   const streamRef = useRef<HTMLDivElement>(null);
@@ -204,7 +207,7 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
     l3ConfirmedForRequest = requestedLevel === 3 && l3IsConfirmed,
   ) => {
     const clean = text.trim();
-    if (!clean || sending) return;
+    if (!clean || sending || !sessionIsCurrent()) return;
     // 幂等键必须是 UUID 且在同一次求助的所有重试中保持不变。
     // 原先的 `scaffold-${Date.now()}` 有两个问题：毫秒精度在多标签页下会碰撞；
     // 更关键的是它在每次提交时重新生成，后端的 (user_id, request_id) 幂等约束
@@ -243,6 +246,7 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
           testFeedback: artifactContext.testFeedback,
         },
       });
+      if (!sessionIsCurrent()) return;
       // 除建构阶段已确认的 L3 外，后端仍可能按教师蓝图压低等级。
       // 气泡按实际生效等级标注；沿用请求等级会让学生高估自己拿到的支持。
       const appliedLevel = response.scaffold?.appliedLevel ?? requestedLevel;
@@ -262,7 +266,7 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
     } finally {
       setSending(false);
     }
-  }, [activeContextKey, getArtifactContext, hasOpenedProject, isCodingStage, isZh, l3IsConfirmed, language, level, observationCount, observationStageReady, onProfileUpdate, sending, stage, taskId, taskPrompt, taskTitle, userId]);
+  }, [activeContextKey, getArtifactContext, hasOpenedProject, isCodingStage, isZh, l3IsConfirmed, language, level, observationCount, observationStageReady, onProfileUpdate, sending, stage, taskId, taskPrompt, taskTitle, userId, sessionIsCurrent]);
 
   const requestHint = () => void submit(
     observationStageReady
@@ -295,7 +299,7 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
     setL3ConfirmationOpen(false);
     setLevels(current => ({ ...current, [activeContextKey]: 3 }));
     try {
-      window.localStorage.setItem(confirmedL3Key(taskId), JSON.stringify([...next]));
+      window.localStorage.setItem(confirmedL3Key(storageScope), JSON.stringify([...next]));
     } catch {
       // 本轮确认仍有效；只是刷新后需要再次确认。
     }

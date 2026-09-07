@@ -64,7 +64,7 @@ const ResearchCodeEditor = React.lazy(() => import('./ResearchCodeEditor'));
 interface Props {
   language: Language;
   theme: 'light' | 'dark';
-  taskId: string;
+  storageScope: string;
   onBack: () => void;
   onAssistantContextChange?: (context: ProjectBuildAssistantContext) => void;
   onReportKeyMoment?: ReportKeyMoment;
@@ -444,7 +444,7 @@ const linkedFunctionCard = (cards: StudentFunctionCard[], nodeId: string) => car
 export const ProjectBuildStage: React.FC<Props> = ({
   language,
   theme,
-  taskId,
+  storageScope,
   onBack,
   onAssistantContextChange,
   onReportKeyMoment,
@@ -454,11 +454,11 @@ export const ProjectBuildStage: React.FC<Props> = ({
   completed = false,
 }) => {
   const isZh = language === 'zh';
-  const functionKey = `cognisync:project-function-cards:v1:${taskId}`;
-  const progressKey = `cognisync:project-module-progress:v1:${taskId}`;
-  const creativeKey = `cognisync:project-creative-functions:v1:${taskId}`;
-  const sidebarKey = `cognisync:project-build-sidebar:v1:${taskId}`;
-  const terminalKey = `cognisync:project-build-terminal:v1:${taskId}`;
+  const functionKey = `cognisync:project-function-cards:v1:${storageScope}`;
+  const progressKey = `cognisync:project-module-progress:v1:${storageScope}`;
+  const creativeKey = `cognisync:project-creative-functions:v1:${storageScope}`;
+  const sidebarKey = `cognisync:project-build-sidebar:v1:${storageScope}`;
+  const terminalKey = `cognisync:project-build-terminal:v1:${storageScope}`;
   const [cards] = useState<StudentFunctionCard[]>(() => readStoredList(functionKey));
   const [progress, setProgress] = useState<Record<string, StudentModuleProgress>>(() => readStoredObject(progressKey, {}));
   const [creativeFunctions, setCreativeFunctions] = useState<StudentCreativeFunction[]>(() => (

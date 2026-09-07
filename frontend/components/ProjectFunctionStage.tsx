@@ -19,6 +19,7 @@ import './ProjectFunctionStage.css';
 interface Props {
   language: Language;
   taskId: string;
+  storageScope: string;
   onBack: () => void;
   onContinue: () => void;
   onCardCountChange?: (count: number) => void;
@@ -86,13 +87,14 @@ const readStoredList = <T,>(key: string): T[] => {
 export const ProjectFunctionStage: React.FC<Props> = ({
   language,
   taskId,
+  storageScope,
   onBack,
   onContinue,
   onCardCountChange,
 }) => {
   const isZh = language === 'zh';
-  const observationStorageKey = `cognisync:project-observation-cards:v2:${taskId}`;
-  const functionStorageKey = `cognisync:project-function-cards:v1:${taskId}`;
+  const observationStorageKey = `cognisync:project-observation-cards:v2:${storageScope}`;
+  const functionStorageKey = `cognisync:project-function-cards:v1:${storageScope}`;
   const [observations] = useState<StudentObservationCard[]>(() => readStoredList(observationStorageKey));
   const [cards, setCards] = useState<StudentFunctionCard[]>(() => readStoredList(functionStorageKey));
   const [selectedObservationId, setSelectedObservationId] = useState('');

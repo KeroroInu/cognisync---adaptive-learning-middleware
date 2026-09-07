@@ -280,11 +280,12 @@ function App() {
       case 'research':
         return (
           <Research
+            key={state.user.id}
             onUpdateProfile={updateProfile}
             onLogout={handleLogout}
             language={state.language}
             theme={theme}
-            userId={state.user?.id}
+            userId={state.user.id}
             studentId={state.user?.student_id}
             experimentGroup={state.user.experimentGroup ?? 'unassigned'}
           />

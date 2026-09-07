@@ -43,7 +43,7 @@ interface FactoryHeaderProps {
 
 interface ObservationStageProps {
   language: Language;
-  taskId: string;
+  storageScope: string;
   evidence: SnakeRuntimeEvidence[];
   scaffoldCompletion: ScaffoldCompletion | null;
   onOpenProject: () => void;
@@ -166,7 +166,7 @@ export const ProjectFactoryHeader: React.FC<FactoryHeaderProps> = ({
 
 export const ProjectObservationStage: React.FC<ObservationStageProps> = ({
   language,
-  taskId,
+  storageScope,
   evidence,
   scaffoldCompletion,
   onOpenProject,
@@ -174,7 +174,7 @@ export const ProjectObservationStage: React.FC<ObservationStageProps> = ({
   onCardCountChange,
 }) => {
   const isZh = language === 'zh';
-  const storageKey = `cognisync:project-observation-cards:v2:${taskId}`;
+  const storageKey = `cognisync:project-observation-cards:v2:${storageScope}`;
   const [cards, setCards] = useState<StudentObservationCard[]>(() => {
     try {
       const stored = window.localStorage.getItem(storageKey);
