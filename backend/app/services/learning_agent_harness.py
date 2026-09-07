@@ -41,6 +41,59 @@ BUILD_FUNCTION_TITLES = {
 }
 
 
+def stage_resource_contract(context: ProjectScaffoldContext, language: str = "zh") -> str:
+    """Server-owned resource boundaries, not tools the model can invent or execute."""
+    resources = {
+        "observe": (
+            "运行记录与学生已保存的观察卡；学生可操作游戏、比较变化、用一句话记录观察。"
+            "本环节没有代码编辑或调试任务，不要求看代码、改代码、写测试、解释实现或填写代码模板。"
+            "打开窗口、实际运行、保存观察卡、阶段完成是四件不同的事；不能用卡片为空推断没运行。"
+            "移动、进食、碰撞等记录均能证明已运行；记录缺失只表示未读到证据，不是否定学生。"
+            "学生说已经运行时先承认并核对记录，不反复要求重新开始，也不推断学生急于写代码。",
+            "Runtime records and saved observation cards. Students can play, compare changes and write a short observation. "
+            "There is no coding or debugging task here: do not ask for code, tests, implementation explanations or code templates. "
+            "Opening, running, saving observations and stage completion are distinct. Empty cards do not mean no run. "
+            "Movement, eating or collision prove a run; missing evidence is not proof the student did nothing. "
+            "Acknowledge a student reporting an earlier run; do not repeatedly restart or infer an eagerness to code.",
+        ),
+        "decompose": (
+            "已保存观察卡和功能卡；学生可引用观察、给功能命名、写一句实现描述。"
+            "不增加输入输出、知识点等表单，不公布教师七函数答案清单，不要求开始编码。",
+            "Saved observations and function cards; students can reference an observation, name a function and describe its implementation briefly. "
+            "Do not add input/output or knowledge forms, reveal the teacher's function list or demand coding.",
+        ),
+        "model": (
+            "学生功能卡及其流程图节点和连线；学生可添加、编辑、连接图形。"
+            "只讨论功能内部顺序、判断和分支；没有当前卡片标识时先确认目标，不假装知道选择了哪张卡。",
+            "Function cards and their flow nodes and edges; students can edit and connect shapes. "
+            "Discuss internal sequence, decisions and branches. If no selected card is supplied, clarify the target rather than invent it.",
+        ),
+        "build": (
+            "本轮选中的函数卡、编辑器代码、最近测试反馈及相关观察和流程图；学生可编辑、测试、查看终端、运行游戏。"
+            "只围绕当前函数和实际运行器契约协作；遵守 L0—L3，已确认 L3 时直接讨论完整函数。"
+            "未提供当前代码或反馈时明确说没有读到，不从历史函数猜测；未测试的代码不能宣称通过。",
+            "The selected function, live editor code, latest test feedback and related observations/flows. Students can edit, test, inspect terminal output and run the game. "
+            "Stay with the selected function and real runner contract; respect L0–L3, with complete code after L3 confirmation. "
+            "Do not infer missing code or feedback from another function or claim untested code passed.",
+        ),
+    }
+    fallback = ("仅使用当前任务明确提供的产物和操作，不从其他阶段借用权限。", "Use only artifacts and operations explicitly supplied for the current task.")
+    boundary = resources.get(context.stage, fallback)[1 if language == "en" else 0]
+    if language == "en":
+        return (
+            "\nCOGNISYNC_STAGE_RESOURCES_V1\n" + boundary
+            + "\nResources are supplied snapshots, not callable model tools. Textbook excerpts and profile/graph evidence are available only when included; do not claim to have read absent sources. "
+            "The profile adjusts phrasing, not mastery labels or stage permissions. Current live context outranks older saved snapshots and conversation. "
+            "You cannot click, modify student work, run tests, access files/network, read hidden tests or advance stages on the student's behalf. Suggest actions only.\n"
+        )
+    return (
+        "\nCOGNISYNC_STAGE_RESOURCES_V1\n" + boundary
+        + "\n上述资源是系统传入的快照，不是模型可自行调用的工具。教材摘录、画像和图谱仅在本轮实际提供时可引用，未提供不能声称读过。"
+        "画像只调整表达方式，不决定掌握程度或跨阶段权限。本轮实时上下文优先于旧数据库快照和对话。"
+        "助手不能代点击、代改作品、代跑测试、访问文件或网络、读取隐藏测试或自动切换阶段；只能建议学生执行。\n"
+    )
+
+
 def _one_line(value: Any, max_chars: int = 160) -> str:
     """把学生产物压成安全的一行数据，避免标题伪装成 Prompt 指令。"""
 
@@ -229,6 +282,7 @@ COGNISYNC_AGENT_CONTEXT
 上下文键：{key.serialize()}
 后续只提供与这个上下文键完全一致的对话历史。
 """
+        prompt_section += stage_resource_contract(context, lang)
         return PreparedLearningTurn(
             key=key,
             focus_title=focus_title,
@@ -369,6 +423,14 @@ COGNISYNC_LEARNER_SUPPORT_CONTEXT
 使用下方检索到的教材摘要作支持资料，不代表学生已经掌握。运行器接口与教材知识须区分，不额外增加学生填写负担。
 """
 
+        if context.stage not in {"build", "transfer"}:
+            # Non-coding stages must not inherit the L2/L3 code-template plan.
+            prompt_section = (
+                "\nCOGNISYNC_LEARNER_SUPPORT_CONTEXT\n"
+                + ("This is a non-coding stage. Use profile evidence only to adjust wording and step size, not to assign coding work.\n"
+                   if language == "en" else "当前不是编码环节。画像证据仅用于调整措辞和步骤大小，不生成代码模板、不安排编码任务。\n")
+                + stage_resource_contract(context, language)
+            )
         sources = retrieve_textbook(
             module_id,
             " ".join(curriculum_concepts) + " " + student_message,

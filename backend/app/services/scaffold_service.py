@@ -19,12 +19,12 @@ from app.services.creative_capability import (
     creative_contract_en as creative_contract_text_en,
     creative_contract_zh as creative_contract_text_zh,
 )
-from app.services.learning_agent_harness import BUILD_FUNCTION_TITLES, PreparedLearnerSupport
+from app.services.learning_agent_harness import BUILD_FUNCTION_TITLES, PreparedLearnerSupport, stage_resource_contract
 
 
 STAGE_GOALS = {
     "observe": "依据运行证据描述可观察变化，不急于解释原因",
-    "decompose": "从观察现象推断程序职责，并形成输入、处理、输出与验证约定",
+    "decompose": "引用已有观察，命名功能，并用一句短话描述实现",
     "model": "围绕一张功能卡表达内部处理、判断、分支与结果",
     "plan": "根据功能间数据和前置关系形成可执行而非唯一的实现路径",
     "build": "围绕当前基础函数按 L0-L3 提供可复制运行的代码支持，不自动覆盖学生代码",
@@ -365,7 +365,7 @@ def resolve_scaffold_rule(
             if configured
             else LEVEL_RULES[applied_level]
         ),
-        "maxCodeLines": BUILD_MAX_CODE_LINES[applied_level] if build_rule else (configured.maxCodeLines if configured else 0),
+        "maxCodeLines": BUILD_MAX_CODE_LINES[applied_level] if build_rule else 0,
         "requireAttemptBeforeUpgrade": require_attempt,
         "coreImplementationMaxLevel": max_implementation_level,
         "source": "platform_latest" if build_rule else ("teacher_blueprint" if configured else "platform_default"),
@@ -544,7 +544,14 @@ def build_scaffold_prompt(
         if resolved["requireAttemptBeforeUpgrade"]
         else "An earlier attempt is recommended but is not a mandatory gate for this task."
     )
-    artifact = context.artifactSummary or "学生尚未形成可读取的阶段产物，请先帮助其说清当前尝试。"
+    artifact = context.artifactSummary or "本轮未读到阶段产物；不能据此断言学生尚未操作。"
+    if not coding_stage:
+        code_limit = 0
+        level_rule = (
+            f"L{applied_level}：仅提高当前阶段解释与建议的具体程度；不生成代码，不要求改代码或调试。"
+        )
+        teacher_boundary = stage_resource_contract(context, language)
+        stage_goal = STAGE_GOALS[context.stage]
     observe_completion_rule_en = (
         "The observation stage is already complete. Acknowledge the saved observations and do not ask for another observation. "
         "If the student asks what to do next, direct them to Function decomposition."
@@ -669,12 +676,14 @@ def build_scaffold_metadata(
     code = current_code or ""
     return {
         **context.model_dump(),
+        "stageResourcesVersion": "stage-resources-v1",
+        "stageResourceBoundary": stage_resource_contract(context),
         "requestedLevel": resolved["requestedLevel"],
         "level": resolved["appliedLevel"],
         "levelLabel": f"L{resolved['appliedLevel']}",
-        "levelRule": BUILD_LEVEL_RULES[resolved["appliedLevel"]] if context.stage == "build" else LEVEL_RULES[resolved["appliedLevel"]],
-        "policyGoal": resolved["goalZh"],
-        "policyAllowedHelp": resolved["allowedHelpZh"],
+        "levelRule": BUILD_LEVEL_RULES[resolved["appliedLevel"]] if context.stage in {"build", "transfer"} else "仅提高本环节建议的具体程度，不生成代码、不安排调试。",
+        "policyGoal": resolved["goalZh"] if context.stage in {"build", "transfer"} else STAGE_GOALS[context.stage],
+        "policyAllowedHelp": resolved["allowedHelpZh"] if context.stage in {"build", "transfer"} else stage_resource_contract(context),
         "policyMaxCodeLines": resolved["maxCodeLines"],
         "policySource": resolved["source"],
         "policyWasClamped": resolved["wasClamped"],

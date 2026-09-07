@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+import pytest
 
 from app.schemas.chat import ProjectScaffoldContext
 from app.schemas.project_blueprint import BlueprintScaffoldPolicy
@@ -32,6 +33,39 @@ def scaffold_context(level: int = 2, *, l3_confirmed: bool | None = None) -> Pro
         testFeedback="边界用例失败",
         l3Confirmed=level == 3 if l3_confirmed is None else l3_confirmed,
     )
+
+
+@pytest.mark.parametrize("level", [0, 1, 2, 3])
+def test_observe_resources_never_assign_code_templates(level):
+    context = scaffold_context(level)
+    context.stage = "observe"
+    context.currentModule = None
+    context.artifactSummary = "【观察阶段状态】已运行项目：是；观察卡：0；完成条件：未满足。\n运行记录：发生碰撞。"
+    profile = UserProfile(cognition=30, affect=50, behavior=50)
+    support = learning_agent_harness.prepare_learner_support(
+        context, profile, [], [], applied_level=level, curriculum_version_id=None,
+    )
+    prompt = build_scaffold_prompt(context, profile, learner_support=support)
+    assert "已运行项目：是；观察卡：0" in prompt
+    assert "不能用卡片为空推断没运行" in prompt
+    assert "不要求看代码、改代码、写测试" in prompt
+    assert "本轮最多允许补全代码 0 行" in prompt
+    assert "包含注释、安全默认值和少量 TODO" not in prompt
+    assert "直接围绕当前函数给出完整实现" not in prompt
+    assert "不能代点击、代改作品、代跑测试" in prompt
+
+
+@pytest.mark.parametrize("stage", ["observe", "decompose", "model", "build"])
+@pytest.mark.parametrize("language", ["zh", "en"])
+def test_harness_has_explicit_current_stage_resource_boundary(stage, language):
+    context = scaffold_context(0)
+    context.stage = stage
+    turn = learning_agent_harness.prepare_turn(context, [], language)
+    assert "COGNISYNC_STAGE_RESOURCES_V1" in turn.prompt_section
+    assert f"`{stage}`" in turn.prompt_section
+    assert ("not callable model tools" if language == "en" else "不是模型可自行调用的工具") in turn.prompt_section
+    if stage == "observe":
+        assert ("Empty cards do not mean no run" if language == "en" else "不能用卡片为空推断没运行") in turn.prompt_section
 
 
 def test_profile_changes_wording_not_requested_level():

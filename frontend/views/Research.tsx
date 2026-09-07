@@ -24,7 +24,7 @@ import { ProjectFunctionStage } from '../components/ProjectFunctionStage';
 import { ProjectMechanismStage } from '../components/ProjectMechanismStage';
 import { ProjectBuildStage, type ProjectBuildAssistantContext } from '../components/ProjectBuildStage';
 import { ClassroomTaskBrief } from '../components/ClassroomTaskBrief';
-import type { SnakeRuntimeEvidence } from '../data/snakeProjectBlueprint';
+import { formatSnakeEvidence, retainSnakeEvidence, type SnakeRuntimeEvidence } from '../data/snakeProjectBlueprint';
 import { hasBasicFunctionFlow } from '../data/projectPath';
 import {
   collectSnakeProjectWorkspace,
@@ -618,7 +618,7 @@ export const Research: React.FC<Props> = ({
       ) {
         return current;
       }
-      const next = [...current, event].slice(-30);
+      const next = retainSnakeEvidence([...current, event]);
       if (task?.id) {
         try {
           window.localStorage.setItem(`cognisync:snake-runtime-evidence:v1:${storageScope}`, JSON.stringify(next));
@@ -739,6 +739,7 @@ export const Research: React.FC<Props> = ({
       summary: [
         '【当前观察焦点】',
         `本轮浏览器已记录运行证据 ${runtimeEvidence.length} 条。`,
+        ...runtimeEvidence.slice(-8).map(item => `运行记录：${formatSnakeEvidence(item, language)}`),
         taskWorkspaceSummary,
       ].join('\n'),
     };
@@ -767,7 +768,7 @@ export const Research: React.FC<Props> = ({
         taskWorkspaceSummary,
       ].join('\n'),
     };
-  }, [buildAssistantContext, factoryStage, runtimeEvidence.length, task, storageScope]);
+  }, [buildAssistantContext, factoryStage, runtimeEvidence, task, storageScope, language]);
 
   // ── Auto-scroll chat ────────────────────────────────────────────────────
 

@@ -31,6 +31,20 @@ export interface SnakeRuntimeEvidence {
   };
 }
 
+// 打开窗口不等于运行；历史记录里的移动、进食等同样能证明已运行。
+export const hasProjectRun = (evidence: SnakeRuntimeEvidence[]): boolean =>
+  evidence.some(item => ['started', 'moved', 'food_eaten', 'collision', 'paused'].includes(item.type));
+
+// 限制记录体积，但保留首次打开与真实运行的证据，避免操作多了反而变成“未运行”。
+export const retainSnakeEvidence = (evidence: SnakeRuntimeEvidence[]): SnakeRuntimeEvidence[] => {
+  const milestones = [evidence.find(item => item.type === 'opened'), evidence.find(item => hasProjectRun([item]))]
+    .filter((item): item is SnakeRuntimeEvidence => Boolean(item));
+  const ids = new Set(milestones.map(item => item.id));
+  const recent = evidence.filter(item => !ids.has(item.id)).slice(-(30 - milestones.length));
+  const keep = new Set([...milestones, ...recent].map(item => item.id));
+  return evidence.filter(item => keep.delete(item.id));
+};
+
 export interface BlueprintNode {
   id: string;
   titleZh: string;

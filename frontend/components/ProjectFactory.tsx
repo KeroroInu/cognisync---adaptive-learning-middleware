@@ -21,6 +21,7 @@ import {
 import type { Language, User } from '../types';
 import {
   formatSnakeEvidence,
+  hasProjectRun,
   type ProjectStage,
   type SnakeRuntimeEvidence,
 } from '../data/snakeProjectBlueprint';
@@ -202,7 +203,7 @@ export const ProjectObservationStage: React.FC<ObservationStageProps> = ({
     setDraftSource('ai-assisted');
   }, [scaffoldCompletion]);
 
-  const hasOpenedProject = evidence.some(item => item.type === 'opened');
+  const hasOpenedProject = hasProjectRun(evidence);
   const visibleEvidence = useMemo(() => evidence.slice(-8).reverse(), [evidence]);
   const selectedEvidence = evidence.find(item => item.id === selectedEvidenceId);
 
@@ -260,7 +261,7 @@ export const ProjectObservationStage: React.FC<ObservationStageProps> = ({
 
         <div className="project-brief-copy">
           <p>{isZh ? '第一个任务' : 'FIRST MISSION'}</p>
-          <h3>{isZh ? '先让它跑起来，别急着看代码。' : 'Run it before reading the code.'}</h3>
+          <h3>{isZh ? '玩一玩，看看发生了什么。' : 'Play and notice what changes.'}</h3>
           <span>
             {isZh
               ? '自由操作贪吃蛇。系统只记录按键、位置和结果等客观变化，不会替你判断功能；你需要从证据中形成自己的观察。'

@@ -15,7 +15,7 @@ import type { Language, UserProfile } from '../types';
 import { sendChatMessage } from '../services/api';
 import { createRequestId } from '../services/stageEvents';
 import { captureCurrentSession, createWorkspaceScope } from '../data/workspaceScope';
-import { formatSnakeEvidence, type ProjectStage, type SnakeRuntimeEvidence } from '../data/snakeProjectBlueprint';
+import { formatSnakeEvidence, hasProjectRun, type ProjectStage, type SnakeRuntimeEvidence } from '../data/snakeProjectBlueprint';
 import './ProjectScaffoldAssistant.css';
 
 export interface ScaffoldCompletion {
@@ -159,7 +159,7 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
   const stageLabel = STAGE_LABELS[stage];
   const levelLabels = isCodingStage ? BUILD_LEVEL_LABELS : LEVEL_LABELS;
   const visibleMessages = messages.filter(message => message.contextKey === activeContextKey);
-  const hasOpenedProject = evidence.some(item => item.type === 'opened');
+  const hasOpenedProject = hasProjectRun(evidence);
   const observationStageReady = stage === 'observe' && hasOpenedProject && observationCount >= 2;
 
   const latestEvidence = useMemo(() => {
@@ -224,7 +224,7 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
     setSending(true);
     try {
       const observationStageStatus = stage === 'observe'
-        ? `【观察阶段状态】已运行项目：${hasOpenedProject ? '是' : '否'}；观察卡：${observationCount}；完成条件：${observationStageReady ? '已满足' : '未满足'}。`
+        ? `【观察阶段状态】已运行项目：${hasOpenedProject ? '是' : '未读取到运行记录'}；观察卡：${observationCount}；完成条件：${observationStageReady ? '已满足' : '未满足'}。`
         : '';
       const response = await sendChatMessage({
         userId: userId || 'guest',
@@ -447,7 +447,7 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
       <div className="project-scaffold-body">
         <header className="project-scaffold-context">
           <div><span>{isZh ? stageLabel.zh : stageLabel.en}</span><b>L{level} · {levelLabels[language][level]}</b></div>
-          <small><Sparkles size={13} />{isZh ? '已读取本任务各环节产物与学习画像' : 'Uses every stage of this task and your learner profile'}</small>
+          <small><Sparkles size={13} />{isZh ? '参考本轮阶段产物与支持资料' : 'Uses this turn’s stage artifacts and resources'}</small>
         </header>
 
         <div ref={streamRef} className="project-scaffold-stream" aria-live="polite">
@@ -456,17 +456,17 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
               <MessageCircleMore size={34} />
               <h4>{observationStageReady
                 ? (isZh ? '这个观察环节已经完成' : 'This observation stage is complete')
-                : (isZh ? '我知道你现在正在做什么' : 'I know what you are working on')}</h4>
+                : (isZh ? '一起看看当前进展' : 'Let’s check your progress')}</h4>
               <p>{observationStageReady
                 ? (isZh
                     ? `我已读到你保存的 ${observationCount} 张观察卡，也确认你运行过完整项目；不会再重复要求你观察。`
                     : `I read your ${observationCount} saved observation cards and confirmed that you ran the complete project. I will not ask you to repeat observations.`)
                 : (isZh
-                    ? `当前处于“${stageLabel.zh}”。我会参考本任务已保存的观察卡、功能卡和函数进度；建构阶段还会读取当前代码与测试反馈。`
+                    ? `当前处于“${stageLabel.zh}”。${stage === 'observe' ? '我会参考运行记录和观察卡，帮助你比较现象、写下观察；这里不需要改代码。' : '我会参考当前阶段产物；仅在建构阶段读取当前代码与测试反馈。'}`
                     : `You are at “${stageLabel.en}”. I can use this task's observations, function cards and function progress, plus current code and tests during build.`)}</p>
               <small>{observationStageReady
                 ? (isZh ? '下一步：进入功能拆解' : 'Next: continue to function decomposition')
-                : (isZh ? `当前证据：${observationCount} 张观察卡` : `${observationCount} observation cards`)}</small>
+                : (isZh ? `${hasOpenedProject ? '已记录运行' : '暂未读到运行记录'} · ${observationCount} 张观察卡` : `${hasOpenedProject ? 'Run recorded' : 'No run evidence available'} · ${observationCount} observation cards`)}</small>
             </div>
           ) : visibleMessages.map(message => (
             <article key={message.id} className={`project-scaffold-chat is-${message.role}`}>
