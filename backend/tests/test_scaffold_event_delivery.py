@@ -200,6 +200,7 @@ async def test_confirmed_creative_l3_prompt_allows_only_current_complete_functio
     request_id = f"req-{uuid.uuid4().hex[:12]}"
     payload = _scaffold_payload(task_id, request_id)
     payload["currentCode"] = "def creative_feature(event, state):\n    pass"
+    payload["message"] = "请结合列表和条件判断，完善这个创意函数"
     payload["scaffoldContext"].update({
         "level": 3,
         "trigger": "l3_confirmed",
@@ -216,6 +217,9 @@ async def test_confirmed_creative_l3_prompt_allows_only_current_complete_functio
     assert "保持代码协作" in provider.system_prompt
     assert "可以引用、修改、补全和解释完整函数" in provider.system_prompt
     assert "不要越级给完整函数" not in provider.system_prompt
+    assert "COGNISYNC_TEXTBOOK_RESOURCES" in provider.system_prompt
+    assert "不是原文引用" in provider.system_prompt
+    assert "L3 确认后不再留空" in provider.system_prompt
     assert response.json()["data"]["scaffold"]["appliedLevel"] == 3
 
 
@@ -274,3 +278,7 @@ async def test_legacy_jsonb_is_still_written(test_db, client, auth_headers):
         assert assistant.analysis is not None
         assert "scaffoldContext" in assistant.analysis
         assert assistant.analysis["scaffoldContext"]["requestId"] == request_id
+        support = assistant.analysis["scaffoldContext"]["learnerSupport"]
+        assert support["contextVersion"] == "learner-support-v2-textbook"
+        assert support["textbookRetrievalEnabled"] is True
+        assert "textbookSources" in support

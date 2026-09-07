@@ -226,7 +226,10 @@ async def export_conversations(db: AsyncSession = Depends(get_db)):
             cm.analysis->'scaffoldContext'->'profileSnapshot'->>'behavior'  AS scaffold_profile_behavior,
             cm.analysis->'scaffoldContext'->'profileAdaptation'->>'cognitionBand' AS scaffold_cognition_band,
             cm.analysis->'scaffoldContext'->'profileAdaptation'->>'affectBand'    AS scaffold_affect_band,
-            cm.analysis->'scaffoldContext'->'profileAdaptation'->>'behaviorBand'  AS scaffold_behavior_band
+            cm.analysis->'scaffoldContext'->'profileAdaptation'->>'behaviorBand'  AS scaffold_behavior_band,
+            cm.analysis->'scaffoldContext'->'learnerSupport'->>'contextVersion' AS learner_support_version,
+            cm.analysis->'scaffoldContext'->'learnerSupport'->>'templateDensity' AS template_density,
+            COALESCE(cm.analysis->'scaffoldContext'->'learnerSupport'->'textbookSources', cm.analysis->'textbookSources')::text AS textbook_sources
         FROM chat_messages cm
         JOIN users u ON u.id = cm.user_id
         ORDER BY cm.timestamp DESC
@@ -337,7 +340,10 @@ async def export_single_user(user_id: str, db: AsyncSession = Depends(get_db)):
             cm.analysis->'scaffoldContext'->'profileSnapshot'->>'behavior'   AS scaffold_profile_behavior,
             cm.analysis->'scaffoldContext'->'profileAdaptation'->>'cognitionBand' AS scaffold_cognition_band,
             cm.analysis->'scaffoldContext'->'profileAdaptation'->>'affectBand'    AS scaffold_affect_band,
-            cm.analysis->'scaffoldContext'->'profileAdaptation'->>'behaviorBand'  AS scaffold_behavior_band
+            cm.analysis->'scaffoldContext'->'profileAdaptation'->>'behaviorBand'  AS scaffold_behavior_band,
+            cm.analysis->'scaffoldContext'->'learnerSupport'->>'contextVersion' AS learner_support_version,
+            cm.analysis->'scaffoldContext'->'learnerSupport'->>'templateDensity' AS template_density,
+            COALESCE(cm.analysis->'scaffoldContext'->'learnerSupport'->'textbookSources', cm.analysis->'textbookSources')::text AS textbook_sources
         FROM chat_messages cm
         WHERE cm.user_id = :uid
         ORDER BY cm.timestamp ASC
@@ -373,7 +379,7 @@ async def export_single_user(user_id: str, db: AsyncSession = Depends(get_db)):
             "scaffold_artifact_summary", "scaffold_current_module", "scaffold_test_feedback",
             "scaffold_code_length", "scaffold_code_fingerprint", "scaffold_profile_cognition", "scaffold_profile_affect",
             "scaffold_profile_behavior", "scaffold_cognition_band", "scaffold_affect_band",
-            "scaffold_behavior_band"
+            "scaffold_behavior_band", "learner_support_version", "template_density", "textbook_sources"
         ]
         output = io.StringIO()
         writer = csv.DictWriter(output, fieldnames=fieldnames)
@@ -400,7 +406,7 @@ async def export_single_user(user_id: str, db: AsyncSession = Depends(get_db)):
         "scaffold_artifact_summary", "scaffold_current_module", "scaffold_test_feedback",
         "scaffold_code_length", "scaffold_code_fingerprint", "scaffold_profile_cognition", "scaffold_profile_affect",
         "scaffold_profile_behavior", "scaffold_cognition_band", "scaffold_affect_band",
-        "scaffold_behavior_band"
+        "scaffold_behavior_band", "learner_support_version", "template_density", "textbook_sources"
     ]
     # 过滤 rows 只保留已知列
     rows_clean = [{k: row.get(k, "") for k in ordered_fieldnames} for row in rows]

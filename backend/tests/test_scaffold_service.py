@@ -296,7 +296,10 @@ def test_l2_templates_are_runnable_and_change_density_from_learner_evidence():
             responses[density] = code
 
         assert responses["guided"] != responses["balanced"]
-        assert responses["balanced"] != responses["open"]
+        # Even confident students get no more than two gaps per turn.
+        assert responses["balanced"] == responses["open"]
+        assert responses["guided"].count("TODO") == 1
+        assert responses["balanced"].count("TODO") == 2
         assert responses["guided"].count("TODO") <= responses["open"].count("TODO")
 
 
@@ -492,7 +495,8 @@ def test_learner_support_compiles_graph_and_frozen_curriculum_into_runnable_l2_p
     assert "网页爬虫" not in support.prompt_section
     assert "可运行骨架" in support.prompt_section
     assert "TODO 未完成前也必须语法正确" in support.prompt_section
-    assert support.metadata()["textbookRetrievalEnabled"] is False
+    assert support.metadata()["textbookRetrievalEnabled"] is True
+    assert any(row["id"] == "lists" for row in support.metadata()["textbookSources"])
 
 
 def test_learner_support_never_uses_profile_to_override_level():

@@ -1,0 +1,57 @@
+{
+  "version": "hsd-data-computing-ch2-v1",
+  "title": "信息技术必修1 数据与计算（华师大版）",
+  "source_sha256": "16b605b95f139716e3e334d5100ec5e66fa31a78ad4860737cf3e39aca4e8bfe",
+  "scope": "第二章编程基础的人工核对摘要，不是教材全文或教材原句。项目接口另由运行器契约规定。",
+  "cards": [
+    {
+      "id": "variables", "title": "变量与赋值", "pages": "52—53", "pdf_pages": "59—60",
+      "keywords": ["变量", "赋值", "分数", "初始化", "score", "initial"],
+      "summary": "变量保存程序中的数据。赋值先计算右边，再更新左边变量；整数、字符串和布尔值表示不同的数据。",
+      "teaching_hint": "让学生填写一个初始值或更新表达式，不要求重新搭建程序框架。",
+      "example": "score = 0\n# TODO：把 0 改成本次增加的分数\nscore = score + 0"
+    },
+    {
+      "id": "conditions", "title": "比较与逻辑运算", "pages": "54", "pdf_pages": "61",
+      "keywords": ["条件", "判断", "布尔", "碰撞", "方向", "比较", "if", "collision", "direction"],
+      "summary": "比较运算得到 True 或 False；and 要求条件同时成立，or 表示至少一个成立，not 对结果取反。",
+      "teaching_hint": "一次只补一个判断，比较条件成立和不成立两种情况。",
+      "example": "x = 3\n# TODO：把 False 换成判断 x 是否小于 0 的表达式\noutside = False\nprint(outside)"
+    },
+    {
+      "id": "lists", "title": "列表与成员操作", "pages": "56", "pdf_pages": "63",
+      "keywords": ["列表", "蛇身", "坐标", "对象", "食物", "list", "snake", "append", "objects"],
+      "summary": "列表用方括号集中保存数据，通过从 0 开始的序号访问成员。append 在末尾添加，insert 在指定位置插入，remove 删除第一个匹配成员。",
+      "teaching_hint": "优先使用索引、append 和普通循环，不把列表推导式或星号展开作为填空目标。",
+      "example": "positions = []\n# TODO：把 0 改成新位置的横坐标\nx = 0\npositions.append((x, 2))"
+    },
+    {
+      "id": "sequence-debug", "title": "顺序、注释与调试", "pages": "57—59", "pdf_pages": "64—66",
+      "keywords": ["顺序", "打印", "报错", "调试", "观察", "print", "debug", "error"],
+      "summary": "顺序结构自上而下执行。注释以 # 开始，用于提高可读性；print 显示结果，运行时用不同输入检查结果。",
+      "teaching_hint": "每条注释只说一个用途；先预测一个结果，再用 print 检查。不向学生索取隐私数据。",
+      "example": "score = 5\nprint(score)  # 查看当前分数"
+    },
+    {
+      "id": "branches", "title": "分支结构与缩进", "pages": "60—61", "pdf_pages": "67—68",
+      "keywords": ["分支", "缩进", "判断", "进食", "条件", "if", "else", "indent", "eat"],
+      "summary": "if 根据条件选择执行路径；else 处理条件不成立的情况。缩进标明语句属于哪个分支，同一层保持一致。",
+      "teaching_hint": "给出 if/else 外围结构，留一个条件或一处更新；保留四空格缩进。",
+      "example": "score = 0\n# TODO：把 False 换成你要判断的条件\nif False:\n    score = score + 10\nprint(score)"
+    },
+    {
+      "id": "loops", "title": "循环结构", "pages": "65—66", "pdf_pages": "72—73",
+      "keywords": ["循环", "遍历", "重复", "计时", "空格", "for", "while", "loop", "timer"],
+      "summary": "for 依次访问序列成员；while 在条件为真时重复执行。while 的循环条件需要能够改变，避免死循环。",
+      "teaching_hint": "用已有列表做有界循环；让学生补循环中的一处处理，不要求搭建游戏的计时器。",
+      "example": "values = [1, 2, 3]\nfor value in values:\n    # TODO：把 0 换成 value 的平方\n    result = 0\n    print(result)"
+    },
+    {
+      "id": "calls", "title": "函数调用与模块", "pages": "55", "pdf_pages": "62",
+      "keywords": ["函数", "调用", "参数", "random", "import", "return"],
+      "summary": "内置函数可以通过函数名和参数调用。教材介绍使用 import 导入模块后调用其中的函数。",
+      "teaching_hint": "教材有模块导入不等于当前运行器支持所有模块。自定义函数签名、字典状态、随机和绘图接口由平台提供，不作为本知识卡已教会的内容。",
+      "example": "value = -3\nprint(abs(value))  # 显示绝对值"
+    }
+  ]
+}

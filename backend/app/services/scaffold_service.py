@@ -9,6 +9,12 @@ from typing import Any
 from app.schemas.chat import ProjectScaffoldContext
 from app.schemas.project_blueprint import BlueprintScaffoldPolicy
 from app.schemas.profile import UserProfile
+from app.services.beginner_snake_templates import (
+    SOLUTIONS as SNAKE_L3_SOLUTIONS,
+    GUIDED as SNAKE_L2_STRUCTURES,
+    BALANCED as SNAKE_L2_BALANCED_STRUCTURES,
+    BALANCED as SNAKE_L2_OPEN_STRUCTURES,
+)
 from app.services.creative_capability import (
     creative_contract_en as creative_contract_text_en,
     creative_contract_zh as creative_contract_text_zh,
@@ -61,57 +67,6 @@ BUILD_MAX_CODE_LINES = {0: 8, 1: 5, 2: 40, 3: 100}
 
 OBSERVE_READY_MARKER = "【观察阶段状态】"
 
-SNAKE_L3_SOLUTIONS = {
-    "initial-state": """def create_initial_state(board_size=12, initial_length=3):
-    y = board_size // 2
-    head_x = max(initial_length - 1, board_size // 2)
-    snake = [(head_x - offset, y) for offset in range(initial_length)]
-    return snake, 'right', 0""",
-    "direction-input": """def change_direction(current_direction, next_direction):
-    opposite = {'up': 'down', 'down': 'up', 'left': 'right', 'right': 'left'}
-    if next_direction not in opposite or opposite[current_direction] == next_direction:
-        return current_direction
-    return next_direction""",
-    "movement": """def move_snake(snake, direction):
-    dx, dy = {'up': (0, -1), 'down': (0, 1), 'left': (-1, 0), 'right': (1, 0)}[direction]
-    head_x, head_y = snake[0]
-    new_head = (head_x + dx, head_y + dy)
-    return [new_head, *snake[:-1]]""",
-    "food-spawn": """def spawn_food(snake, board_size):
-    import random
-    free_cells = [(x, y) for y in range(board_size) for x in range(board_size)
-                  if (x, y) not in snake]
-    if not free_cells:
-        raise ValueError('No free cell for food')
-    return random.choice(free_cells)""",
-    "eat-grow-score": """def apply_food_effect(snake, food, score):
-    if snake[0] == food:
-        grown_snake = [*snake, snake[-1]]
-        return grown_snake, score + 10, True
-    return snake, score, False""",
-    "collision": """def check_collision(snake, board_size):
-    head_x, head_y = snake[0]
-    outside = head_x < 0 or head_x >= board_size or head_y < 0 or head_y >= board_size
-    hit_self = snake[0] in snake[1:]
-    return outside or hit_self""",
-    "game-loop": """def step_game(state, user_input):
-    if state['game_over']:
-        return state
-    if user_input:
-        state['direction'] = change_direction(state['direction'], user_input)
-    state['snake'] = move_snake(state['snake'], state['direction'])
-    state['game_over'] = check_collision(state['snake'], 12)
-    if state['game_over']:
-        return state
-    before_score = state['score']
-    effect = apply_food_effect(state['snake'], state['food'], state['score'])
-    state['snake'], state['score'] = effect[:2]
-    needs_food = effect[2] if len(effect) > 2 else state['score'] > before_score
-    if needs_food:
-        state['food'] = spawn_food(state['snake'], 12)
-    return state""",
-}
-
 SNAKE_L0_CHECKS = {
     "initial-state": """state = create_initial_state()
 print(state)
@@ -147,145 +102,14 @@ assert next_state['snake'][0] == (7, 5)""",
 }
 
 SNAKE_L1_SNIPPETS = {
-    "initial-state": "snake = [(head_x - offset, y) for offset in range(initial_length)]\nreturn snake, 'right', 0",
+    "initial-state": "# 依次放入每节身体的坐标\nfor offset in range(initial_length):\n    snake.append((head_x - offset, y))",
     "direction-input": "if opposite[current_direction] == next_direction:\n    return current_direction",
-    "movement": "new_head = (head_x + dx, head_y + dy)\nreturn [new_head, *snake[:-1]]",
-    "food-spawn": "free_cells = [(x, y) for y in range(board_size) for x in range(board_size)\n              if (x, y) not in snake]",
-    "eat-grow-score": "if snake[0] == food:\n    return [*snake, snake[-1]], score + 10, True",
+    "movement": "# 按方向更新蛇头坐标\nnew_head = (head_x + dx, head_y + dy)",
+    "food-spawn": "# 空格才能放食物\nif (x, y) not in snake:\n    free_cells.append((x, y))",
+    "eat-grow-score": "# 吃到食物才增长、加分\nif snake[0] == food:\n    grown_snake = list(snake)\n    grown_snake.append(snake[-1])\n    return grown_snake, score + 10, True",
     "collision": "outside = head_x < 0 or head_x >= board_size or head_y < 0 or head_y >= board_size\nhit_self = snake[0] in snake[1:]",
     "game-loop": "state['snake'] = move_snake(state['snake'], state['direction'])\nstate['game_over'] = check_collision(state['snake'], 12)",
 }
-
-SNAKE_L2_STRUCTURES = {
-    "initial-state": """def create_initial_state(board_size=12, initial_length=3):
-    y = board_size // 2
-    head_x = max(initial_length - 1, board_size // 2)
-    # TODO: 生成连续的蛇身坐标
-    snake = []
-    return snake, 'right', 0""",
-    "direction-input": """def change_direction(current_direction, next_direction):
-    opposite = {'up': 'down', 'down': 'up', 'left': 'right', 'right': 'left'}
-    if next_direction not in opposite:
-        return current_direction
-    # TODO: 如果 next_direction 与 current_direction 相反，保持当前方向
-    return next_direction""",
-    "movement": """def move_snake(snake, direction):
-    delta = {'up': (0, -1), 'down': (0, 1), 'left': (-1, 0), 'right': (1, 0)}
-    dx, dy = delta[direction]
-    head_x, head_y = snake[0]
-    new_head = (head_x + dx, head_y + dy)
-    # TODO: 新蛇头放前面，去掉蛇尾
-    return snake
-""",
-    "food-spawn": """def spawn_food(snake, board_size):
-    import random
-    free_cells = [(x, y) for y in range(board_size) for x in range(board_size)
-                  if (x, y) not in snake]
-    if not free_cells:
-        raise ValueError('No free cell for food')
-    # TODO: 随机选择一个空格
-    return free_cells[0]
-""",
-    "eat-grow-score": """def apply_food_effect(snake, food, score):
-    if snake[0] == food:
-        grown_snake = [*snake, snake[-1]]
-        # TODO: 返回蛇身、新分数和 True
-        return snake, score, False
-    return snake, score, False""",
-    "collision": """def check_collision(snake, board_size):
-    head_x, head_y = snake[0]
-    outside = head_x < 0 or head_x >= board_size or head_y < 0 or head_y >= board_size
-    hit_self = snake[0] in snake[1:]
-    # TODO: 返回两个判断的结果
-    return False
-""",
-    "game-loop": """def step_game(state, user_input):
-    if state['game_over']:
-        return state
-    if user_input:
-        state['direction'] = change_direction(state['direction'], user_input)
-    state['snake'] = move_snake(state['snake'], state['direction'])
-    state['game_over'] = check_collision(state['snake'], 12)
-    if state['game_over']:
-        return state
-    # TODO: 处理进食，需要时生成食物
-    return state""",
-}
-
-SNAKE_L2_BALANCED_STRUCTURES = {
-    "initial-state": """def create_initial_state(board_size=12, initial_length=3):
-    # TODO: 算出蛇头的横、纵坐标
-    head_x, y = 0, 0
-    # TODO: 生成连续的蛇身坐标
-    snake = []
-    return snake, 'right', 0""",
-    "direction-input": """def change_direction(current_direction, next_direction):
-    opposite = {'up': 'down', 'down': 'up', 'left': 'right', 'right': 'left'}
-    # TODO: 先检查输入是否有效
-    # TODO: 再阻止直接反向
-    return current_direction""",
-    "movement": """def move_snake(snake, direction):
-    delta = {'up': (0, -1), 'down': (0, 1), 'left': (-1, 0), 'right': (1, 0)}
-    # TODO: 读取方向变化量和蛇头
-    # TODO: 生成并放入新蛇头
-    return snake""",
-    "food-spawn": """def spawn_food(snake, board_size):
-    import random
-    # TODO: 找出没有蛇身的空格
-    free_cells = []
-    if not free_cells:
-        return snake[0]
-    # TODO: 随机选择一个空格
-    return free_cells[0]""",
-    "eat-grow-score": """def apply_food_effect(snake, food, score):
-    # TODO: 判断蛇头是否碰到食物
-    # TODO: 碰到后增长并加分
-    return snake, score, False""",
-    "collision": """def check_collision(snake, board_size):
-    # TODO: 判断蛇头是否出界
-    outside = False
-    # TODO: 判断蛇头是否碰到蛇身
-    hit_self = False
-    return outside or hit_self""",
-    "game-loop": """def step_game(state, user_input):
-    if state['game_over']:
-        return state
-    # TODO: 更新方向、移动并检查碰撞
-    # TODO: 处理进食，需要时生成食物
-    return state""",
-}
-
-SNAKE_L2_OPEN_STRUCTURES = {
-    "initial-state": """def create_initial_state(board_size=12, initial_length=3):
-    # TODO: 确定蛇头位置
-    # TODO: 生成蛇身列表
-    return [], 'right', 0""",
-    "direction-input": """def change_direction(current_direction, next_direction):
-    # TODO: 检查输入是否合法
-    # TODO: 阻止直接反向
-    return current_direction""",
-    "movement": """def move_snake(snake, direction):
-    # TODO: 根据方向计算新蛇头
-    # TODO: 更新蛇身列表
-    return snake""",
-    "food-spawn": """def spawn_food(snake, board_size):
-    # TODO: 找出所有空格
-    # TODO: 随机选择一个空格
-    return snake[0]""",
-    "eat-grow-score": """def apply_food_effect(snake, food, score):
-    # TODO: 判断是否吃到食物
-    # TODO: 更新蛇身和分数
-    return snake, score, False""",
-    "collision": """def check_collision(snake, board_size):
-    # TODO: 判断是否出界
-    # TODO: 判断是否碰到蛇身
-    return False""",
-    "game-loop": """def step_game(state, user_input):
-    # TODO: 更新方向并移动
-    # TODO: 检查碰撞和进食
-    return state""",
-}
-
 
 def build_controlled_build_response(
     context: ProjectScaffoldContext,
@@ -375,18 +199,18 @@ def build_controlled_build_response(
             0: "先不要改实现。把这段定位代码放在函数后运行，只看打印和断言停在哪里：",
             1: "当前卡点只需要下面这几行关键写法；把它放回你自己的函数结构中：",
             2: (
-                "这是当前函数的可运行骨架，留下了 2—3 个关键空位："
+                "只需补两个 TODO，其他代码先保留："
                 if density == "open"
-                else "这是当前函数的可运行骨架，留下了两个关键空位："
+                else "只需补两个 TODO，其他代码先保留："
                 if density == "balanced"
-                else "这是当前函数接近完整的可运行结构，只留一个关键空位："
+                else "先补这一处 TODO，再运行看看："
             ),
         },
         "en": {
             0: "Do not change the implementation yet. Run this diagnostic code after the function and see which print or assertion stops:",
             1: "Only these key lines are needed for the current blocker; place them into your own function:",
             2: (
-                "This runnable scaffold leaves 2–3 focused gaps:"
+                "Fill the two TODOs; keep the surrounding code:"
                 if density == "open"
                 else "This runnable scaffold leaves two focused gaps:"
                 if density == "balanced"
@@ -394,7 +218,7 @@ def build_controlled_build_response(
             ),
         },
     }
-    closing = "运行后把新的测试反馈告诉我。" if language == "zh" else "Run it, then share the new test feedback."
+    closing = ("占位代码能运行，不代表功能已完成；补完后点测试。" if applied_level == 2 else "运行后看看测试反馈。") if language == "zh" else "Run and check the feedback; runnable placeholders are not completed features."
     return f"{' '.join(focus_lines)}\n\n{introductions[lang][applied_level]}\n\n```python\n{content}\n```\n\n{closing}"
 
 

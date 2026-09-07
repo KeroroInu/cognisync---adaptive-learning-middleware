@@ -22,6 +22,7 @@ from app.services.emotion_log_service import record_emotion_log
 from app.services.text_analyzer import TextAnalyzer
 from app.services.llm_config import get_chat_provider
 from app.services.learning_agent_harness import learning_agent_harness
+from app.services.textbook_library import retrieve_textbook, textbook_prompt
 from app.models.sql.message import ChatMessage, MessageRole
 from app.models.sql.chat_session import ChatSession
 from app.models.sql.research import (
@@ -979,6 +980,7 @@ async def chat(
         )
 
         learner_support = None
+        textbook_sources = ()
         if scaffold_context:
             learner_support = learning_agent_harness.prepare_learner_support(
                 scaffold_context,
@@ -988,6 +990,7 @@ async def chat(
                 applied_level=int(scaffold_metadata["level"]) if scaffold_metadata else scaffold_context.level,
                 curriculum_version_id=scaffold_blueprint_version_id,
                 language=request.language or "zh",
+                student_message=request.message,
             )
             if scaffold_metadata:
                 scaffold_metadata["learnerSupport"] = learner_support.metadata()
@@ -1003,6 +1006,13 @@ async def chat(
                 scaffold_policy,
                 learner_support,
             )
+            textbook_sources = learner_support.textbook_sources
+        elif request.isResearchMode:
+            # The shared resource library does not assign a scaffold level or
+            # change the experimental condition of ordinary AI collaboration.
+            textbook_sources = retrieve_textbook(query=request.message + " " + (request.currentCode or "")[:6000])
+            system_prompt += textbook_prompt(textbook_sources)
+            user_message.analysis = {**(user_message.analysis or {}), "textbookSources": list(textbook_sources)}
 
         # 注入跨会话上下文（让 AI 能自然引用上次讨论内容）
         # 项目智能体使用任务作用域记忆；普通自由对话才允许引用跨会话主题。
@@ -1090,13 +1100,15 @@ async def chat(
                 llm_provider,
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
-                max_tokens=700 if confirmed_build_l3 else 300,
+                max_tokens=900 if confirmed_build_l3 or (scaffold_metadata and scaffold_metadata["level"] == 2) else 300,
             )
 
         logger.info(f"AI reply generated: {len(assistant_reply)} characters")
 
         # ========== 7. 保存 AI 回复 ==========
         assistant_analysis = analysis.model_dump()
+        if request.isResearchMode:
+            assistant_analysis["textbookSources"] = list(textbook_sources)
         if scaffold_metadata:
             assistant_analysis["scaffoldContext"] = scaffold_metadata
 

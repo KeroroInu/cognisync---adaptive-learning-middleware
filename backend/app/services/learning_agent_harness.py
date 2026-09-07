@@ -18,6 +18,7 @@ from typing import Any, Mapping, Sequence
 
 from app.schemas.chat import ProjectScaffoldContext
 from app.schemas.profile import UserProfile
+from app.services.textbook_library import retrieve_textbook, textbook_prompt
 
 
 STAGE_TITLES = {
@@ -91,6 +92,7 @@ class PreparedLearnerSupport:
     curriculum_concepts: tuple[str, ...]
     graph_evidence: tuple[dict[str, Any], ...]
     prompt_section: str
+    textbook_sources: tuple[dict[str, Any], ...] = ()
 
     def metadata(self) -> dict[str, Any]:
         return {
@@ -100,11 +102,12 @@ class PreparedLearnerSupport:
             "curriculumVersionId": self.curriculum_version_id,
             "curriculumConcepts": list(self.curriculum_concepts),
             "graphEvidence": [dict(item) for item in self.graph_evidence],
-            "textbookRetrievalEnabled": False,
+            "textbookRetrievalEnabled": True,
+            "textbookSources": [dict(item) for item in self.textbook_sources],
         }
 
 
-LEARNER_SUPPORT_CONTEXT_VERSION = "learner-support-v1"
+LEARNER_SUPPORT_CONTEXT_VERSION = "learner-support-v2-textbook"
 
 
 def _concept_key(value: Any) -> str:
@@ -243,6 +246,7 @@ COGNISYNC_AGENT_CONTEXT
         applied_level: int,
         curriculum_version_id: str | None,
         language: str = "zh",
+        student_message: str = "",
     ) -> PreparedLearnerSupport:
         """把已有学生数据编译成小而可审计的支架上下文。
 
@@ -308,9 +312,9 @@ COGNISYNC_AGENT_CONTEXT
             density_rule = {
                 "guided": "Keep the surrounding plumbing runnable; leave 1–2 small conceptual TODOs with short comments.",
                 "balanced": "Provide a runnable scaffold with 2 focused TODOs and short comments.",
-                "open": "Keep the signature and safe fallback; leave 2–3 focused TODOs for the student.",
+                "open": "Keep the signature and safe fallback; leave at most two focused TODOs for the student.",
             }[density]
-            concepts = ", ".join(curriculum_concepts) or "No versioned textbook excerpt is published; use only the task objective and basic Python already visible in this task."
+            concepts = ", ".join(curriculum_concepts) or "No frozen task concept labels; do not infer prior mastery."
             evidence = "; ".join(
                 f"{item['name']}={item['mastery'] if item['mastery'] is not None else 'unknown'}"
                 for item in graph_evidence
@@ -332,15 +336,15 @@ Relevant graph evidence: {evidence}
 {level_rule}
 Generated code must use only the real runner contract, remain runnable before TODOs are completed, and may use a fenced Python block despite the general conversational formatting rule.
 Keep comments to one short purpose statement per TODO. Do not use long docstrings or explain syntax in paragraphs inside the code. Prefer variables, assignment, lists, conditions, loops and simple function calls; runner-provided dictionary access may be shown but must not become an extra student task.
-No versioned textbook retrieval is enabled. Do not claim to quote a textbook or introduce advanced material outside the approved concepts.
+Use the retrieved textbook summaries below as supporting resources, not as a claim that the student has mastered the content. The runner contract still governs available APIs.
 """
         else:
             density_rule = {
                 "guided": "外围代码保持可运行，只留 1—2 个小 TODO，用短注释说明目的。",
                 "balanced": "给出可运行骨架，保留 2 个聚焦 TODO，每条注释只说一个目的。",
-                "open": "保留函数签名和安全返回，留下 2—3 个聚焦 TODO。",
+                "open": "保留函数签名和安全返回，最多留下 2 个聚焦 TODO。",
             }[density]
-            concepts = "、".join(curriculum_concepts) or "尚未发布版本化教材片段；只能使用当前任务目标中已经出现的基础 Python。"
+            concepts = "、".join(curriculum_concepts) or "当前任务没有冻结的概念标签，不据此推断学生已经掌握。"
             evidence = "；".join(
                 f"{item['name']}={item['mastery'] if item['mastery'] is not None else '未知'}"
                 for item in graph_evidence
@@ -362,8 +366,15 @@ COGNISYNC_LEARNER_SUPPORT_CONTEXT
 {level_rule}
 生成代码只能调用真实运行器能力；TODO 未完成前也必须语法正确、能够运行。需要给代码时可以使用 Python 代码块，不受通用“纯对话格式”限制。
 代码注释每条只写一句简短用途，不写长段说明或长文档字符串。优先使用变量、赋值、列表、条件、循环和简单函数调用；运行器已经提供的字典访问可以展示，但不要把理解框架接口变成额外学习任务。
-当前没有启用版本化教材检索。不得声称引用了教材，也不得引入上述课程概念之外的进阶内容。
+使用下方检索到的教材摘要作支持资料，不代表学生已经掌握。运行器接口与教材知识须区分，不额外增加学生填写负担。
 """
+
+        sources = retrieve_textbook(
+            module_id,
+            " ".join(curriculum_concepts) + " " + student_message,
+            context.stage,
+        )
+        prompt_section += textbook_prompt(sources)
 
         return PreparedLearnerSupport(
             context_version=LEARNER_SUPPORT_CONTEXT_VERSION,
@@ -373,6 +384,7 @@ COGNISYNC_LEARNER_SUPPORT_CONTEXT
             curriculum_concepts=tuple(curriculum_concepts),
             graph_evidence=graph_evidence,
             prompt_section=prompt_section,
+            textbook_sources=sources,
         )
 
 
