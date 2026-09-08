@@ -5,13 +5,9 @@
   flex-direction: column;
   gap: 18px;
   overflow: auto;
-  padding: clamp(20px, 2.5vw, 34px);
+  padding: 18px;
   color: var(--text-primary);
-  background:
-    linear-gradient(90deg, color-mix(in srgb, var(--text-primary) 6%, transparent) 1px, transparent 1px),
-    linear-gradient(0deg, color-mix(in srgb, var(--text-primary) 6%, transparent) 1px, transparent 1px),
-    var(--surface-strong);
-  background-size: 32px 32px, 32px 32px, auto;
+  background: var(--surface-strong);
 }
 
 .function-stage-heading {
@@ -30,8 +26,8 @@
 
 .function-stage-heading h3 {
   margin: 7px 0 5px;
-  font-family: 'Songti SC', 'STSong', 'Noto Serif CJK SC', serif;
-  font-size: clamp(2rem, 3.2vw, 3.8rem);
+  font-family: inherit;
+  font-size: 24px;
   font-weight: 800;
   line-height: 1.05;
 }
@@ -47,7 +43,7 @@
 .function-stage-heading > strong {
   flex: none;
   font-family: 'Google Sans Code', ui-monospace, monospace;
-  font-size: clamp(2.2rem, 4vw, 4.4rem);
+  font-size: 28px;
   line-height: .9;
 }
 
@@ -571,7 +567,7 @@
 
 @media (max-width: 700px) {
   .project-function-stage { overflow: visible; }
-  .function-stage-heading h3 { font-size: 2.1rem; }
+  .function-stage-heading h3 { font-size: 22px; }
   .function-stage-heading > strong { font-size: 2.4rem; }
   .function-observation-list,
   .saved-function-grid,

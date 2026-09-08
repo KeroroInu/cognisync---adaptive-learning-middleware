@@ -367,8 +367,7 @@ export const SnakeProjectDemo: React.FC<Props> = ({
             {variant === 'floating' ? <GripHorizontal size={16} /> : <Gamepad2 size={16} />}
           </span>
           <span>
-            <small>PROJECT_001 / COMPLETE BUILD</small>
-            <strong>{isZh ? '贪吃蛇项目演示' : 'Snake project demo'}</strong>
+            <strong>{isZh ? '贪吃蛇' : 'Snake'}</strong>
           </span>
         </div>
         <div className="snake-demo-window-actions">
@@ -438,23 +437,18 @@ export const SnakeProjectDemo: React.FC<Props> = ({
               {status === 'over' && (
                 <div className="snake-demo-gameover">
                   <span>{isZh ? '碰到边界或自己了' : 'Collision detected'}</span>
-                  <strong>{isZh ? '这也是一个需要解构的规则' : 'A rule worth deconstructing'}</strong>
+                  <strong>{isZh ? '游戏结束' : 'Game over'}</strong>
                   <button type="button" onClick={resetGame}>{isZh ? '重新观察' : 'Try again'}</button>
                 </div>
               )}
             </div>
 
-            <div className="snake-demo-observe-strip">
-              <span>{isZh ? '观察焦点' : 'OBSERVE'}</span>
-              <p>{isZh ? '方向输入如何改变状态？吃到食物后哪些数据发生变化？' : 'How does direction input change state? What changes after eating food?'}</p>
-            </div>
           </div>
 
           <aside className="snake-demo-controls">
             <div className="snake-demo-control-copy">
-              <span>RUN / OBSERVE</span>
-              <h3>{isZh ? '先玩一玩，再拆开它。' : 'Play it. Then take it apart.'}</h3>
-              <p>{isZh ? '点击棋盘后使用方向键或 WASD。先观察完整项目，不急着看答案。' : 'Click the board and use arrow keys or WASD. Observe the complete project before looking for answers.'}</p>
+              <h3>{isZh ? '试着玩一局' : 'Try a round'}</h3>
+              <p>{isZh ? '点击棋盘，用方向键控制。看看转向和吃食物时有什么变化。' : 'Click the board and use arrow keys. Notice what changes when turning and eating.'}</p>
             </div>
 
             <div className="snake-demo-dpad" aria-label={isZh ? '方向控制' : 'Direction controls'}>
@@ -481,7 +475,7 @@ export const SnakeProjectDemo: React.FC<Props> = ({
               <span>
                 {variant === 'floating'
                   ? (isZh ? '点击窗口标题可拖动到不遮挡的位置' : 'Drag the title bar out of your way')
-                  : (isZh ? '完成观察后关闭窗口，系统会保留你的观察记录' : 'Close the viewer when finished; your observations stay saved')}
+                  : (isZh ? '玩完关掉窗口，回去记下发现。' : 'Close the game to write down what you noticed.')}
               </span>
             </div>
           </aside>

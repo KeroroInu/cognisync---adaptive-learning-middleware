@@ -237,11 +237,10 @@ export const ProjectFunctionStage: React.FC<Props> = ({
     <section className="project-function-stage">
       <header className="function-stage-heading">
         <div>
-          <span>02 / FUNCTION CARDS</span>
-          <h3>{isZh ? '把观察到的现象命名为功能' : 'Name the functions behind what you saw'}</h3>
+          <h3>{isZh ? '这个功能叫什么？' : 'Name this function'}</h3>
           <p>
             {isZh
-              ? '选一条自己记录的现象，给它命名一个功能，再用一句话说说这个功能大概怎么实现。写短句就够了。'
+              ? '选一条观察，给功能起名，再说说它怎么做。'
               : 'Pick one of your observations, name the function behind it, and describe in one sentence how it works.'}
           </p>
         </div>
@@ -299,7 +298,7 @@ export const ProjectFunctionStage: React.FC<Props> = ({
               </div>
 
               <label className="function-field is-responsibility">
-                <span>{isZh ? '我给这个功能起的名字' : 'Function name'}<small>{responsibility.length}/32</small></span>
+                <span>{isZh ? '功能名称' : 'Function name'}<small>{responsibility.length}/32</small></span>
                 <input
                   value={responsibility}
                   onChange={event => setResponsibility(event.target.value)}

@@ -171,7 +171,7 @@
 
 .project-observation-stage {
   display: grid;
-  grid-template-columns: minmax(0, 0.84fr) minmax(520px, 1.16fr);
+  grid-template-columns: minmax(270px, .7fr) minmax(0, 1.3fr);
   gap: 12px;
   overflow: auto;
   padding: 1px 5px 8px 1px;
@@ -182,27 +182,22 @@
 .project-stage-preview {
   position: relative;
   overflow: hidden;
-  border: 1.5px solid var(--brand-ink);
+  border: 1px solid var(--line-strong);
   border-radius: 10px;
   background: var(--surface-strong);
-  box-shadow: 5px 6px 0 color-mix(in srgb, var(--brand-ink) 16%, transparent);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--brand-ink) 5%, transparent);
 }
 
 .project-brief-card {
-  min-height: 535px;
+  min-height: 360px;
   display: flex;
   flex-direction: column;
-  padding: clamp(22px, 3.2vw, 44px);
-  background:
-    radial-gradient(circle at 80% 10%, color-mix(in srgb, var(--brand-cyan) 16%, transparent), transparent 32%),
-    linear-gradient(90deg, color-mix(in srgb, var(--text-primary) 6%, transparent) 1px, transparent 1px),
-    linear-gradient(0deg, color-mix(in srgb, var(--text-primary) 6%, transparent) 1px, transparent 1px),
-    var(--surface-strong);
-  background-size: auto, 32px 32px, 32px 32px, auto;
+  padding: clamp(18px, 2vw, 28px);
+  background: var(--surface-strong);
 }
 
 .project-brief-card::after {
-  content: 'RUN';
+  content: none;
   position: absolute;
   right: -14px;
   bottom: -42px;
@@ -227,9 +222,9 @@
 .project-brief-kicker > span:last-child { display: inline-flex; align-items: center; gap: 5px; }
 .project-brief-kicker > span:last-child.is-complete { color: #657c22; }
 
-.project-brief-copy { margin-top: clamp(34px, 8vh, 74px); }
+.project-brief-copy { margin-top: 28px; }
 .project-brief-copy > p { margin: 0 0 9px; color: #6c812e; font-size: 0.72rem; font-weight: 900; }
-.project-brief-copy h3 { max-width: 620px; margin: 0; font-family: 'Songti SC', 'STSong', 'Noto Serif CJK SC', serif; font-size: clamp(2rem, 3.6vw, 4rem); font-weight: 900; line-height: 1.04; letter-spacing: -0.055em; }
+.project-brief-copy h3 { max-width: 620px; margin: 0; font-family: inherit; font-size: clamp(24px, 2.2vw, 32px); font-weight: 700; line-height: 1.45; }
 .project-brief-copy > span { display: block; max-width: 620px; margin-top: 22px; color: var(--text-secondary); font-size: clamp(0.84rem, 1.05vw, 1.02rem); line-height: 1.85; }
 
 .project-run-card {
@@ -279,10 +274,10 @@
 
 .observation-capture-card > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
 .observation-capture-card header > div > span { color: var(--text-tertiary); }
-.observation-capture-card h3 { margin: 7px 0 0; font-family: 'Songti SC', 'STSong', 'Noto Serif CJK SC', serif; font-size: clamp(1.55rem, 2.4vw, 2.45rem); line-height: 1.1; }
-.observation-capture-card header > strong { font-family: 'Google Sans Code', ui-monospace, monospace; font-size: clamp(2.1rem, 3.5vw, 3.8rem); line-height: 0.9; }
+.observation-capture-card h3 { margin: 0; font-family: inherit; font-size: 22px; line-height: 1.4; }
+.observation-capture-card header > strong { font-family: 'Google Sans Code', ui-monospace, monospace; font-size: 26px; line-height: 1.2; }
 .observation-capture-card header > strong small { color: var(--text-tertiary); font-size: 0.68rem; }
-.observation-capture-hint { margin: 15px 0 17px; color: var(--text-secondary); font-size: 0.76rem; }
+.observation-capture-hint { margin: 15px 0 17px; color: var(--text-secondary); font-size: 14px; }
 
 .runtime-evidence-section,
 .observation-composer,
@@ -352,7 +347,7 @@
 .runtime-evidence-list > button:hover { border-color: #728333; }
 .runtime-evidence-list > button.is-selected { border: 1.5px solid #161713; background: color-mix(in srgb, var(--brand-cyan) 42%, var(--surface-strong)); box-shadow: 2px 3px 0 #161713; }
 .runtime-evidence-list > button span { color: #6c7d39; font-family: 'Google Sans Code', ui-monospace, monospace; font-size: .51rem; font-weight: 850; }
-.runtime-evidence-list > button p { margin: 0; font-size: .68rem; font-weight: 720; line-height: 1.4; }
+.runtime-evidence-list > button p { margin: 0; font-size: 14px; font-weight: 600; line-height: 1.5; }
 
 .runtime-evidence-empty {
   width: 100%;
@@ -368,18 +363,14 @@
 }
 
 .runtime-evidence-empty svg { flex: 0 0 auto; color: #738638; }
-.runtime-evidence-empty span { font-size: .68rem; line-height: 1.5; }
+.runtime-evidence-empty span { font-size: 14px; line-height: 1.5; }
 
 .observation-composer {
   margin-top: 13px;
   padding: 12px;
   border: 1.5px solid var(--brand-ink);
   border-radius: 8px;
-  background:
-    linear-gradient(90deg, rgba(22, 23, 19, .045) 1px, transparent 1px),
-    linear-gradient(0deg, rgba(22, 23, 19, .045) 1px, transparent 1px),
-    var(--surface-muted);
-  background-size: 22px 22px, 22px 22px, auto;
+  background: var(--surface-muted);
 }
 
 .observation-source-line {
@@ -393,15 +384,15 @@
 }
 
 .observation-source-line strong { font-size: .62rem; }
-.observation-source-line span { overflow: hidden; color: var(--text-secondary); font-size: .64rem; text-overflow: ellipsis; white-space: nowrap; }
+.observation-source-line span { min-width: 0; color: var(--text-secondary); font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
 .observation-composer label { display: grid; gap: 5px; }
 .observation-composer label > span { font-size: .63rem; font-weight: 900; }
-.observation-composer textarea { width: 100%; min-height: 58px; resize: vertical; padding: 9px 10px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface-strong); color: var(--text-primary); font: inherit; font-size: .72rem; line-height: 1.5; outline: none; }
+.observation-composer textarea { width: 100%; min-height: 76px; resize: vertical; padding: 10px 12px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface-strong); color: var(--text-primary); font: inherit; font-size: 16px; line-height: 1.5; outline: none; }
 .observation-composer textarea:focus { border: 1.5px solid #161713; box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand-cyan) 42%, transparent); }
 .observation-composer-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .observation-composer-actions small { color: var(--text-tertiary); font-family: 'Google Sans Code', ui-monospace, monospace; font-size: .55rem; }
 .observation-composer-actions > div { display: flex; align-items: center; gap: 7px; }
-.observation-composer-actions button { min-height: 34px; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; border: 1.5px solid #161713; border-radius: 6px; background: var(--brand-cyan); color: #161713; font-size: .65rem; font-weight: 900; box-shadow: 2px 3px 0 #161713; }
+.observation-composer-actions button { min-height: 38px; display: inline-flex; align-items: center; gap: 6px; padding: 0 12px; border: 1.5px solid #161713; border-radius: 6px; background: var(--brand-cyan); color: #161713; font-size: 14px; font-weight: 700; box-shadow: 2px 3px 0 #161713; }
 .observation-composer-actions button.is-secondary { background: var(--surface-strong); box-shadow: none; }
 .observation-composer-actions button:disabled { border-color: var(--line-strong); background: var(--surface-muted); color: var(--text-tertiary); box-shadow: none; }
 
@@ -409,7 +400,7 @@
 .saved-observation-list > div:last-child { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
 .saved-observation-list article { position: relative; min-height: 66px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: 8px; padding: 9px 33px 9px 9px; border: 1px solid var(--line-strong); border-radius: 7px; background: var(--surface-muted); }
 .saved-observation-list article > span { color: #718336; font-family: 'Google Sans Code', ui-monospace, monospace; font-size: .56rem; font-weight: 900; }
-.saved-observation-list article p { margin: 0; font-size: .68rem; font-weight: 730; line-height: 1.45; }
+.saved-observation-list article p { margin: 0; font-size: 15px; font-weight: 600; line-height: 1.5; }
 .saved-observation-list article small { align-self: start; padding: 2px 4px; border: 1px solid #9d8757; border-radius: 3px; color: #6b572e; font-size: .48rem; white-space: nowrap; }
 .saved-observation-actions { position: absolute; top: 7px; right: 7px; display: flex; gap: 2px; }
 .saved-observation-list article .saved-observation-actions button { position: static; width: 22px; height: 22px; display: grid; place-items: center; border: 0; background: transparent; color: var(--text-tertiary); }

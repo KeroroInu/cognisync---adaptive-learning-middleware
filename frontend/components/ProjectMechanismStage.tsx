@@ -579,9 +579,8 @@ export const ProjectMechanismStage: React.FC<Props> = ({
     <section className="project-mechanism-stage">
       <header className="mechanism-stage-heading">
         <div>
-          <span>03 / FUNCTION MECHANISM</span>
-          <h3>{isZh ? '选择一张功能卡，把它内部如何实现画出来' : 'Choose a function and draw how it works inside'}</h3>
-          <p>{isZh ? '一次只画一个功能内部的开始、处理、判断与结果。这里不规划功能之间的依赖或建构顺序。' : 'Draw one function’s start, process, decisions and result. Do not plan dependencies or build order here.'}</p>
+          <h3>{isZh ? '画出这个功能怎么做' : 'Draw how this function works'}</h3>
+          <p>{isZh ? '选一张卡，用箭头连起步骤。遇到不同情况，用判断框分开。' : 'Choose a card, connect steps, and branch at decisions.'}</p>
         </div>
         <div className={`mechanism-progress ${allCompleted ? 'is-complete' : ''}`}>
           {allCompleted ? <Check size={18} /> : <CircleDot size={18} />}
@@ -592,7 +591,6 @@ export const ProjectMechanismStage: React.FC<Props> = ({
       <div className="mechanism-workspace">
         <aside className="mechanism-card-rail">
           <div className="mechanism-section-label"><ListChecks size={15} /><span>{isZh ? '选择功能卡' : 'CHOOSE A FUNCTION'}</span></div>
-          <p>{isZh ? '一次只处理一张，避免把项目层关系混进函数内部。' : 'Work on one card at a time.'}</p>
           <div className="mechanism-card-list">
             {cards.map((card, index) => {
               const completed = hasBasicFunctionFlow(plan.functionMechanisms?.[card.id]);

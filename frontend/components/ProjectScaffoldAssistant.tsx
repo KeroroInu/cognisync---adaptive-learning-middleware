@@ -8,7 +8,6 @@ import {
   LoaderCircle,
   MessageCircleMore,
   Send,
-  Sparkles,
   X,
 } from 'lucide-react';
 import type { Language, UserProfile } from '../types';
@@ -17,6 +16,7 @@ import { createRequestId } from '../services/stageEvents';
 import { captureCurrentSession, createWorkspaceScope } from '../data/workspaceScope';
 import { formatSnakeEvidence, hasProjectRun, type ProjectStage, type SnakeRuntimeEvidence } from '../data/snakeProjectBlueprint';
 import './ProjectScaffoldAssistant.css';
+import { AssistantMessage } from './AssistantMessage';
 
 export interface ScaffoldCompletion {
   requestId: string;
@@ -74,7 +74,7 @@ const STAGE_LABELS: Record<ProjectStage, { zh: string; en: string }> = {
 };
 
 const LEVEL_LABELS = {
-  zh: ['情境澄清', '概念提示', '策略提示', '最小补全'],
+  zh: ['一起看看', '给点提示', '具体一点', '示例参考'],
   en: ['Clarify', 'Concept cue', 'Strategy cue', 'Minimum completion'],
 };
 
@@ -271,7 +271,7 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
   const requestHint = () => void submit(
     observationStageReady
       ? (isZh ? '请先核对我已有的观察卡和阶段完成条件，再告诉我下一步，不要重复要求已完成的观察。' : 'Check my saved observations and stage completion first, then tell me the next step without repeating completed observation work.')
-      : (isZh ? '请结合我当前的阶段产物，只提示我接下来最小的一步。' : 'Use my current work and give me only the smallest next step.'),
+      : (isZh ? '看看我现在做的，接下来可以做什么？' : 'Look at my current work. What can I do next?'),
     'hint_button',
     level,
   );
@@ -439,7 +439,7 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
       <div className="project-scaffold-titlebar" onPointerDown={handleDragStart} onPointerMove={handleDragMove} onPointerUp={handleDragEnd} onPointerCancel={handleDragEnd}>
         <div>
           <GripHorizontal size={17} />
-          <span><small>COGNISYNC / SCAFFOLD</small><strong>{isZh ? '项目学习助手' : 'Project learning assistant'}</strong></span>
+          <span><strong>{isZh ? '学习助手' : 'Learning assistant'}</strong></span>
         </div>
         <button type="button" onClick={() => onOpenChange(false)} aria-label={isZh ? '收起助手' : 'Close assistant'}><X size={20} /></button>
       </div>
@@ -447,7 +447,6 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
       <div className="project-scaffold-body">
         <header className="project-scaffold-context">
           <div><span>{isZh ? stageLabel.zh : stageLabel.en}</span><b>L{level} · {levelLabels[language][level]}</b></div>
-          <small><Sparkles size={13} />{isZh ? '参考本轮阶段产物与支持资料' : 'Uses this turn’s stage artifacts and resources'}</small>
         </header>
 
         <div ref={streamRef} className="project-scaffold-stream" aria-live="polite">
@@ -459,10 +458,10 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
                 : (isZh ? '一起看看当前进展' : 'Let’s check your progress')}</h4>
               <p>{observationStageReady
                 ? (isZh
-                    ? `我已读到你保存的 ${observationCount} 张观察卡，也确认你运行过完整项目；不会再重复要求你观察。`
+                    ? `你保存了 ${observationCount} 张观察卡，可以继续拆功能了。`
                     : `I read your ${observationCount} saved observation cards and confirmed that you ran the complete project. I will not ask you to repeat observations.`)
                 : (isZh
-                    ? `当前处于“${stageLabel.zh}”。${stage === 'observe' ? '我会参考运行记录和观察卡，帮助你比较现象、写下观察；这里不需要改代码。' : '我会参考当前阶段产物；仅在建构阶段读取当前代码与测试反馈。'}`
+                    ? (stage === 'observe' ? '说说你发现了什么，我们一起看看。这里不用改代码。' : isCodingStage ? '我会看当前函数和运行结果。你想改哪里？' : '我会看你正在做的卡片。哪里还没想清楚？')
                     : `You are at “${stageLabel.en}”. I can use this task's observations, function cards and function progress, plus current code and tests during build.`)}</p>
               <small>{observationStageReady
                 ? (isZh ? '下一步：进入功能拆解' : 'Next: continue to function decomposition')
@@ -481,11 +480,11 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
                         : ''
                     }`
                   : (isZh ? '我的问题' : 'My question')}</small>
-                <p>{message.text}</p>
+                <AssistantMessage text={message.text} language={language} />
               </div>
             </article>
           ))}
-          {sending ? <div className="project-scaffold-thinking"><LoaderCircle size={16} className="is-spinning" />{isZh ? '正在查看当前阶段产物…' : 'Reviewing the current work…'}</div> : null}
+          {sending ? <div className="project-scaffold-thinking"><LoaderCircle size={16} className="is-spinning" />{isZh ? '正在看你的内容…' : 'Reviewing your work…'}</div> : null}
         </div>
 
         {error ? <p className="project-scaffold-error">{error}</p> : null}
@@ -495,7 +494,7 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
             <div>
               <strong id="build-l3-confirm-title">{isZh ? '确认查看当前函数的完整实现？' : 'Show the complete implementation?'}</strong>
               <p>{isZh
-                ? '确认后，助手会给出这一张函数卡的完整正确代码。代码不会自动写入编辑器；你仍需自行复制或输入，并运行测试。'
+                ? '给你当前函数的完整代码。看懂后复制到右边，再运行试试。'
                 : 'After confirmation, the assistant gives the complete correct code for this function only. It will not edit the editor; you still copy or type and run it yourself.'}</p>
             </div>
             <div>
@@ -521,20 +520,20 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
 
         <div className="project-scaffold-actions">
           <button type="button" className="is-primary" onClick={requestHint} disabled={sending}><Lightbulb size={16} />{observationStageReady
-            ? (isZh ? '确认下一步' : 'Confirm next step')
+            ? (isZh ? '聊聊下一步' : 'Discuss next step')
             : (isZh ? `提示一下 · L${level}` : `Hint · L${level}`)}</button>
           {visibleMessages.some(message => message.role === 'assistant')
             && !observationStageReady
             && level < 3
             ? (
-            <button type="button" onClick={requestMoreSpecific} disabled={sending}>{isZh ? '再具体一级' : 'One level more'}<ArrowRight size={16} /></button>
+            <button type="button" onClick={requestMoreSpecific} disabled={sending}>{isZh ? '再具体一点' : 'More detail'}<ArrowRight size={16} /></button>
           ) : null}
           {level === 3 && stage === 'observe' && !observationStageReady && latestEvidence ? (
-            <button type="button" onClick={applyMinimumCompletion}><Check size={16} />{isZh ? '采用最小补全' : 'Apply minimum completion'}</button>
+            <button type="button" onClick={applyMinimumCompletion}><Check size={16} />{isZh ? '放入观察草稿' : 'Use as observation draft'}</button>
           ) : null}
         </div>
 
-        <p className="project-scaffold-footnote">{isZh ? '每轮问题、AI 建议、支架等级和画像快照都会进入教师端对话导出。' : 'Questions, advice, scaffold levels and profile snapshots are included in teacher exports.'}</p>
+        <p className="project-scaffold-footnote">{isZh ? '对话会保存，老师可查看。' : 'Conversations are saved for your teacher.'}</p>
       </div>
     </aside>
   );
