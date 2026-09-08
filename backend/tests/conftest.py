@@ -60,7 +60,7 @@ async def test_db():
     """创建干净的测试数据库，测试结束后清理所有表"""
     test_url = make_url(TEST_DATABASE_URL)
     database_name = test_url.database or ""
-    if not database_name.replace("_", "").isalnum() or database_name == settings.POSTGRES_DB:
+    if not database_name.endswith("_test") or not database_name.replace("_", "").isalnum() or database_name == settings.POSTGRES_DB:
         raise RuntimeError("TEST_DATABASE_URL must point to a dedicated *_test database")
     admin_engine = create_async_engine(test_url.set(database="postgres"), isolation_level="AUTOCOMMIT")
     async with admin_engine.connect() as conn:
