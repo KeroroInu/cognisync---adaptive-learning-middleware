@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 
 from app.core.security import verify_admin_key
 from app.db.postgres import get_db
+from app.services.research_package import csv_cell
 
 router = APIRouter(tags=["Admin - Data Export"])
 
@@ -29,12 +30,12 @@ def _make_csv_response(rows: list[dict], filename: str) -> StreamingResponse:
             headers={"Content-Disposition": f'attachment; filename="{filename}"'}
         )
     output = io.StringIO()
-    writer = csv.DictWriter(output, fieldnames=rows[0].keys())
+    writer = csv.DictWriter(output, fieldnames=list(dict.fromkeys(key for row in rows for key in row)))
     writer.writeheader()
-    writer.writerows(rows)
+    writer.writerows({key: csv_cell(value) for key, value in row.items()} for row in rows)
     output.seek(0)
     return StreamingResponse(
-        iter([output.getvalue()]),
+        iter(["\ufeff" + output.getvalue()]),
         media_type="text/csv; charset=utf-8-sig",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'}
     )

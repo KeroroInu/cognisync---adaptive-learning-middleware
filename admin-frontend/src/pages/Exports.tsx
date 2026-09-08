@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Download, Users, FileText, MessageSquare, TrendingUp, CheckCircle, AlertCircle, Loader, GitBranch, Milestone, LifeBuoy } from 'lucide-react';
 import { adminApi } from '../lib/adminApi';
+import { ResearchPackagePanel } from '../components/ResearchPackagePanel';
 
 interface DatasetConfig {
   id: string;
@@ -30,7 +31,7 @@ const DATASETS: DatasetConfig[] = [
     filename: 'learner_profiles',
     endpoint: '/admin/export/csv/learner-profiles',
     fields: ['user_id', 'student_id', 'name', 'email', 'registered_at', 'initial_cognition', 'initial_affect', 'initial_behavior', 'current_cognition', 'current_affect', 'current_behavior', 'profile_update_count', 'total_sessions', 'total_messages', 'scale_completions'],
-    researchUse: '适用：学习者特征分析、初始能力水平分组、纵向追踪研究的基线数据（student_id 可直接用作去标识化主键）',
+    researchUse: '画像是系统估计，不是经过验证的能力测验；不可直接作为实验前测或分组依据。student_id 是学号，不是匿名编号。',
   },
   {
     id: 'scale-responses',
@@ -72,7 +73,7 @@ const DATASETS: DatasetConfig[] = [
     filename: 'learning_trajectory',
     endpoint: '/admin/export/csv/knowledge-graph',
     fields: ['user_id', 'student_id', 'user_name', 'user_email', 'snapshot_cognition', 'snapshot_affect', 'snapshot_behavior', 'snapshot_time', 'snapshot_source'],
-    researchUse: '适用：纵向学习轨迹分析、干预效果前后对比、增长曲线建模（HLM/LCA）',
+    researchUse: '可检查画像估计如何变化，不能仅凭画像变化认定教学效果。效果评价需另用共同任务和明确评分标准。',
   },
   // ── 项目解构过程证据（三份）─────────────────────────────────────────────
   // 与上面四份「结果型」数据集不同，这三份是过程型证据：产物怎么改的、
@@ -170,6 +171,7 @@ export const Exports = () => {
         </p>
       </div>
 
+      <ResearchPackagePanel />
       {/* Research Note */}
       <div className="admin-research-note rounded-xl p-4 flex gap-3">
         <div className="shrink-0 mt-0.5">
@@ -178,11 +180,11 @@ export const Exports = () => {
         <div className="text-sm space-y-1" style={{ color: 'var(--text-primary)' }}>
           <p className="font-semibold">数据使用说明</p>
           <p style={{ color: 'var(--text-secondary)' }}>
-            导出数据包含用户邮箱，请在分析前进行去标识化处理。建议使用{' '}
+            下方旧版 CSV 包含身份信息，请在分析前去标识化。关联主键使用{' '}
             <code className="px-1 py-0.5 rounded font-mono text-xs">
-              student_id
+              user_id
             </code>{' '}
-            作为分析主键替代 email，以符合数据脱敏要求。所有数据使用 UTF-8 with BOM 编码，Excel 可直接打开中文内容。
+            而不是登录学号。画像只能作为支持线索，不能直接当作能力测评得分。
           </p>
         </div>
       </div>
@@ -281,9 +283,9 @@ export const Exports = () => {
       <div className="glass-card rounded-2xl p-6" style={{ border: '1px solid var(--glass-border)' }}>
         <div className="flex items-center justify-between gap-4">
           <div>
-            <h3 className="text-base font-bold mb-1" style={{ color: 'var(--text-primary)' }}>一键导出全部数据集</h3>
+            <h3 className="text-base font-bold mb-1" style={{ color: 'var(--text-primary)' }}>批量下载旧版分析表</h3>
             <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-              依次下载上述 {DATASETS.length} 个 CSV 文件，适合完整数据备份或跨数据集联合分析。
+              依次下载上述 {DATASETS.length} 个 CSV 文件。完整 SQL 研究证据请用上方研究包，旧版分析表不等于完整备份。
             </p>
           </div>
           <button
@@ -292,7 +294,7 @@ export const Exports = () => {
             className="shrink-0 inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-slate-700 to-slate-900 text-white font-semibold text-sm hover:shadow-lg hover:scale-105 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Download size={18} />
-            导出全部（{DATASETS.length} 个文件）
+            下载分析表（{DATASETS.length} 个文件）
           </button>
         </div>
       </div>

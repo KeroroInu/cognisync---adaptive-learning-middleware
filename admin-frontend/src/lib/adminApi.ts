@@ -231,7 +231,8 @@ class AdminApiClient {
       headers: { 'Authorization': `Bearer ${localStorage.getItem('auth_token') || ''}` },
     });
     if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      const error = await response.json().catch(() => null);
+      throw new Error(typeof error?.detail === 'string' ? error.detail : `导出失败（HTTP ${response.status}），请检查登录状态或稍后重试`);
     }
     return response.blob();
   }
