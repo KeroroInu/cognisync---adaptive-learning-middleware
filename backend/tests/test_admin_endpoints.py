@@ -265,9 +265,9 @@ async def test_experiment_group_assignment_and_task_isolation(
         return response.json()["data"]["id"]
 
     pdt_task_id = await create_task("PDT 任务", "pdt")
-    lecture_task_id = await create_task("讲授组任务", "lecture")
+    ai_task_id = await create_task("常规 AI 协作任务", "ai_pbl")
     assert (await admin_client.post(f"/api/admin/research/tasks/{pdt_task_id}/activate")).status_code == 200
-    assert (await admin_client.post(f"/api/admin/research/tasks/{lecture_task_id}/activate")).status_code == 200
+    assert (await admin_client.post(f"/api/admin/research/tasks/{ai_task_id}/activate")).status_code == 200
 
     active = await client.get("/api/research/active-task", headers=auth)
     assert active.status_code == 200
@@ -295,7 +295,7 @@ async def test_experiment_group_assignment_and_task_isolation(
     assert restored.json()["data"]["workspace_data"] == workspace
 
     forbidden_save = await client.post(
-        f"/api/research/tasks/{lecture_task_id}/save-progress",
+        f"/api/research/tasks/{ai_task_id}/save-progress",
         json={"code_submitted": "print('not allowed')"},
         headers=auth,
     )

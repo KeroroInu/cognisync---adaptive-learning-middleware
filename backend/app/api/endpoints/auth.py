@@ -194,8 +194,8 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
                 detail={
                     "code": "REGISTRATION_INCOMPLETE",
                     "message": (
-                        "该学号之前已经开始注册但没有完成。"
-                        "请用当时设置的密码登录，系统会自动带你回到未完成的那一步。"
+                        "该学号已经建立账号。"
+                        "请用当时设置的密码登录继续，不用重新注册。"
                     ),
                     "onboardingMode": existing_user.onboarding_mode,
                 },
@@ -262,6 +262,11 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
             className=new_user.class_name,
             experimentGroup=new_user.experiment_group,
         )
+
+        # 课堂注册只建立身份。没有问卷或学习证据，不伪造 50 分前测/图谱。
+        # 保留旧 scale/ai 注册的历史语义，不回写旧账号。
+        if data.mode == 'classroom':
+            return AuthResponse(token=token, user=user_info)
 
         # 生成初始画像和知识图谱（仅 AI 模式）
         initial_profile = None

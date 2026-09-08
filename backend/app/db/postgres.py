@@ -108,7 +108,7 @@ async def init_db():
         # 种子：测试学生账号 kero/kero（幂等）
         if settings.SEED_TEST_DATA:
             await _seed_test_student()
-        # 种子：默认量表 v1.0（幂等，已存在则跳过）
+        # 历史示例题仅作为草稿，不能自动发布为正式研究工具。
         await _seed_default_scale()
         # 种子：学校实验固定使用的贪吃蛇学习项目（只补缺失项）
         await _seed_experiment_tasks()
@@ -860,8 +860,8 @@ async def _seed_experiment_tasks(session_factory=async_session_factory):
 
 async def _seed_default_scale():
     """
-    幂等种子：若不存在名为 'AI 教育研究量表 v1.0' 的模板，则创建并激活它。
-    每次启动时执行，已存在则静默跳过。
+    幂等种子：历史示例题只建草稿；旧模板/答卷不自动更改。
+    正式问卷须由研究者核验来源、授权和适龄性后手动发布。
     """
     import uuid as _uuid
     import json
@@ -871,7 +871,7 @@ async def _seed_default_scale():
     TEMPLATE_NAME = "AI 教育研究量表 v1.0"
 
     schema_json = {
-        "description": "AI 教育研究前/后测问卷（计算思维 · 自我效能感 · 学习动机 · 复杂问题解决 · 编程能力 · AI 素养）",
+        "description": "历史自编示例（非正式测评工具，未核验信效度，请勿直接用于实验前后测）",
         "questions": [
             {"id": "ct1",  "text": "遇到问题时，我喜欢尝试不同或有创意的解决方式。",                     "dimension": "CT",  "type": "likert5", "reverse_scored": False},
             {"id": "ct2",  "text": "面对任务时，我会将大问题拆成若干小步骤。",                           "dimension": "CT",  "type": "likert5", "reverse_scored": False},
@@ -955,11 +955,11 @@ async def _seed_default_scale():
                 INSERT INTO scale_templates
                     (id, name, version, status, schema_json, scoring_json, mapping_json, created_at, updated_at, activated_at)
                 VALUES
-                    (:id, :name, 1, 'ACTIVE',
+                    (:id, :name, 1, 'DRAFT',
                      CAST(:schema_json AS jsonb),
                      CAST(:scoring_json AS jsonb),
                      CAST(:mapping_json AS jsonb),
-                     :now, :now, :now)
+                     :now, :now, NULL)
             """),
             {
                 "id": _uuid.uuid4(),
@@ -970,4 +970,4 @@ async def _seed_default_scale():
                 "now": now,
             }
         )
-    logger.info(f"✅ Default scale created: '{TEMPLATE_NAME}' (42 questions, ACTIVE)")
+    logger.info(f"Default example scale created as DRAFT: '{TEMPLATE_NAME}' (not a validated instrument)")

@@ -19,7 +19,7 @@ class RegisterRequest(BaseModel):
     name: str = Field(..., min_length=1, description="姓名（必填）")
     password: str = Field(..., min_length=6, description="密码（≥6字符）")
     email: Optional[EmailStr] = Field(None, description="邮箱（可选）")
-    mode: str = Field(..., description="注册模式：scale | ai")
+    mode: str = Field(..., description="注册模式：classroom（只建账号） | scale | ai")
     class_name: Optional[str] = Field(None, alias="className", max_length=100, description="班级名称或代码")
 
     model_config = {"populate_by_name": True}

@@ -7,8 +7,8 @@ import { Search, ChevronLeft, ChevronRight, Edit2, Trash2, Eye, X, Save, Downloa
 const GROUP_LABELS: Record<User['experiment_group'], string> = {
   unassigned: '未分组',
   pdt: '项目解构式',
-  ai_pbl: 'AI 项目式',
-  lecture: '普通讲授式',
+  ai_pbl: '常规 AI 协作',
+  lecture: '历史讲授组',
 };
 
 export const Users = () => {
@@ -294,10 +294,10 @@ export const Users = () => {
                   className="w-full px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                   style={inputStyle}
                 >
-                  <option value="unassigned">未分组（仅开放画像与量表）</option>
-                  <option value="pdt">项目解构式教学组</option>
-                  <option value="ai_pbl">AI 项目式教学组</option>
-                  <option value="lecture">普通讲授式教学组</option>
+                  <option value="unassigned">未分组（等待教师安排）</option>
+                  <option value="pdt">项目解构＋AI</option>
+                  <option value="ai_pbl">常规 AI 协作</option>
+                  {editingUser?.experiment_group === 'lecture' && <option value="lecture">历史讲授组（保留原分组）</option>}
                 </select>
               </div>
 

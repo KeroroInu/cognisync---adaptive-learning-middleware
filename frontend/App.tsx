@@ -7,6 +7,7 @@ import { RegisterScale } from './views/RegisterScale';
 import { RegisterAI } from './views/RegisterAI';
 import { useAppStore } from './services/store';
 import type { User, UserProfile } from './types';
+import { classroomEntry } from './utils/classroomEntry';
 
 const Dashboard = React.lazy(() => import('./views/Dashboard').then(module => ({ default: module.Dashboard })));
 const Chat = React.lazy(() => import('./views/Chat').then(module => ({ default: module.Chat })));
@@ -80,16 +81,11 @@ function App() {
 
   /**
    * 解析登录后的落地视图。
-   * 未完成 onboarding 的学生进入注册流程；已分组学生直接进入唯一项目工作区，
+   * 已分组学生直接进入项目，不把旧版画像问卷作为入课条件。
    * 任务尚未发布或后端暂不可用时由工作区显示明确状态，不再绕回学习首页。
    */
   const resolveEntryView = useCallback(async (user: User | null): Promise<View> => {
-    if (!user) return 'login';
-    if (!user.hasCompletedOnboarding) {
-      return (user.onboardingMode || 'scale') === 'ai' ? 'register-ai' : 'register-scale';
-    }
-    if ((user.experimentGroup ?? 'unassigned') === 'unassigned') return 'dashboard';
-    return 'research';
+    return classroomEntry(user);
   }, []);
 
   // 会话恢复（刷新、重新打开标签页）时同样直达唯一项目工作区
@@ -117,10 +113,11 @@ function App() {
     setEntryResolved(true);
   };
 
-  // 注册成功处理（设置认证信息并跳转到onboarding）
-  const handleRegisterSuccess = (token: string, user: any, mode: 'scale' | 'ai') => {
+  // 注册只建账号，不伪造量表作答或完成标记。
+  const handleRegisterSuccess = (token: string, user: any) => {
     setAuth(user, token);
-    setCurrentView(mode === 'scale' ? 'register-scale' : 'register-ai');
+    setCurrentView(classroomEntry(user));
+    setEntryResolved(true);
   };
 
   // Scale 模式：暂存注册数据，直接跳转到量表（不建账号）
@@ -177,6 +174,7 @@ function App() {
             language={state.language}
             onRegisterSuccess={handleRegisterSuccess}
             onPendingScale={handlePendingScale}
+            classroomOnly
             onNavigateToLogin={() => setCurrentView('login')}
           />
         );

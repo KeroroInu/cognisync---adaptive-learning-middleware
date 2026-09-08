@@ -34,7 +34,7 @@ const COPY: Record<User['experimentGroup'], Record<Language, BriefCopy>> = {
   },
   ai_pbl: {
     zh: {
-      badge: 'AI 项目式组',
+      badge: '常规 AI 协作组',
       title: '和 AI 组队，方向盘在你手里',
       body: '围绕贪吃蛇持续设计、编码和调试；卡住时问 AI，让它帮你看清下一步。最后拍板和动手的人，还是你。',
       route: ['理解任务', '规划', '编码', '调试'],

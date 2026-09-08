@@ -14,6 +14,7 @@ export interface PendingScaleRegistration {
 }
 
 export interface RegisterProps {
+  classroomOnly?: boolean;
   language: Language;
   onRegisterSuccess: (token: string, user: any, mode: 'scale' | 'ai') => void;
   /** scale 模式：不创建账号，把表单数据传给量表页面 */
@@ -23,6 +24,7 @@ export interface RegisterProps {
 
 export const Register: React.FC<RegisterProps> = ({
   language,
+  classroomOnly = false,
   onRegisterSuccess,
   onPendingScale,
   onNavigateToLogin
@@ -81,14 +83,18 @@ export const Register: React.FC<RegisterProps> = ({
       }
     }
 
-    setStep('mode');
+    if (classroomOnly) {
+      await handleModeSelect('scale');
+    } else {
+      setStep('mode');
+    }
   };
 
   // Handle mode selection and registration
   const handleModeSelect = async (mode: 'scale' | 'ai') => {
     // Scale 模式：不在此处创建账号，把表单数据传给量表页面
     // 账号将在量表填写完成提交时原子性创建
-    if (mode === 'scale') {
+    if (mode === 'scale' && !classroomOnly) {
       onPendingScale({
         student_id: studentId.trim(),
         name: name.trim(),
@@ -109,7 +115,7 @@ export const Register: React.FC<RegisterProps> = ({
         name: name.trim(),
         email: email.trim() || undefined,
         password,
-        mode,
+        mode: classroomOnly ? 'classroom' : mode,
         className: className.trim() || undefined,
       });
 
@@ -252,7 +258,7 @@ export const Register: React.FC<RegisterProps> = ({
               disabled={isLoading}
               className="w-full px-6 py-3 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-medium rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 disabled:opacity-50 flex items-center justify-center gap-2"
             >
-              {language === 'zh' ? '下一步' : 'Next'}
+              {isLoading ? (language === 'zh' ? '正在注册…' : 'Registering…') : classroomOnly ? (language === 'zh' ? '注册并进入课堂' : 'Join classroom') : (language === 'zh' ? '下一步' : 'Next')}
             </button>
 
             <div className="text-center text-sm" style={{ color: 'var(--text-light)' }}>

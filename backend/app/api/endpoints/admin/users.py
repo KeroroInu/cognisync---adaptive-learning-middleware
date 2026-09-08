@@ -115,6 +115,9 @@ async def update_user(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
+    if body.experiment_group == "lecture" and user.experiment_group != "lecture":
+        raise HTTPException(422, "本轮实验仅分配项目解构＋AI、常规 AI 协作两组；讲授组仅保留历史记录")
+
     if body.name is not None:
         user.name = body.name
     if body.is_active is not None and hasattr(user, "is_active"):

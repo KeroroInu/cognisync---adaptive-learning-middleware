@@ -136,7 +136,7 @@ class Settings(BaseSettings):
     # 分组信息在注册那一刻就写进了 users 表，不会留下"这是被强制指定的"痕迹。
     #
     # 正式实验应通过管理端逐个分配，或实现随机分配接口后再开放注册。
-    DEFAULT_EXPERIMENT_GROUP: Literal["unassigned", "pdt", "ai_pbl", "lecture"] = Field(
+    DEFAULT_EXPERIMENT_GROUP: Literal["unassigned", "pdt", "ai_pbl"] = Field(
         default="unassigned",
         description="新注册用户的实验分组；仅试用环境可改为具体组别，正式实验须为 unassigned"
     )

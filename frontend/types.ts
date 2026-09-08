@@ -110,7 +110,7 @@ export interface User {
   name: string;
   createdAt: string;
   hasCompletedOnboarding: boolean;
-  onboardingMode?: 'scale' | 'ai';
+  onboardingMode?: 'classroom' | 'scale' | 'ai';
   className?: string;
   experimentGroup: 'unassigned' | 'pdt' | 'ai_pbl' | 'lecture';
 }
@@ -138,7 +138,7 @@ export interface RegisterRequest {
   name: string;
   password: string;
   email?: string;
-  mode: 'scale' | 'ai';
+  mode: 'classroom' | 'scale' | 'ai';
   className?: string;
 }
 

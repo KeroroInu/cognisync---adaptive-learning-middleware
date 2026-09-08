@@ -39,7 +39,7 @@ class ResearchTaskCreate(BaseModel):
     ai_prompt: Optional[str] = None
     code_content: str
     language: str = "python"
-    target_group: Literal["all", "pdt", "ai_pbl", "lecture", "unassigned"] = "all"
+    target_group: Literal["all", "pdt", "ai_pbl", "unassigned"] = "all"
     task_kind: Literal["learning"] = "learning"
     test_template: None = None
     ai_enabled: bool = True
@@ -246,6 +246,8 @@ async def update_research_task(
     if data.language is not None:
         task.language = data.language
     if data.target_group is not None:
+        if data.target_group == "lecture" and task.target_group != "lecture":
+            raise HTTPException(422, "本轮实验不新增讲授组任务，历史任务保持可读")
         task.target_group = data.target_group
     frozen_assignment_change = (
         data.task_kind is not None
