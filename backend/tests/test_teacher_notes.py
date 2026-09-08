@@ -90,3 +90,22 @@ async def test_student_cannot_read_write_or_export_notes(client, note_context, a
         assert (await client.get(url, headers=auth_headers)).status_code == 403
         assert (await client.get(url)).status_code == 401
     assert (await client.post(path + "/teacher-notes", headers=auth_headers, json=payload())).status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_optional_assessment_is_versioned_and_validated(client, note_context):
+    ctx = note_context
+    path = f'/api/admin/users/{ctx["student"]}/teacher-notes'
+    assessment = {"rubric_version": "课堂评分草案 v1", "criterion": "代码理解", "score": 2, "max_score": 4}
+    body = payload(assessment=assessment)
+    response = await client.post(path, headers=ctx["headers"], json=body)
+    assert response.status_code == 200, response.text
+    assert response.json()["data"]["assessment"] == assessment
+    replay = await client.post(path, headers=ctx["headers"], json=body)
+    assert replay.json()["data"]["id"] == response.json()["data"]["id"]
+    conflict = await client.post(path, headers=ctx["headers"], json={**body, "assessment": {**assessment, "score": 3}})
+    assert conflict.status_code == 409
+    for invalid in ({**assessment, "score": 5}, {**assessment, "score": -1}, {**assessment, "rubric_version": " "}, {**assessment, "max_score": 0}):
+        assert (await client.post(path, headers=ctx["headers"], json=payload(assessment=invalid))).status_code == 422
+    plain = await client.post(path, headers=ctx["headers"], json=payload())
+    assert plain.json()["data"]["assessment"] is None

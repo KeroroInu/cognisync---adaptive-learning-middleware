@@ -24,5 +24,6 @@ class TeacherNote(Base, UUIDMixin):
     interpretation: Mapped[str] = mapped_column(Text, nullable=False, default="")
     next_step: Mapped[str] = mapped_column(Text, nullable=False, default="")
     evidence: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    assessment: Mapped[dict | None] = mapped_column(JSONB, nullable=True, comment="教师按指定评分规准记录的单项评分；空值表示未评分，非零分")
     supersedes_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("teacher_notes.id", ondelete="RESTRICT"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)

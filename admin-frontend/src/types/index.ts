@@ -423,6 +423,7 @@ export interface TeacherNoteInput {
   next_step: string;
   evidence_ids: string[];
   supersedes_id: string | null;
+  assessment?: { rubric_version: string; criterion: string; score: number; max_score: number } | null;
 }
 
 export interface TeacherNote extends Omit<TeacherNoteInput, 'request_id' | 'evidence_ids'> {

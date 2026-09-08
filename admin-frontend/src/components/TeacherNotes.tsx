@@ -28,6 +28,11 @@ export function TeacherNotes({ userId }: { userId: string }) {
   const [nextStep, setNextStep] = useState('');
   const [evidenceId, setEvidenceId] = useState('');
   const [supersedes, setSupersedes] = useState<string | null>(null);
+  const [assess, setAssess] = useState(false);
+  const [rubric, setRubric] = useState('');
+  const [criterion, setCriterion] = useState('');
+  const [score, setScore] = useState('');
+  const [maxScore, setMaxScore] = useState('');
   const retry = useRef<{ payload: string; id: string } | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const submissionLock = useRef(false);
@@ -52,6 +57,7 @@ export function TeacherNotes({ userId }: { userId: string }) {
       lesson_date: lessonDate, lesson_label: lessonLabel.trim(), observation: observation.trim(),
       interpretation: interpretation.trim(), next_step: nextStep.trim(),
       evidence_ids: evidenceId ? [evidenceId] : [], supersedes_id: supersedes,
+      assessment: assess ? { rubric_version: rubric.trim(), criterion: criterion.trim(), score: Number(score), max_score: Number(maxScore) } : null,
     };
     const serialized = JSON.stringify(content);
     try {
@@ -59,7 +65,8 @@ export function TeacherNotes({ userId }: { userId: string }) {
       const note = await adminApi.createTeacherNote(userId, { ...content, request_id: retry.current.id });
       setNotes(previous => [note, ...previous.filter(item => item.id !== note.id)]);
       setObservation(''); setInterpretation(''); setNextStep(''); setEvidenceId(''); setSupersedes(null);
-      retry.current = null; setNotice('已保存，仅教师可见；不会作为学生能力分数。');
+      setAssess(false); setScore('');
+      retry.current = null; setNotice('已保存，仅教师可见；点评和人工评分保留来源，不写入学生画像。');
     } catch (err) { setError(err instanceof Error ? err.message : '保存失败，内容已保留，可以重试'); }
     finally { submissionLock.current = false; setSaving(false); }
   }
@@ -112,6 +119,17 @@ export function TeacherNotes({ userId }: { userId: string }) {
             </select></label>
           </div>
         </details>
+        <details className="rounded-xl border p-3" style={{ borderColor: 'var(--glass-border)' }}>
+          <summary className="cursor-pointer">按已确定的评分规准记一项分数（选填）</summary>
+          <p className="text-sm my-3">这只是记录工具，不是系统提供的量表。请先统一评分标准；未评分保持空值，不当作零分。依据写在“看到的行为”中。</p>
+          <label className="flex gap-2"><input type="checkbox" checked={assess} onChange={event => setAssess(event.target.checked)} />本条包含人工评分</label>
+          {assess && <div className="grid gap-3 sm:grid-cols-2 mt-3">
+            <label>规准名称及版本<input className="admin-input w-full" required maxLength={120} value={rubric} onChange={event => setRubric(event.target.value)} placeholder="例如：作品评分规准 v1" /></label>
+            <label>本次评价项目<input className="admin-input w-full" required maxLength={120} value={criterion} onChange={event => setCriterion(event.target.value)} placeholder="按规准填写项目名称" /></label>
+            <label>得分<input className="admin-input w-full" type="number" step="any" min="0" max={maxScore || undefined} required value={score} onChange={event => setScore(event.target.value)} /></label>
+            <label>该项满分<input className="admin-input w-full" type="number" step="any" min="0.01" max="1000" required value={maxScore} onChange={event => setMaxScore(event.target.value)} /></label>
+          </div>}
+        </details>
         <button type="submit" className="rounded-lg border border-current disabled:opacity-50 px-5 py-2 font-bold" disabled={saving || !loaded || !observation.trim() || !lessonLabel.trim()}>{saving ? '保存中…' : '保存点评'}</button>
       </fieldset>
     </form>
@@ -123,6 +141,7 @@ export function TeacherNotes({ userId }: { userId: string }) {
         {note.supersedes_id && <p className="text-sm">更正记录 · 原编号 {note.supersedes_id.slice(0, 8)}</p>}
         <p className="whitespace-pre-wrap break-words">{note.observation}</p>
         {note.interpretation && <p className="whitespace-pre-wrap break-words"><span className="font-semibold">教师判断：</span>{note.interpretation}</p>}
+        {note.assessment && <p className="break-words">人工评分 · {note.assessment.rubric_version} · {note.assessment.criterion}：{note.assessment.score} / {note.assessment.max_score}</p>}
         {note.next_step && <p className="whitespace-pre-wrap break-words"><span className="font-semibold">指导 / 下次关注：</span>{note.next_step}</p>}
         {note.evidence.length > 0 && <details><summary className="text-sm cursor-pointer">已关联 {note.evidence.length} 条学习证据</summary>{note.evidence.map(item => <p className="text-sm break-all mt-1" key={item.event_id}>{eventLabels[item.event_type] || item.event_type} · {item.created_at} · {item.event_id}</p>)}</details>}
         <div className="flex justify-between gap-3 text-sm" style={{ color: 'var(--text-light)' }}><span>记录于 {new Date(note.created_at).toLocaleString('zh-CN')}</span><button type="button" className="underline" disabled={saving} onClick={() => { setSupersedes(note.id); setLessonDate(note.lesson_date); setLessonLabel(note.lesson_label); formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}>追加更正</button></div>

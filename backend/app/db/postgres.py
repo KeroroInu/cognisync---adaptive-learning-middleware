@@ -88,6 +88,11 @@ async def init_db():
         # 迁移：阶段产物版本与关键教学事件
         await _migrate_research_process_events()
 
+        # 仅增加可空字段；旧点评保持未评分，不回填为零。
+        async with engine.begin() as conn:
+            from sqlalchemy import text
+            await conn.execute(text("ALTER TABLE teacher_notes ADD COLUMN IF NOT EXISTS assessment JSONB"))
+
         # 打印已创建的表
         async with engine.begin() as conn:
             def get_table_names(sync_conn):
