@@ -1,5 +1,7 @@
 # CogniSync 后续开发交接（给 Claude）
 
+> **2026-09-09 接续入口**：[课堂实验执行基线](CLASSROOM_EXPERIMENT_PLAN_20260909.md) 与 [本轮验收记录](CLASSROOM_ACCEPTANCE_20260909.md)。本轮在 `codex/classroom-export-completion`（基于 `bffe970`）开发，新增全量研究包、教师可选人工评分、两组新投放约束、课堂注册直达和短文案界面。旧目录 `dev` 未修改，未推送或部署。下方各日期记录保持历史含义，不得把旧三组/量表/迁移计划当作当前已确定方案。
+
 > 2026-09-07 增量：课堂点评、教材摘要检索与低负担填空模板见 [课堂点评与轻量教材支架](CLASSROOM_NOTES_AND_TEXTBOOK_SUPPORT.md)。本轮不新增学生表单；新量表、最终两组配置和课堂效果验证尚未完成，不得把旧历史章节当成这些事项已经实现的证明。
 
 > 交接分支：`codex/final-quasi-experiment-dev`
