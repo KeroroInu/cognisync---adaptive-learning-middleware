@@ -52,6 +52,7 @@ import {
 } from '../services/stageEvents';
 
 import { createWorkspaceScope, captureCurrentSession } from '../data/workspaceScope';
+import { executionEvidence } from '../utils/executionEvidence';
 
 const ResearchCodeEditor = React.lazy(() => import('../components/ResearchCodeEditor'));
 
@@ -191,6 +192,8 @@ const restoreProjectStage = (
   workspace: SnakeProjectWorkspace | null,
   experimentGroup: User['experimentGroup'],
 ): ProjectStage => {
+  // 普通 AI 组不接受旧解构阶段缓存，避免把处理组活动带入对照条件。
+  if (experimentGroup !== 'pdt') return 'build';
   try {
     const stored = window.localStorage.getItem(projectStageKey(taskId));
     if (stored === 'observe' || stored === 'decompose' || stored === 'build') return stored;
@@ -305,6 +308,7 @@ export const Research: React.FC<Props> = ({
   const workspaceLastSavedSignatureRef = useRef('');
   const flushWorkspaceRef = useRef<(keepalive?: boolean) => Promise<void>>(async () => {});
   const chatScrollRef = useRef<HTMLDivElement>(null);
+  const chatInputRef = useRef<HTMLInputElement>(null);
   /**
    * 响应丢失后学生手动重试时，必须复用第一次的幂等键。
    * 只有提交内容变化才生成新 ID。
@@ -632,7 +636,7 @@ export const Research: React.FC<Props> = ({
 
   const handleFactoryStageChange = useCallback((stage: ProjectStage) => {
     queueWorkspaceSave(0);
-    let nextStage = experimentGroup === 'pdt' && stage === 'plan' ? 'build' : stage;
+    let nextStage: ProjectStage = experimentGroup !== 'pdt' || stage === 'plan' ? 'build' : stage;
     if (experimentGroup === 'pdt' && nextStage === 'build' && factoryStage !== 'build' && task?.id) {
       const workspace = collectSnakeProjectWorkspace(storageScope);
       const mechanisms = workspace.path.functionMechanisms ?? {};
@@ -1068,7 +1072,10 @@ export const Research: React.FC<Props> = ({
   // ── Run code ────────────────────────────────────────────────────────────
 
   const handleRun = async () => {
-    if (running) return;
+    if (running || !task || !canUseSession()) return;
+    const executedCode = code;
+    let executionCompleted = false;
+    let executionError = '';
     setRunning(true);
     setTerminalOpen(true);
 
@@ -1085,12 +1092,14 @@ export const Research: React.FC<Props> = ({
       const pyodide = await ensurePyodide();
 
       try {
-        await pyodide.runPythonAsync(code);
+        await pyodide.runPythonAsync(executedCode);
+        executionCompleted = true;
       } catch (err: any) {
         // Pyodide already sent the full traceback via the stderr callback.
         // Extract just the last line for a compact error entry.
         const raw: string = err?.message ?? String(err);
         const lastLine = raw.trim().split('\n').pop() ?? raw;
+        executionError = lastLine;
         setTerminalLines(prev => [...prev, { type: 'error', text: lastLine }]);
         return;
       }
@@ -1104,6 +1113,7 @@ export const Research: React.FC<Props> = ({
         },
       ]);
     } catch (err: any) {
+      executionError = String(err?.message ?? err);
       setTerminalLines(prev => [
         ...prev,
         {
@@ -1114,6 +1124,13 @@ export const Research: React.FC<Props> = ({
         },
       ]);
     } finally {
+      if (canUseSession()) {
+        const outcome = await reportStageEvent(task.id, {
+          request_id: createRequestId(), stage: 'build', event_type: 'module_test',
+          ...executionEvidence(executedCode, executionCompleted, executionError, Date.now() - startMs),
+        });
+        if (!isStageEventPersisted(outcome)) setEventNotice(isZh ? '代码已运行，但运行记录未保存。请检查网络。' : 'Code ran, but its record was not saved. Check the connection.');
+      }
       setRunning(false);
     }
   };
@@ -1161,7 +1178,7 @@ export const Research: React.FC<Props> = ({
         activeStage={factoryStage}
         onStageChange={handleFactoryStageChange}
         onOpenProject={() => setDemoOpen(true)}
-        onOpenAssistant={() => setAssistantOpen(true)}
+        onOpenAssistant={() => experimentGroup === 'pdt' ? setAssistantOpen(true) : chatInputRef.current?.focus()}
         onOpenClassTask={() => setClassTaskOpen(true)}
         onLogout={onLogout}
         saveLabel={factorySaveLabel}
@@ -1196,7 +1213,7 @@ export const Research: React.FC<Props> = ({
         onEvidence={handleSnakeEvidence}
       />
 
-      {experimentGroup !== 'lecture' && (
+      {experimentGroup === 'pdt' && allowAI && (
         <ProjectScaffoldAssistant
           key={task.id}
           language={language}
@@ -1526,6 +1543,8 @@ export const Research: React.FC<Props> = ({
         <form onSubmit={handleChatSubmit} className="research-composer">
           <div className="research-composer-row">
             <input
+              ref={chatInputRef}
+              aria-label={isZh ? '向 AI 提问' : 'Ask AI'}
               value={input}
               onChange={e => setInput(e.target.value)}
               placeholder={isZh ? '问我任何问题...' : 'Ask me anything...'}

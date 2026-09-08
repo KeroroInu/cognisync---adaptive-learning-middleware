@@ -99,7 +99,7 @@ export const ProjectFactoryHeader: React.FC<FactoryHeaderProps> = ({
   const isZh = language === 'zh';
   const visibleStages = experimentGroup === 'pdt'
     ? STAGES.filter(stage => PDT_STAGE_IDS.has(stage.id))
-    : STAGES;
+    : STAGES.filter(stage => stage.id === 'build');
 
   return (
     <header className="project-factory-header">
@@ -252,7 +252,7 @@ export const ProjectObservationStage: React.FC<ObservationStageProps> = ({
     <section className="project-observation-stage">
       <article className="project-brief-card">
         <div className="project-brief-kicker">
-          <span>MISSION_01 / OBSERVE</span>
+          <span>{isZh ? '观察游戏' : 'Explore the game'}</span>
           <span className={hasOpenedProject ? 'is-complete' : ''}>
             <CircleDot size={11} />
             {hasOpenedProject ? (isZh ? '已运行' : 'Opened') : (isZh ? '等待运行' : 'Not opened')}
@@ -260,11 +260,10 @@ export const ProjectObservationStage: React.FC<ObservationStageProps> = ({
         </div>
 
         <div className="project-brief-copy">
-          <p>{isZh ? '第一个任务' : 'FIRST MISSION'}</p>
           <h3>{isZh ? '玩一玩，看看发生了什么。' : 'Play and notice what changes.'}</h3>
           <span>
             {isZh
-              ? '自由操作贪吃蛇。系统只记录按键、位置和结果等客观变化，不会替你判断功能；你需要从证据中形成自己的观察。'
+              ? '试试转向、吃食物和重新开始。你发现了什么变化？'
               : 'Operate the snake freely. The system captures objective actions and changes without naming functions; you form the observation.'}
           </span>
         </div>
@@ -272,7 +271,6 @@ export const ProjectObservationStage: React.FC<ObservationStageProps> = ({
         <button type="button" className="project-run-card" onClick={onOpenProject}>
           <span className="project-run-icon"><Play size={25} fill="currentColor" /></span>
           <span>
-            <small>{isZh ? '完整项目 / 可交互' : 'COMPLETE BUILD / LIVE'}</small>
             <strong>{isZh ? '打开贪吃蛇' : 'Open Snake'}</strong>
           </span>
           <ArrowRight size={22} />
@@ -282,7 +280,7 @@ export const ProjectObservationStage: React.FC<ObservationStageProps> = ({
           <MousePointer2 size={17} />
           <p>
             <strong>{isZh ? '操作提示' : 'HOW TO OBSERVE'}</strong>
-            <span>{isZh ? '改变一个操作，比较前后变化；同一证据也可以产生不同解释。' : 'Change one action and compare before and after. The same evidence may support different interpretations.'}</span>
+            <span>{isZh ? '一次改变一个操作，看看结果有什么不同。' : 'Change one action and compare the result.'}</span>
           </p>
         </div>
       </article>
@@ -290,20 +288,18 @@ export const ProjectObservationStage: React.FC<ObservationStageProps> = ({
       <article className="observation-capture-card">
         <header>
           <div>
-            <span>RUNTIME EVIDENCE → MY NOTE</span>
-            <h3>{isZh ? '从证据形成自己的观察' : 'Turn evidence into your observation'}</h3>
+            <h3>{isZh ? '记下你的发现' : 'Your observations'}</h3>
           </div>
           <strong>{String(cards.length).padStart(2, '0')}<small>/02</small></strong>
         </header>
 
         <p className="observation-capture-hint">
-          {isZh ? '选择一条系统运行记录，再用一句短话写下你真正观察到的变化。至少形成 2 张卡片。' : 'Choose one runtime record, then write the change you actually observed. Create at least two cards.'}
+          {isZh ? '选一条记录，写下你的发现。记两条就可以继续。' : 'Choose a record and write what you noticed. Save two to continue.'}
         </p>
 
         <section className="runtime-evidence-section">
           <div className="runtime-evidence-heading">
-            <span><Radio size={14} />{isZh ? '系统运行证据' : 'Runtime evidence'}</span>
-            <small>{isZh ? '仅记录发生了什么' : 'What happened, without interpretation'}</small>
+            <span><Radio size={14} />{isZh ? '刚才发生了什么' : 'What just happened'}</span>
           </div>
           <div className="runtime-evidence-list">
             {visibleEvidence.length > 0 ? visibleEvidence.map(item => {
@@ -331,11 +327,11 @@ export const ProjectObservationStage: React.FC<ObservationStageProps> = ({
 
         <section className="observation-composer">
           <div className="observation-composer-title">
-            <span><PencilLine size={14} />{isZh ? '我的空白观察卡' : 'My blank observation card'}</span>
+            <span><PencilLine size={14} />{isZh ? '我的发现' : 'My observation'}</span>
             {draftSource === 'ai-assisted' && <small>{isZh ? 'AI辅助草稿' : 'AI-assisted draft'}</small>}
           </div>
           <div className="observation-source-line">
-            <strong>{isZh ? '引用证据' : 'Evidence'}</strong>
+            <strong>{isZh ? '选中记录' : 'Selected record'}</strong>
             <span>{selectedEvidence ? formatSnakeEvidence(selectedEvidence, language) : (isZh ? '请先选择上方的一条运行记录' : 'Choose one runtime record above')}</span>
           </div>
           <label>
@@ -366,7 +362,6 @@ export const ProjectObservationStage: React.FC<ObservationStageProps> = ({
           <section className="saved-observation-list">
             <div className="runtime-evidence-heading">
               <span><ClipboardList size={14} />{isZh ? '已形成的观察卡' : 'Saved observations'}</span>
-              <small>{isZh ? '后续由你继续推测功能与机制' : 'You will infer functions and mechanisms next'}</small>
             </div>
             <div>
               {cards.map((card, index) => (
@@ -388,9 +383,9 @@ export const ProjectObservationStage: React.FC<ObservationStageProps> = ({
           <div>
             <CircleDot size={17} />
             <p>
-              <strong>{isZh ? '阶段完成条件' : 'STAGE COMPLETION'}</strong>
+              <strong>{isZh ? '准备好了吗？' : 'Ready?'}</strong>
               <span>
-                {isZh ? '运行过项目，并形成至少 2 张自己的观察卡' : 'Run the project and create at least two observation cards'}
+                {isZh ? '玩过游戏，记下两条发现' : 'Play the game and save two observations'}
               </span>
             </p>
           </div>
