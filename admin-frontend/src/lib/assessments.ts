@@ -1,0 +1,26 @@
+export interface AssessmentQuestion {
+  id: string; text: string; type: 'choice' | 'text'; required: boolean;
+  options: { value: string; label: string }[];
+}
+export interface AssessmentDraft {
+  phase: 'pre' | 'post'; name: string; class_name: string; source: string; questions: AssessmentQuestion[];
+}
+export interface AssessmentRound extends AssessmentDraft {
+  id: string; enabled: boolean; revision: number; published_at: string | null; response_count: number;
+}
+export async function assessmentAdmin<T>(path = '', body?: unknown, method = 'POST'): Promise<T> {
+  const response = await fetch(`/api/admin/assessments${path}`, {
+    method: body === undefined ? 'GET' : method,
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('auth_token') || ''}` },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const result = await response.json();
+  if (!response.ok || !result.success) {
+    const message = typeof result.detail === 'string' ? result.detail
+      : Array.isArray(result.detail) ? result.detail.map((d: {msg: string}) => d.msg).join('；') : '操作失败，请重试';
+    throw new Error(message);
+  }
+  return result.data as T;
+}
+export const emptyQuestion = (): AssessmentQuestion => ({ id: `q_${crypto.randomUUID().replace(/-/g, '')}`, text: '', type: 'choice', required: true,
+  options: [{ value: '1', label: '' }, { value: '2', label: '' }] });

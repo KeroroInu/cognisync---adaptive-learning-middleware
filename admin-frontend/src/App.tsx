@@ -9,6 +9,7 @@ const Dashboard = lazy(() => import('./pages/Dashboard').then(module => ({ defau
 const Users = lazy(() => import('./pages/Users').then(module => ({ default: module.Users })));
 const UserDetail = lazy(() => import('./pages/UserDetail').then(module => ({ default: module.UserDetail })));
 const Scales = lazy(() => import('./pages/Scales').then(module => ({ default: module.Scales })));
+const Assessments = lazy(() => import('./pages/Assessments').then(module => ({ default: module.Assessments })));
 const ResearchManagement = lazy(() => import('./pages/ResearchManagement').then(module => ({ default: module.ResearchManagement })));
 const Conversations = lazy(() => import('./pages/Conversations').then(module => ({ default: module.Conversations })));
 const ConversationDetail = lazy(() => import('./pages/ConversationDetail').then(module => ({ default: module.ConversationDetail })));
@@ -54,6 +55,7 @@ function AdminApp() {
       <Route path="users" element={<AdminLayout><Users /></AdminLayout>} />
       <Route path="users/:userId" element={<AdminLayout><UserDetail /></AdminLayout>} />
       <Route path="scales" element={<AdminLayout><Scales /></AdminLayout>} />
+      <Route path="assessments" element={<AdminLayout><Assessments /></AdminLayout>} />
       <Route path="research" element={<AdminLayout><ResearchManagement /></AdminLayout>} />
       <Route path="conversations" element={<AdminLayout><Conversations /></AdminLayout>} />
       <Route path="conversations/:sessionId" element={<AdminLayout><ConversationDetail /></AdminLayout>} />

@@ -26,6 +26,7 @@ EXPORT_MODELS = (
     models.ChatSession, models.ChatMessage, models.ProfileSnapshot,
     models.BehaviorLog, models.EmotionLog, models.CalibrationLog,
     models.ScaleTemplate, models.ScaleResponse, models.OnboardingSession, models.TeacherNote,
+    models.AssessmentRound, models.AssessmentResponse,
 )
 USER_FIELDS = {"id", "role", "class_name", "experiment_group", "is_active", "created_at", "last_active_at", "onboarding_mode", "has_completed_onboarding"}
 MAX_BYTES = 128 * 1024 * 1024  # Uncompressed, including CSV + JSONL. Fail rather than truncate.

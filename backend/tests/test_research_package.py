@@ -58,7 +58,7 @@ def unpack(response):
 @pytest.mark.asyncio
 async def test_package_complete_joinable_and_private(admin_client, package_context):
     archive, manifest = unpack(await admin_client.get('/api/admin/export/research-package?class_name=一班'))
-    assert len(manifest["tables"]) == 19
+    assert len(manifest["tables"]) == 21
     assert manifest["tables"]["research_task_submissions"]["rows"] == 1
     assert manifest["tables"]["stage_events"]["rows"] == 0
     assert archive.read("stage_events.csv").startswith(b"\xef\xbb\xbf")
