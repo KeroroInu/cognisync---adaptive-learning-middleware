@@ -195,7 +195,7 @@ const BuildTerminal: React.FC<BuildTerminalProps> = React.memo(({
   );
 });
 
-const SnakeBuildPreview: React.FC<SnakeBuildPreviewProps> = React.memo(({
+export const SnakeBuildPreview: React.FC<SnakeBuildPreviewProps> = React.memo(({
   language,
   capabilities,
   codeByNode,
@@ -261,7 +261,7 @@ const SnakeBuildPreview: React.FC<SnakeBuildPreviewProps> = React.memo(({
     try {
       // 每局开始重置随机序号：同一 seed 下事件序列相同则随机结果可复现。
       setCreativeSeed();
-      const rawBase = await resetPythonGame(codeByNode);
+      const rawBase = await resetPythonGame(codeByNode, lines => runtimeOutputHandlerRef.current('游戏', lines));
       const base = { ...rawBase, interval: rawBase.interval ?? INITIAL_GAME_STATE.interval };
       applyGame(await runCreativeHook('game_start', base));
     } catch (error) {
@@ -302,7 +302,7 @@ const SnakeBuildPreview: React.FC<SnakeBuildPreviewProps> = React.memo(({
         if (userInput) before = await runCreativeHook('key_input', before, { input: userInput });
         before = await runCreativeHook('before_move', before, { input: userInput });
         const scoreBefore = before.score;
-        let next = await stepPythonGame(codeByNode, before, userInput);
+        let next = await stepPythonGame(codeByNode, before, userInput, lines => runtimeOutputHandlerRef.current('游戏', lines));
         const baseScoreAfter = next.score;
         inputRef.current = null;
         next = await runCreativeHook('after_move', next, { scoreBefore, scoreAfter: baseScoreAfter });

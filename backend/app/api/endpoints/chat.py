@@ -1013,6 +1013,16 @@ async def chat(
             textbook_sources = retrieve_textbook(query=request.message + " " + (request.currentCode or "")[:6000])
             system_prompt += textbook_prompt(textbook_sources)
             user_message.analysis = {**(user_message.analysis or {}), "textbookSources": list(textbook_sources)}
+            if user.experiment_group == "ai_pbl":
+                system_prompt += """
+当前是普通 AI 协作组的整文件编程工作台，不是解构组，不设置 L0-L3 门槛。
+可直接讨论和提供代码，关键逻辑配简短注释；根据教材解释，不强制学生填解构表格。
+网页使用浏览器 Python Worker，不是桌面终端：支持基础 Python、print、math、random；不能使用 pygame、tkinter、文件、网络或 pip。
+游戏为 12×12 贪吃蛇画布。create_initial_state() 返回 (蛇身坐标列表, 方向字符串, 得分)；step_game(state, user_input) 推进一步并返回 state。
+state 含 snake、direction、food、score、game_over，可选 interval（秒）、objects、timers。user_input 为 up/down/left/right 或 None。
+学生可自由组织辅助函数；先“运行代码”接入，再“运行当前版本”启动。编辑尚未运行的代码不会改变正在播放的版本。
+只生成上述画布能展示的结果，不承诺任意 Python 桌面窗口。代码执行完毕不等于任务正确或已通过测试。
+"""
 
         # 注入跨会话上下文（让 AI 能自然引用上次讨论内容）
         # 项目智能体使用任务作用域记忆；普通自由对话才允许引用跨会话主题。
@@ -1039,12 +1049,14 @@ async def chat(
                 "zh": f"\n\n**学生当前代码：**\n```\n{code_snippet}\n```\n" + (
                     "学生已确认建构 L3。此后保持代码协作：直接结合当前代码回答，可以引用、修改、补全和解释完整函数，不要退回只给定位问题；但不得扩展到其他函数。\n"
                     if confirmed_build_l3
-                    else "请根据以上代码理解学生进度，严格遵守本轮 L0-L2 边界，不要越级给完整函数。\n"
+                    else ("请根据以上代码理解学生进度，严格遵守本轮 L0-L2 边界，不要越级给完整函数。\n" if scaffold_context
+                          else "结合当前代码直接协作，可提供完整函数，关键处使用简短注释。\n")
                 ),
                 "en": f"\n\n**Student's current code:**\n```\n{code_snippet}\n```\n" + (
                     "The student confirmed build L3. Stay in code collaboration: answer from the current code directly and freely quote, modify, complete, or explain this function, without falling back to diagnostic-only hints. Do not expand to other functions.\n"
                     if confirmed_build_l3
-                    else "Use the code to understand progress and stay within the current L0-L2 boundary. Do not give a complete function.\n"
+                    else ("Use the code to understand progress and stay within the current L0-L2 boundary. Do not give a complete function.\n" if scaffold_context
+                          else "Collaborate directly on this code; complete functions with short comments are allowed.\n")
                 ),
             }[lang]
             system_prompt += code_context
@@ -1100,7 +1112,7 @@ async def chat(
                 llm_provider,
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
-                max_tokens=900 if confirmed_build_l3 or (scaffold_metadata and scaffold_metadata["level"] == 2) else 300,
+                max_tokens=900 if confirmed_build_l3 or (request.isResearchMode and not scaffold_context) or (scaffold_metadata and scaffold_metadata["level"] == 2) else 300,
             )
 
         logger.info(f"AI reply generated: {len(assistant_reply)} characters")

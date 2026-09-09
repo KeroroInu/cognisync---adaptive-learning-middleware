@@ -53,6 +53,10 @@ import {
 
 import { createWorkspaceScope, captureCurrentSession } from '../data/workspaceScope';
 import { executionEvidence } from '../utils/executionEvidence';
+import { FreeGamePreview } from '../components/FreeGamePreview';
+import { AssistantMessage } from '../components/AssistantMessage';
+import { disposePythonModuleRunner, runPythonProgram, formatPythonRunnerError } from '../services/pythonModuleRunner';
+import '../components/FreeCodingWorkspace.css';
 
 const ResearchCodeEditor = React.lazy(() => import('../components/ResearchCodeEditor'));
 
@@ -172,14 +176,6 @@ const WORKSPACE_CHECK_INTERVAL_MS = 400;
 const WORKSPACE_SAVE_DEBOUNCE_MS = 900;
 const WORKSPACE_RETRY_DELAY_MS = 4000;
 
-// Pyodide 运行时的同源路径。
-//
-// 不走公共 CDN：建构阶段的模块测试完全依赖它在浏览器里跑 Python，而
-// cdn.jsdelivr.net 在国内课堂环境经常极慢甚至不可达，40–50 人同时首次加载
-// 会进一步放大。运行时由 scripts/fetch-pyodide.sh 在构建期放进 public/pyodide/，
-// 随前端镜像分发。改动此常量时必须同步改 workers/pythonModuleWorker.ts。
-const PYODIDE_BASE_URL = '/pyodide/';
-
 const projectStageKey = (taskId: string) => `cognisync:project-stage:v1:${taskId}`;
 const classroomTaskSeenKey = (
   taskId: string,
@@ -205,13 +201,6 @@ const restoreProjectStage = (
   // 存量工作区没有阶段键；已有函数测试进度说明学生此前已进入建构。
   return workspace && Object.keys(workspace.progress ?? {}).length > 0 ? 'build' : 'observe';
 };
-
-// Extend Window so TS knows about the self-hosted Pyodide loader
-declare global {
-  interface Window {
-    loadPyodide: (options?: Record<string, unknown>) => Promise<any>;
-  }
-}
 
 // ── Component ──────────────────────────────────────────────────────────────
 
@@ -296,7 +285,12 @@ export const Research: React.FC<Props> = ({
   const [terminalOpen, setTerminalOpen] = useState(false);
   const [running, setRunning] = useState(false);
   const [pyodideReady, setPyodideReady] = useState(false);
-  const pyodideRef = useRef<any>(null);
+  const [freePreviewCode, setFreePreviewCode] = useState('');
+  const [normalChatOpen, setNormalChatOpen] = useState(false);
+  const onFreeOutput = useCallback((_source: string, lines: string[]) => {
+    if (lines.length) setTerminalLines(prev => [...prev, ...lines.map(text => ({ type: 'stdout' as const, text }))].slice(-500));
+  }, []);
+  useEffect(() => () => { if (experimentGroup !== 'pdt') disposePythonModuleRunner(); }, [experimentGroup]);
   const terminalScrollRef = useRef<HTMLDivElement>(null);
 
   // Refs
@@ -1022,53 +1016,6 @@ export const Research: React.FC<Props> = ({
     }
   };
 
-  // ── Pyodide: load from CDN ──────────────────────────────────────────────
-
-  const ensurePyodide = useCallback(async (): Promise<any> => {
-    if (pyodideRef.current) return pyodideRef.current;
-
-    setTerminalLines(prev => [
-      ...prev,
-      {
-        type: 'info',
-        text: isZh
-          ? '⏳ 正在加载 Python 环境（首次约需 10-20 秒）...'
-          : '⏳ Loading Python environment (first time ~10-20s)...',
-      },
-    ]);
-
-    // Inject the Pyodide script once (same-origin, self-hosted)
-    if (!window.loadPyodide) {
-      await new Promise<void>((resolve, reject) => {
-        const existing = document.getElementById('pyodide-cdn');
-        if (existing) { resolve(); return; }
-        const s = document.createElement('script');
-        s.id = 'pyodide-cdn';
-        s.src = `${PYODIDE_BASE_URL}pyodide.js`;
-        s.onload = () => resolve();
-        s.onerror = () => reject(new Error('Failed to load the local Python runtime'));
-        document.head.appendChild(s);
-      });
-    }
-
-    const pyodide = await window.loadPyodide({
-      indexURL: PYODIDE_BASE_URL,
-      // Route Python stdout/stderr directly into terminal lines
-      stdout: (text: string) =>
-        setTerminalLines(prev => [...prev, { type: 'stdout', text: text.replace(/\n$/, '') }]),
-      stderr: (text: string) =>
-        setTerminalLines(prev => [...prev, { type: 'stderr', text: text.replace(/\n$/, '') }]),
-    });
-
-    pyodideRef.current = pyodide;
-    setPyodideReady(true);
-    setTerminalLines(prev => [
-      ...prev,
-      { type: 'info', text: isZh ? '✓ Python 环境就绪' : '✓ Python ready' },
-    ]);
-    return pyodide;
-  }, [isZh]);
-
   // ── Run code ────────────────────────────────────────────────────────────
 
   const handleRun = async () => {
@@ -1078,6 +1025,7 @@ export const Research: React.FC<Props> = ({
     let executionError = '';
     setRunning(true);
     setTerminalOpen(true);
+    setFreePreviewCode('');
 
     // Run separator with timestamp
     const ts = new Date().toLocaleTimeString('en-GB');
@@ -1089,20 +1037,14 @@ export const Research: React.FC<Props> = ({
     const startMs = Date.now();
 
     try {
-      const pyodide = await ensurePyodide();
-
-      try {
-        await pyodide.runPythonAsync(executedCode);
-        executionCompleted = true;
-      } catch (err: any) {
-        // Pyodide already sent the full traceback via the stderr callback.
-        // Extract just the last line for a compact error entry.
-        const raw: string = err?.message ?? String(err);
-        const lastLine = raw.trim().split('\n').pop() ?? raw;
-        executionError = lastLine;
-        setTerminalLines(prev => [...prev, { type: 'error', text: lastLine }]);
-        return;
-      }
+      const result = await runPythonProgram(executedCode);
+      if (!canUseSession()) return;
+      setPyodideReady(true);
+      executionCompleted = result.completed;
+      executionError = result.error;
+      onFreeOutput('main.py', result.output);
+      if (!result.completed) { setTerminalLines(prev => [...prev, { type: 'error', text: result.error }].slice(-500) as TerminalLine[]); return; }
+      if (result.canPreview) setFreePreviewCode(executedCode);
 
       const elapsed = ((Date.now() - startMs) / 1000).toFixed(2);
       setTerminalLines(prev => [
@@ -1119,7 +1061,7 @@ export const Research: React.FC<Props> = ({
         {
           type: 'error',
           text: isZh
-            ? `环境加载失败: ${err?.message}`
+            ? formatPythonRunnerError(err, language)
             : `Load failed: ${err?.message}`,
         },
       ]);
@@ -1171,14 +1113,14 @@ export const Research: React.FC<Props> = ({
   // ── Render ──────────────────────────────────────────────────────────────
 
   return (
-    <div className="project-factory">
+    <div className={`project-factory ${experimentGroup !== 'pdt' ? 'ordinary-classroom' : ''}`}>
       <ProjectFactoryHeader
         language={language}
         experimentGroup={experimentGroup}
         activeStage={factoryStage}
         onStageChange={handleFactoryStageChange}
         onOpenProject={() => setDemoOpen(true)}
-        onOpenAssistant={() => experimentGroup === 'pdt' ? setAssistantOpen(true) : chatInputRef.current?.focus()}
+        onOpenAssistant={() => { if (experimentGroup === 'pdt') setAssistantOpen(true); else setNormalChatOpen(value => !value); }}
         onOpenClassTask={() => setClassTaskOpen(true)}
         onLogout={onLogout}
         saveLabel={factorySaveLabel}
@@ -1298,7 +1240,7 @@ export const Research: React.FC<Props> = ({
 
       {factoryStage === 'build' && experimentGroup !== 'pdt' && (
       <div className="project-build-stage">
-      <div className={`research-workbench ${allowAI ? '' : 'research-workbench-solo'}`}>
+      <div className="research-workbench free-coding-layout">
 
       {/* ── Left: Code Editor + Terminal ─────────────────────────────── */}
       <div className="research-panel research-code-panel">
@@ -1307,16 +1249,17 @@ export const Research: React.FC<Props> = ({
           <div className="research-title-row">
             <FlaskConical size={16} className="research-title-icon" />
             <span className="research-task-title">
-              {task.title}
+              main.py
             </span>
             <span className="research-language-badge">
               {task.language}
             </span>
           </div>
           {task.instructions && (
-            <span className="research-instructions">
-              {task.instructions}
-            </span>
+            <details className="free-task-instructions">
+              <summary>{isZh ? '老师的说明' : 'Teacher instructions'}</summary>
+              <p>{task.title}</p><p>{task.instructions}</p>
+            </details>
           )}
         </div>
 
@@ -1327,7 +1270,7 @@ export const Research: React.FC<Props> = ({
               value={code}
               onChange={handleCodeChange}
               language={task.language}
-              theme={theme}
+              theme="dark"
             />
           </React.Suspense>
         </div>
@@ -1435,7 +1378,7 @@ export const Research: React.FC<Props> = ({
                 {running
                   ? <Loader size={13} className="animate-spin" />
                   : <Play size={13} />}
-                <span>{isZh ? '运行' : 'Run'}</span>
+                <span>{isZh ? '运行代码' : 'Run code'}</span>
               </button>
             )}
 
@@ -1480,16 +1423,15 @@ export const Research: React.FC<Props> = ({
         )}
       </div>
 
-      {/* ── Right: Chat Panel ─────────────────────────────────────── */}
-      {allowAI && <div className="research-panel research-assistant-panel">
+      <FreeGamePreview code={freePreviewCode} currentCode={code} language={language} onOutput={onFreeOutput} />
+      {/* Ordinary group: optional chat, no decomposition forms or graded scaffold. */}
+      {allowAI && normalChatOpen && <div className="research-panel research-assistant-panel">
         {/* Chat header */}
         <div className="research-panel-header research-assistant-header">
           <p className="research-assistant-title">
             {isZh ? 'AI 学习助手' : 'AI Learning Assistant'}
           </p>
-          <p className="research-assistant-subtitle">
-            {isZh ? '遇到问题？和我聊聊吧' : 'Stuck? Chat with me'}
-          </p>
+          <button aria-label="收起对话" onClick={() => setNormalChatOpen(false)}><X size={18} /></button>
         </div>
 
         {/* Messages */}
@@ -1513,7 +1455,7 @@ export const Research: React.FC<Props> = ({
                     : 'research-chat-bubble-assistant'
                 }`}
               >
-                {msg.text}
+                <AssistantMessage text={msg.text} language={language} />
               </div>
             </div>
           ))}

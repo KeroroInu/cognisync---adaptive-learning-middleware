@@ -341,7 +341,61 @@ export const runPythonModuleTest = async (
   return { ...result, durationMs: Math.round(performance.now() - startedAt) };
 };
 
-const createGameHarness = (
+// The ordinary group's whole-file editor uses a limited Python namespace too.
+// No bridge to JavaScript, host filesystem, package installer or network tools.
+export const freeProgramNamespace = (code: string) => `
+import ast as _free_ast
+import builtins as _free_builtins
+import math as _free_math
+import random as _free_random
+_free_tree = _free_ast.parse(${JSON.stringify(code)})
+for _free_node in _free_ast.walk(_free_tree):
+    if isinstance(_free_node, _free_ast.Attribute) and _free_node.attr.startswith('_'):
+        raise ValueError('不能访问 Python 内部属性；请使用普通函数和数据')
+    if isinstance(_free_node, _free_ast.Name) and _free_node.id.startswith('_'):
+        raise ValueError('自定义名称不要以下划线开头')
+    if isinstance(_free_node, (_free_ast.Import, _free_ast.ImportFrom)):
+        _free_modules = [a.name for a in _free_node.names] if isinstance(_free_node, _free_ast.Import) else [_free_node.module]
+        if getattr(_free_node, 'level', 0) or any(m not in ('math', 'random') for m in _free_modules):
+            raise ValueError('网页支持 math、random 和基础 Python；其他库暂不能加载')
+        if isinstance(_free_node, _free_ast.ImportFrom) and any(a.name.startswith('_') or a.name == '*' for a in _free_node.names):
+            raise ValueError('请按名称导入公开函数')
+_free_lines = []
+_free_count = [0]
+def _free_print(*values, sep=' ', end='\\n'):
+    if _free_count[0] >= 16000:
+        return
+    content = (str(sep).join(str(v)[:4000] for v in values) + str(end))[:16000 - _free_count[0]]
+    _free_count[0] += len(content)
+    _free_lines.append(content)
+def _free_import(name, globals=None, locals=None, fromlist=(), level=0):
+    if level or name not in ('math', 'random'):
+        raise ValueError('只能导入 math 或 random')
+    return _free_math if name == 'math' else _free_random
+_free_safe = {name: getattr(_free_builtins, name) for name in ${JSON.stringify([...CREATIVE_SAFE_BUILTIN_NAMES, 'isinstance', 'Exception', 'ValueError', 'TypeError', 'AssertionError'])}}
+_free_safe.update({'print': _free_print, '__import__': _free_import})
+_game_namespace = {'__builtins__': _free_safe}
+exec(compile(_free_tree, '<main.py>', 'exec'), _game_namespace, _game_namespace)
+`;
+
+export const runPythonProgram = async (code: string) => {
+  if (code.length > 50000) throw new Error('代码过长，请控制在 50000 字以内');
+  return runPythonJson<{ completed: boolean; error: string; output: string[]; canPreview: boolean }>(`
+import json
+_free_lines = []
+_free_result = {'completed': False, 'error': '', 'canPreview': False}
+try:
+${freeProgramNamespace(code).split('\n').map(line => `    ${line}`).join('\n')}
+    _free_result['completed'] = True
+    _free_result['canPreview'] = callable(_game_namespace.get('create_initial_state')) and (callable(_game_namespace.get('step_game')) or callable(_game_namespace.get('move_snake')))
+except Exception as _free_error:
+    _free_result['error'] = f'{type(_free_error).__name__}: {_free_error}'[:2000]
+_free_result['output'] = ''.join(_free_lines).splitlines()[:200]
+json.dumps(_free_result, ensure_ascii=False)
+`);
+};
+
+export const createGameHarness = (
   command: 'reset' | 'step',
   codeByNode: Record<string, string>,
   state?: PythonGameState,
@@ -350,8 +404,7 @@ const createGameHarness = (
 import json
 _bundle_source = ${JSON.stringify(sourceBundle(codeByNode))}
 if globals().get('_game_bundle_source') != _bundle_source:
-    _game_namespace = {}
-    exec(_bundle_source, _game_namespace)
+${codeByNode['free-program'] !== undefined ? freeProgramNamespace(codeByNode['free-program']).split('\n').map(line => `    ${line}`).join('\n') : '    _game_namespace = {}\n    exec(_bundle_source, _game_namespace)'}
     globals()['_game_namespace'] = _game_namespace
     globals()['_game_bundle_source'] = _bundle_source
 _namespace = globals()['_game_namespace']
@@ -396,7 +449,7 @@ else:
     # objects 与 timers 在基础循环中原样保留：它们由创意钩子维护，
     # 基础七函数不认识这些字段，重建状态时丢掉会让计时器每帧被清空。
     _state = {'snake': _point_list(_state['snake']), 'direction': _state['direction'], 'food': list(_state['food']), 'score': int(_state['score']), 'game_over': bool(_state['game_over']), **({'interval': float(_state['interval'])} if 'interval' in _state else {}), **({'objects': _state['objects']} if 'objects' in _state else {}), **({'timers': _state['timers']} if 'timers' in _state else {})}
-json.dumps(_state, ensure_ascii=False)
+${codeByNode['free-program'] !== undefined ? "_free_report = {'state': _state, 'output': ''.join(_free_lines).splitlines()[:200]}\n_free_lines.clear()\n_free_count[0] = 0\njson.dumps(_free_report, ensure_ascii=False)" : 'json.dumps(_state, ensure_ascii=False)'}
 `;
 
 /**
@@ -541,15 +594,25 @@ export const validateSceneState = (value: unknown): PythonGameState => {
 
 type Direction = PythonGameState['direction'];
 
-export const resetPythonGame = async (codeByNode: Record<string, string>) => (
-  validateSceneState(await runPythonJson<unknown>(createGameHarness('reset', codeByNode)))
+function gameResult(result: unknown, code: Record<string, string>, onOutput?: (lines: string[]) => void) {
+  if (code['free-program'] !== undefined) {
+    const report = result as { state: unknown; output?: unknown };
+    const state = validateSceneState(report.state);
+    if (Array.isArray(report.output)) onOutput?.(report.output.filter(v => typeof v === 'string').slice(0, 200).map(v => v.slice(0, 4000)));
+    return state;
+  }
+  return validateSceneState(result);
+}
+export const resetPythonGame = async (codeByNode: Record<string, string>, onOutput?: (lines: string[]) => void) => (
+  gameResult(await runPythonJson<unknown>(createGameHarness('reset', codeByNode)), codeByNode, onOutput)
 );
 
 export const stepPythonGame = (
   codeByNode: Record<string, string>,
   state: PythonGameState,
   userInput: PythonGameState['direction'] | null,
-) => runPythonJson<unknown>(createGameHarness('step', codeByNode, state, userInput)).then(validateSceneState);
+  onOutput?: (lines: string[]) => void,
+) => runPythonJson<unknown>(createGameHarness('step', codeByNode, state, userInput)).then(result => gameResult(result, codeByNode, onOutput));
 
 export interface CreativeExecutionResult {
   passed: boolean;

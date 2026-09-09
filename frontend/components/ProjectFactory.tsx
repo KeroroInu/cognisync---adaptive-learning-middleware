@@ -120,9 +120,9 @@ export const ProjectFactoryHeader: React.FC<FactoryHeaderProps> = ({
               onClick={() => onStageChange(stage.id)}
               aria-current={active ? 'step' : undefined}
             >
-              <span className="project-stage-number">{String(index + 1).padStart(2, '0')}</span>
+              {experimentGroup === 'pdt' && <span className="project-stage-number">{String(index + 1).padStart(2, '0')}</span>}
               <Icon size={15} />
-              <strong>{isFunctionFlow ? (isZh ? '画流程' : 'Flow') : (isZh ? stage.shortZh : stage.shortEn)}</strong>
+              <strong>{experimentGroup !== 'pdt' ? (isZh ? '编程工作台' : 'Coding workspace') : isFunctionFlow ? (isZh ? '画流程' : 'Flow') : (isZh ? stage.shortZh : stage.shortEn)}</strong>
             </button>
           );
         })}

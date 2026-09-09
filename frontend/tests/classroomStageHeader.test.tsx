@@ -13,7 +13,7 @@ describe('两组阶段导航', () => {
   }
   it('常规 AI 不展示解构、系统关系或路径门槛', () => {
     const html = header('ai_pbl');
-    expect(html).toContain('再建构');
+    expect(html).toContain('编程工作台');
     for (const label of ['拆功能', '观察', '理关系', '定路径', '画流程']) expect(html).not.toContain(label);
   });
   it('解构组仍保留单功能流程，不恢复旧系统关系与路径', () => {
