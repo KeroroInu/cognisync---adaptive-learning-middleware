@@ -1,8 +1,8 @@
 .project-scaffold-panel {
   position: fixed;
   z-index: 140;
-  width: min(520px, calc(100vw - 24px));
-  height: min(680px, calc(100vh - 90px));
+  width: min(460px, calc(100vw - 24px));
+  height: min(620px, calc(100dvh - 90px));
   min-width: min(400px, calc(100vw - 24px));
   min-height: min(520px, calc(100vh - 90px));
   max-width: calc(100vw - 24px);
@@ -81,7 +81,7 @@
 .project-scaffold-context span,
 .project-scaffold-context b { padding: 6px 10px; border: 1.5px solid #161713; border-radius: 6px; font-size: .78rem; }
 .project-scaffold-context span { background: var(--brand-cyan); color: #161713; font-weight: 900; }
-.project-scaffold-context b { background: var(--surface-muted); font-weight: 850; }
+.project-scaffold-context b { background: var(--surface-muted); font-weight: 650; }
 .project-scaffold-context > small { display: inline-flex; align-items: center; gap: 5px; color: var(--text-tertiary); font-size: .7rem; }
 
 .project-scaffold-stream {
@@ -99,11 +99,11 @@
   scrollbar-width: thin;
 }
 
-.project-scaffold-empty { min-height: 235px; display: grid; place-items: center; align-content: center; gap: 8px; padding: 26px; color: var(--text-secondary); text-align: center; }
+.project-scaffold-empty { min-height: 180px; display: grid; place-items: center; align-content: center; gap: 10px; padding: 18px 10px; color: var(--text-secondary); text-align: center; }
 .project-scaffold-empty svg { color: #6c812e; }
 .project-scaffold-empty h4 { margin: 2px 0 0; color: var(--text-primary); font-size: 1.05rem; }
-.project-scaffold-empty p { max-width: 450px; margin: 0; font-size: .86rem; line-height: 1.72; }
-.project-scaffold-empty small { color: var(--text-tertiary); font-size: .7rem; }
+.project-scaffold-empty p { max-width: 450px; margin: 0; font-size: 15px; line-height: 1.7; }
+.project-scaffold-empty small { color: var(--text-secondary); font-size: 13px; }
 
 .project-scaffold-chat { display: flex; align-items: flex-start; gap: 8px; max-width: 100%; min-width: 0; }
 .project-scaffold-chat.is-user { justify-self: end; flex-direction: row-reverse; }
@@ -114,32 +114,34 @@
 .project-scaffold-chat small { color: #65752f; font-size: 12px; font-weight: 650; }
 .project-scaffold-chat p { margin: 5px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 15px; line-height: 1.7; }
 .assistant-code-block { min-width: 0; margin-top: 10px; border: 1px solid var(--line-strong); border-radius: 7px; overflow: hidden; background: #111811; color: #eff3e7; }
-.assistant-code-block button { display: block; margin: 6px 6px 0 auto; padding: 4px 8px; border: 1px solid #64715d; border-radius: 4px; color: inherit; background: transparent; font-size: 12px; cursor: pointer; }
+.assistant-code-block button { display: block; min-height:30px; margin: 6px 6px 0 auto; padding: 4px 8px; border: 1px solid #64715d; border-radius: 4px; color: inherit; background: transparent; font-size: 13px; cursor: pointer; }
 .assistant-code-block pre { overflow: auto; max-width: 100%; margin: 0; padding: 10px; white-space: pre; font-size: 14px; line-height: 1.6; }
 .assistant-code-block code { font-family: ui-monospace, monospace; }
-.project-scaffold-thinking { display: inline-flex; align-items: center; gap: 7px; color: var(--text-tertiary); font-size: .72rem; }
-.project-scaffold-thinking .is-spinning { animation: scaffold-spin .8s linear infinite; }
+.project-scaffold-thinking { display: inline-flex; align-items: center; gap: 7px; color: var(--text-secondary); font-size: 13px; }
+.project-scaffold-panel .is-spinning { animation: scaffold-spin .8s linear infinite; }
 @keyframes scaffold-spin { to { transform: rotate(360deg); } }
 
 .project-scaffold-composer { display: grid; grid-template-columns: minmax(0, 1fr) 46px; gap: 8px; }
-.project-scaffold-composer textarea { min-height: 66px; resize: none; padding: 11px 12px; border: 1.5px solid #161713; border-radius: 9px; background: var(--surface-strong); color: var(--text-primary); font: inherit; font-size: .79rem; line-height: 1.5; }
+.project-scaffold-composer textarea { min-height: 76px; resize: none; padding: 11px 12px; border: 1.5px solid #161713; border-radius: 9px; background: var(--surface-strong); color: var(--text-primary); font: inherit; font-size: 15px; line-height: 1.5; }
 .project-scaffold-composer textarea:focus { outline: 3px solid color-mix(in srgb, var(--brand-cyan) 45%, transparent); outline-offset: 1px; }
 .project-scaffold-composer button { display: grid; place-items: center; border: 1.5px solid #161713; border-radius: 9px; background: var(--brand-cyan); color: #161713; box-shadow: 3px 4px 0 #161713; cursor: pointer; }
 .project-scaffold-composer button:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; }
-.project-scaffold-error { margin: -3px 0 0; color: #b33939; font-size: .7rem; }
+.project-scaffold-error { margin: -3px 0 0; padding:8px 10px; border-left:3px solid #b33939; background:#fff1ed; color: #962c20; font-size: 14px; line-height:1.55; overflow-wrap:anywhere; }
 
-.project-scaffold-l3-confirm { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 12px; border: 1.5px solid #161713; border-radius: 9px; background: color-mix(in srgb, var(--brand-cyan) 16%, var(--surface-strong)); }
-.project-scaffold-l3-confirm strong { font-size: .82rem; }
-.project-scaffold-l3-confirm p { margin: 4px 0 0; color: var(--text-secondary); font-size: 1rem; line-height: 1.5; }
-.project-scaffold-l3-confirm > div:last-child { display: flex; gap: 7px; }
+.project-scaffold-l3-confirm { display: grid; grid-template-columns: minmax(0, 1fr); align-items: center; gap: 10px; padding: 12px; border: 1.5px solid #161713; border-radius: 9px; background: color-mix(in srgb, var(--brand-cyan) 16%, var(--surface-strong)); }
+.project-scaffold-l3-confirm strong { font-size: 15px; }
+.project-scaffold-l3-confirm p { margin: 4px 0 0; color: var(--text-secondary); font-size: 14px; line-height: 1.5; }
+.project-scaffold-l3-confirm > div:last-child { display: flex; justify-content:flex-end; flex-wrap:wrap; gap: 7px; }
 .project-scaffold-l3-confirm button { min-height: 42px; padding: 0 10px; border: 1.5px solid #161713; border-radius: 7px; background: var(--surface-strong); color: var(--text-primary); font-size: .78rem; font-weight: 850; white-space: nowrap; cursor: pointer; }
 .project-scaffold-l3-confirm button.is-confirm { background: var(--brand-cyan); color: #161713; box-shadow: 2px 3px 0 #161713; }
 
 .project-scaffold-actions { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
-.project-scaffold-actions button { min-height: 42px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 0 13px; border: 1.5px solid var(--brand-ink); border-radius: 8px; background: var(--surface-muted); color: var(--text-primary); font-size: .74rem; font-weight: 850; cursor: pointer; }
+.project-scaffold-actions button { min-height: 42px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 0 12px; border: 1.5px solid var(--brand-ink); border-radius: 8px; background: var(--surface-muted); color: var(--text-primary); font-size: 14px; font-weight: 700; cursor: pointer; }
 .project-scaffold-actions button.is-primary { margin-right: auto; background: var(--brand-cyan); color: #161713; box-shadow: 3px 4px 0 #161713; }
 .project-scaffold-actions button:disabled { opacity: .5; cursor: not-allowed; box-shadow: none; }
-.project-scaffold-footnote { margin: 0; color: var(--text-tertiary); font-size: .64rem; line-height: 1.45; text-align: center; }
+.project-scaffold-footnote { margin: 0; color: var(--text-secondary); font-size: 12px; line-height: 1.5; text-align: center; }
+.project-scaffold-panel button:focus-visible { outline:3px solid #789944; outline-offset:3px; }
+.project-scaffold-context :is(span,b) { font-size:13px; }
 
 @media (max-width: 760px) {
   .project-scaffold-panel { left: 8px !important; top: 76px !important; right: 8px; bottom: 8px; width: auto !important; height: auto !important; min-width: 0; min-height: 0; max-width: none; max-height: none; }
@@ -153,6 +155,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .project-scaffold-panel, .project-scaffold-thinking .is-spinning { transition: none !important; animation: none !important; }
+  .project-scaffold-panel, .project-scaffold-panel .is-spinning { transition: none !important; animation: none !important; }
   .project-scaffold-stream { scroll-behavior: auto; }
 }

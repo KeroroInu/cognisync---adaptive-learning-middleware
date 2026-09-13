@@ -96,15 +96,15 @@ const readConfirmedL3 = (taskId: string): Set<string> => {
 
 const getDefaultPosition = (): Position => {
   if (typeof window === 'undefined') return { x: 748, y: 92 };
-  const width = Math.min(520, window.innerWidth - 24);
-  return { x: Math.max(12, window.innerWidth - width - 24), y: 92 };
+  const width = Math.min(460, window.innerWidth - 24);
+  return { x: Math.max(12, window.innerWidth - width - 24), y: 76 };
 };
 
 const getDefaultSize = (): PanelSize => {
-  if (typeof window === 'undefined') return { width: 520, height: 680 };
+  if (typeof window === 'undefined') return { width: 460, height: 620 };
   return {
-    width: Math.min(520, window.innerWidth - 24),
-    height: Math.min(680, window.innerHeight - 90),
+    width: Math.min(460, window.innerWidth - 24),
+    height: Math.min(620, window.innerHeight - 90),
   };
 };
 
@@ -459,13 +459,13 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
               <p>{observationStageReady
                 ? (isZh
                     ? `你保存了 ${observationCount} 张观察卡，可以继续拆功能了。`
-                    : `I read your ${observationCount} saved observation cards and confirmed that you ran the complete project. I will not ask you to repeat observations.`)
+                    : `You saved ${observationCount} observations. You can move on to identifying functions.`)
                 : (isZh
                     ? (stage === 'observe' ? '说说你发现了什么，我们一起看看。这里不用改代码。' : isCodingStage ? '我会看当前函数和运行结果。你想改哪里？' : '我会看你正在做的卡片。哪里还没想清楚？')
-                    : `You are at “${stageLabel.en}”. I can use this task's observations, function cards and function progress, plus current code and tests during build.`)}</p>
-              <small>{observationStageReady
+                    : stage === 'observe' ? 'Tell me what you noticed. You do not need to change code here.' : isCodingStage ? 'I can look at this function and its results. What would you like to change?' : 'Let’s look at your current card. What is unclear?')}</p>
+              {stage === 'observe' && <small>{observationStageReady
                 ? (isZh ? '下一步：进入功能拆解' : 'Next: continue to function decomposition')
-                : (isZh ? `${hasOpenedProject ? '已记录运行' : '暂未读到运行记录'} · ${observationCount} 张观察卡` : `${hasOpenedProject ? 'Run recorded' : 'No run evidence available'} · ${observationCount} observation cards`)}</small>
+                : (isZh ? `${hasOpenedProject ? '已记录运行' : '暂未读到运行记录'} · ${observationCount} 张观察卡` : `${hasOpenedProject ? 'Run recorded' : 'No run evidence available'} · ${observationCount} observation cards`)}</small>}
             </div>
           ) : visibleMessages.map(message => (
             <article key={message.id} className={`project-scaffold-chat is-${message.role}`}>
@@ -475,8 +475,8 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
                   ? `L${message.level} · ${((message.stage === 'build' || message.stage === 'transfer') ? BUILD_LEVEL_LABELS : LEVEL_LABELS)[language][message.level]}${
                       message.clampedFrom !== undefined
                         ? (isZh
-                            ? `（教师蓝图上限，已从 L${message.clampedFrom} 下调）`
-                            : ` (capped by the teacher blueprint, requested L${message.clampedFrom})`)
+                            ? '（按本课提示范围）'
+                            : ' (within this lesson’s hint limit)')
                         : ''
                     }`
                   : (isZh ? '我的问题' : 'My question')}</small>
@@ -487,15 +487,15 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
           {sending ? <div className="project-scaffold-thinking"><LoaderCircle size={16} className="is-spinning" />{isZh ? '正在看你的内容…' : 'Reviewing your work…'}</div> : null}
         </div>
 
-        {error ? <p className="project-scaffold-error">{error}</p> : null}
+        {error ? <p className="project-scaffold-error" role="alert">{error}</p> : null}
 
         {l3ConfirmationOpen ? (
           <section className="project-scaffold-l3-confirm" role="alertdialog" aria-labelledby="build-l3-confirm-title">
             <div>
               <strong id="build-l3-confirm-title">{isZh ? '确认查看当前函数的完整实现？' : 'Show the complete implementation?'}</strong>
               <p>{isZh
-                ? '给你当前函数的完整代码。看懂后复制到右边，再运行试试。'
-                : 'After confirmation, the assistant gives the complete correct code for this function only. It will not edit the editor; you still copy or type and run it yourself.'}</p>
+                ? '只给当前函数。你可以复制到编辑器，再运行试试。'
+                : 'You will get this function’s code. Copy it into the editor, then run it.'}</p>
             </div>
             <div>
               <button type="button" onClick={() => setL3ConfirmationOpen(false)}>{isZh ? '先不用' : 'Not now'}</button>
@@ -509,13 +509,13 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
             value={draft}
             onChange={event => setDraft(event.target.value)}
             onKeyDown={handleComposerKeyDown}
-            placeholder={isZh ? '说说你正在想什么…（Enter 发送）' : 'Describe what you are thinking… (Enter to send)'}
+            placeholder={isZh ? '哪里卡住了？Enter 发送，Shift+Enter 换行' : 'What are you working on? Enter sends, Shift+Enter starts a line'}
             aria-label={isZh ? '向项目学习助手提问；Enter 发送，Shift+Enter 换行' : 'Ask the project assistant; Enter sends, Shift+Enter starts a new line'}
             title={isZh ? 'Enter 发送，Shift+Enter 换行' : 'Enter to send, Shift+Enter for a new line'}
             maxLength={800}
             rows={2}
           />
-          <button type="submit" disabled={!draft.trim() || sending} aria-label={isZh ? '发送问题' : 'Send question'}><Send size={18} /></button>
+          <button type="submit" disabled={!draft.trim() || sending} aria-label={sending ? (isZh ? '正在回复' : 'Replying') : (isZh ? '发送问题' : 'Send question')}>{sending ? <LoaderCircle size={18} className="is-spinning" /> : <Send size={18} />}</button>
         </form>
 
         <div className="project-scaffold-actions">
