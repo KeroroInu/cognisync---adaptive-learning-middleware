@@ -154,21 +154,27 @@ async def reset_user_password(
     """管理员重置用户密码"""
     if len(body.new_password) < 6:
         raise HTTPException(status_code=400, detail="密码长度不能少于 6 位")
+    if len(body.new_password.encode("utf-8")) > 72:
+        raise HTTPException(status_code=400, detail="密码不能超过 72 个字节")
 
     try:
         uid = UUID(user_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid user_id")
 
-    result = await db.execute(select(User).where(User.id == uid))
+    result = await db.execute(select(User).where(User.id == uid).with_for_update())
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+
+    if user.role == "admin":
+        raise HTTPException(422, "此入口仅重置学生密码")
 
     import bcrypt
     user.password_hash = bcrypt.hashpw(
         body.new_password.encode("utf-8"), bcrypt.gensalt()
     ).decode("utf-8")
+    user.auth_version += 1
 
     await db.commit()
     return SuccessResponse(data={"reset": True, "user_id": user_id})

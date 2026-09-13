@@ -55,6 +55,9 @@ async def init_db():
         # 迁移：添加 student_id 列（幂等，安全重复执行）
         await _migrate_student_id()
 
+        await _run_migration_sql("ALTER TABLE users ADD COLUMN IF NOT EXISTS gender VARCHAR(10)", "ADD optional gender")
+        await _run_migration_sql("ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_version INTEGER NOT NULL DEFAULT 0", "ADD token revocation version")
+
         # 迁移：为 scale_responses 添加 started_at 列
         await _migrate_scale_started_at()
 

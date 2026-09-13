@@ -1,0 +1,25 @@
+.classroom-register { min-height:100dvh; display:flex; align-items:center; justify-content:center; padding:28px 18px; background:#f3f3eb; color:#242b1d; }
+.classroom-register > section { width:min(100%,430px); padding:32px; border:1px solid #d0d4c5; border-radius:20px; background:#fffef8; box-shadow:0 10px 35px #2932160d; }
+.classroom-register header { margin-bottom:26px; }
+.classroom-register-mark { display:inline-flex; align-items:center; justify-content:center; width:48px; height:48px; border-radius:15px; background:#e7f7b9; color:#4e6829; }
+.classroom-register header p { font-size:13px; color:#70805a; margin:18px 0 7px; }
+.classroom-register h1 { font-size:27px; font-weight:650; margin:0; }
+.classroom-register form { display:flex; flex-direction:column; gap:18px; }
+.classroom-register input:not([type=radio]) { height:46px; font-size:16px; }
+.classroom-register-password { position:relative; }
+.classroom-register-password input { padding-right:48px; }
+.classroom-register-password > button { position:absolute; right:3px; bottom:3px; height:40px; width:40px; display:flex; align-items:center; justify-content:center; color:#697858; background:transparent; border:0; border-radius:8px; cursor:pointer; }
+.classroom-register-gender { display:flex; gap:8px; padding:0; border:0; margin:0; }
+.classroom-register-gender legend { font-size:14px; margin-bottom:9px; }
+.classroom-register-gender small { color:#7a8370; font-size:12px; margin-left:6px; }
+.classroom-register-gender label { display:flex; align-items:center; justify-content:center; gap:7px; border:1px solid #d2d8c6; padding:10px 12px; border-radius:10px; cursor:pointer; font-size:14px; flex:1; white-space:nowrap; }
+.classroom-register-gender label.is-selected { background:#edf6dc; border-color:#7e9b4a; }
+.classroom-register-gender input { position:absolute; opacity:0; width:1px; height:1px; }
+.classroom-register-gender label:has(input:focus-visible) { outline:3px solid #729b40; outline-offset:2px; }
+.classroom-register-gender span { font-size:20px; }
+.classroom-register-submit { padding:13px 16px; border-radius:12px; border:0; font:inherit; font-weight:600; background:#2e4022; color:#fff; cursor:pointer; }
+.classroom-register button:disabled { opacity:.5; cursor:not-allowed; }
+.classroom-register-login { border:0; padding:4px; background:transparent; color:#65774a; font:inherit; font-size:14px; cursor:pointer; }
+.classroom-register :focus-visible { outline:3px solid #74963f; outline-offset:2px; }
+.classroom-register [role=alert] { margin:0; color:#a03d2b; font-size:14px; }
+@media(max-width:440px) { .classroom-register > section { padding:24px; } .classroom-register-gender label { padding:10px 8px; } }

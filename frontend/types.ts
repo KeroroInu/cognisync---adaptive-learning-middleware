@@ -109,6 +109,7 @@ export interface User {
   email?: string;
   name: string;
   createdAt: string;
+  gender?: 'male' | 'female' | null;
   hasCompletedOnboarding: boolean;
   onboardingMode?: 'classroom' | 'scale' | 'ai';
   className?: string;
@@ -137,6 +138,7 @@ export interface RegisterRequest {
   student_id: string;
   name: string;
   password: string;
+  gender?: 'male' | 'female' | null;
   email?: string;
   mode: 'classroom' | 'scale' | 'ai';
   className?: string;

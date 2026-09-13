@@ -24,13 +24,16 @@ _EXPIRE_MINUTES = settings.JWT_EXPIRES_IN
 
 
 def _verify_password(plain: str, hashed: str) -> bool:
-    return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
+    try:
+        return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
+    except ValueError:
+        return False
 
 
-def _create_admin_token(user_id: str) -> str:
+def _create_admin_token(user_id: str, auth_version: int = 0) -> str:
     """创建包含 role='admin' 声明的 JWT"""
     expire = datetime.now(timezone.utc) + timedelta(minutes=_EXPIRE_MINUTES)
-    payload = {"sub": str(user_id), "role": "admin", "exp": expire}
+    payload = {"sub": str(user_id), "role": "admin", "exp": expire, "ver": auth_version}
     return jwt.encode(payload, _SECRET_KEY, algorithm=_ALGORITHM)
 
 
@@ -54,9 +57,14 @@ async def get_current_admin(
         raise HTTPException(status_code=401, detail="Token 无效")
 
     import uuid as _uuid
-    user = await db.get(User, _uuid.UUID(user_id))
+    try:
+        user = await db.get(User, _uuid.UUID(user_id))
+    except ValueError:
+        raise HTTPException(status_code=401, detail="Token 无效") from None
     if not user or user.role != "admin" or not user.is_active:
         raise HTTPException(status_code=403, detail="管理员账号不存在、已禁用或已被降权")
+    if payload.get("ver", 0) != user.auth_version:
+        raise HTTPException(status_code=401, detail="密码已更新，请重新登录")
 
     return user
 
@@ -118,7 +126,7 @@ async def admin_login(
     if user.role != "admin":
         raise HTTPException(status_code=403, detail="该账号没有管理员权限，请联系管理员")
 
-    token = _create_admin_token(str(user.id))
+    token = _create_admin_token(str(user.id), user.auth_version)
 
     return SuccessResponse(data=AdminLoginData(
         token=token,
@@ -171,13 +179,16 @@ async def create_admin(
     if not x_admin_key or x_admin_key != settings.ADMIN_KEY:
         raise HTTPException(status_code=403, detail="X-ADMIN-KEY 无效")
 
-    result = await db.execute(select(User).where(User.student_id == data.student_id))
+    result = await db.execute(select(User).where(User.student_id == data.student_id).with_for_update())
     user = result.scalar_one_or_none()
 
+    if len(data.password) < 6 or len(data.password.encode("utf-8")) > 72:
+        raise HTTPException(422, "密码至少 6 位，UTF-8 长度不能超过 72 字节")
     new_hash = bcrypt.hashpw(data.password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
     if user:
         user.password_hash = new_hash
+        user.auth_version += 1
         user.role = "admin"
         if data.name:
             user.name = data.name

@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { ClipboardList, MessageSquare, Check, ArrowLeft, Hash, Lock, User, Mail, Loader } from 'lucide-react';
+import { ClipboardList, MessageSquare, Check, ArrowLeft, User, Loader, Eye, EyeOff } from 'lucide-react';
 import { Input } from '../components/Input';
 import { register as registerAPI, AuthError } from '../services/api';
 import { translations } from '../utils/translations';
 import type { Language } from '../types';
+import './Register.css';
 
 export interface PendingScaleRegistration {
   student_id: string;
@@ -39,6 +40,8 @@ export const Register: React.FC<RegisterProps> = ({
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [gender, setGender] = useState<'male' | 'female' | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   /** 该学号已开始注册但未完成时置真：错误框下方额外给出「去登录继续」入口。 */
@@ -69,7 +72,7 @@ export const Register: React.FC<RegisterProps> = ({
       return;
     }
 
-    if (password !== confirmPassword) {
+    if (!classroomOnly && password !== confirmPassword) {
       setError(language === 'zh' ? '两次密码不一致' : 'Passwords do not match');
       return;
     }
@@ -113,10 +116,11 @@ export const Register: React.FC<RegisterProps> = ({
       const response = await registerAPI({
         student_id: studentId.trim(),
         name: name.trim(),
-        email: email.trim() || undefined,
+        email: classroomOnly ? undefined : email.trim() || undefined,
         password,
         mode: classroomOnly ? 'classroom' : mode,
-        className: className.trim() || undefined,
+        className: classroomOnly ? undefined : className.trim() || undefined,
+        ...(classroomOnly ? { gender } : {}),
       });
 
       const token = response.success && response.data ? response.data.token : '';
@@ -147,6 +151,25 @@ export const Register: React.FC<RegisterProps> = ({
 
   // Render basic info form
   if (step === 'info') {
+    if (classroomOnly) return <main className="classroom-register">
+      <section aria-labelledby="classroom-register-heading">
+        <header><span className="classroom-register-mark"><User size={26} /></span><p>CogniSync · 编程课堂</p><h1 id="classroom-register-heading">先认识一下你</h1></header>
+        <form onSubmit={handleNext}>
+          <Input label={language === 'zh' ? '姓名' : 'Name'} placeholder="你的姓名" value={name} onChange={e => setName(e.target.value)} required autoComplete="name" maxLength={100} disabled={isLoading} />
+          <Input label={t.studentId} placeholder="你的学号" value={studentId} onChange={e => setStudentId(e.target.value)} required autoComplete="username" maxLength={50} disabled={isLoading} />
+          <div className="classroom-register-password"><Input label={t.password} placeholder="自己设一个密码，至少 6 位" type={showPassword ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)} required minLength={6} maxLength={128} autoComplete="new-password" disabled={isLoading} />
+            <button type="button" aria-label={showPassword ? '隐藏密码' : '显示密码'} aria-pressed={showPassword} onClick={() => setShowPassword(value => !value)}>{showPassword ? <EyeOff size={20} /> : <Eye size={20} />}</button></div>
+          <fieldset className="classroom-register-gender" disabled={isLoading}><legend>性别 <small>选填</small></legend>
+            {[{ value: 'male' as const, icon: '♂', label: '男' }, { value: 'female' as const, icon: '♀', label: '女' }, { value: null, icon: '—', label: '暂不填写' }].map(option => <label key={option.value ?? 'skip'} className={gender === option.value ? 'is-selected' : ''}>
+              <input type="radio" name="gender" checked={gender === option.value} onChange={() => setGender(option.value)} /><span aria-hidden="true">{option.icon}</span>{option.label}
+            </label>)}
+          </fieldset>
+          {error ? <p role="alert">{error}</p> : null}
+          <button type="submit" className="classroom-register-submit" disabled={isLoading}>{isLoading ? '正在注册…' : '注册并进入课堂'}</button>
+          <button type="button" className="classroom-register-login" onClick={onNavigateToLogin}>已有账号？直接登录</button>
+        </form>
+      </section>
+    </main>;
     return (
       <div className="min-h-screen flex items-center justify-center gradient-mesh p-4">
         <div className="w-full max-w-md animate-scale-in">

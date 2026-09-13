@@ -2,9 +2,9 @@
 Auth Schemas - 认证相关 Pydantic 模型
 """
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Literal
 from uuid import UUID
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
 class LoginRequest(BaseModel):
@@ -18,11 +18,27 @@ class RegisterRequest(BaseModel):
     student_id: str = Field(..., min_length=1, description="学号（必填）")
     name: str = Field(..., min_length=1, description="姓名（必填）")
     password: str = Field(..., min_length=6, description="密码（≥6字符）")
+    gender: Optional[Literal["male", "female"]] = None
     email: Optional[EmailStr] = Field(None, description="邮箱（可选）")
     mode: str = Field(..., description="注册模式：classroom（只建账号） | scale | ai")
     class_name: Optional[str] = Field(None, alias="className", max_length=100, description="班级名称或代码")
 
     model_config = {"populate_by_name": True}
+
+    @field_validator("password")
+    @classmethod
+    def password_size(cls, value):
+        if len(value.encode("utf-8")) > 72:
+            raise ValueError("密码不能超过 72 个字节")
+        return value
+
+    @field_validator("name", "student_id")
+    @classmethod
+    def clean_identity(cls, value):
+        value = value.strip()
+        if not value or len(value) > 50:
+            raise ValueError("姓名和学号须为 1—50 个字符")
+        return value
 
 
 class UserInfo(BaseModel):
@@ -31,6 +47,7 @@ class UserInfo(BaseModel):
     student_id: str = Field(..., description="学号")
     email: Optional[str] = Field(None, description="邮箱（可选）")
     name: str = Field(..., description="姓名")
+    gender: Optional[Literal["male", "female"]] = None
     created_at: datetime = Field(..., alias="createdAt")
     has_completed_onboarding: bool = Field(False, alias="hasCompletedOnboarding")
     onboarding_mode: Optional[str] = Field(None, alias="onboardingMode", description="注册模式: scale | ai")

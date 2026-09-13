@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { adminApi } from '../lib/adminApi';
 import type { User } from '../types';
@@ -40,6 +40,35 @@ export const Users = () => {
   const [resetLoading, setResetLoading] = useState(false);
   const [resetError, setResetError] = useState('');
   const [resetSuccess, setResetSuccess] = useState(false);
+  const [resetAcknowledged, setResetAcknowledged] = useState(false);
+  const resetLock = useRef(false);
+  const resetDialog = useRef<HTMLDivElement>(null);
+
+  const closeReset = useCallback(() => {
+    if (resetLock.current) return;
+    setResetUser(null);
+    setResetPassword('');
+    setResetConfirm('');
+    setResetAcknowledged(false);
+  }, []);
+
+  useEffect(() => {
+    if (!resetUser) return;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const dialog = resetDialog.current;
+    dialog?.focus();
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') { event.preventDefault(); closeReset(); }
+      if (event.key !== 'Tab' || !dialog) return;
+      const controls = Array.from(dialog.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), [tabindex="0"]'));
+      const first = controls[0]; const last = controls[controls.length - 1];
+      if (!first) { event.preventDefault(); return; }
+      if (event.shiftKey && (document.activeElement === first || document.activeElement === dialog)) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && (document.activeElement === last || document.activeElement === dialog)) { event.preventDefault(); first.focus(); }
+    }
+    document.addEventListener('keydown', onKeyDown);
+    return () => { document.removeEventListener('keydown', onKeyDown); previousFocus?.focus(); };
+  }, [resetUser, closeReset]);
 
   const loadUsers = useCallback(async () => {
     try {
@@ -100,10 +129,11 @@ export const Users = () => {
     setResetConfirm('');
     setResetError('');
     setResetSuccess(false);
+    setResetAcknowledged(false);
   };
 
   const handleResetSave = async () => {
-    if (!resetUser) return;
+    if (!resetUser || resetLock.current) return;
     if (resetPassword.length < 6) {
       setResetError('密码长度不能少于 6 位');
       return;
@@ -112,14 +142,22 @@ export const Users = () => {
       setResetError('两次输入的密码不一致');
       return;
     }
+    if (!resetAcknowledged) {
+      setResetError('请确认已经核对学生身份，并告知原密码将失效。');
+      return;
+    }
     try {
+      resetLock.current = true;
       setResetLoading(true);
       setResetError('');
       await adminApi.resetUserPassword(resetUser.id, resetPassword);
+      setResetPassword('');
+      setResetConfirm('');
       setResetSuccess(true);
     } catch (err) {
       setResetError(err instanceof Error ? err.message : '重置失败');
     } finally {
+      resetLock.current = false;
       setResetLoading(false);
     }
   };
@@ -349,20 +387,24 @@ export const Users = () => {
       {/* Reset Password Modal */}
       {resetUser && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="glass-card rounded-2xl p-6 w-full max-w-md mx-4">
+          <div ref={resetDialog} role="dialog" aria-modal="true" aria-labelledby="reset-password-title" tabIndex={-1} className="glass-card rounded-2xl p-6 w-full max-w-md mx-4" style={{ maxHeight: '92dvh', overflowY: 'auto' }}>
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <KeyRound size={20} style={{ color: '#f59e0b' }} />
-                <h2 className="text-xl font-bold" style={{ color: 'var(--text-primary)' }}>重置密码</h2>
+                <h2 id="reset-password-title" className="text-xl font-bold" style={{ color: 'var(--text-primary)' }}>帮助学生重设密码</h2>
               </div>
               <button
-                onClick={() => setResetUser(null)}
+                onClick={closeReset}
+                disabled={resetLoading}
+                aria-label="关闭重设密码"
                 className="p-1 rounded-lg transition-opacity hover:opacity-60"
                 style={{ color: 'var(--text-light)' }}
               >
                 <X size={20} />
               </button>
             </div>
+
+            <p className="mb-4" style={{ color: 'var(--text-secondary)' }}>系统不保存可查看的原密码。学生忘记密码时，教师可以在核对身份后设置新密码。</p>
 
             {/* Student info */}
             <div className="mb-4 px-3 py-2 rounded-lg text-sm" style={{ background: 'var(--bg-secondary)', color: 'var(--text-secondary)' }}>
@@ -377,7 +419,7 @@ export const Users = () => {
                   <p className="text-sm mt-1" style={{ color: 'var(--text-light)' }}>学生下次登录时使用新密码即可</p>
                 </div>
                 <button
-                  onClick={() => setResetUser(null)}
+                  onClick={closeReset}
                   className="w-full px-4 py-2 rounded-lg bg-indigo-600 text-white hover:opacity-90 transition-opacity"
                 >
                   关闭
@@ -386,9 +428,12 @@ export const Users = () => {
             ) : (
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-tertiary)' }}>新密码</label>
+                  <label htmlFor="teacher-reset-password" className="block text-sm font-medium mb-1" style={{ color: 'var(--text-tertiary)' }}>新密码</label>
                   <input
+                    id="teacher-reset-password"
                     type="password"
+                    autoComplete="new-password"
+                    disabled={resetLoading}
                     value={resetPassword}
                     onChange={(e) => setResetPassword(e.target.value)}
                     placeholder="至少 6 位"
@@ -398,9 +443,12 @@ export const Users = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-tertiary)' }}>确认新密码</label>
+                  <label htmlFor="teacher-reset-password-confirm" className="block text-sm font-medium mb-1" style={{ color: 'var(--text-tertiary)' }}>确认新密码</label>
                   <input
+                    id="teacher-reset-password-confirm"
                     type="password"
+                    autoComplete="new-password"
+                    disabled={resetLoading}
                     value={resetConfirm}
                     onChange={(e) => setResetConfirm(e.target.value)}
                     placeholder="再次输入新密码"
@@ -409,13 +457,16 @@ export const Users = () => {
                   />
                 </div>
 
+                <label className="flex items-start gap-2" style={{ color: 'var(--text-secondary)' }}><input type="checkbox" checked={resetAcknowledged} disabled={resetLoading} onChange={event => setResetAcknowledged(event.target.checked)} className="mt-1" />我已核对学生身份，并告知原密码将失效。</label>
+
                 {resetError && (
-                  <p className="text-sm text-red-500">{resetError}</p>
+                  <p role="alert" className="text-sm text-red-500">{resetError}</p>
                 )}
 
                 <div className="flex gap-3 pt-2">
                   <button
-                    onClick={() => setResetUser(null)}
+                    onClick={closeReset}
+                    disabled={resetLoading}
                     className="flex-1 px-4 py-2 rounded-lg border transition-opacity hover:opacity-70"
                     style={{ borderColor: 'var(--glass-border)', color: 'var(--text-secondary)' }}
                   >
@@ -423,7 +474,7 @@ export const Users = () => {
                   </button>
                   <button
                     onClick={handleResetSave}
-                    disabled={resetLoading}
+                    disabled={resetLoading || !resetAcknowledged}
                     className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-white hover:opacity-90 disabled:opacity-50 transition-opacity"
                     style={{ background: 'linear-gradient(135deg, #f59e0b, #ef4444)' }}
                   >
@@ -438,6 +489,7 @@ export const Users = () => {
       )}
 
       {/* Search */}
+      <p style={{ color: 'var(--text-secondary)' }}>学生自行设置密码。忘记时，点击对应学生右侧的钥匙按钮重设；后台不显示原密码。</p>
       <div className="glass-card p-4 rounded-xl">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />

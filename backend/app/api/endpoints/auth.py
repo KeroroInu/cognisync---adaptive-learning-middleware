@@ -31,10 +31,10 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = settings.JWT_EXPIRES_IN
 
 
-def create_access_token(user_id: str) -> str:
+def create_access_token(user_id: str, auth_version: int = 0) -> str:
     """创建访问令牌"""
     expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode = {"sub": str(user_id), "exp": expire}
+    to_encode = {"sub": str(user_id), "exp": expire, "ver": auth_version}
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 
@@ -45,7 +45,10 @@ def hash_password(password: str) -> str:
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """验证密码"""
-    return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
+    try:
+        return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
+    except ValueError:
+        return False
 
 
 def ensure_self_scope(requested_user_id: str, current_user: User) -> None:
@@ -83,11 +86,15 @@ async def get_current_user(
         raise HTTPException(status_code=401, detail="Invalid token")
 
     # 从数据库查询用户
-    stmt = select(User).where(User.id == uuid.UUID(user_id))
+    try:
+        uid = uuid.UUID(user_id)
+    except (ValueError, TypeError, AttributeError):
+        raise HTTPException(status_code=401, detail="Invalid token")
+    stmt = select(User).where(User.id == uid)
     result = await db.execute(stmt)
     user = result.scalar_one_or_none()
 
-    if user is None or not user.is_active:
+    if user is None or not user.is_active or payload.get("ver", 0) != user.auth_version:
         logger.warning(f"[AUTH] User not found in database: {user_id}")
         raise HTTPException(status_code=401, detail="User not found")
 
@@ -124,7 +131,7 @@ async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
     logger.info(f"[LOGIN] Password verified for user: {user.id}")
 
     # 生成token
-    token = create_access_token(str(user.id))
+    token = create_access_token(str(user.id), user.auth_version)
     logger.info(f"[LOGIN] Access token generated for user: {user.id}")
 
     # 检查是否有画像（判断是否完成了onboarding）
@@ -139,6 +146,7 @@ async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
         student_id=user.student_id,
         email=user.email,
         name=user.name,
+        gender=user.gender,
         createdAt=user.created_at.isoformat(),
         hasCompletedOnboarding=user.has_completed_onboarding,
         onboardingMode=user.onboarding_mode,
@@ -225,6 +233,7 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
             id=uuid.uuid4(),
             student_id=data.student_id,
             name=data.name,
+            gender=data.gender,
             email=data.email,  # 可为 None
             password_hash=hash_password(data.password),
             role="learner",
@@ -247,7 +256,7 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
         logger.info("[REGISTER] User object refreshed successfully")
 
         # 生成token
-        token = create_access_token(str(new_user.id))
+        token = create_access_token(str(new_user.id), new_user.auth_version)
         logger.info(f"[REGISTER] Access token generated for user: {new_user.id}")
 
         # 构造用户信息
@@ -256,6 +265,7 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
             student_id=new_user.student_id,
             email=new_user.email,
             name=new_user.name,
+            gender=new_user.gender,
             createdAt=new_user.created_at.isoformat(),
             hasCompletedOnboarding=False,
             onboardingMode=new_user.onboarding_mode,
@@ -492,7 +502,7 @@ async def register_with_scale(data: RegisterWithScaleRequest, db: AsyncSession =
         await db.refresh(new_user)
         logger.info(f"[REGISTER-WITH-SCALE] ✅ Success: {new_user.student_id}")
 
-        token     = create_access_token(str(new_user.id))
+        token     = create_access_token(str(new_user.id), new_user.auth_version)
         user_info = UserInfo(
             id=str(new_user.id),
             student_id=new_user.student_id,
@@ -553,6 +563,7 @@ async def get_current_user_info(
         student_id=current_user.student_id,
         email=current_user.email,
         name=current_user.name,
+        gender=current_user.gender,
         createdAt=current_user.created_at.isoformat(),
         hasCompletedOnboarding=current_user.has_completed_onboarding,
         onboardingMode=current_user.onboarding_mode,

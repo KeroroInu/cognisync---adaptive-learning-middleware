@@ -32,4 +32,6 @@ async def verify_admin_key(
         raise HTTPException(status_code=401, detail="Token 无效")
     if not user or user.role != "admin" or not user.is_active:
         raise HTTPException(status_code=403, detail="管理员账号不存在、已禁用或已被降权")
+    if payload.get("ver", 0) != user.auth_version:
+        raise HTTPException(status_code=401, detail="密码已更新，请重新登录")
     return True
