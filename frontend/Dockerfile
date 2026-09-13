@@ -47,5 +47,8 @@ RUN npm run build
 FROM nginx:alpine
 COPY --from=builder /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
+# 一次压缩、多次发送；保留原文件，兼容不接受 gzip 的浏览器。
+RUN find /usr/share/nginx/html -type f \( -name '*.js' -o -name '*.css' -o -name '*.wasm' -o -name '*.json' -o -name '*.html' \) \
+    -exec gzip -k -6 '{}' \;
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]

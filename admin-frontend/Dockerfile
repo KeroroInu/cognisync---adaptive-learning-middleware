@@ -20,5 +20,8 @@ RUN npm run build
 FROM nginx:alpine
 COPY --from=builder /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
+# 只压缩公共静态文件，不压缩或缓存 API 答案、代码和身份信息。
+RUN find /usr/share/nginx/html -type f \( -name '*.js' -o -name '*.css' -o -name '*.json' -o -name '*.html' \) \
+    -exec gzip -k -6 '{}' \;
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]
