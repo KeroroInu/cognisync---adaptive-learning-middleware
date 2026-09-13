@@ -106,8 +106,11 @@ services:
     environment:
       - NEO4J_AUTH=${NEO4J_AUTH:-neo4j/cognisync_neo4j_2024}
       - NEO4J_PLUGINS=["apoc"]
-      - NEO4J_dbms_memory_heap_initial__size=512m
-      - NEO4J_dbms_memory_heap_max__size=1G
+      # Neo4j 5.x 配置名；显式约束 page cache，给 SQL、API 和操作系统留内存。
+      # 这不是容器总内存上限，JVM / native buffers 仍需部署时实测。
+      - NEO4J_server_memory_heap_initial__size=${NEO4J_HEAP_INITIAL_SIZE:-512m}
+      - NEO4J_server_memory_heap_max__size=${NEO4J_HEAP_MAX_SIZE:-1G}
+      - NEO4J_server_memory_pagecache_size=${NEO4J_PAGECACHE_SIZE:-256m}
     volumes:
       - neo4j-data:/data
       - neo4j-logs:/logs
