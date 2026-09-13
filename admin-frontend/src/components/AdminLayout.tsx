@@ -58,12 +58,9 @@ export const AdminLayout = ({ children }: AdminLayoutProps) => {
         <div className="admin-brand-block">
           {sidebarOpen && (
             <div className="admin-brand-row">
-              <div className="admin-brand-mark flow-surface">
-                A
-              </div>
               <div className="min-w-0">
-                <p className="admin-brand-title metallic-text">CogniSync Teacher</p>
-                <p className="admin-brand-subtitle">PDT teaching & evidence console</p>
+                <p className="admin-brand-title">CogniSync</p>
+                <p className="admin-brand-subtitle">教师工作台</p>
               </div>
             </div>
           )}
@@ -71,14 +68,16 @@ export const AdminLayout = ({ children }: AdminLayoutProps) => {
             onClick={() => setSidebarOpen(!sidebarOpen)} 
             className="admin-icon-button"
             aria-label={sidebarOpen ? '收起导航' : '展开导航'}
+            aria-expanded={sidebarOpen}
+            aria-controls="admin-navigation"
             title={sidebarOpen ? '收起导航' : '展开导航'}
           >
             {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
           </button>
         </div>
 
-        <nav className="admin-nav">
-          {navItems.map((item, index) => {
+        <nav id="admin-navigation" className="admin-nav" aria-label="教师端导航">
+          {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = item.path === '/'
               ? location.pathname === '/'
@@ -90,8 +89,9 @@ export const AdminLayout = ({ children }: AdminLayoutProps) => {
                 to={item.path}
                 className={`admin-nav-item ${isActive ? 'is-active' : ''} ${sidebarOpen ? '' : 'is-collapsed'}`}
                 title={sidebarOpen ? undefined : item.label}
+                aria-label={item.label}
+                aria-current={isActive ? 'page' : undefined}
               >
-                {sidebarOpen && <span className="admin-nav-index">{String(index + 1).padStart(2, '0')}</span>}
                 <Icon size={20} />
                 {sidebarOpen && <span className="font-medium">{item.label}</span>}
               </Link>
@@ -100,24 +100,26 @@ export const AdminLayout = ({ children }: AdminLayoutProps) => {
         </nav>
 
         <div className="admin-sidebar-footer">
-          <button
+          <div className="admin-appearance-tools"><button
             onClick={toggleTheme}
             className={`admin-tool-button ${sidebarOpen ? '' : 'is-collapsed'}`}
             title={theme === 'light' ? t('common.darkMode') : t('common.lightMode')}
+            aria-label={theme === 'light' ? t('common.darkMode') : t('common.lightMode')}
           >
             {theme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
-            {sidebarOpen && <span>{theme === 'light' ? t('common.darkMode') : t('common.lightMode')}</span>}
           </button>
-          <LanguageSwitcher compact={!sidebarOpen} />
+          <LanguageSwitcher compact />
+          </div>
           <button
             onClick={handleLogout}
             title={sidebarOpen ? undefined : '退出登录'}
+            aria-label="退出登录"
             className={`admin-tool-button is-danger ${sidebarOpen ? '' : 'is-collapsed'}`}
           >
             <LogOut size={20} />
             {sidebarOpen && (
               <span className="text-sm">
-                {user?.name ? `退出 (${user.name})` : '退出登录'}
+                退出登录
               </span>
             )}
           </button>
@@ -127,7 +129,6 @@ export const AdminLayout = ({ children }: AdminLayoutProps) => {
       <main className="admin-main glass-card">
         <header className="admin-header">
           <div>
-            <p className="admin-page-kicker">COGNISYNC / PDT 教学控制台</p>
             <h1 className="admin-page-title">
               {navItems.find(item => (
                 item.path === '/' ? location.pathname === '/' : location.pathname.startsWith(item.path)
