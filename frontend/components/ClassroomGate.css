@@ -1,4 +1,4 @@
-.classroom-shade { position:fixed; inset:0; z-index:1900; display:flex; align-items:center; justify-content:center; padding:24px; background:#17201673; backdrop-filter:blur(3px); }
+.classroom-shade { position:fixed; inset:0; z-index:1900; display:flex; align-items:center; justify-content:center; padding:24px; background:#17201673; }
 .classroom-question { width:min(100%,600px); max-height:calc(100dvh - 48px); overflow:auto; box-sizing:border-box; background:#fffef8; color:#242a20; border:1px solid #a5af96; border-radius:20px; padding:28px; box-shadow:0 18px 70px #1118; outline:none; }
 .classroom-question header { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:24px; }
 .classroom-question header > span { display:flex; align-items:center; gap:10px; font-size:15px; color:#5c694e; }
@@ -14,7 +14,7 @@
 .classroom-options span { flex:1; overflow-wrap:anywhere; }
 .classroom-question textarea { width:100%; min-height:120px; padding:14px; resize:vertical; background:#fffefb; font:inherit; font-size:17px; border:1px solid #bfc8b2; border-radius:12px; }
 .classroom-question footer { display:flex; justify-content:space-between; align-items:center; gap:12px; margin:26px 0 16px; }
-.classroom-question .classroom-primary { background:#26391e; color:#fff; border-color:#26391e; }
+.classroom-question .classroom-primary { background:var(--brand-cyan,#bdf52f); color:#161713; border-color:#161713; font-weight:700; }
 .classroom-question small,.classroom-muted { font-size:13px; line-height:1.7; color:#66725c; }
 .classroom-question [role=alert] { color:#a23929; line-height:1.5; }
 .classroom-question :focus-visible,.classroom-question-reminder:focus-visible { outline:3px solid #789944; outline-offset:3px; }
@@ -25,3 +25,9 @@
 .classroom-toast { bottom:28px; left:50%; transform:translateX(-50%); }
 .classroom-connection { bottom:20px; left:20px; max-width:calc(100vw - 40px); font-size:14px; }
 @media(max-width:600px) { .classroom-shade { padding:12px; } .classroom-question { padding:22px; max-height:calc(100dvh - 24px); } .classroom-question h1 { font-size:21px; } }
+.classroom-question textarea { box-sizing:border-box; line-height:1.6; }
+.classroom-question footer { flex-wrap:wrap; }
+.classroom-question button:not(:disabled):hover { background:#eef6d9; border-color:#789342; }
+.classroom-question .classroom-primary:not(:disabled):hover { background:#b8e84d; border-color:#161713; }
+.classroom-toast { max-width:calc(100vw - 32px); font-size:14px; }
+.classroom-options label:has(input:disabled) { cursor:default; }
