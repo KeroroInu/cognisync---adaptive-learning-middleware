@@ -10,6 +10,53 @@ const stateLabel = { open: '上课中', closing: '正在下课', closed: '已下
 const errorMessage = (error: unknown) => error instanceof Error ? error.message : '操作失败，请重试。';
 const dateLabel = (value: string) => new Date(value).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
+interface Confirmation {
+  title: string;
+  scope: string;
+  description: string;
+  confirmLabel: string;
+  preview?: string;
+  danger?: boolean;
+  operation: () => Promise<void>;
+}
+
+/** Native HTML dialog keeps keyboard focus inside the application confirmation. */
+export function ClassroomConfirmation({ title, scope, description, confirmLabel, preview, danger, busy, error, onConfirm, onCancel }: Omit<Confirmation, 'operation'> & {
+  busy: boolean;
+  error: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const dialog = dialogRef.current;
+    dialog?.showModal();
+    cancelRef.current?.focus();
+    return () => {
+      dialog?.close();
+      if (previous?.isConnected && !previous.matches(':disabled')) previous.focus();
+      else document.querySelector<HTMLButtonElement>('[aria-label="刷新课堂"]')?.focus();
+    };
+  }, []);
+  return <dialog ref={dialogRef} className="classroom-confirm" aria-labelledby="classroom-confirm-title" aria-describedby="classroom-confirm-description" aria-busy={busy}
+    onCancel={event => { event.preventDefault(); if (!busy) onCancel(); }}
+    onClick={event => { if (event.target === event.currentTarget && !busy) onCancel(); }}>
+    <div className="classroom-confirm-content">
+      <p className="classroom-confirm-scope">{scope}</p>
+      <h2 id="classroom-confirm-title">{title}</h2>
+      <p id="classroom-confirm-description">{description}</p>
+      {preview && <blockquote>{preview}</blockquote>}
+      {error && <p className="classroom-error" role="alert">{error}</p>}
+      <div className="classroom-actions">
+        <button ref={cancelRef} type="button" disabled={busy} onClick={onCancel}>取消</button>
+        <button type="button" disabled={busy} className={danger ? 'classroom-end' : 'classroom-primary'} onClick={onConfirm}>{busy ? '正在处理…' : confirmLabel}</button>
+      </div>
+    </div>
+  </dialog>;
+}
+
 export function Classroom() {
   const [sessions, setSessions] = useState<ClassroomSession[]>([]);
   const [selectedId, setSelectedId] = useState('');
@@ -26,6 +73,7 @@ export function Classroom() {
   const [responseData, setResponseData] = useState<ClassroomResponses | null>(null);
   const [responseError, setResponseError] = useState('');
   const [page, setPage] = useState(0);
+  const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
   const requestLock = useRef(false);
   const listSequence = useRef(0);
   const createRequest = useRef<{ key: string; id: string } | null>(null);
@@ -77,51 +125,69 @@ export function Classroom() {
   }, [promptId, page]);
 
   async function act(operation: () => Promise<void>) {
-    if (requestLock.current) return;
+    if (requestLock.current) return false;
     requestLock.current = true;
     setBusy(true); setError(''); setMessage('');
-    try { await operation(); await load(); }
-    catch (cause) { setError(errorMessage(cause)); }
+    try { await operation(); await load(); return true; }
+    catch (cause) { setError(errorMessage(cause)); return false; }
     finally { requestLock.current = false; setBusy(false); }
   }
 
-  async function create() {
+  function askToConfirm(next: Confirmation) {
+    if (requestLock.current) return;
+    setError('');
+    setConfirmation(next);
+  }
+
+  async function confirmAction() {
+    if (confirmation && await act(confirmation.operation)) setConfirmation(null);
+  }
+
+  function create() {
     if (!className.trim()) { setError('填写学生账号所属的班级，避免发到其他班。'); return; }
     if (!title.trim()) { setError('给这节课起一个名字，方便以后查找。'); return; }
-    if (!window.confirm(`为“${className.trim()}”开始“${title.trim()}”？\n同一班级的旧课次会保留记录，并切换到本课。`)) return;
     const payload = { class_name: className.trim(), title: title.trim() };
     const key = JSON.stringify(payload);
     if (createRequest.current?.key !== key) createRequest.current = { key, id: crypto.randomUUID() };
-    await act(async () => {
+    askToConfirm({ title: '开始这节课？', scope: payload.class_name, description: '本班的学习入口将开放。之前的课次和回答会保留。', confirmLabel: '开始上课', preview: payload.title, operation: async () => {
       const session = await classroomAdmin<ClassroomSession>('/sessions', { ...payload, request_id: createRequest.current!.id });
       setSelectedId(session.id); setCreating(false); setTitle(''); createRequest.current = null;
-      setMessage('课堂已开始。学生可继续学习，下面可以发一道互动题。');
-    });
+      setMessage('已开始上课，可以发题了。');
+    } });
   }
 
-  async function changeState(action: 'open' | 'end') {
+  function changeState(action: 'open' | 'end') {
     if (!selected?.is_current) return;
     const label = selected.class_name || '所有班级';
-    if (!window.confirm(action === 'end' ? `结束“${label}”的课堂？\n学生有 10 秒保存时间，之后不能继续学习或调用 AI。教师端不受影响。` : `重新开放“${label}”的课堂？`)) return;
-    await act(async () => {
+    askToConfirm({ title: action === 'end' ? '现在下课？' : '重新开放课堂？', scope: label,
+      description: action === 'end' ? '给学生 10 秒保存，然后关闭本班的学习和 AI 入口。数据保留，教师端不受影响。' : '本班学生可以继续编辑代码和使用 AI。',
+      confirmLabel: action === 'end' ? '确认下课' : '重新开放', danger: action === 'end', operation: async () => {
       await classroomAdmin(`/sessions/${selected.id}/state`, { action });
-      setMessage(action === 'end' ? '已通知下课。保存时间结束后关闭学习入口；现有数据保留。' : '课堂已重新开放。');
-    });
+      setMessage(action === 'end' ? '已通知下课，10 秒后关闭学习入口。' : '课堂已重新开放。');
+    } });
   }
 
-  async function publish() {
+  function publish() {
     if (!selected?.is_current || selected.state !== 'open') return;
     const validation = validateClassroomQuestion(question);
     if (validation) { setError(validation); return; }
-    if (!window.confirm(`向“${selected.class_name || '所有班级'}”发布这道题？\n学生会收到弹窗。题目发布后冻结，上一题的回答会保留。`)) return;
     const payload = { question: { ...question, text: question.text.trim(), options: question.type === 'choice' ? question.options.map(option => ({ value: option.value.trim(), label: option.label.trim() })) : [] }, source: source.trim() };
     const key = JSON.stringify({ session: selected.id, ...payload });
     if (publishRequest.current?.key !== key) publishRequest.current = { key, id: crypto.randomUUID() };
-    await act(async () => {
+    askToConfirm({ title: '向学生发布这道题？', scope: selected.class_name || '所有班级', description: '学生会收到提问弹窗。发布后不能修改这道题，上一题的回答会保留。', confirmLabel: '确认发布', preview: payload.question.text, operation: async () => {
       await classroomAdmin(`/sessions/${selected.id}/prompts`, { ...payload, request_id: publishRequest.current!.id });
       setQuestion(emptyQuestion()); setSource(''); publishRequest.current = null;
-      setMessage('题目已发布。回答会自动更新，学生不需要离开当前代码。');
-    });
+      setMessage('已发布，回答会自动更新。');
+    } });
+  }
+
+  function closePrompt() {
+    const prompt = selected?.prompt;
+    if (!selected?.is_current || !prompt) return;
+    askToConfirm({ title: '结束这道题？', scope: selected.class_name || '所有班级', description: '学生不能再提交这道题，已收到的答案会保留。', confirmLabel: '结束回答', preview: prompt.question.text, operation: async () => {
+      await classroomAdmin(`/prompts/${prompt.id}/close`, {});
+      setMessage('本题已结束，答案保留。');
+    } });
   }
 
   function selectSession(id: string) {
@@ -129,12 +195,12 @@ export function Classroom() {
   }
 
   return <div className="classroom-admin">
-    <div className="classroom-toolbar"><p>开课、发题、收回答。下课后可关闭学生的学习入口。</p><div className="classroom-actions">
+    <div className="classroom-toolbar"><p>发一道题，听听学生的想法。</p><div className="classroom-actions">
       <button disabled={busy} aria-label="刷新课堂" onClick={() => void load()}><RefreshCw size={18} />刷新</button>
       <button disabled={busy} className="classroom-primary" aria-expanded={creating} onClick={() => setCreating(value => !value)}><Plus size={18} />新课次</button>
     </div></div>
     {loadError && <p className="classroom-error" role="alert">{loadError}</p>}
-    {error && <p className="classroom-error" role="alert">{error}</p>}
+    {error && !confirmation && <p className="classroom-error" role="alert">{error}</p>}
     {message && <p className="classroom-message" role="status">{message}</p>}
     {creating && <form className="classroom-panel classroom-create" onSubmit={event => { event.preventDefault(); void create(); }}>
       <h2>开始一节课</h2><fieldset disabled={busy}>
@@ -144,24 +210,26 @@ export function Classroom() {
       </fieldset>
     </form>}
     {loading ? <p role="status">正在读取课堂…</p> : sessions.length === 0 ? <section className="classroom-empty"><DoorOpen size={32} /><h2>还没有课次</h2><p>点击“新课次”开始。没有设置过开关的班级仍可正常学习。</p></section> : <>
-      <label className="classroom-picker">选择课次<select disabled={busy} value={selectedId} onChange={event => selectSession(event.target.value)}>{sessions.map(session => <option key={session.id} value={session.id}>{session.class_name || '所有班级'} · {session.title} · {dateLabel(session.created_at)}{session.is_current ? '' : '（历史）'}</option>)}</select></label>
       {selected && <>
-        <section className="classroom-panel classroom-session"><div><span className={`classroom-state is-${selected.state}`}>{selected.is_current ? stateLabel[selected.state] : '历史课次'}</span><h2>{selected.title}</h2><p>{selected.class_name || '所有班级'}{selected.state === 'closing' && selected.closes_at ? ` · 将于 ${dateLabel(selected.closes_at)} 关闭` : ''}</p></div>
-          {selected.is_current && <button disabled={busy || selected.state === 'closing'} className={selected.state === 'open' ? 'classroom-end' : 'classroom-primary'} onClick={() => void changeState(selected.state === 'open' ? 'end' : 'open')}>{selected.state === 'open' ? <DoorClosed size={19} /> : <DoorOpen size={19} />}{selected.state === 'open' ? '下课 · 关闭学习入口' : selected.state === 'closing' ? '正在保存后关闭…' : '重新开放课堂'}</button>}
+        <section className="classroom-panel classroom-session" aria-label="当前课次">
+          <label className="classroom-picker">课次<select disabled={busy} value={selectedId} onChange={event => selectSession(event.target.value)}>{sessions.map(session => <option key={session.id} value={session.id}>{session.class_name || '所有班级'} · {session.title} · {dateLabel(session.created_at)}{session.is_current ? '' : '（历史）'}</option>)}</select></label>
+          <div className="classroom-session-actions"><span className={`classroom-state is-${selected.state}`}>{selected.is_current ? stateLabel[selected.state] : '历史课次'}</span>
+          {selected.is_current && <button disabled={busy || selected.state === 'closing'} className={selected.state === 'open' ? 'classroom-end' : 'classroom-primary'} onClick={() => changeState(selected.state === 'open' ? 'end' : 'open')}>{selected.state === 'open' ? <DoorClosed size={19} /> : <DoorOpen size={19} />}{selected.state === 'open' ? '下课' : selected.state === 'closing' ? '正在保存…' : '重新开放'}</button>}</div>
+          {selected.state === 'closing' && selected.closes_at && <p className="classroom-closing-note">学生正在保存，将于 {dateLabel(selected.closes_at)} 关闭学习入口。</p>}
         </section>
         <div className="classroom-workspace">
           <section className="classroom-panel classroom-compose"><h2><MessageSquare size={21} />发一道题</h2>
             <form onSubmit={event => { event.preventDefault(); void publish(); }}><fieldset disabled={busy || !selected.is_current || selected.state !== 'open'}>
-              <label>想问什么？<textarea required maxLength={2000} rows={3} placeholder="写下这一次想了解的问题。" value={question.text} onChange={event => setQuestion({ ...question, text: event.target.value })} /></label>
+              <label>想问什么？<textarea required maxLength={2000} rows={2} placeholder="写一个简短、清楚的问题。" value={question.text} onChange={event => setQuestion({ ...question, text: event.target.value })} /></label>
               <div className="classroom-question-settings"><label>回答方式<select value={question.type} onChange={event => setQuestion({ ...question, type: event.target.value as AssessmentQuestion['type'], options: event.target.value === 'text' ? [] : emptyQuestion().options })}><option value="choice">点选一个答案</option><option value="text">写一句话</option></select></label>
                 <label className="classroom-checkbox"><input type="checkbox" checked={question.required} onChange={event => setQuestion({ ...question, required: event.target.checked })} />需要回答</label></div>
               {question.type === 'choice' && <div className="classroom-options">{question.options.map((option, index) => <div key={index}><span>{index + 1}</span><input required maxLength={300} aria-label={`选项 ${index + 1}`} placeholder="选项文字" value={option.label} onChange={event => setQuestion({ ...question, options: question.options.map((item, current) => current === index ? { ...item, label: event.target.value } : item) })} /><button type="button" disabled={question.options.length <= 2} aria-label={`删除选项 ${index + 1}`} onClick={() => setQuestion({ ...question, options: question.options.filter((_, current) => current !== index).map((item, current) => ({ ...item, value: String(current + 1) })) })}><X size={17} /></button></div>)}<button type="button" disabled={question.options.length >= 12} onClick={() => setQuestion({ ...question, options: [...question.options, { value: String(question.options.length + 1), label: '' }] })}><Plus size={16} />添加选项</button></div>}
               <details><summary>来源备注（仅教师可见）</summary><textarea aria-label="题目来源备注" maxLength={2000} rows={2} placeholder="如使用正式量表，填写来源与原始题号。" value={source} onChange={event => setSource(event.target.value)} /><p>这里是课堂提问，不会自动评分或改动画像。</p></details>
-              <button type="submit" className="classroom-primary classroom-publish"><Send size={18} />发布到学生页面</button>
+              <button type="submit" className="classroom-primary classroom-publish"><Send size={18} />发布给学生</button>
             </fieldset></form>
             {(!selected.is_current || selected.state !== 'open') && <p>重新开放当前课堂后才能发题；历史记录不会被覆盖。</p>}
           </section>
-          <section className="classroom-panel classroom-results"><header><h2>本题回答</h2>{selected.prompt && !selected.prompt.closed_at && selected.is_current && <button disabled={busy} onClick={() => { if (window.confirm('结束这道题的回答？已提交的答案会保留。')) void act(async () => { await classroomAdmin(`/prompts/${selected.prompt!.id}/close`, {}); setMessage('本题已结束，答案保留。'); }); }}>结束回答</button>}</header>
+          <section className="classroom-panel classroom-results"><header><h2>本题回答</h2>{selected.prompt && !selected.prompt.closed_at && selected.is_current && <button disabled={busy} onClick={closePrompt}>结束回答</button>}</header>
             {!selected.prompt ? <p className="classroom-empty">还未发题。发布后在这里查看回答。</p> : <>
               <p className="classroom-published-question">{selected.prompt.question.text}</p>
               <p className="classroom-response-count"><strong>{responseData?.total ?? selected.response_count}</strong> 份回答{responseData ? ` / 班级当前 ${responseData.total_students} 人` : ''}<span>{selected.prompt.closed_at ? '本题已结束' : '收集中'}</span></p>
@@ -175,6 +243,7 @@ export function Classroom() {
         </div>
       </>}
     </>}
-    <footer className="classroom-footnote">历史题目、逐人答案和课次记录保存在数据库中，可到 <Link to="/exports">数据导出 → 课堂研究包</Link> 一并下载。下课开关不会删除数据，也不能关闭学生本地的 Pi。</footer>
+    <footer className="classroom-footnote">课次和每位学生的回答会保留，可在 <Link to="/exports">数据导出 → 课堂研究包</Link> 下载。<details><summary>下课开关的范围</summary>只关闭本班在平台内的学习和 AI 入口，不删除数据，也不影响学生本地的 Pi。</details></footer>
+    {confirmation && <ClassroomConfirmation {...confirmation} busy={busy} error={error} onConfirm={() => void confirmAction()} onCancel={() => { if (!requestLock.current) { setConfirmation(null); setError(''); } }} />}
   </div>;
 }
