@@ -1,11 +1,14 @@
 """
 Auth API Endpoints - 认证相关接口 (PostgreSQL Database Version)
 """
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict
 from fastapi import APIRouter, HTTPException, Header, Depends
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 import jwt
 import bcrypt
@@ -30,6 +33,60 @@ SECRET_KEY = settings.JWT_SECRET or "cognisync-dev-secret-key-change-in-producti
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = settings.JWT_EXPIRES_IN
 
+# bcrypt is deliberately CPU-expensive. Keep it off the API event loop without
+# spawning a thread per student. Cancellation cannot exceed this two-worker cap.
+_password_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="password")
+
+
+class PasswordWorkQueue:
+    """Bound password work independently of model calls and database sessions."""
+
+    def __init__(self, workers=2, max_waiters=64, wait_timeout=25):
+        self.slots = asyncio.Semaphore(workers)
+        self.waiting = 0
+        self.max_waiters = max_waiters
+        self.wait_timeout = wait_timeout
+
+    async def run(self, function, *args):
+        if self.waiting >= self.max_waiters:
+            raise HTTPException(503, detail={"code": "AUTH_BUSY", "message": "登录人数较多，请稍后再试。"})
+        self.waiting += 1
+        try:
+            async with asyncio.timeout(self.wait_timeout):
+                await self.slots.acquire()
+        except TimeoutError as error:
+            raise HTTPException(503, detail={"code": "AUTH_QUEUE_TIMEOUT", "message": "等待登录超时，请稍后再试。"}) from error
+        finally:
+            self.waiting -= 1
+        try:
+            work = asyncio.get_running_loop().run_in_executor(_password_executor, function, *args)
+        except BaseException:
+            self.slots.release()
+            raise
+
+        def completed(future):
+            self.slots.release()
+            # A disconnected request may no longer be awaiting this future.
+            if not future.cancelled():
+                future.exception()
+
+        work.add_done_callback(completed)
+        # Cancellation must not free a slot while bcrypt is still using a CPU.
+        return await asyncio.shield(work)
+
+
+_password_queue = None
+_password_queue_loop = None
+
+
+def get_password_queue():
+    global _password_queue, _password_queue_loop
+    loop = asyncio.get_running_loop()
+    if _password_queue is None or _password_queue_loop is not loop:
+        _password_queue = PasswordWorkQueue()
+        _password_queue_loop = loop
+    return _password_queue
+
 
 def create_access_token(user_id: str, auth_version: int = 0) -> str:
     """创建访问令牌"""
@@ -49,6 +106,14 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
         return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
     except ValueError:
         return False
+
+
+async def hash_password_async(password: str) -> str:
+    return await get_password_queue().run(hash_password, password)
+
+
+async def verify_password_async(plain_password: str, hashed_password: str) -> bool:
+    return await get_password_queue().run(verify_password, plain_password, hashed_password)
 
 
 def ensure_self_scope(requested_user_id: str, current_user: User) -> None:
@@ -123,15 +188,24 @@ async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
         logger.warning(f"[LOGIN] User not found: {data.student_id}")
         raise HTTPException(status_code=401, detail="Invalid student ID or password")
 
-    # 验证密码
-    if not user.password_hash or not verify_password(data.password, user.password_hash):
+    # Password work may queue. Do not retain a SQL connection while waiting;
+    # copy scalars before rollback expires the ORM object.
+    user_id, password_hash, auth_version = user.id, user.password_hash, user.auth_version
+    await db.rollback()
+    if not password_hash or not await verify_password_async(data.password, password_hash):
         logger.warning(f"[LOGIN] Invalid password for: {data.student_id}")
         raise HTTPException(status_code=401, detail="Invalid student ID or password")
+
+    user = await db.scalar(select(User).where(User.id == user_id).execution_options(populate_existing=True))
+    if (not user or not user.is_active or user.password_hash != password_hash
+            or user.auth_version != auth_version):
+        # A teacher may reset/disable the account while bcrypt is running.
+        raise HTTPException(status_code=401, detail="账号信息已变化，请重新登录。")
 
     logger.info(f"[LOGIN] Password verified for user: {user.id}")
 
     # 生成token
-    token = create_access_token(str(user.id), user.auth_version)
+    token = create_access_token(str(user.id), auth_version)
     logger.info(f"[LOGIN] Access token generated for user: {user.id}")
 
     # 检查是否有画像（判断是否完成了onboarding）
@@ -178,6 +252,9 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
     logger = logging.getLogger(__name__)
 
     logger.info(f"[REGISTER] Attempting registration for student_id: {data.student_id}, mode: {data.mode}")
+
+    # No SQL transaction is opened until the bounded password work finishes.
+    password_hash = await hash_password_async(data.password)
 
     # 检查学号是否已存在
     stmt = select(User).where(User.student_id == data.student_id)
@@ -235,7 +312,7 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
             name=data.name,
             gender=data.gender,
             email=data.email,  # 可为 None
-            password_hash=hash_password(data.password),
+            password_hash=password_hash,
             role="learner",
             is_active=True,
             created_at=datetime.now(timezone.utc),
@@ -254,9 +331,12 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
 
         await db.refresh(new_user)
         logger.info("[REGISTER] User object refreshed successfully")
+        if (new_user.password_hash != password_hash or new_user.auth_version != 0
+                or not new_user.is_active):
+            raise HTTPException(status_code=401, detail="账号信息已变化，请重新登录。")
 
         # 生成token
-        token = create_access_token(str(new_user.id), new_user.auth_version)
+        token = create_access_token(str(new_user.id), 0)
         logger.info(f"[REGISTER] Access token generated for user: {new_user.id}")
 
         # 构造用户信息
@@ -328,6 +408,9 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
         logger.info(f"[REGISTER] ✅ Registration successful: {new_user.student_id}")
         return AuthResponse(token=token, user=user_info, initialProfile=initial_profile, initialGraph=initial_graph)
 
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status_code=409, detail="账号信息已被使用，请登录或检查后重试。")
     except HTTPException:
         raise
     except Exception as e:
@@ -378,8 +461,16 @@ async def register_with_scale(data: RegisterWithScaleRequest, db: AsyncSession =
             },
         )
 
+    if existing_user and not existing_user.is_active:
+        raise HTTPException(status_code=401, detail="账号已停用，请联系老师。")
+    account_before = (
+        (existing_user.id, existing_user.password_hash or "", existing_user.auth_version, existing_user.onboarding_mode)
+        if existing_user else None
+    )
+    await db.rollback()
+
     # 未完成的账号可以改用量表模式继续（这是 AI 模式中断后的自助恢复路径，
-    # 下面 391 行起会复用该行而不是新建）。但**必须先证明是本人**。
+    # 后续会复用该行而不是新建）。但**必须先证明是本人**。
     #
     # 复用逻辑会重写 password_hash。若不校验原密码，任何人拿到别人未完成的
     # 学号就能把账号连同密码一起接管——学号在课堂场景里是公开可猜的。
@@ -389,7 +480,7 @@ async def register_with_scale(data: RegisterWithScaleRequest, db: AsyncSession =
     # /register 早已拒绝覆盖未完成账号的密码，这里却没有，属于两条注册路径
     # 的策略不一致。统一为：原密码正确才允许继续，否则给出与 /register
     # 相同的「请用原密码登录」指引。
-    if existing_user and not verify_password(data.password, existing_user.password_hash or ""):
+    if account_before and not await verify_password_async(data.password, account_before[1]):
         logger.warning(
             f"[REGISTER-WITH-SCALE] Password mismatch on incomplete account: {data.student_id}"
         )
@@ -402,9 +493,22 @@ async def register_with_scale(data: RegisterWithScaleRequest, db: AsyncSession =
                     "请用当时设置的密码登录，系统会自动带你回到未完成的那一步；"
                     "若要改用量表模式重新开始，请填写当时设置的密码。"
                 ),
-                "onboardingMode": existing_user.onboarding_mode,
+                "onboardingMode": account_before[3],
             },
         )
+
+    password_hash = await hash_password_async(data.password)
+    expected_auth_version = account_before[2] if account_before else 0
+    existing_user = await db.scalar(select(User).where(User.student_id == data.student_id)
+        .execution_options(populate_existing=True).with_for_update())
+    if account_before:
+        if (not existing_user or existing_user.id != account_before[0]
+                or not existing_user.is_active or existing_user.has_completed_onboarding
+                or existing_user.password_hash != account_before[1]
+                or existing_user.auth_version != account_before[2]):
+            raise HTTPException(status_code=409, detail="账号信息已变化，请重新登录后继续。")
+    elif existing_user:
+        raise HTTPException(status_code=409, detail="该学号已经建立账号，请登录继续。")
 
     # ── 邮箱唯一性检查 ────────────────────────────────────────────────────────
     if data.email:
@@ -441,7 +545,7 @@ async def register_with_scale(data: RegisterWithScaleRequest, db: AsyncSession =
         if existing_user:
             new_user = existing_user
             new_user.onboarding_mode = data.mode
-            new_user.password_hash   = hash_password(data.password)
+            new_user.password_hash   = password_hash
             new_user.class_name = data.class_name or new_user.class_name
             if data.name:
                 new_user.name = data.name
@@ -451,7 +555,7 @@ async def register_with_scale(data: RegisterWithScaleRequest, db: AsyncSession =
                 student_id=data.student_id,
                 name=data.name,
                 email=data.email,
-                password_hash=hash_password(data.password),
+                password_hash=password_hash,
                 role="learner",
                 is_active=True,
                 created_at=datetime.now(timezone.utc),
@@ -500,9 +604,12 @@ async def register_with_scale(data: RegisterWithScaleRequest, db: AsyncSession =
         new_user.has_completed_onboarding = True
         await db.commit()
         await db.refresh(new_user)
+        if (new_user.password_hash != password_hash or new_user.auth_version != expected_auth_version
+                or not new_user.is_active):
+            raise HTTPException(status_code=401, detail="账号信息已变化，请重新登录。")
         logger.info(f"[REGISTER-WITH-SCALE] ✅ Success: {new_user.student_id}")
 
-        token     = create_access_token(str(new_user.id), new_user.auth_version)
+        token     = create_access_token(str(new_user.id), expected_auth_version)
         user_info = UserInfo(
             id=str(new_user.id),
             student_id=new_user.student_id,
@@ -518,6 +625,9 @@ async def register_with_scale(data: RegisterWithScaleRequest, db: AsyncSession =
 
         return AuthResponse(token=token, user=user_info, initialProfile=profile_data)
 
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status_code=409, detail="账号信息已被使用，请登录或检查后重试。")
     except HTTPException:
         raise
     except Exception as e:

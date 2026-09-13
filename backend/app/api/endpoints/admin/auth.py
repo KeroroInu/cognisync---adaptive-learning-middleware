@@ -11,6 +11,7 @@ import jwt
 import bcrypt
 
 from app.core.config import settings
+from app.api.endpoints.auth import get_password_queue
 from app.db.postgres import get_db
 from app.models.sql.user import User
 from app.schemas.base import SuccessResponse
@@ -117,8 +118,16 @@ async def admin_login(
     result = await db.execute(select(User).where(User.student_id == data.student_id))
     user = result.scalar_one_or_none()
 
-    if not user or not user.password_hash or not _verify_password(data.password, user.password_hash):
+    if not user or not user.password_hash:
         raise HTTPException(status_code=401, detail="学号或密码错误")
+
+    user_id, password_hash, auth_version = user.id, user.password_hash, user.auth_version
+    await db.rollback()
+    if not await get_password_queue().run(_verify_password, data.password, password_hash):
+        raise HTTPException(status_code=401, detail="学号或密码错误")
+    user = await db.scalar(select(User).where(User.id == user_id).execution_options(populate_existing=True))
+    if not user or user.password_hash != password_hash or user.auth_version != auth_version:
+        raise HTTPException(status_code=401, detail="账号信息已变化，请重新登录")
 
     if not user.is_active:
         raise HTTPException(status_code=403, detail="账号已被禁用")
@@ -126,7 +135,7 @@ async def admin_login(
     if user.role != "admin":
         raise HTTPException(status_code=403, detail="该账号没有管理员权限，请联系管理员")
 
-    token = _create_admin_token(str(user.id), user.auth_version)
+    token = _create_admin_token(str(user.id), auth_version)
 
     return SuccessResponse(data=AdminLoginData(
         token=token,
