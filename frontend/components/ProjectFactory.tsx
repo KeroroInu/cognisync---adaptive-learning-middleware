@@ -108,7 +108,7 @@ export const ProjectFactoryHeader: React.FC<FactoryHeaderProps> = ({
         aria-label={isZh ? '项目阶段' : 'Project stages'}
         style={{ '--project-stage-count': visibleStages.length } as React.CSSProperties}
       >
-        {visibleStages.map((stage, index) => {
+        {visibleStages.map(stage => {
           const Icon = stage.icon;
           const active = stage.id === activeStage;
           const isFunctionFlow = experimentGroup === 'pdt' && stage.id === 'model';
@@ -120,7 +120,6 @@ export const ProjectFactoryHeader: React.FC<FactoryHeaderProps> = ({
               onClick={() => onStageChange(stage.id)}
               aria-current={active ? 'step' : undefined}
             >
-              {experimentGroup === 'pdt' && <span className="project-stage-number">{String(index + 1).padStart(2, '0')}</span>}
               <Icon size={15} />
               <strong>{experimentGroup !== 'pdt' ? (isZh ? '编程工作台' : 'Coding workspace') : isFunctionFlow ? (isZh ? '画流程' : 'Flow') : (isZh ? stage.shortZh : stage.shortEn)}</strong>
             </button>
@@ -129,8 +128,9 @@ export const ProjectFactoryHeader: React.FC<FactoryHeaderProps> = ({
       </nav>
 
       <div className="project-factory-tools">
-        <span className="project-save-indicator" title={saveLabel} aria-label={saveLabel}>
+        <span className="project-save-indicator" title={saveLabel} role="status">
           <Save size={16} />
+          <span>{saveLabel}</span>
         </span>
         <button
           type="button"
@@ -142,14 +142,14 @@ export const ProjectFactoryHeader: React.FC<FactoryHeaderProps> = ({
           <ClipboardList size={18} />
         </button>
         {experimentGroup !== 'lecture' && (
-          <button type="button" className="project-hint-button" onClick={onOpenAssistant}>
+          <button type="button" className="project-hint-button" onClick={onOpenAssistant} aria-label={isZh ? '打开学习助手' : 'Open learning assistant'} title={isZh ? '打开学习助手' : 'Open learning assistant'}>
             <Lightbulb size={17} />
-            <span>{isZh ? '提示一下' : 'Hint'}</span>
+            <span>{isZh ? '问 AI' : 'Ask AI'}</span>
           </button>
         )}
-        <button type="button" className="project-demo-button" onClick={onOpenProject}>
+        <button type="button" className="project-demo-button" onClick={onOpenProject} aria-label={isZh ? '打开示例游戏' : 'Open example game'} title={isZh ? '查看示例，不会运行或修改你的代码' : 'View the example without running or changing your code'}>
           <Gamepad2 size={17} />
-          <span>{isZh ? '运行完整项目' : 'Run complete project'}</span>
+          <span>{isZh ? '打开示例' : 'Open example'}</span>
         </button>
         <button
           type="button"
@@ -252,7 +252,7 @@ export const ProjectObservationStage: React.FC<ObservationStageProps> = ({
     <section className="project-observation-stage">
       <article className="project-brief-card">
         <div className="project-brief-kicker">
-          <span>{isZh ? '观察游戏' : 'Explore the game'}</span>
+          <span>{isZh ? '贪吃蛇' : 'Snake'}</span>
           <span className={hasOpenedProject ? 'is-complete' : ''}>
             <CircleDot size={11} />
             {hasOpenedProject ? (isZh ? '已运行' : 'Opened') : (isZh ? '等待运行' : 'Not opened')}
@@ -260,18 +260,18 @@ export const ProjectObservationStage: React.FC<ObservationStageProps> = ({
         </div>
 
         <div className="project-brief-copy">
-          <h3>{isZh ? '玩一玩，看看发生了什么。' : 'Play and notice what changes.'}</h3>
+          <h3>{isZh ? '先玩一局，找找变化。' : 'Play a round. Notice what changes.'}</h3>
           <span>
             {isZh
               ? '试试转向、吃食物和重新开始。你发现了什么变化？'
-              : 'Operate the snake freely. The system captures objective actions and changes without naming functions; you form the observation.'}
+              : 'Try turning, eating food and restarting. What changes?'}
           </span>
         </div>
 
         <button type="button" className="project-run-card" onClick={onOpenProject}>
           <span className="project-run-icon"><Play size={25} fill="currentColor" /></span>
           <span>
-            <strong>{isZh ? '打开贪吃蛇' : 'Open Snake'}</strong>
+            <strong>{hasOpenedProject ? (isZh ? '再玩一局' : 'Play again') : (isZh ? '开始体验' : 'Play the example')}</strong>
           </span>
           <ArrowRight size={22} />
         </button>
@@ -279,7 +279,6 @@ export const ProjectObservationStage: React.FC<ObservationStageProps> = ({
         <div className="project-observe-method">
           <MousePointer2 size={17} />
           <p>
-            <strong>{isZh ? '操作提示' : 'HOW TO OBSERVE'}</strong>
             <span>{isZh ? '一次改变一个操作，看看结果有什么不同。' : 'Change one action and compare the result.'}</span>
           </p>
         </div>
@@ -290,11 +289,11 @@ export const ProjectObservationStage: React.FC<ObservationStageProps> = ({
           <div>
             <h3>{isZh ? '记下你的发现' : 'Your observations'}</h3>
           </div>
-          <strong>{String(cards.length).padStart(2, '0')}<small>/02</small></strong>
+          <span className="observation-saved-count" role="status">{isZh ? `已保存 ${cards.length} 条` : `${cards.length} saved`}</span>
         </header>
 
         <p className="observation-capture-hint">
-          {isZh ? '选一条记录，写下你的发现。记两条就可以继续。' : 'Choose a record and write what you noticed. Save two to continue.'}
+          {isZh ? '选一条记录，用自己的话说说你发现的变化。' : 'Choose a record and describe the change in your own words.'}
         </p>
 
         <section className="runtime-evidence-section">
@@ -319,7 +318,7 @@ export const ProjectObservationStage: React.FC<ObservationStageProps> = ({
             }) : (
               <div className="runtime-evidence-empty">
                 <Gamepad2 size={22} />
-                <span>{isZh ? '先打开项目，开始、转向、得分或碰撞后，这里会留下运行记录。' : 'Open the project and start, turn, score or collide to create runtime records.'}</span>
+                <span>{isZh ? '玩过游戏后，这里会出现操作记录。' : 'Your game actions will appear here after you play.'}</span>
               </div>
             )}
           </div>
@@ -361,7 +360,7 @@ export const ProjectObservationStage: React.FC<ObservationStageProps> = ({
         {cards.length > 0 && (
           <section className="saved-observation-list">
             <div className="runtime-evidence-heading">
-              <span><ClipboardList size={14} />{isZh ? '已形成的观察卡' : 'Saved observations'}</span>
+              <span><ClipboardList size={14} />{isZh ? '我的观察卡' : 'My observations'}</span>
             </div>
             <div>
               {cards.map((card, index) => (
@@ -383,14 +382,18 @@ export const ProjectObservationStage: React.FC<ObservationStageProps> = ({
           <div>
             <CircleDot size={17} />
             <p>
-              <strong>{isZh ? '准备好了吗？' : 'Ready?'}</strong>
+              <strong>{hasOpenedProject && cards.length >= 2 ? (isZh ? '可以继续了' : 'Ready to continue') : (isZh ? '接下来' : 'Next')}</strong>
               <span>
-                {isZh ? '玩过游戏，记下两条发现' : 'Play the game and save two observations'}
+                {!hasOpenedProject
+                  ? (isZh ? '先玩过游戏，再保存两条发现' : 'Play the game and save two observations')
+                  : cards.length < 2
+                    ? (isZh ? `再保存 ${2 - cards.length} 条发现` : `Save ${2 - cards.length} more observation(s)`)
+                    : (isZh ? '从你的发现出发，想想游戏需要哪些功能' : 'Use your observations to identify the game’s functions')}
               </span>
             </p>
           </div>
           <button type="button" disabled={!hasOpenedProject || cards.length < 2} onClick={onContinue}>
-            {isZh ? '进入功能拆解' : 'Continue to functions'}
+            {isZh ? '下一步：拆功能' : 'Next: identify functions'}
             <ArrowRight size={17} />
           </button>
         </div>
