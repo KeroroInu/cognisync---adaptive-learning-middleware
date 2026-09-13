@@ -5,24 +5,12 @@ For local preview only. Production continues to use the existing nginx deploymen
 """
 from pathlib import Path
 
-from starlette.exceptions import HTTPException
-from starlette.staticfiles import StaticFiles
-
 from app.core.config import settings
+from app.core.staticfiles import SPAFiles
 from main import app
 
 if settings.APP_ENV == "production":
     raise RuntimeError("preview.py is for local acceptance only")
-
-
-class SPAFiles(StaticFiles):
-    async def get_response(self, path, scope):
-        try:
-            return await super().get_response(path, scope)
-        except HTTPException as error:
-            if error.status_code != 404 or Path(path).suffix:
-                raise
-            return await super().get_response("index.html", scope)
 
 
 root = Path(__file__).resolve().parent.parent
