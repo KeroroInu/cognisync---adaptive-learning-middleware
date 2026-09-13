@@ -173,7 +173,13 @@ const getWorker = () => {
       pending.resolve(message.result ?? '');
       return;
     }
-    if (message.type === 'error') rejectPending(new Error(message.message || 'python-runtime-error'));
+    if (message.type === 'error') {
+      // A failed Pyodide bootstrap leaves a rejected runtimePromise in this
+      // Worker. Retry on a fresh Worker; ordinary Python errors keep the loaded
+      // runtime so debugging does not download/reinitialize it every time.
+      if (!pendingRun.executionTimer) stopWorker();
+      rejectPending(new Error(message.message || 'python-runtime-error'));
+    }
   };
   moduleWorker.onerror = () => {
     stopWorker();
