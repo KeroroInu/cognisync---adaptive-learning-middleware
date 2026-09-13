@@ -104,10 +104,20 @@ export interface ProfileChangesResponse {
   changes: ProfileChange[];
 }
 
+export class ChatRequestError extends Error {
+  constructor(message: string, public status: number, public code?: string) {
+    super(message);
+    this.name = 'ChatRequestError';
+  }
+}
+
 /**
  * 调用聊天接口
  */
 export async function sendChatMessage(request: ChatRequest): Promise<ChatResponse> {
+  const unavailable = request.language === 'zh'
+    ? 'AI 暂时没有连上，请稍后重试。'
+    : 'AI is temporarily unavailable. Please try again shortly.';
   try {
     const response = await fetch(`${API_BASE_URL}/api/chat`, {
       method: 'POST',
@@ -116,19 +126,32 @@ export async function sendChatMessage(request: ChatRequest): Promise<ChatRespons
     });
 
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || `HTTP error! status: ${response.status}`);
+      // A proxy may return HTML; the model queue returns structured detail.
+      // Neither should become a JSON error or "[object Object]" in the chat.
+      const error = parseAuthError(await response.json().catch(() => null), response.status);
+      const queueMessages: Record<string, string> = request.language === 'zh'
+        ? { AI_BUSY: '提问较多，请稍后再试。', AI_QUEUE_TIMEOUT: '等待 AI 超时，请稍后再试。' }
+        : { AI_BUSY: 'AI is busy. Please try again shortly.', AI_QUEUE_TIMEOUT: 'The wait for AI timed out. Please try again shortly.' };
+      const message = (error.code && queueMessages[error.code])
+        || (response.status >= 500 ? unavailable : error.message);
+      throw new ChatRequestError(message, response.status, error.code);
     }
 
-    const result: ApiResponse<ChatResponse> = await response.json();
+    const result: ApiResponse<ChatResponse> | null = await response.json().catch(() => null);
 
-    if (!result.success) {
-      throw new Error('API returned unsuccessful response');
+    if (!result?.success || !result.data) {
+      throw new ChatRequestError(unavailable, response.status, 'INVALID_RESPONSE');
     }
 
     return result.data;
   } catch (error) {
-    console.error('Failed to send chat message:', error);
+    // No automatic POST retry: a lost response does not prove that the model
+    // request failed. ClassroomError must retain its closure semantics.
+    if (error instanceof TypeError) {
+      throw new ChatRequestError(request.language === 'zh'
+        ? '网络没有连上，请检查连接后重试。'
+        : 'Unable to connect. Check your network and try again.', 0, 'NETWORK_ERROR');
+    }
     throw error;
   }
 }
