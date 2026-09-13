@@ -26,6 +26,16 @@ interface ApiResponse<T> {
   };
 }
 
+function responseErrorMessage(result: unknown): string | undefined {
+  if (!result || typeof result !== 'object') return;
+  const payload = result as { detail?: unknown; error?: unknown };
+  if (typeof payload.detail === 'string' && payload.detail.trim()) return payload.detail;
+  for (const value of [payload.detail, payload.error]) {
+    if (value && typeof value === 'object' && 'message' in value
+      && typeof value.message === 'string' && value.message.trim()) return value.message;
+  }
+}
+
 class ApiClient {
   private getAuthToken(): string | null {
     return localStorage.getItem('auth_token');
@@ -53,34 +63,39 @@ class ApiClient {
       headers['Authorization'] = `Bearer ${token}`;
     }
 
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-      ...options,
-      headers,
-    });
+    let response: Response;
+    try {
+      response = await fetch(`${API_BASE_URL}${endpoint}`, {
+        ...options,
+        headers,
+      });
+    } catch {
+      if (options.signal?.aborted) throw new DOMException('请求已取消。', 'AbortError');
+      throw new Error('无法连接服务器，请检查网络后重试。');
+    }
+
+    if (response.status === 401) this.setAuthToken(null);
+
+    // Only JSON decoding belongs in this catch. Business errors must escape it.
+    let result: ApiResponse<T> | null = null;
+    try { result = await response.json(); }
+    catch { /* A reverse proxy may return an HTML error page. */ }
+    const message = responseErrorMessage(result);
 
     if (!response.ok) {
       if (response.status === 401) {
-        // 未授权，清除 token
-        this.setAuthToken(null);
-        throw new Error('Unauthorized. Please login again.');
+        throw new Error(message || (endpoint.endsWith('/login') ? '学号或密码错误，请检查后重试。' : '登录已过期，请重新登录。'));
       }
       if (response.status === 403) {
-        throw new Error('Access forbidden.');
+        throw new Error(message || '没有操作权限，请联系管理员。');
       }
-
-      // 尝试解析错误响应
-      try {
-        const errorResult: ApiResponse<T> = await response.json();
-        throw new Error(errorResult.error?.message || `API Error: ${response.statusText}`);
-      } catch (e) {
-        throw new Error(`API Error: ${response.statusText}`);
-      }
+      const fallback = response.status === 503 ? '服务暂时繁忙，请稍后再试。'
+        : response.status >= 500 ? '服务器暂时无法响应，请稍后再试。' : '请求未完成，请检查后重试。';
+      throw new Error(message || fallback);
     }
 
-    const result: ApiResponse<T> = await response.json();
-    if (!result.success) {
-      throw new Error(result.error?.message || 'Unknown error');
-    }
+    if (!result || typeof result !== 'object') throw new Error('服务器响应异常，请刷新后重试。');
+    if (!result.success) throw new Error(message || '操作未完成，请稍后再试。');
 
     return result.data;
   }
