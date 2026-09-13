@@ -337,7 +337,7 @@ async def test_event_links_all_artifacts_not_only_first(test_db, client, auth_he
     """一次关键时刻常同时涉及多个产物，全部都要可追溯。
 
     这里用 ``build`` 阶段的一次结构修订：测试失败后学生回头同时改功能卡、
-    实现路径和机制说明。这是 ``docs/PROJECT_WORKBENCH_V02.md`` 第 30 行描述的
+    实现路径和机制说明。这是 ``docs/archive/PROJECT_WORKBENCH_V02.md`` 第 30 行描述的
     主线，也是唯一真实会跨多类产物的场景——阶段确认本身只确认本阶段的产物。
     """
     task_id = await _create_active_task(test_db)

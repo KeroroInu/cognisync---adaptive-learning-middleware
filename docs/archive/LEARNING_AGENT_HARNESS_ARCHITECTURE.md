@@ -137,13 +137,13 @@ flowchart TB
 | `l3Confirmed` | 是否明确确认 L3 | 控制是否允许返回当前完整函数 |
 | `requestId` | 本轮请求标识 | 前后端对齐和事件幂等 |
 
-实现入口：[`frontend/components/ProjectScaffoldAssistant.tsx`](../frontend/components/ProjectScaffoldAssistant.tsx) 和 [`frontend/services/api.ts`](../frontend/services/api.ts)。
+实现入口：[`frontend/components/ProjectScaffoldAssistant.tsx`](../../frontend/components/ProjectScaffoldAssistant.tsx) 和 [`frontend/services/api.ts`](../../frontend/services/api.ts)。
 
 ### 5.2 服务端先校验身份和实验条件
 
 服务端不信任请求体中的 `userId` 或裸任务 ID，而以 JWT 当前用户为准，并校验该学生是否有权访问当前活动任务。该步骤同时承担实验组隔离：学生不能通过构造其他任务 ID 获取不同实验条件的蓝图策略。
 
-实现位置：[`backend/app/api/endpoints/chat.py`](../backend/app/api/endpoints/chat.py) 中的 `_resolve_scaffold_task`。
+实现位置：[`backend/app/api/endpoints/chat.py`](../../backend/app/api/endpoints/chat.py) 中的 `_resolve_scaffold_task`。
 
 迁移测试另外具有任务级 `ai_enabled` 权限。教师关闭 AI 时，前端不显示助手入口；后端仍会在写入学生消息、求助事件或支架证据之前拒绝伪造请求。因此该开关是 Harness 权限边界，而不是纯界面配置。
 
@@ -160,7 +160,7 @@ flowchart TB
 
 浏览器实时摘要与数据库摘要合并后最多保留 6000 字符。学生产物被视为数据而不是 Prompt 指令，避免把学生填写的卡片标题当成模型命令。
 
-实现位置：[`backend/app/services/scaffold_service.py`](../backend/app/services/scaffold_service.py) 中的 `summarize_project_workspace`。
+实现位置：[`backend/app/services/scaffold_service.py`](../../backend/app/services/scaffold_service.py) 中的 `summarize_project_workspace`。
 
 ### 5.4 Harness 建立上下文身份
 
@@ -186,7 +186,7 @@ task:a32bd811...|stage:observe|focus:observe
 
 这个上下文键同时进入消息元数据和研究导出。其作用是把“学生现在在哪里”变成可序列化、可追踪且可以重新构建的状态，而不是依赖模型记忆。
 
-实现位置：[`backend/app/services/learning_agent_harness.py`](../backend/app/services/learning_agent_harness.py)。
+实现位置：[`backend/app/services/learning_agent_harness.py`](../../backend/app/services/learning_agent_harness.py)。
 
 ### 5.5 对话记忆严格按作用域投影
 
@@ -223,7 +223,7 @@ requestedLevel → policy resolution → appliedLevel
 
 学习者画像只能调整表达方式、步骤颗粒度和互动节奏，不能自动提高或降低支架等级。
 
-实现位置：[`backend/app/services/scaffold_service.py`](../backend/app/services/scaffold_service.py) 中的 `resolve_scaffold_rule`、`build_profile_adaptation` 和 `build_scaffold_prompt`。
+实现位置：[`backend/app/services/scaffold_service.py`](../../backend/app/services/scaffold_service.py) 中的 `resolve_scaffold_rule`、`build_profile_adaptation` 和 `build_scaffold_prompt`。
 
 ### 5.7 回复路由采用“受控生成 + 开放生成”混合模式
 
@@ -265,7 +265,7 @@ requestedLevel → policy resolution → appliedLevel
 
 按钮生成的固定求助句不参与情感与画像分析，只有学生亲自输入的文本才会进入文本分析器，以免系统把界面模板误判为学生情绪证据。
 
-实现位置：[`backend/app/services/llm_config.py`](../backend/app/services/llm_config.py)、[`backend/app/services/text_analyzer.py`](../backend/app/services/text_analyzer.py) 和 [`backend/app/services/llm_provider.py`](../backend/app/services/llm_provider.py)。
+实现位置：[`backend/app/services/llm_config.py`](../../backend/app/services/llm_config.py)、[`backend/app/services/text_analyzer.py`](../../backend/app/services/text_analyzer.py) 和 [`backend/app/services/llm_provider.py`](../../backend/app/services/llm_provider.py)。
 
 ### 5.9 回复完成后形成研究证据
 
@@ -288,7 +288,7 @@ requestedLevel → policy resolution → appliedLevel
 
 消息中的 `analysis.scaffoldContext` 继续双写，用于兼容既有教师页面与导出；规范研究数据逐步迁移到事件表。
 
-实现位置：[`backend/app/models/sql/research_event.py`](../backend/app/models/sql/research_event.py) 和 [`backend/app/services/research_event_service.py`](../backend/app/services/research_event_service.py)。
+实现位置：[`backend/app/models/sql/research_event.py`](../../backend/app/models/sql/research_event.py) 和 [`backend/app/services/research_event_service.py`](../../backend/app/services/research_event_service.py)。
 
 ## 6. 当前 Harness 的状态、记忆与权限模型
 
@@ -599,21 +599,21 @@ Harness 不允许模型直接修改编辑器、运行代码、创建学习卡片
 
 | 组件 | 文件 |
 |---|---|
-| 学生端助手与实时上下文 | [`frontend/components/ProjectScaffoldAssistant.tsx`](../frontend/components/ProjectScaffoldAssistant.tsx) |
-| 聊天 API 封装 | [`frontend/services/api.ts`](../frontend/services/api.ts) |
-| 请求与响应模式 | [`backend/app/schemas/chat.py`](../backend/app/schemas/chat.py) |
-| 上下文键和作用域记忆 | [`backend/app/services/learning_agent_harness.py`](../backend/app/services/learning_agent_harness.py) |
-| L0—L3、受控回复和工作区摘要 | [`backend/app/services/scaffold_service.py`](../backend/app/services/scaffold_service.py) |
-| 对话主流程和权限校验 | [`backend/app/api/endpoints/chat.py`](../backend/app/api/endpoints/chat.py) |
-| 模型角色配置 | [`backend/app/services/llm_config.py`](../backend/app/services/llm_config.py) |
-| 统一模型接口 | [`backend/app/services/llm_provider.py`](../backend/app/services/llm_provider.py) |
-| 文本分析 | [`backend/app/services/text_analyzer.py`](../backend/app/services/text_analyzer.py) |
-| 学习者画像 | [`backend/app/services/profile_service.py`](../backend/app/services/profile_service.py) |
-| 研究事件模型 | [`backend/app/models/sql/research_event.py`](../backend/app/models/sql/research_event.py) |
-| 研究事件写入 | [`backend/app/services/research_event_service.py`](../backend/app/services/research_event_service.py) |
-| Harness 和支架单元测试 | [`backend/tests/test_scaffold_service.py`](../backend/tests/test_scaffold_service.py) |
-| 支架送达事件测试 | [`backend/tests/test_scaffold_event_delivery.py`](../backend/tests/test_scaffold_event_delivery.py) |
-| 任务权限与实验组隔离测试 | [`backend/tests/test_research_task_guard_api.py`](../backend/tests/test_research_task_guard_api.py) |
+| 学生端助手与实时上下文 | [`frontend/components/ProjectScaffoldAssistant.tsx`](../../frontend/components/ProjectScaffoldAssistant.tsx) |
+| 聊天 API 封装 | [`frontend/services/api.ts`](../../frontend/services/api.ts) |
+| 请求与响应模式 | [`backend/app/schemas/chat.py`](../../backend/app/schemas/chat.py) |
+| 上下文键和作用域记忆 | [`backend/app/services/learning_agent_harness.py`](../../backend/app/services/learning_agent_harness.py) |
+| L0—L3、受控回复和工作区摘要 | [`backend/app/services/scaffold_service.py`](../../backend/app/services/scaffold_service.py) |
+| 对话主流程和权限校验 | [`backend/app/api/endpoints/chat.py`](../../backend/app/api/endpoints/chat.py) |
+| 模型角色配置 | [`backend/app/services/llm_config.py`](../../backend/app/services/llm_config.py) |
+| 统一模型接口 | [`backend/app/services/llm_provider.py`](../../backend/app/services/llm_provider.py) |
+| 文本分析 | [`backend/app/services/text_analyzer.py`](../../backend/app/services/text_analyzer.py) |
+| 学习者画像 | [`backend/app/services/profile_service.py`](../../backend/app/services/profile_service.py) |
+| 研究事件模型 | [`backend/app/models/sql/research_event.py`](../../backend/app/models/sql/research_event.py) |
+| 研究事件写入 | [`backend/app/services/research_event_service.py`](../../backend/app/services/research_event_service.py) |
+| Harness 和支架单元测试 | [`backend/tests/test_scaffold_service.py`](../../backend/tests/test_scaffold_service.py) |
+| 支架送达事件测试 | [`backend/tests/test_scaffold_event_delivery.py`](../../backend/tests/test_scaffold_event_delivery.py) |
+| 任务权限与实验组隔离测试 | [`backend/tests/test_research_task_guard_api.py`](../../backend/tests/test_research_task_guard_api.py) |
 
 ## 17. 一句话版本
 

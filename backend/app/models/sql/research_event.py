@@ -1,7 +1,7 @@
 """
 Research Process Models - 阶段产物版本与关键教学事件
 
-设计要点（对应 docs/PROJECT_WORKBENCH_V02.md「后端数据最小模型」）：
+设计要点（对应 docs/archive/PROJECT_WORKBENCH_V02.md「后端数据最小模型」）：
 
 - ``research_task_submissions.workspace_data`` 仍然是**最新工作区快照**，只负责
   跨设备恢复，不做整份版本化；本模块负责正式实验所需的、不可覆盖的证据链。

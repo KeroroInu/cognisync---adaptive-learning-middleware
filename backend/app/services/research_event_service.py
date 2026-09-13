@@ -142,7 +142,7 @@ ARTIFACT_NATIVE_STAGES: dict[ArtifactType, frozenset[ProjectStage]] = {
 # 跨阶段修订白名单。
 #
 # 「回到解构结果进行修订」是本教学法的核心机制，不是异常路径。依据
-# ``docs/PROJECT_WORKBENCH_V02.md``：
+# ``docs/archive/PROJECT_WORKBENCH_V02.md``：
 #
 # - 第 7 行：「遗漏会在综合运行中表现为可观察的问题，促使学生回到解构结果进行修订」
 # - 第 30 行：「建构阶段持续引用学生的解构产物，测试失败能够返回对应功能或关系进行修订」

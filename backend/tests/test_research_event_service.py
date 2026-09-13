@@ -237,7 +237,7 @@ def test_module_code_cannot_be_reported_before_build():
 def test_build_stage_may_revise_earlier_artifacts():
     """「回到解构结果进行修订」是本教学法的核心机制，不是异常路径。
 
-    依据 docs/PROJECT_WORKBENCH_V02.md 第 7、30、246 行：测试失败时学生要能
+    依据 docs/archive/PROJECT_WORKBENCH_V02.md 第 7、30、246 行：测试失败时学生要能
     返回对应功能或关系进行修订。若把矩阵做成严格单向，这条主线会被 422 挡死。
     """
     for artifact_type in (
