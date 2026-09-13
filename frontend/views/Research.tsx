@@ -52,7 +52,10 @@ import {
 } from '../services/stageEvents';
 
 import { createWorkspaceScope, captureCurrentSession } from '../data/workspaceScope';
+import { acknowledgePendingWorkspace, readPendingWorkspace, storePendingWorkspace } from '../data/workspaceDraft';
 import { executionEvidence } from '../utils/executionEvidence';
+import { CLASSROOM_CLOSING_EVENT, CLASSROOM_OPEN_EVENT, ClassroomError } from '../services/classroom';
+import { createCodePersistence, readCodeDraft } from '../services/codePersistence';
 import { FreeGamePreview } from '../components/FreeGamePreview';
 import { AssistantMessage } from '../components/AssistantMessage';
 import { disposePythonModuleRunner, runPythonProgram, formatPythonRunnerError } from '../services/pythonModuleRunner';
@@ -301,6 +304,7 @@ export const Research: React.FC<Props> = ({
   const workspacePendingRef = useRef<SnakeProjectWorkspace | null>(null);
   const workspaceLastSavedSignatureRef = useRef('');
   const flushWorkspaceRef = useRef<(keepalive?: boolean) => Promise<void>>(async () => {});
+  const codePersistenceRef = useRef<ReturnType<typeof createCodePersistence> | null>(null);
   const chatScrollRef = useRef<HTMLDivElement>(null);
   const chatInputRef = useRef<HTMLInputElement>(null);
   /**
@@ -367,10 +371,12 @@ export const Research: React.FC<Props> = ({
         try {
           await saveResearchWorkspace(task.id, snapshot, { keepalive });
           workspaceLastSavedSignatureRef.current = signature;
-        } catch {
+          acknowledgePendingWorkspace(storageScope, snapshot);
+        } catch (error) {
           if (!canUseSession()) return;
           workspacePendingRef.current ??= snapshot;
           setWorkspaceSaveStatus('error');
+          if (error instanceof ClassroomError && error.code === 'CLASSROOM_CLOSED') return;
           if (workspaceRetryTimerRef.current) clearTimeout(workspaceRetryTimerRef.current);
           workspaceRetryTimerRef.current = setTimeout(() => {
             workspaceRetryTimerRef.current = null;
@@ -384,7 +390,7 @@ export const Research: React.FC<Props> = ({
       workspaceSaveRunningRef.current = null;
       release();
     }
-  }, [experimentGroup, task, canUseSession]);
+  }, [experimentGroup, task, canUseSession, storageScope]);
 
   useEffect(() => {
     flushWorkspaceRef.current = flushWorkspaceQueue;
@@ -399,6 +405,7 @@ export const Research: React.FC<Props> = ({
       : '';
     if (signature === workspaceLastSavedSignatureRef.current || signature === pendingSignature) return;
     workspacePendingRef.current = snapshot;
+    if (!storePendingWorkspace(storageScope, snapshot)) setEventNotice('浏览器未能保存完整草稿，请保持页面打开，等待同步。');
     setWorkspaceSaveStatus('unsaved');
     if (workspaceSaveTimerRef.current) clearTimeout(workspaceSaveTimerRef.current);
     if (workspaceRetryTimerRef.current) {
@@ -550,14 +557,27 @@ export const Research: React.FC<Props> = ({
           workspaceLastSavedSignatureRef.current = workspace ? workspaceSignature(workspace) : '';
           // Only this learner's namespaced cache may recover an unsynced draft.
           // Legacy task-only keys have no provable owner and are never imported.
-          workspace ??= collectSnakeProjectWorkspace(scope);
+          workspace = readPendingWorkspace(scope) ?? workspace ?? collectSnakeProjectWorkspace(scope);
           hydrateSnakeProjectWorkspace(scope, workspace);
           workspacePendingRef.current = null;
           setWorkspaceSaveStatus('saved');
           setFactoryStage(restoreProjectStage(scope, workspace, experimentGroup));
 
           // 优先使用学生已保存的代码，否则用模板原始代码
-          setCode(t.code_submitted || t.code_content);
+          const remoteCode = t.code_submitted ?? t.code_content;
+          const localCode = experimentGroup === 'pdt' ? null : readCodeDraft(scope);
+          setCode(localCode ?? remoteCode);
+          if (experimentGroup !== 'pdt') {
+            codePersistenceRef.current = createCodePersistence({
+              scope, current: canUseSession, onStatus: setSaveStatus,
+              onStorageError: () => setEventNotice('浏览器未能保存代码草稿，请保持页面打开，等待同步。'),
+              save: (value, keepalive) => saveResearchProgress(t.id, value, startTimeRef.current ? new Date(startTimeRef.current).toISOString() : undefined, { keepalive }),
+            });
+            if (localCode !== null) {
+              codePersistenceRef.current.enqueue(localCode);
+              void codePersistenceRef.current.flush();
+            }
+          }
           // 若已提交过，直接标记为完成（停止计时器）
           if (t.is_completed) {
             setCompleted(true);
@@ -590,13 +610,33 @@ export const Research: React.FC<Props> = ({
       if (document.visibilityState === 'hidden') flushBeforeLeaving();
     };
     window.addEventListener('pagehide', flushBeforeLeaving);
+    window.addEventListener(CLASSROOM_CLOSING_EVENT, flushBeforeLeaving);
+    window.addEventListener(CLASSROOM_OPEN_EVENT, flushBeforeLeaving);
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => {
       window.clearInterval(interval);
       window.removeEventListener('pagehide', flushBeforeLeaving);
+      window.removeEventListener(CLASSROOM_CLOSING_EVENT, flushBeforeLeaving);
+      window.removeEventListener(CLASSROOM_OPEN_EVENT, flushBeforeLeaving);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [experimentGroup, queueWorkspaceSave, task, storageScope, canUseSession]);
+
+  useEffect(() => {
+    if (experimentGroup === 'pdt') return;
+    const flush = () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); void codePersistenceRef.current?.flush(true); };
+    const onVisibility = () => { if (document.visibilityState === 'hidden') flush(); };
+    window.addEventListener('pagehide', flush);
+    window.addEventListener(CLASSROOM_CLOSING_EVENT, flush);
+    window.addEventListener(CLASSROOM_OPEN_EVENT, flush);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('pagehide', flush);
+      window.removeEventListener(CLASSROOM_CLOSING_EVENT, flush);
+      window.removeEventListener(CLASSROOM_OPEN_EVENT, flush);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [experimentGroup]);
 
   useEffect(() => () => {
     if (workspaceSaveTimerRef.current) clearTimeout(workspaceSaveTimerRef.current);
@@ -808,17 +848,9 @@ export const Research: React.FC<Props> = ({
     setCode(value);
     setSaveStatus('unsaved');
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    if (!task) return;
-    saveTimerRef.current = setTimeout(async () => {
-      if (!canUseSession()) return;
-      setSaveStatus('saving');
-      try {
-        await saveResearchProgress(task.id, value, startTimeRef.current ? new Date(startTimeRef.current).toISOString() : undefined);
-        setSaveStatus('saved');
-      } catch {
-        setSaveStatus('unsaved');
-      }
-    }, 2000);
+    if (!task || !canUseSession()) return;
+    codePersistenceRef.current?.enqueue(value);
+    saveTimerRef.current = setTimeout(() => { void codePersistenceRef.current?.flush(); }, 2000);
   }, [task, canUseSession]);
 
   // ── Chat submit ─────────────────────────────────────────────────────────

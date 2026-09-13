@@ -3,6 +3,7 @@ Admin API Router - 聚合所有 admin 端点
 """
 from fastapi import APIRouter
 from app.api.endpoints.assessments import admin_router as assessments_router
+from app.api.endpoints.classroom import admin_router as classroom_router
 
 from app.api.endpoints.admin import (
     users,
@@ -22,6 +23,7 @@ from app.api.endpoints.admin import (
 # 创建 admin 主路由
 admin_router = APIRouter(prefix="/admin")
 admin_router.include_router(assessments_router)
+admin_router.include_router(classroom_router)
 
 # 认证端点（PUBLIC，无需 admin key，用于登录）
 admin_router.include_router(admin_auth.router, prefix="/auth", tags=["Admin - Auth"])

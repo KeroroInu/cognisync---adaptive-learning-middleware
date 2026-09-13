@@ -5,6 +5,7 @@ import {
   LayoutDashboard,
   Users,
   MessageSquare,
+  Presentation,
   FileText,
   FlaskConical,
   Download,
@@ -41,6 +42,7 @@ export const AdminLayout = ({ children }: AdminLayoutProps) => {
   const navItems = [
     { path: '/', icon: LayoutDashboard, label: t('nav.dashboard') },
     { path: '/users', icon: Users, label: t('nav.users') },
+    { path: '/classroom', icon: Presentation, label: '课堂互动' },
     { path: '/conversations', icon: MessageSquare, label: t('nav.conversations') },
     { path: '/emotions', icon: HeartPulse, label: t('nav.emotions') },
     { path: '/assessments', icon: FileText, label: '前后测' },

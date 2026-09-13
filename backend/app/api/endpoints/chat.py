@@ -1027,9 +1027,9 @@ state 含 snake、direction、food、score、game_over，可选 interval（秒�
         # 注入跨会话上下文（让 AI 能自然引用上次讨论内容）
         # 项目智能体使用任务作用域记忆；普通自由对话才允许引用跨会话主题。
         cross_session_ctx = None if scaffold_context else await get_cross_session_context(db, user_id)
-        if not scaffold_context:
-            # 自由对话的跨会话摘要也是一次 SELECT，在模型生成前结束读事务。
-            await db.commit()
+        # 两组都先落下本轮元数据并释放连接，再等待模型；PDT 的画像 refresh
+        # 同样会开启读事务，不能占着连接再排队申请课堂状态检查的连接。
+        await db.commit()
         if cross_session_ctx:
             system_prompt += f"\n上次对话涉及：{cross_session_ctx}，如自然可提及。"
 

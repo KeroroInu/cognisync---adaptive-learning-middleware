@@ -32,7 +32,7 @@ export function ResearchPackagePanel() {
   }
   return <section className="glass-card rounded-2xl p-6 space-y-4" aria-label="完整研究包">
     <h2 className="text-xl font-bold">课堂研究包</h2>
-    <p>一次下载对话、代码与卡片版本、测试与支架事件、课堂点评、问卷原始答卷和画像快照。附关联字段、行数与文件校验值。</p>
+    <p>一次下载对话、代码与卡片版本、测试与支架事件、课堂点评、问卷原始答卷、课堂互动题与逐人回答和画像快照。附关联字段、行数与文件校验值。</p>
     <div className="flex flex-wrap gap-4 items-end">
       <label>班级（留空为全部）<input className="block border rounded-lg p-2" value={className} maxLength={100}
         onChange={event => setClassName(event.target.value)} disabled={busy} /></label>

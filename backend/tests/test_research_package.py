@@ -9,7 +9,8 @@ import zipfile
 import pytest
 from sqlalchemy import text
 
-from app.models.sql import User, ResearchTask, ResearchTaskSubmission, TeacherNote
+from app.models.sql import (User, ResearchTask, ResearchTaskSubmission, TeacherNote,
+    ClassroomSession, ClassroomPublication, ClassroomResponse, ClassroomControlEvent)
 from app.services import research_package as package_service
 
 
@@ -58,7 +59,7 @@ def unpack(response):
 @pytest.mark.asyncio
 async def test_package_complete_joinable_and_private(admin_client, package_context):
     archive, manifest = unpack(await admin_client.get('/api/admin/export/research-package?class_name=一班'))
-    assert len(manifest["tables"]) == 21
+    assert len(manifest["tables"]) == 25
     assert manifest["tables"]["research_task_submissions"]["rows"] == 1
     assert manifest["tables"]["stage_events"]["rows"] == 0
     assert archive.read("stage_events.csv").startswith(b"\xef\xbb\xbf")
@@ -122,3 +123,34 @@ async def test_graph_failure_never_silently_omitted(admin_client, package_contex
     archive, manifest = unpack(await admin_client.get('/api/admin/export/research-package?include_graph=false'))
     assert not manifest["graph"]["included"]
     assert 'knowledge_graph.jsonl' not in archive.namelist()
+
+
+@pytest.mark.asyncio
+async def test_classroom_export_keeps_question_and_author_after_student_moves(admin_client, test_db, package_context):
+    async with test_db() as db:
+        teacher = User(student_id="interaction-teacher", name="新教师", role="admin", password_hash="NEVER_EXPORT")
+        db.add(teacher)
+        await db.flush()
+        lesson = ClassroomSession(class_name="原三班", title="旧课次", created_by=teacher.id)
+        db.add(lesson)
+        await db.flush()
+        prompt = ClassroomPublication(session_id=lesson.id, created_by=teacher.id,
+            question={"id": "reason", "text": "你的理由？", "type": "text", "required": False, "options": []}, source="课堂追问")
+        db.add(prompt)
+        await db.flush()
+        db.add(ClassroomResponse(user_id=uuid.UUID(package_context["student"]), publication_id=prompt.id,
+            answer=None, class_snapshot="原三班", group_snapshot="ai_pbl"))
+        db.add(ClassroomControlEvent(session_id=lesson.id, teacher_id=teacher.id, action="create"))
+        await db.commit()
+        teacher_id, prompt_id = str(teacher.id), str(prompt.id)
+    archive, _ = unpack(await admin_client.get('/api/admin/export/research-package?class_name=一班&include_graph=false'))
+    users = [json.loads(line) for line in archive.read("users.jsonl").splitlines()]
+    assert teacher_id in {u["id"] for u in users}
+    assert "NEVER_EXPORT" not in archive.read("users.jsonl").decode()
+    assert all("auth_version" not in u and "password_hash" not in u for u in users)
+    answer = json.loads(archive.read("classroom_responses.jsonl"))
+    assert answer["answer"] is None and answer["class_snapshot"] == "原三班"
+    assert answer["publication_id"] == prompt_id
+    assert json.loads(archive.read("classroom_publications.jsonl"))["id"] == prompt_id
+    assert json.loads(archive.read("classroom_sessions.jsonl"))["class_name"] == "原三班"
+    assert json.loads(archive.read("classroom_control_events.jsonl"))["teacher_id"] == teacher_id

@@ -15,6 +15,7 @@ from typing import Dict, Any
 import httpx
 import json
 import re
+from fastapi import HTTPException
 
 from app.core.config import settings
 
@@ -31,12 +32,14 @@ class _GateWaiter:
 class SharedLLMConcurrencyGate:
     """同一后端进程内所有模型角色共用的并发预算。
 
-    数字越小优先级越高；同优先级保持先来先服务。等待者取消时只标记
-    Future，释放槽位时惰性跳过，避免在线程外修改优先队列。
+    数字越小优先级越高；同优先级保持先来先服务。所有队列操作均在锁内；
+    超时/取消会移除等待者，不让过期请求占用内存或槽位。
     """
 
-    def __init__(self, limit: int):
+    def __init__(self, limit: int, max_waiters: int = 128, wait_timeout: float = 25):
         self.limit = max(1, limit)
+        self.max_waiters = max_waiters
+        self.wait_timeout = wait_timeout
         self._active = 0
         self._waiters: list[_GateWaiter] = []
         self._sequence = itertools.count()
@@ -58,19 +61,25 @@ class SharedLLMConcurrencyGate:
             if self._active < self.limit and not self._waiters:
                 self._active += 1
                 return 0.0
+            if self.waiting >= self.max_waiters:
+                raise HTTPException(503, detail={"code": "AI_BUSY", "message": "提问较多，请稍后再试。"})
             waiter = _GateWaiter(priority, next(self._sequence), loop.create_future())
             heapq.heappush(self._waiters, waiter)
 
         try:
-            await waiter.future
-        except BaseException:
+            await asyncio.wait_for(waiter.future, timeout=self.wait_timeout)
+        except BaseException as error:
             async with self._lock:
                 granted = waiter.future.done() and not waiter.future.cancelled()
                 if granted:
                     self._active = max(0, self._active - 1)
                 else:
                     waiter.future.cancel()
+                self._waiters = [item for item in self._waiters if not item.future.done()]
+                heapq.heapify(self._waiters)
                 self._wake_waiters()
+            if isinstance(error, TimeoutError):
+                raise HTTPException(503, detail={"code": "AI_QUEUE_TIMEOUT", "message": "等待 AI 超时，请稍后再试。"}) from error
             raise
         return (perf_counter() - started) * 1000
 
@@ -109,9 +118,11 @@ def get_shared_llm_gate() -> SharedLLMConcurrencyGate:
         _shared_gate is None
         or _shared_gate_loop is not loop
         or _shared_gate.limit != settings.LLM_MAX_CONCURRENCY
+        or _shared_gate.max_waiters != settings.LLM_MAX_QUEUE
+        or _shared_gate.wait_timeout != settings.LLM_QUEUE_TIMEOUT_SECONDS
     ):
         _shared_gate_loop = loop
-        _shared_gate = SharedLLMConcurrencyGate(settings.LLM_MAX_CONCURRENCY)
+        _shared_gate = SharedLLMConcurrencyGate(settings.LLM_MAX_CONCURRENCY, settings.LLM_MAX_QUEUE, settings.LLM_QUEUE_TIMEOUT_SECONDS)
     return _shared_gate
 
 
@@ -210,6 +221,9 @@ class OpenAICompatibleProvider(BaseProvider):
             for attempt in range(settings.LLM_MAX_RETRIES + 1):
                 gate = get_shared_llm_gate()
                 async with gate.slot(self.request_priority) as wait_ms:
+                    # Class may end while this request waits behind another student.
+                    from app.services.classroom_service import ensure_queued_llm_access
+                    await ensure_queued_llm_access()
                     total_wait_ms += wait_ms
                     request_started = perf_counter()
                     response = await self.client.post(

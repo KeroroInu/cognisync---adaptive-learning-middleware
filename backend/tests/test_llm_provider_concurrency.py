@@ -2,6 +2,7 @@
 import asyncio
 
 import pytest
+from fastapi import HTTPException
 
 from app.services import llm_provider
 from app.services.llm_provider import OpenAICompatibleProvider, SharedLLMConcurrencyGate
@@ -103,3 +104,76 @@ async def test_separate_analysis_and_chat_providers_share_one_budget(monkeypatch
     ])
 
     assert max_active == 2
+
+
+@pytest.mark.asyncio
+async def test_queue_bounds_timeout_and_cancel_cleanup():
+    gate = SharedLLMConcurrencyGate(1, max_waiters=1, wait_timeout=0.02)
+    await gate.acquire()
+    waiting = asyncio.create_task(gate.acquire())
+    await asyncio.sleep(0)
+    with pytest.raises(HTTPException) as busy:
+        await gate.acquire()
+    assert busy.value.detail["code"] == "AI_BUSY"
+    with pytest.raises(HTTPException) as timed_out:
+        await waiting
+    assert timed_out.value.detail["code"] == "AI_QUEUE_TIMEOUT"
+    assert gate.waiting == 0 and not gate._waiters
+    # Repeated cancellation cannot grow a stale heap behind a slow active call.
+    for _ in range(20):
+        waiting = asyncio.create_task(gate.acquire())
+        await asyncio.sleep(0)
+        waiting.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await waiting
+    assert gate.active == 1 and not gate._waiters
+    await gate.release()
+    async with gate.slot():
+        assert gate.active == 1
+    assert gate.active == 0
+
+
+@pytest.mark.asyncio
+async def test_queued_request_rechecks_classroom_before_http_dispatch(monkeypatch):
+    from app.services import classroom_service
+    gate = SharedLLMConcurrencyGate(1)
+    await gate.acquire()
+    calls = []
+    closed = False
+
+    async def check_access():
+        assert classroom_service.llm_classroom_scope.get() == "排队班"
+        if closed:
+            raise classroom_service.denied("closed")
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            pass
+
+        async def post(self, *args, **kwargs):
+            calls.append(True)
+            return _SuccessResponse()
+
+        async def aclose(self):
+            pass
+
+    monkeypatch.setattr(llm_provider, "get_shared_llm_gate", lambda: gate)
+    monkeypatch.setattr(llm_provider.httpx, "AsyncClient", FakeClient)
+    monkeypatch.setattr(classroom_service, "ensure_queued_llm_access", check_access)
+    provider = OpenAICompatibleProvider("https://example.invalid/v1", "unused", "test")
+    token = classroom_service.llm_classroom_scope.set("排队班")
+    try:
+        request = asyncio.create_task(provider.complete("system", "user"))
+        for _ in range(10):
+            await asyncio.sleep(0)
+            if gate.waiting:
+                break
+        assert gate.waiting == 1
+        closed = True
+        await gate.release()
+        with pytest.raises(HTTPException) as rejected:
+            await request
+        assert rejected.value.detail["code"] == "CLASSROOM_CLOSED"
+        assert not calls and gate.active == 0
+    finally:
+        classroom_service.llm_classroom_scope.reset(token)

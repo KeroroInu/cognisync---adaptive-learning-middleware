@@ -27,8 +27,9 @@ EXPORT_MODELS = (
     models.BehaviorLog, models.EmotionLog, models.CalibrationLog,
     models.ScaleTemplate, models.ScaleResponse, models.OnboardingSession, models.TeacherNote,
     models.AssessmentRound, models.AssessmentResponse,
+    models.ClassroomSession, models.ClassroomPublication, models.ClassroomResponse, models.ClassroomControlEvent,
 )
-USER_FIELDS = {"id", "role", "class_name", "experiment_group", "is_active", "created_at", "last_active_at", "onboarding_mode", "has_completed_onboarding"}
+USER_FIELDS = {"id", "role", "class_name", "experiment_group", "is_active", "created_at", "last_active_at", "onboarding_mode", "has_completed_onboarding", "gender"}
 MAX_BYTES = 128 * 1024 * 1024  # Uncompressed, including CSV + JSONL. Fail rather than truncate.
 EXPORT_LOCK = 739204821
 LEARNER_ROLES = ("learner", "student", "user")  # Earlier imports used student/user.
@@ -71,6 +72,17 @@ def export_queries(class_name=None, group=None, include_identity=False):
         students = students.where(models.User.experiment_group == group)
     artifact_ids = select(models.StageArtifact.id).where(models.StageArtifact.user_id.in_(students))
     event_ids = select(models.StageEvent.id).where(models.StageEvent.user_id.in_(students))
+    classroom_ids = select(models.ClassroomSession.id)
+    if class_name is not None:
+        classroom_ids = classroom_ids.where(models.ClassroomSession.class_name == class_name)
+    if group is not None:
+        classroom_ids = classroom_ids.where(models.ClassroomSession.class_name.in_(
+            select(models.User.class_name).where(models.User.id.in_(students))))
+    # A moved student still needs the original question/session behind each answer.
+    answered_sessions = select(models.ClassroomPublication.session_id).join(
+        models.ClassroomResponse, models.ClassroomResponse.publication_id == models.ClassroomPublication.id,
+    ).where(models.ClassroomResponse.user_id.in_(students))
+    classroom_ids = classroom_ids.union(answered_sessions)
     for model in EXPORT_MODELS:
         table = model.__table__
         columns = list(table.columns)
@@ -81,8 +93,13 @@ def export_queries(class_name=None, group=None, include_identity=False):
             columns = [c for c in columns if c.name != "teacher_name"]
         query = select(*columns)
         if model is models.User:
-            # Include note authors as identifier-only rows, even when filtering a classroom.
+            # Preserve author keys for notes and classroom controls in filtered packages.
             teachers = select(models.TeacherNote.teacher_id).where(models.TeacherNote.student_id.in_(students))
+            teachers = teachers.union(
+                select(models.ClassroomSession.created_by).where(models.ClassroomSession.id.in_(classroom_ids)),
+                select(models.ClassroomPublication.created_by).where(models.ClassroomPublication.session_id.in_(classroom_ids)),
+                select(models.ClassroomControlEvent.teacher_id).where(models.ClassroomControlEvent.session_id.in_(classroom_ids)),
+            )
             query = query.where(table.c.id.in_(students) | table.c.id.in_(teachers))
         elif "user_id" in table.c:
             query = query.where(table.c.user_id.in_(students))
@@ -92,6 +109,10 @@ def export_queries(class_name=None, group=None, include_identity=False):
             query = query.where(table.c.artifact_id.in_(artifact_ids))
         elif model is models.StageEventArtifact:
             query = query.where(table.c.event_id.in_(event_ids))
+        elif model is models.ClassroomSession:
+            query = query.where(table.c.id.in_(classroom_ids))
+        elif model in (models.ClassroomPublication, models.ClassroomControlEvent):
+            query = query.where(table.c.session_id.in_(classroom_ids))
         # Task/blueprint/scale catalogs stay complete to preserve foreign-key interpretation.
         query = query.order_by(*table.primary_key.columns)
         yield table.name, columns, query
@@ -168,7 +189,7 @@ async def build_package(db: AsyncSession, *, class_name=None, group=None, includ
         "consistency": "PostgreSQL REPEATABLE READ / READ ONLY",
         "files": [], "tables": {},
         "limitations": [
-            "筛选依据当前班级/分组；teacher_notes 保留当时的分组快照。历史改组无法由当前 users 反推。",
+            "学生筛选依据当前班级/分组；teacher_notes 与 classroom_responses 保留当时的快照。历史改组无法由当前 users 反推。",
             "任务、蓝图和量表目录完整保留，包含教师专用材料，不得分发给学生。",
             "默认移除结构化姓名、学号、邮箱；对话、代码、备注自由文本仍可能含身份信息。不是匿名数据。",
             "画像及情感分析是系统推断，不是已验证的能力测评。adopted=null 表示未知。",
@@ -176,6 +197,7 @@ async def build_package(db: AsyncSession, *, class_name=None, group=None, includ
             "图谱 shared_concept_edge 是共享概念关系，不是这位学生独立生成关系的证据。",
             "时间为原始 ISO 时间；事件间隔包含离开页面时间，不等于有效学习时长。",
             "量表目录是当前保存的模板；旧答卷没有模板快照时不能重建其当时题本。",
+            "classroom_publications.question 是发布时冻结的题目；每次发布单独计次，回答中的 null 不代表零分。发布不等于学生已读。",
         ],
     }
     total_bytes = 0

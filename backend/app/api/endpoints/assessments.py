@@ -6,6 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import case, func, or_, select, text, update
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.endpoints.auth import get_current_user
@@ -13,35 +14,11 @@ from app.core.security import verify_admin_key
 from app.db.postgres import get_db
 from app.models.sql.assessment import AssessmentResponse, AssessmentRound
 from app.models.sql.user import User
+from app.schemas.assessment import Question, validate_answer
 
 router = APIRouter(prefix="/assessments", tags=["Assessments"])
 admin_router = APIRouter(prefix="/assessments", dependencies=[Depends(verify_admin_key)], tags=["Admin Assessments"])
 LOCK = 739204822
-
-
-class Option(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-    value: str = Field(min_length=1, max_length=100)
-    label: str = Field(min_length=1, max_length=300)
-
-
-class Question(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-    id: str = Field(pattern=r"^[A-Za-z0-9_-]{1,80}$")
-    text: str = Field(min_length=1, max_length=2000)
-    type: Literal["choice", "text"] = "choice"
-    required: bool = True
-    options: list[Option] = Field(default_factory=list, max_length=12)
-
-    @model_validator(mode="after")
-    def valid_options(self):
-        if self.type == "choice" and len(self.options) < 2:
-            raise ValueError("选择题至少需要两个选项")
-        if len({o.value for o in self.options}) != len(self.options):
-            raise ValueError("选项值不能重复")
-        if self.type == "text" and self.options:
-            raise ValueError("简答题不应包含选项")
-        return self
 
 
 class RoundInput(BaseModel):
@@ -147,7 +124,8 @@ async def toggle_round(round_id: UUID, data: ToggleInput, db: AsyncSession = Dep
 
 @router.post("/{round_id}/responses")
 async def submit_answers(round_id: UUID, data: AnswerInput, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
-    item = await db.scalar(select(AssessmentRound).where(AssessmentRound.id == round_id).with_for_update())
+    # Shared lock allows the class to submit together; close/edit needs exclusive lock.
+    item = await db.scalar(select(AssessmentRound).where(AssessmentRound.id == round_id).with_for_update(read=True))
     if not item or item.class_name not in ("", user.class_name or ""):
         raise HTTPException(404, "找不到这份问卷")
     existing = await db.scalar(select(AssessmentResponse).where(AssessmentResponse.round_id == round_id, AssessmentResponse.user_id == user.id))
@@ -164,17 +142,20 @@ async def submit_answers(round_id: UUID, data: AnswerInput, db: AsyncSession = D
     if set(data.answers) - questions.keys():
         raise HTTPException(422, "答案包含未知题目")
     for qid, q in questions.items():
-        answer = data.answers.get(qid)
-        if answer is None or not answer.strip():
-            if q["required"]:
-                raise HTTPException(422, "还有题目没有回答")
-        elif len(answer) > 4000 or (q["type"] == "choice" and answer not in {o["value"] for o in q["options"]}):
-            raise HTTPException(422, "答案不在题目允许的范围内")
+        try:
+            validate_answer(q, data.answers.get(qid))
+        except ValueError as error:
+            raise HTTPException(422, str(error)) from error
     now = datetime.now(timezone.utc)
     if data.started_at.tzinfo is None or data.started_at > now or data.started_at < item.published_at:
         raise HTTPException(422, "开始时间无效，请重新打开问卷")
-    response = AssessmentResponse(user_id=user.id, round_id=item.id, answers=data.answers,
-        started_at=data.started_at, class_snapshot=user.class_name or "", group_snapshot=user.experiment_group or "unassigned")
-    db.add(response)
+    response_id = await db.scalar(insert(AssessmentResponse).values(user_id=user.id, round_id=item.id, answers=data.answers,
+        started_at=data.started_at, class_snapshot=user.class_name or "", group_snapshot=user.experiment_group or "unassigned").on_conflict_do_nothing(
+        constraint="uq_assessment_answer").returning(AssessmentResponse.id))
+    if response_id is None:
+        existing = await db.scalar(select(AssessmentResponse).where(AssessmentResponse.round_id == round_id, AssessmentResponse.user_id == user.id))
+        if existing.answers != data.answers:
+            raise HTTPException(409, "这份问卷已经提交，不能覆盖原答案")
+        return {"success": True, "data": {"id": str(existing.id), "already_submitted": True}}
     await db.commit()
-    return {"success": True, "data": {"id": str(response.id), "already_submitted": False}}
+    return {"success": True, "data": {"id": str(response_id), "already_submitted": False}}

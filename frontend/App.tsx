@@ -9,6 +9,7 @@ import { useAppStore } from './services/store';
 import type { User, UserProfile } from './types';
 import { classroomEntry } from './utils/classroomEntry';
 import { AssessmentGate } from './components/AssessmentGate';
+import { ClassroomGate } from './components/ClassroomGate';
 
 const Dashboard = React.lazy(() => import('./views/Dashboard').then(module => ({ default: module.Dashboard })));
 const Chat = React.lazy(() => import('./views/Chat').then(module => ({ default: module.Chat })));
@@ -332,6 +333,7 @@ function App() {
   // 已登录且完成 onboarding：使用 Layout 包裹应用内容
   return (
     <AssessmentGate key={state.user.id} userId={state.user.id} onLogout={handleLogout}>
+    <ClassroomGate key={state.user.id} userId={state.user.id} onLogout={handleLogout}>
     <Layout
       currentView={currentView as AppView}
       onViewChange={setCurrentView as (view: AppView) => void}
@@ -346,6 +348,7 @@ function App() {
         {renderProtectedContent()}
       </Suspense>
     </Layout>
+    </ClassroomGate>
     </AssessmentGate>
   );
 }

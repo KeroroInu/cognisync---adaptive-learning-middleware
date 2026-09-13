@@ -86,6 +86,8 @@ class Settings(BaseSettings):
         description="单轮对话生成的总时间预算",
     )
     LLM_MAX_CONCURRENCY: int = Field(default=12, ge=1, le=100)
+    LLM_MAX_QUEUE: int = Field(default=128, ge=1, le=1000)
+    LLM_QUEUE_TIMEOUT_SECONDS: float = Field(default=25, gt=0, le=120)
     LLM_MAX_RETRIES: int = Field(default=2, ge=0, le=5)
     LLM_PROJECT_TEXT_ANALYSIS: Literal["rules", "model"] = Field(
         default="rules",

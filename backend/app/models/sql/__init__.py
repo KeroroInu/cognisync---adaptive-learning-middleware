@@ -33,6 +33,7 @@ from app.models.sql.system_config import SystemConfig
 from app.models.sql.behavior_log import BehaviorLog
 from app.models.sql.teacher_note import TeacherNote
 from app.models.sql.assessment import AssessmentRound, AssessmentResponse
+from app.models.sql.classroom import ClassroomSession, ClassroomPublication, ClassroomResponse, ClassroomControlEvent
 
 __all__ = [
     "Base",
@@ -71,4 +72,8 @@ __all__ = [
     "TeacherNote",
     "AssessmentRound",
     "AssessmentResponse",
+    "ClassroomSession",
+    "ClassroomPublication",
+    "ClassroomResponse",
+    "ClassroomControlEvent",
 ]
