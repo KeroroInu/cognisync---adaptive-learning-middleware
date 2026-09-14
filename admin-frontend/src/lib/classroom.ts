@@ -3,6 +3,8 @@ import type { AssessmentQuestion } from './assessments';
 export interface ClassroomPrompt {
   id: string;
   question: AssessmentQuestion;
+  questions?: AssessmentQuestion[];
+  title?: string;
   published_at: string;
   closed_at: string | null;
   source?: string;
@@ -22,7 +24,7 @@ export interface ClassroomSession {
 
 export interface ClassroomResponses {
   prompt: ClassroomPrompt;
-  responses: { id: string; user_id: string; student_id: string; name: string; answer: string | null; created_at: string }[];
+  responses: { id: string; user_id: string; student_id: string; name: string; answer: string | null; answers?: Record<string, string | null> | null; created_at: string }[];
   total: number;
   total_students: number;
 }
@@ -62,6 +64,7 @@ export function validateClassroomQuestion(question: AssessmentQuestion): string 
   if (!question.text.trim()) return '先写下想问学生的问题。';
   if (question.type === 'choice') {
     if (question.options.length < 2) return '单选题至少需要两个选项。';
+    if (question.options.length > 12 || question.options.some(option => option.label.length > 300)) return '每题最多 12 个选项，每个选项最多 300 字。';
     if (question.options.some(option => !option.label.trim() || !option.value.trim())) return '每个选项都需要文字和保存值。';
     if (new Set(question.options.map(option => option.value.trim())).size !== question.options.length) return '选项保存值不能重复。';
   }

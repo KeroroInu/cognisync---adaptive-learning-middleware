@@ -31,3 +31,8 @@
 .classroom-question .classroom-primary:not(:disabled):hover { background:#b8e84d; border-color:#161713; }
 .classroom-toast { max-width:calc(100vw - 32px); font-size:14px; }
 .classroom-options label:has(input:disabled) { cursor:default; }
+.classroom-set-dialog { border: 1px solid #bbb9ae; border-radius: 20px; padding: 0; width: min(720px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); color: #20231d; background: #fffdf6; }
+.classroom-set-dialog::backdrop { background: #13170f66; }
+.classroom-set-dialog .question-room { min-height: 0; padding: 18px 24px; }
+.classroom-set-dialog .question-dialog { margin: 12px auto; padding: 0; }
+.classroom-set-dialog .question-companion { transform: scale(.7); margin: -12px auto; }

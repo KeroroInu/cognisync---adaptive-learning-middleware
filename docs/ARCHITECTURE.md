@@ -110,6 +110,8 @@ Worker 超时隔离、受限 Python 能力、状态结构校验和输出限额�
 | 课次与准备 | `classroom_lesson_plans`、`preparation_records` | 冻结本课任务/知识目标；分开保存准备区代码、运行与对话 |
 | 文件与本地作品 | `classroom_materials`、`classroom_material_receipts` | 发布时任务/脚本快照；按学生绑定下载、提交和原文件哈希 |
 
+课堂小问答复用前后测的 React 逐题组件，不复用前后测业务数据。`classroom_question_sets` 保存不可变题组；发布至某课次时在 `classroom_publications.question` 冻结 `kind=set/title/set_id/questions`，旧单题 JSON 继续读取。新答卷使用 `classroom_responses.answers` 和 `started_at`，旧 `answer` 字段保留。整组校验、跨班授权和关闭检查后一次事务保存；共享行锁允许同班并发提交，唯一约束阻止重复答卷。题目修改另存新版本，不追改发布快照。问答接口不调用模型、不自动评分、不更新画像。
+
 [research_event_service.py](../backend/app/services/research_event_service.py) 负责事件和版本，[research_task_service.py](../backend/app/services/research_task_service.py) 负责工作区。产物使用稳定 ID，不以数组位置代替身份；相同内容可复用版本，但重复运行仍产生不同测试事件。保存失败不得展示虚假的“已完成”。
 
 事件请求的幂等按用户和任务限定：同一请求重放不重复记录，不同内容复用同一键应拒绝。最终提交需要与有效测试证据对应；历史迁移记录继续可读，不意味着恢复已撤下的迁移界面。
@@ -138,7 +140,7 @@ Worker 超时隔离、受限 Python 能力、状态结构校验和输出限额�
 
 ## 7. 导出与性能
 
-[research_package.py](../backend/app/services/research_package.py) 从允许清单导出 29 张 SQL 表、CSV/JSONL、图谱快照、教材资料和字段说明，附清单、行数与摘要哈希。课堂答案与题目、课次和教师标识保留关联；按当前班级/组别筛选学生时，补入其历史答案、准备记录、资料收取和课堂证据引用的课次。身份字段单独控制；即便不导出姓名，学生自由文本仍可能包含个人信息，不能称为完全匿名数据。上传原件位于 `originals/<表名>/<UUID>.bin`，实际文件名和 SHA-256 在对应表；二进制不重复编码进 CSV/JSONL。
+[research_package.py](../backend/app/services/research_package.py) 从允许清单导出 30 张 SQL 表、CSV/JSONL、图谱快照、教材资料和字段说明，附清单、行数与摘要哈希。课堂答案与题目、课次和教师标识保留关联；按当前班级/组别筛选学生时，补入其历史答案、准备记录、资料收取和课堂证据引用的课次。身份字段单独控制；即便不导出姓名，学生自由文本仍可能包含个人信息，不能称为完全匿名数据。上传原件位于 `originals/<表名>/<UUID>.bin`，实际文件名和 SHA-256 在对应表；二进制不重复编码进 CSV/JSONL。
 
 SQL 导出使用一致性只读事务，Neo4j 是另一次读取，不能声称跨库原子快照；知识图谱当前快照也不等于完整变更历史。导出采取分批读取、临时文件、大小和时间限制，并限制同时导出数量，以免占满普通教学请求的内存与连接。
 

@@ -9,9 +9,10 @@ export function Companion({ busy = false }: { busy?: boolean }) {
 }
 
 export const AssessmentConversation: React.FC<{
-  round: PendingAssessment; userId: string; onDone: () => Promise<void>; onLogout: () => void;
-}> = ({ round, userId, onDone, onLogout }) => {
-  const key = `cognisync:assessment:v1:${userId}:${round.id}`;
+  round: Pick<PendingAssessment, 'id' | 'questions' | 'served_at'>; userId: string; onDone: () => Promise<void>; onLogout: () => void;
+  classroomSubmit?: (answers: Record<string, string | null>, startedAt: string) => Promise<unknown>;
+}> = ({ round, userId, onDone, onLogout, classroomSubmit }) => {
+  const key = `cognisync:${classroomSubmit ? 'classroom-set' : 'assessment'}:v1:${userId}:${round.id}`;
   const [draft] = useState(() => {
     try {
       const value = JSON.parse(localStorage.getItem(key) || 'null');
@@ -33,6 +34,7 @@ export const AssessmentConversation: React.FC<{
   const [error, setError] = useState('');
   const [storageWarning, setStorageWarning] = useState(false);
   const heading = useRef<HTMLHeadingElement>(null);
+  const submitting = useRef(false);
   const question = round.questions[index];
   const answered = !question.required || Boolean(answers[question.id]?.trim());
   useEffect(() => {
@@ -41,19 +43,20 @@ export const AssessmentConversation: React.FC<{
   }, [answers, draft.started_at, key]);
   useEffect(() => { heading.current?.focus(); }, [index]);
   async function submit() {
-    if (busy) return;
+    if (submitting.current) return;
     const missing = round.questions.findIndex(q => q.required && !answers[q.id]?.trim());
     if (missing >= 0) { setIndex(missing); return; }
-    setBusy(true); setError('');
+    submitting.current = true; setBusy(true); setError('');
     try {
-      await assessmentRequest(`/${round.id}/responses`, { answers, started_at: draft.started_at });
+      if (classroomSubmit) await classroomSubmit(answers, draft.started_at);
+      else await assessmentRequest(`/${round.id}/responses`, { answers, started_at: draft.started_at });
       try { localStorage.removeItem(key); } catch { /* server already saved */ }
       await onDone();
     } catch (e) { setError(e instanceof Error ? e.message : '没有保存成功，请重试。'); }
-    finally { setBusy(false); }
+    finally { submitting.current = false; setBusy(false); }
   }
   return <main className="question-room">
-    <header><span>CogniSync</span><button onClick={onLogout} disabled={busy}>退出登录</button></header>
+    <header><span>{classroomSubmit ? '课堂小问答' : 'CogniSync'}</span><button onClick={onLogout} disabled={busy}>{classroomSubmit ? '稍后回答' : '退出登录'}</button></header>
     <section className="question-dialog" aria-label="课堂问卷">
       <Companion busy={busy} />
       <p className="question-greeting">我有几个问题想问你。</p>
@@ -68,7 +71,7 @@ export const AssessmentConversation: React.FC<{
         </label>)}
       </fieldset> : <textarea aria-label="你的回答" placeholder="写下你的想法…" maxLength={4000} disabled={busy} value={answers[question.id] || ''} onChange={e => setAnswers(a => ({ ...a, [question.id]: e.target.value }))} />}
       {storageWarning && <p role="status">浏览器未能保存草稿，请先完成本次填写再关闭页面。</p>}
-      {error && <div role="alert"><p>{error}</p><button disabled={busy} onClick={() => void onDone().catch(e => setError(e instanceof Error ? e.message : '读取失败，请重试'))}>重新读取安排</button></div>}
+      {error && <div role="alert"><p>{error}</p>{!classroomSubmit && <button disabled={busy} onClick={() => void onDone().catch(e => setError(e instanceof Error ? e.message : '读取失败，请重试'))}>重新读取安排</button>}</div>}
       <footer><button disabled={index === 0 || busy} onClick={() => setIndex(i => i - 1)}><ArrowLeft size={18} />上一题</button>
         {index < round.questions.length - 1 ? <button className="question-primary" disabled={!answered || busy} onClick={() => setIndex(i => i + 1)}>下一题<ArrowRight size={18} /></button>
           : <button className="question-primary" disabled={!answered || busy} onClick={() => void submit()}>{busy ? '正在保存…' : '提交回答'}<Check size={18} /></button>}

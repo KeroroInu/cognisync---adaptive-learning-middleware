@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, DoorClosed, DoorOpen, MessageSquare, Plus, RefreshCw, Send, X } from 'lucide-react';
-import { emptyQuestion, type AssessmentQuestion } from '../lib/assessments';
-import { classroomAdmin, classroomAnswerLabel, validateClassroomQuestion, type ClassroomResponses, type ClassroomSession } from '../lib/classroom';
+import { ChevronLeft, ChevronRight, DoorClosed, DoorOpen, Plus, RefreshCw } from 'lucide-react';
+import { classroomAdmin, classroomAnswerLabel, type ClassroomResponses, type ClassroomSession } from '../lib/classroom';
 import './Classroom.css';
+import { ClassroomQuestionSets } from './ClassroomQuestionSets';
 import { LessonSetup } from './LessonSetup';
 import { LessonMaterials, LessonEvidence } from './LessonMaterials';
 
@@ -69,9 +69,7 @@ export function Classroom() {
   const [message, setMessage] = useState('');
   const [creating, setCreating] = useState(false);
   const [className, setClassName] = useState('');
-  const [title, setTitle] = useState('');
-  const [question, setQuestion] = useState<AssessmentQuestion>(emptyQuestion);
-  const [source, setSource] = useState('');
+  const [title, setTitle] = useState(new Date().toLocaleDateString('zh-CN') + ' 课堂');
   const [responseData, setResponseData] = useState<ClassroomResponses | null>(null);
   const [responseError, setResponseError] = useState('');
   const [page, setPage] = useState(0);
@@ -79,7 +77,6 @@ export function Classroom() {
   const requestLock = useRef(false);
   const listSequence = useRef(0);
   const createRequest = useRef<{ key: string; id: string } | null>(null);
-  const publishRequest = useRef<{ key: string; id: string } | null>(null);
   const selected = sessions.find(session => session.id === selectedId);
   const promptId = selected?.prompt?.id;
 
@@ -153,7 +150,7 @@ export function Classroom() {
     if (createRequest.current?.key !== key) createRequest.current = { key, id: crypto.randomUUID() };
     askToConfirm({ title: '开放准备区？', scope: payload.class_name, description: '先开放准备区和课堂问答，选好两组任务后再开始本课。之前的课次和回答会保留。', confirmLabel: '开放准备区', preview: payload.title, operation: async () => {
       const session = await classroomAdmin<ClassroomSession>('/sessions', { ...payload, request_id: createRequest.current!.id });
-      setSelectedId(session.id); setCreating(false); setTitle(''); createRequest.current = null;
+      setSelectedId(session.id); setCreating(false); setTitle(new Date().toLocaleDateString('zh-CN') + ' 课堂'); createRequest.current = null;
       setMessage('准备区已开放，可以发题；保存本课安排后再启动分组课堂。');
     } });
   }
@@ -169,24 +166,10 @@ export function Classroom() {
     } });
   }
 
-  function publish() {
-    if (!selected?.is_current || selected.state !== 'open') return;
-    const validation = validateClassroomQuestion(question);
-    if (validation) { setError(validation); return; }
-    const payload = { question: { ...question, text: question.text.trim(), options: question.type === 'choice' ? question.options.map(option => ({ value: option.value.trim(), label: option.label.trim() })) : [] }, source: source.trim() };
-    const key = JSON.stringify({ session: selected.id, ...payload });
-    if (publishRequest.current?.key !== key) publishRequest.current = { key, id: crypto.randomUUID() };
-    askToConfirm({ title: '向学生发布这道题？', scope: selected.class_name || '所有班级', description: '学生会收到提问弹窗。发布后不能修改这道题，上一题的回答会保留。', confirmLabel: '确认发布', preview: payload.question.text, operation: async () => {
-      await classroomAdmin(`/sessions/${selected.id}/prompts`, { ...payload, request_id: publishRequest.current!.id });
-      setQuestion(emptyQuestion()); setSource(''); publishRequest.current = null;
-      setMessage('已发布，回答会自动更新。');
-    } });
-  }
-
   function closePrompt() {
     const prompt = selected?.prompt;
     if (!selected?.is_current || !prompt) return;
-    askToConfirm({ title: '结束这道题？', scope: selected.class_name || '所有班级', description: '学生不能再提交这道题，已收到的答案会保留。', confirmLabel: '结束回答', preview: prompt.question.text, operation: async () => {
+    askToConfirm({ title: '结束本次回答？', scope: selected.class_name || '所有班级', description: '学生不能再提交本次问答，已收到的答案会保留。', confirmLabel: '结束回答', preview: prompt.title || prompt.question.text, operation: async () => {
       await classroomAdmin(`/prompts/${prompt.id}/close`, {});
       setMessage('本题已结束，答案保留。');
     } });
@@ -197,9 +180,9 @@ export function Classroom() {
   }
 
   return <div className="classroom-admin">
-    <div className="classroom-toolbar"><p>发一道题，听听学生的想法。</p><div className="classroom-actions">
+    <div className="classroom-toolbar"><p>选班上课，有需要时发一组小问答。</p><div className="classroom-actions">
       <button disabled={busy} aria-label="刷新课堂" onClick={() => void load()}><RefreshCw size={18} />刷新</button>
-      <button disabled={busy} className="classroom-primary" aria-expanded={creating} onClick={() => setCreating(value => !value)}><Plus size={18} />新课次</button>
+      <button disabled={busy} className="classroom-primary" aria-expanded={creating} onClick={() => { setClassName(selected?.class_name || ''); setCreating(value => !value); }}><Plus size={18} />新的一课</button>
     </div></div>
     {loadError && <p className="classroom-error" role="alert">{loadError}</p>}
     {error && !confirmation && <p className="classroom-error" role="alert">{error}</p>}
@@ -211,41 +194,33 @@ export function Classroom() {
         <div className="classroom-actions"><button type="button" onClick={() => setCreating(false)}>取消</button><button className="classroom-primary" type="submit">开始上课</button></div>
       </fieldset>
     </form>}
-    {loading ? <p role="status">正在读取课堂…</p> : sessions.length === 0 ? <section className="classroom-empty"><DoorOpen size={32} /><h2>还没有课次</h2><p>点击“新课次”设置课堂。学生会先进入共同准备区。</p></section> : <>
+    {loading ? <p role="status">正在读取课堂…</p> : sessions.length === 0 ? <section className="classroom-empty"><DoorOpen size={32} /><h2>还没有课次</h2><p>点击“新的一课”选择班级。学生先进入准备区。</p></section> : <>
       {selected && <>
+        <nav className="classroom-class-tabs" aria-label="切换班级">{sessions.filter(s => s.is_current).map(session => <button key={session.id} aria-pressed={session.id === selectedId} disabled={busy} onClick={() => selectSession(session.id)}>{session.class_name}</button>)}</nav>
+        <details className="classroom-history"><summary>查看以前的课</summary><label>课次<select value={selectedId} onChange={event => selectSession(event.target.value)}>{sessions.map(session => <option key={session.id} value={session.id}>{session.class_name} · {session.title} · {dateLabel(session.created_at)}</option>)}</select></label></details>
         <section className="classroom-panel classroom-session" aria-label="当前课次">
-          <label className="classroom-picker">课次<select disabled={busy} value={selectedId} onChange={event => selectSession(event.target.value)}>{sessions.map(session => <option key={session.id} value={session.id}>{session.class_name || '所有班级'} · {session.title} · {dateLabel(session.created_at)}{session.is_current ? '' : '（历史）'}</option>)}</select></label>
+          <div><strong>{selected.class_name}</strong><p>{selected.title}</p></div>
           <div className="classroom-session-actions"><span className={`classroom-state is-${selected.state}`}>{selected.is_current ? stateLabel[selected.state] : '历史课次'}</span>
           {selected.is_current && <button disabled={busy || selected.state === 'closing'} className={selected.state === 'open' ? 'classroom-end' : 'classroom-primary'} onClick={() => changeState(selected.state === 'open' ? 'end' : 'open')}>{selected.state === 'open' ? <DoorClosed size={19} /> : <DoorOpen size={19} />}{selected.state === 'open' ? '下课' : selected.state === 'closing' ? '正在保存…' : '重新开放'}</button>}</div>
           {selected.state === 'closing' && selected.closes_at && <p className="classroom-closing-note">学生正在保存，将于 {dateLabel(selected.closes_at)} 关闭学习入口。</p>}
         </section>
         {selected.is_current && <LessonSetup key={selected.id} sessionId={selected.id} open={selected.state === 'open'} />}
-        <LessonMaterials key={`materials-${selected.id}`} sessionId={selected.id} open={selected.is_current && selected.state === 'open'} />
-        <LessonEvidence key={`evidence-${selected.id}`} sessionId={selected.id} />
         <div className="classroom-workspace">
-          <section className="classroom-panel classroom-compose"><h2><MessageSquare size={21} />发一道题</h2>
-            <form onSubmit={event => { event.preventDefault(); void publish(); }}><fieldset disabled={busy || !selected.is_current || selected.state !== 'open'}>
-              <label>想问什么？<textarea required maxLength={2000} rows={2} placeholder="写一个简短、清楚的问题。" value={question.text} onChange={event => setQuestion({ ...question, text: event.target.value })} /></label>
-              <div className="classroom-question-settings"><label>回答方式<select value={question.type} onChange={event => setQuestion({ ...question, type: event.target.value as AssessmentQuestion['type'], options: event.target.value === 'text' ? [] : emptyQuestion().options })}><option value="choice">点选一个答案</option><option value="text">写一句话</option></select></label>
-                <label className="classroom-checkbox"><input type="checkbox" checked={question.required} onChange={event => setQuestion({ ...question, required: event.target.checked })} />需要回答</label></div>
-              {question.type === 'choice' && <div className="classroom-options">{question.options.map((option, index) => <div key={index}><span>{index + 1}</span><input required maxLength={300} aria-label={`选项 ${index + 1}`} placeholder="选项文字" value={option.label} onChange={event => setQuestion({ ...question, options: question.options.map((item, current) => current === index ? { ...item, label: event.target.value } : item) })} /><button type="button" disabled={question.options.length <= 2} aria-label={`删除选项 ${index + 1}`} onClick={() => setQuestion({ ...question, options: question.options.filter((_, current) => current !== index).map((item, current) => ({ ...item, value: String(current + 1) })) })}><X size={17} /></button></div>)}<button type="button" disabled={question.options.length >= 12} onClick={() => setQuestion({ ...question, options: [...question.options, { value: String(question.options.length + 1), label: '' }] })}><Plus size={16} />添加选项</button></div>}
-              <details><summary>来源备注（仅教师可见）</summary><textarea aria-label="题目来源备注" maxLength={2000} rows={2} placeholder="如使用正式量表，填写来源与原始题号。" value={source} onChange={event => setSource(event.target.value)} /><p>这里是课堂提问，不会自动评分或改动画像。</p></details>
-              <button type="submit" className="classroom-primary classroom-publish"><Send size={18} />发布给学生</button>
-            </fieldset></form>
-            {(!selected.is_current || selected.state !== 'open') && <p>重新开放当前课堂后才能发题；历史记录不会被覆盖。</p>}
-          </section>
-          <section className="classroom-panel classroom-results"><header><h2>本题回答</h2>{selected.prompt && !selected.prompt.closed_at && selected.is_current && <button disabled={busy} onClick={closePrompt}>结束回答</button>}</header>
+          <ClassroomQuestionSets sessionId={selected.id} className={selected.class_name} canSend={selected.is_current && selected.state === 'open' && (!selected.prompt || Boolean(selected.prompt.closed_at))} onSent={() => load()} />
+          <section className="classroom-panel classroom-results"><header><h2>本次回答</h2>{selected.prompt && !selected.prompt.closed_at && selected.is_current && <button disabled={busy} onClick={closePrompt}>结束回答</button>}</header>
             {!selected.prompt ? <p className="classroom-empty">还未发题。发布后在这里查看回答。</p> : <>
-              <p className="classroom-published-question">{selected.prompt.question.text}</p>
+              <p className="classroom-published-question">{selected.prompt.title || selected.prompt.question.text}</p>
               <p className="classroom-response-count"><strong>{responseData?.total ?? selected.response_count}</strong> 份回答{responseData ? ` / 班级当前 ${responseData.total_students} 人` : ''}<span>{selected.prompt.closed_at ? '本题已结束' : '收集中'}</span></p>
               {responseError && <p className="classroom-error" role="alert">{responseError} 将自动重试。</p>}
               {!responseData ? <p role="status">正在读取回答…</p> : responseData.responses.length === 0 ? <p className="classroom-empty">还没有回答，给学生一点时间。</p> : <>
-                <div className="classroom-answer-table"><table><thead><tr><th scope="col">学生</th><th scope="col">回答</th></tr></thead><tbody>{responseData.responses.map(response => <tr key={response.id}><td><strong>{response.name}</strong><span>{response.student_id}</span></td><td>{classroomAnswerLabel(responseData.prompt, response.answer)}</td></tr>)}</tbody></table></div>
+                <div className="classroom-answer-table"><table><thead><tr><th scope="col">学生</th><th scope="col">回答</th></tr></thead><tbody>{responseData.responses.map(response => <tr key={response.id}><td><strong>{response.name}</strong><span>{response.student_id}</span></td><td>{responseData.prompt.questions ? <ol>{responseData.prompt.questions.map(q => <li key={q.id}><span>{q.text}</span>{classroomAnswerLabel({ ...responseData.prompt, question: q }, response.answers?.[q.id] ?? null)}</li>)}</ol> : classroomAnswerLabel(responseData.prompt, response.answer)}</td></tr>)}</tbody></table></div>
                 {responseData.total > PAGE_SIZE && <div className="classroom-pagination"><button aria-label="上一页回答" disabled={page === 0} onClick={() => setPage(value => value - 1)}><ChevronLeft size={18} /></button><span>第 {page + 1} / {Math.ceil(responseData.total / PAGE_SIZE)} 页</span><button aria-label="下一页回答" disabled={(page + 1) * PAGE_SIZE >= responseData.total} onClick={() => setPage(value => value + 1)}><ChevronRight size={18} /></button></div>}
               </>}
             </>}
           </section>
         </div>
+        <LessonMaterials key={`materials-${selected.id}`} sessionId={selected.id} open={selected.is_current && selected.state === 'open'} />
+        <LessonEvidence key={`evidence-${selected.id}`} sessionId={selected.id} />
       </>}
     </>}
     <footer className="classroom-footnote">课次和每位学生的回答会保留，可在 <Link to="/exports">数据导出 → 课堂研究包</Link> 下载。<details><summary>下课开关的范围</summary>只关闭本班在平台内的学习和 AI 入口，不删除数据，也不影响学生本地的 Pi。</details></footer>

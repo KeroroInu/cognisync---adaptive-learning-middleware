@@ -7,7 +7,7 @@ export interface ClassroomSession {
   id: string; class_name: string; title: string;
   state: 'open' | 'closing' | 'closed'; closes_at: string | null;
 }
-export interface ClassroomPrompt { id: string; question: AssessmentQuestion; served_at: string }
+export interface ClassroomPrompt { id: string; question: AssessmentQuestion; questions?: AssessmentQuestion[]; title?: string; served_at: string }
 export interface LessonEntry { task_id: string; lesson_id: string; session_id: string; title: string; group: string }
 export interface ClassroomState { session: ClassroomSession | null; prompt: ClassroomPrompt | null; lesson_entry?: LessonEntry | null }
 
@@ -52,6 +52,7 @@ async function classroomRequest<T>(path: string, body?: unknown): Promise<T> {
 }
 export const getClassroomState = () => classroomRequest<ClassroomState>('/state');
 export const answerClassroomPrompt = (id: string, answer: string | null) => classroomRequest(`/prompts/${encodeURIComponent(id)}/responses`, { answer });
+export const answerClassroomSet = (id: string, answers: Record<string, string | null>, started_at: string) => classroomRequest(`/prompts/${encodeURIComponent(id)}/responses`, { answers, started_at });
 
 export const classroomDraftKey = (userId: string, promptId: string) => `cognisync:classroom-answer:v1:${userId}:${promptId}`;
 export function readClassroomDraft(userId: string, prompt: ClassroomPrompt): string {

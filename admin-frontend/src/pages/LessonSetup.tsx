@@ -47,12 +47,12 @@ export function LessonSetup({ sessionId, open }: { sessionId: string; open: bool
     finally { setBusy(false); }
   }
   return <section className="classroom-panel" aria-label="本课安排">
-    <h2>本课安排</h2><p>{plan?.started_at ? '已启动，任务和知识目标已冻结。' : '学生先在准备区。保存安排后，由你启动分组课堂。'}</p>
+    <div className="classroom-lesson-bar"><div><h2>{plan?.started_at ? '分组课堂已开始' : '学生在准备区'}</h2><p>{plan?.started_at ? '学生按原分组进入各自的课堂。' : '问答和文件都能先发。准备好后，再开始本课。'}</p></div><button className="classroom-primary" disabled={!ready || busy || !open || Boolean(plan?.started_at) || !saved || !Object.values(selected).some(Boolean)} onClick={() => void start()}>开始本课</button></div>
     {error && <p role="alert" className="classroom-error">{error} {!ready && <button onClick={() => setLoadAttempt(value => value + 1)}>重新读取</button>}</p>}
-    <fieldset disabled={!ready || busy || !open || Boolean(plan?.started_at)}>
+    <details><summary>课前设置：两组任务与知识点</summary><fieldset disabled={!ready || busy || !open || Boolean(plan?.started_at)}>
       <div className="classroom-fields">{([['ai_pbl', '常规 AI 协作'], ['pdt', '解构式协作']] as const).map(([group, label]) => <label key={group}>{label}<select value={selected[group] || ''} onChange={event => { setSelected(previous => ({ ...previous, [group]: event.target.value })); setSaved(false); }}><option value="">本课不开放此组</option>{tasks.filter(task => task.target_group === 'all' || task.target_group === group).map(task => <option key={task.id} value={task.id}>{task.title}</option>)}</select></label>)}</div>
       <label>本课知识点（每行一个，可稍后完善再启动）<textarea rows={2} value={points} maxLength={2000} placeholder={'条件判断\n列表操作'} onChange={event => { setPoints(event.target.value); setSaved(false); }} /></label>
-      <div className="classroom-actions"><button disabled={busy || Boolean(plan?.started_at)} onClick={() => void save()}>{saved ? '安排已保存' : '保存安排'}</button><button className="classroom-primary" disabled={!saved || !Object.values(selected).some(Boolean)} onClick={() => void start()}>开始本课</button></div>
-    </fieldset>
+      <div className="classroom-actions"><button disabled={busy || Boolean(plan?.started_at)} onClick={() => void save()}>{saved ? '安排已保存' : '保存安排'}</button></div>
+    </fieldset></details>
   </section>;
 }

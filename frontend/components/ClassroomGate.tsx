@@ -1,11 +1,28 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Check, DoorClosed, MessageCircle, RefreshCw, X } from 'lucide-react';
 import {
-  answerClassroomPrompt, CLASSROOM_ACCESS_EVENT, CLASSROOM_CLOSING_EVENT, CLASSROOM_OPEN_EVENT,
+  answerClassroomPrompt, answerClassroomSet, CLASSROOM_ACCESS_EVENT, CLASSROOM_CLOSING_EVENT, CLASSROOM_OPEN_EVENT,
   classroomDraftKey, createClassroomPoller, getClassroomState, readClassroomDraft,
   type ClassroomPrompt, type ClassroomState,
 } from '../services/classroom';
 import './ClassroomGate.css';
+import { AssessmentConversation } from './AssessmentGate';
+
+function ClassroomQuestionSet({ prompt, userId, onAnswered, onDismiss }: {
+  prompt: ClassroomPrompt; userId: string; onAnswered: () => void; onDismiss: () => void;
+}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null;
+    dialog.current?.showModal();
+    return () => { dialog.current?.close(); if (previous?.isConnected) previous.focus(); };
+  }, []);
+  return <dialog ref={dialog} className="classroom-set-dialog" aria-label="课堂小问答" onCancel={event => event.preventDefault()}>
+    <AssessmentConversation round={{ id: prompt.id, questions: prompt.questions!, served_at: prompt.served_at }} userId={userId}
+      onLogout={onDismiss} onDone={async () => onAnswered()}
+      classroomSubmit={(answers, startedAt) => answerClassroomSet(prompt.id, answers, startedAt)} />
+  </dialog>;
+}
 
 export const ClassroomQuestion: React.FC<{
   prompt: ClassroomPrompt; userId: string; onAnswered: () => void; onDismiss: () => void;
@@ -134,7 +151,7 @@ export const ClassroomGate: React.FC<{ userId: string; onLogout: () => void; chi
       </section>
     </div> : null}
     {status === 'open' && error ? <div className="classroom-connection" role="status">{error}</div> : null}
-    {promptVisible && prompt ? <ClassroomQuestion key={`${userId}:${prompt.id}`} prompt={prompt} userId={userId} onDismiss={() => setDismissedId(prompt.id)} onAnswered={() => { setAnsweredId(prompt.id); setNotice('回答已交给老师'); void refresh.current(); }} /> : null}
+    {promptVisible && prompt ? React.createElement(prompt.questions?.length ? ClassroomQuestionSet : ClassroomQuestion, { key: `${userId}:${prompt.id}`, prompt, userId, onDismiss: () => setDismissedId(prompt.id), onAnswered: () => { setAnsweredId(prompt.id); setNotice('回答已交给老师'); void refresh.current(); } }) : null}
     {status === 'open' && prompt && !promptVisible ? <button type="button" className="classroom-question-reminder" onClick={() => setDismissedId(null)}><MessageCircle size={20} />课堂提问</button> : null}
     {notice ? <div className="classroom-toast" role="status"><Check size={18} />{notice}</div> : null}
   </>;
