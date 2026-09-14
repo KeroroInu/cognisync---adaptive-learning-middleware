@@ -29,6 +29,7 @@ EXPORT_MODELS = (
     models.AssessmentRound, models.AssessmentResponse,
     models.ClassroomSession, models.ClassroomPublication, models.ClassroomResponse, models.ClassroomControlEvent,
     models.LessonPlan, models.PreparationRecord,
+    models.ClassroomMaterial, models.MaterialReceipt,
 )
 USER_FIELDS = {"id", "role", "class_name", "experiment_group", "is_active", "created_at", "last_active_at", "onboarding_mode", "has_completed_onboarding", "gender"}
 MAX_BYTES = 128 * 1024 * 1024  # Uncompressed, including CSV + JSONL. Fail rather than truncate.
@@ -97,10 +98,13 @@ def export_queries(class_name=None, group=None, include_identity=False):
     evidence_sessions = select(models.ClassroomSession.id).where(
         cast(models.ClassroomSession.id, String).in_(lesson_messages.union(lesson_events)),
     )
-    classroom_ids = classroom_ids.union(answered_sessions, preparation_sessions, evidence_sessions)
+    material_sessions = select(models.ClassroomMaterial.session_id).join(models.MaterialReceipt).where(models.MaterialReceipt.user_id.in_(students))
+    classroom_ids = classroom_ids.union(answered_sessions, preparation_sessions, evidence_sessions, material_sessions)
     for model in EXPORT_MODELS:
         table = model.__table__
         columns = list(table.columns)
+        if model in (models.ClassroomMaterial, models.MaterialReceipt):
+            columns = [c for c in columns if c.name != 'content']
         if model is models.User:
             allowed = USER_FIELDS | ({"name", "student_id", "email"} if include_identity else set())
             columns = [c for c in columns if c.name in allowed]
@@ -126,7 +130,7 @@ def export_queries(class_name=None, group=None, include_identity=False):
             query = query.where(table.c.event_id.in_(event_ids))
         elif model is models.ClassroomSession:
             query = query.where(table.c.id.in_(classroom_ids))
-        elif model in (models.ClassroomPublication, models.ClassroomControlEvent, models.LessonPlan):
+        elif model in (models.ClassroomPublication, models.ClassroomControlEvent, models.LessonPlan, models.ClassroomMaterial):
             query = query.where(table.c.session_id.in_(classroom_ids))
         # Task/blueprint/scale catalogs stay complete to preserve foreign-key interpretation.
         query = query.order_by(*table.primary_key.columns)
@@ -208,7 +212,7 @@ async def build_package(db: AsyncSession, *, class_name=None, group=None, includ
             "任务、蓝图和量表目录完整保留，包含教师专用材料，不得分发给学生。",
             "默认移除结构化姓名、学号、邮箱；对话、代码、备注自由文本仍可能含身份信息。不是匿名数据。",
             "画像及情感分析是系统推断，不是已验证的能力测评。adopted=null 表示未知。",
-            "不包含浏览器未保存草稿、未采集的模型版本或本地 pi 日志。Neo4j 是导出时快照，不是历史版本。",
+            "本地 Pi 日志仅包含学生已上传的作品包，不保证完整或不可修改；不会收集电脑其他文件。Neo4j 是当前快照。",
             "图谱 shared_concept_edge 是共享概念关系，不是这位学生独立生成关系的证据。",
             "时间为原始 ISO 时间；事件间隔包含离开页面时间，不等于有效学习时长。",
             "量表目录是当前保存的模板；旧答卷没有模板快照时不能重建其当时题本。",
@@ -250,6 +254,22 @@ async def build_package(db: AsyncSession, *, class_name=None, group=None, includ
                             "name": c.name, "type": str(c.type), "description": c.comment,
                             "references": sorted(f.target_fullname for f in c.foreign_keys),
                         } for c in columns]}
+                    # Private originals are separate entries, not base64 fields in every CSV row.
+                    for name, _columns, query in export_queries(class_name, group, include_identity):
+                        model = {'classroom_materials': models.ClassroomMaterial, 'classroom_material_receipts': models.MaterialReceipt}.get(name)
+                        if model is None:
+                            continue
+                        selected = query.subquery()
+                        result = await snapshot.stream(select(model.id, model.content).where(model.id.in_(select(selected.c.id)), model.content.is_not(None)).execution_options(yield_per=1))
+                        try:
+                            async for record in result:
+                                total_bytes += len(record.content)
+                                if total_bytes > MAX_BYTES:
+                                    raise HTTPException(413, '包含作品的研究包超过 128 MiB，请分班导出或在课次页逐份下载')
+                                with io.BytesIO(record.content) as source:
+                                    manifest['files'].append(await offload(add_file, archive, f'originals/{name}/{record.id}.bin', source))
+                        finally:
+                            await result.close()
                     if include_graph:
                         count = 0
                         with tempfile.TemporaryFile() as raw, tempfile.TemporaryFile() as csv_file:

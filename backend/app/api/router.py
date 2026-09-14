@@ -4,7 +4,7 @@ API 路由聚合 - 将所有端点路由集中管理
 from fastapi import APIRouter, Depends
 
 from app.api.endpoints import auth, chat, profile, graph, calibration, logs, export, forms, ai_onboarding, research, assessments
-from app.api.endpoints import classroom, preparation
+from app.api.endpoints import classroom, preparation, materials
 from app.services.classroom_service import require_classroom_access
 
 # 创建主路由器
@@ -12,6 +12,7 @@ api_router = APIRouter()
 api_router.include_router(assessments.router)
 api_router.include_router(classroom.router)
 api_router.include_router(preparation.router)
+api_router.include_router(materials.router)
 
 # 注册各模块路由
 api_router.include_router(auth.router, prefix="/auth", tags=["Authentication"])

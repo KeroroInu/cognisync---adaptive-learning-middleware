@@ -35,6 +35,7 @@ from app.models.sql.teacher_note import TeacherNote
 from app.models.sql.assessment import AssessmentRound, AssessmentResponse
 from app.models.sql.classroom import ClassroomSession, ClassroomPublication, ClassroomResponse, ClassroomControlEvent
 from app.models.sql.lesson import LessonPlan, PreparationRecord
+from app.models.sql.classroom_material import ClassroomMaterial, MaterialReceipt
 
 __all__ = [
     "Base",
@@ -79,4 +80,6 @@ __all__ = [
     "ClassroomControlEvent",
     "LessonPlan",
     "PreparationRecord",
+    "ClassroomMaterial",
+    "MaterialReceipt",
 ]
