@@ -93,6 +93,85 @@ async def expire_grace(test_db, session_id):
         await db.commit()
 
 
+async def saved_set(client, actors):
+    payload = {"request_id": str(uuid4()), "title": "课中两问", "source": "教师私有来源", "questions": [
+        question(), {**question(kind="text", required=False), "id": "q_why", "text": "为什么？"},
+    ]}
+    denied = await client.post(f"{ADMIN}/question-sets", headers=actors["first"], json=payload)
+    assert denied.status_code == 403
+    response = await client.post(f"{ADMIN}/question-sets", headers=actors["teacher"], json=payload)
+    assert response.status_code == 200, response.text
+    repeated = await client.post(f"{ADMIN}/question-sets", headers=actors["teacher"], json=payload)
+    assert repeated.json() == response.json()
+    return response.json()["data"]
+
+
+async def test_question_set_two_classes_and_atomic_idempotent_answers(client, test_db, classroom_actors):
+    actors = classroom_actors
+    template = await saved_set(client, actors)
+    sessions = [await start(client, actors), await start(client, actors, class_name="测试二班")]
+    publications = []
+    for session in sessions:
+        payload = {"request_id": str(uuid4()), "set_id": template["id"]}
+        response = await client.post(f"{ADMIN}/sessions/{session['id']}/question-sets/send", headers=actors["teacher"], json=payload)
+        assert response.status_code == 200, response.text
+        publications.append(response.json()["data"])
+        again = await client.post(f"{ADMIN}/sessions/{session['id']}/question-sets/send", headers=actors["teacher"], json=payload)
+        assert again.json() == response.json()
+    assert publications[0]["id"] != publications[1]["id"]
+    state = (await client.get(f"{STUDENT}/state", headers=actors["first"])).json()["data"]["prompt"]
+    assert state["questions"] == template["questions"]
+    assert "教师私有来源" not in str(state)
+    payload = {"answers": {"q_check": "code", "q_why": "我先看了条件"}, "started_at": state["served_at"]}
+    path = f"{STUDENT}/prompts/{state['id']}/responses"
+    assert (await client.post(path, headers=actors["other"], json=payload)).status_code == 404
+    replies = await asyncio.gather(*(client.post(path, headers=actors["first"], json=payload) for _ in range(2)))
+    assert [reply.status_code for reply in replies] == [200, 200]
+    changed = {**payload, "answers": {"q_check": "result"}}
+    assert (await client.post(path, headers=actors["first"], json=changed)).status_code == 409
+    assert (await client.get(f"{STUDENT}/state", headers=actors["first"])).json()["data"]["prompt"] is None
+    assert (await client.get(f"{STUDENT}/state", headers=actors["other"])).json()["data"]["prompt"]["id"] == publications[1]["id"]
+    results = (await client.get(f"{ADMIN}/prompts/{state['id']}/responses", headers=actors["teacher"])).json()["data"]
+    assert results["total"] == 1
+    assert results["responses"][0]["answers"] == payload["answers"]
+    assert results["responses"][0]["answer"] is None
+    assert results["responses"][0]["started_at"] is not None
+
+
+async def test_question_set_validation_closed_and_no_silent_replacement(client, test_db, classroom_actors):
+    actors = classroom_actors
+    template = await saved_set(client, actors)
+    session = await start(client, actors)
+    path = f"{ADMIN}/sessions/{session['id']}/question-sets/send"
+    response = await client.post(path, headers=actors["teacher"], json={"request_id": str(uuid4()), "set_id": template["id"]})
+    publication = response.json()["data"]
+    assert (await client.post(path, headers=actors["teacher"], json={"request_id": str(uuid4()), "set_id": template["id"]})).status_code == 409
+    state = (await client.get(f"{STUDENT}/state", headers=actors["first"])).json()["data"]["prompt"]
+    path = f"{STUDENT}/prompts/{publication['id']}/responses"
+    payload = {"answers": {"q_check": "code"}, "started_at": state["served_at"]}
+    for invalid in ({"answer": "code"}, {**payload, "answers": {}}, {**payload, "answers": {"q_check": "fake"}},
+                    {**payload, "answers": {"q_check": "code", "unknown": "a"}}, {**payload, "answers": {"q_check": "code", "q_why": "x" * 4001}},
+                    {**payload, "started_at": "2000-01-01T00:00:00Z"}):
+        assert (await client.post(path, headers=actors["first"], json=invalid)).status_code == 422
+    await client.post(f"{ADMIN}/prompts/{publication['id']}/close", headers=actors["teacher"], json={})
+    assert (await client.post(path, headers=actors["first"], json=payload)).status_code == 409
+    assert (await client.get(f"{STUDENT}/state", headers=actors["first"])).json()["data"]["prompt"] is None
+
+
+async def test_question_set_edit_is_new_snapshot(client, test_db, classroom_actors):
+    actors = classroom_actors
+    template = await saved_set(client, actors)
+    session = await start(client, actors)
+    sent = await client.post(f"{ADMIN}/sessions/{session['id']}/question-sets/send", headers=actors["teacher"], json={"request_id": str(uuid4()), "set_id": template["id"]})
+    assert sent.status_code == 200
+    replacement = {"title": "修订问答", "questions": [{**question(), "text": "新的题目"}]}
+    assert (await client.post(f"{ADMIN}/question-sets", headers=actors["teacher"], json={**replacement, "request_id": template["id"]})).status_code == 409
+    assert (await client.post(f"{ADMIN}/question-sets", headers=actors["teacher"], json=replacement)).status_code == 200
+    old = (await client.get(f"{STUDENT}/state", headers=actors["first"])).json()["data"]["prompt"]
+    assert old["questions"] == template["questions"]
+    assert (await client.post(f"{ADMIN}/question-sets", headers=actors["teacher"], json={"title": "重复编号", "questions": [question(), question()]})).status_code == 422
+
+
 async def test_teacher_controls_require_real_active_admin(client, test_db, classroom_actors):
     actors = classroom_actors
     body = {"class_name": "测试一班", "title": "不应创建"}

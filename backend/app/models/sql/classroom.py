@@ -41,6 +41,8 @@ class ClassroomResponse(Base, UUIDMixin):
     user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), index=True)
     publication_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("classroom_publications.id", ondelete="RESTRICT"), index=True)
     answer: Mapped[str | None] = mapped_column(String(4000))
+    answers: Mapped[dict | None] = mapped_column(JSONB)
+    started_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
     class_snapshot: Mapped[str] = mapped_column(String(100), nullable=False)
     group_snapshot: Mapped[str] = mapped_column(String(20), nullable=False)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), default=now)
@@ -51,4 +53,14 @@ class ClassroomControlEvent(Base, UUIDMixin):
     session_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("classroom_sessions.id", ondelete="RESTRICT"), index=True)
     teacher_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"))
     action: Mapped[str] = mapped_column(String(20), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), default=now)
+
+
+class ClassroomQuestionSet(Base, UUIDMixin):
+    """Saved, immutable question sets, reusable across classes without mixing answers."""
+    __tablename__ = "classroom_question_sets"
+    title: Mapped[str] = mapped_column(String(120))
+    questions: Mapped[list] = mapped_column(JSONB)
+    source: Mapped[str] = mapped_column(String(2000), default="")
+    created_by: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"))
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), default=now)

@@ -30,6 +30,7 @@ EXPORT_MODELS = (
     models.ClassroomSession, models.ClassroomPublication, models.ClassroomResponse, models.ClassroomControlEvent,
     models.LessonPlan, models.PreparationRecord,
     models.ClassroomMaterial, models.MaterialReceipt,
+    models.ClassroomQuestionSet,
 )
 USER_FIELDS = {"id", "role", "class_name", "experiment_group", "is_active", "created_at", "last_active_at", "onboarding_mode", "has_completed_onboarding", "gender"}
 MAX_BYTES = 128 * 1024 * 1024  # Uncompressed, including CSV + JSONL. Fail rather than truncate.
@@ -118,6 +119,7 @@ def export_queries(class_name=None, group=None, include_identity=False):
                 select(models.ClassroomSession.created_by).where(models.ClassroomSession.id.in_(classroom_ids)),
                 select(models.ClassroomPublication.created_by).where(models.ClassroomPublication.session_id.in_(classroom_ids)),
                 select(models.ClassroomControlEvent.teacher_id).where(models.ClassroomControlEvent.session_id.in_(classroom_ids)),
+                select(models.ClassroomQuestionSet.created_by),
             )
             query = query.where(table.c.id.in_(students) | table.c.id.in_(teachers))
         elif "user_id" in table.c:

@@ -95,6 +95,8 @@ async def init_db():
         async with engine.begin() as conn:
             from sqlalchemy import text
             await conn.execute(text("ALTER TABLE teacher_notes ADD COLUMN IF NOT EXISTS assessment JSONB"))
+            await conn.execute(text("ALTER TABLE classroom_responses ADD COLUMN IF NOT EXISTS answers JSONB"))
+            await conn.execute(text("ALTER TABLE classroom_responses ADD COLUMN IF NOT EXISTS started_at TIMESTAMP WITH TIME ZONE"))
 
         # 打印已创建的表
         async with engine.begin() as conn:

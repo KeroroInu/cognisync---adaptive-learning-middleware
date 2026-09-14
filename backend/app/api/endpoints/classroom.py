@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.endpoints.auth import get_current_user
 from app.core.security import verify_admin_key
 from app.db.postgres import get_db
-from app.models.sql.classroom import ClassroomControlEvent, ClassroomPublication, ClassroomResponse, ClassroomSession
+from app.models.sql.classroom import ClassroomControlEvent, ClassroomPublication, ClassroomResponse, ClassroomSession, ClassroomQuestionSet
 from app.models.sql.user import User
 from app.models.sql.lesson import LessonPlan
 from app.models.sql.research import ResearchTask, ResearchTaskStatus, ResearchTaskKind
@@ -48,6 +48,22 @@ class PromptInput(BaseModel):
 class AnswerInput(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     answer: str | None = Field(default=None, max_length=4000)
+    answers: dict[str, str | None] | None = Field(default=None, max_length=20)
+    started_at: datetime | None = Field(default=None, strict=False)
+
+
+class QuestionSetInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    request_id: UUID = Field(default_factory=uuid4)
+    title: str = Field(min_length=1, max_length=120)
+    questions: list[Question] = Field(min_length=1, max_length=20)
+    source: str = Field(default="", max_length=2000)
+
+
+class SendSetInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    request_id: UUID
+    set_id: UUID
 
 
 def success(data):
@@ -61,8 +77,60 @@ def session_row(item):
 
 
 def prompt_row(item):
-    return {"id": str(item.id), "question": item.question,
+    batch = item.question.get("kind") == "set"
+    return {"id": str(item.id), "question": item.question["questions"][0] if batch else item.question,
+            **({"questions": item.question["questions"], "title": item.question["title"]} if batch else {}),
             "published_at": item.published_at, "closed_at": item.closed_at}
+
+
+def set_row(item):
+    return {"id": str(item.id), "title": item.title, "questions": item.questions, "source": item.source}
+
+
+@admin_router.get("/question-sets")
+async def list_question_sets(db: AsyncSession = Depends(get_db)):
+    items = (await db.scalars(select(ClassroomQuestionSet).order_by(ClassroomQuestionSet.created_at.desc()).limit(100))).all()
+    return success([set_row(item) for item in items])
+
+
+@admin_router.post("/question-sets")
+async def save_question_set(body: QuestionSetInput, db: AsyncSession = Depends(get_db), teacher: User = Depends(get_current_user)):
+    questions = [q.model_dump() for q in body.questions]
+    if len({q["id"] for q in questions}) != len(questions):
+        raise HTTPException(422, "题目编号不能重复")
+    await db.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": CONTROL_LOCK})
+    existing = await db.get(ClassroomQuestionSet, body.request_id)
+    if existing:
+        if (existing.title, existing.questions, existing.source, existing.created_by) != (body.title, questions, body.source, teacher.id):
+            raise HTTPException(409, "请求编号已用于其他问答")
+        return success(set_row(existing))
+    item = ClassroomQuestionSet(id=body.request_id, title=body.title, questions=questions, source=body.source, created_by=teacher.id)
+    db.add(item)
+    await db.commit()
+    return success(set_row(item))
+
+
+@admin_router.post("/sessions/{session_id}/question-sets/send")
+async def send_question_set(session_id: UUID, body: SendSetInput, db: AsyncSession = Depends(get_db), teacher: User = Depends(get_current_user)):
+    session = await locked_session(db, session_id)
+    template = await db.get(ClassroomQuestionSet, body.set_id)
+    if not template:
+        raise HTTPException(404, "问答不存在")
+    snapshot = {"kind": "set", "set_id": str(template.id), "title": template.title, "questions": template.questions}
+    existing = await db.get(ClassroomPublication, body.request_id)
+    if existing:
+        if (existing.session_id, existing.question, existing.created_by) != (session.id, snapshot, teacher.id):
+            raise HTTPException(409, "请求编号已用于其他发布")
+        return success(prompt_row(existing))
+    if effective_state(session) != "open":
+        raise HTTPException(409, "请先开放本班课堂")
+    active = await db.scalar(select(ClassroomPublication.id).where(ClassroomPublication.session_id == session.id, ClassroomPublication.closed_at.is_(None)))
+    if active:
+        raise HTTPException(409, "本班还有问答收集中，请先结束回答")
+    item = ClassroomPublication(id=body.request_id, session_id=session.id, question=snapshot, source=template.source, created_by=teacher.id)
+    db.add(item)
+    await db.commit()
+    return success(prompt_row(item))
 
 
 async def locked_session(db, session_id):
@@ -173,7 +241,7 @@ async def student_state(db: AsyncSession = Depends(get_db), user: User = Depends
             ClassroomPublication.id.not_in(answered),
         ).order_by(ClassroomPublication.published_at.desc()).limit(1))
         if item:
-            prompt = {"id": str(item.id), "question": item.question, "served_at": datetime.now(timezone.utc).isoformat()}
+            prompt = {**prompt_row(item), "served_at": datetime.now(timezone.utc).isoformat()}
     plan = await db.scalar(select(LessonPlan).where(LessonPlan.session_id == session.id))
     return success({"session": session_row(session), "prompt": prompt,
                     "lesson_entry": lesson_entry(session, plan, user.experiment_group)})
@@ -253,22 +321,33 @@ async def answer_prompt(publication_id: UUID, body: AnswerInput, db: AsyncSessio
     item = await db.scalar(select(ClassroomPublication).where(ClassroomPublication.id == publication_id).execution_options(populate_existing=True).with_for_update(read=True))
     existing = await db.scalar(select(ClassroomResponse).where(ClassroomResponse.user_id == user.id, ClassroomResponse.publication_id == item.id))
     if existing:
-        if existing.answer != body.answer:
+        if existing.answer != body.answer or existing.answers != body.answers:
             raise HTTPException(409, "已经回答，不能覆盖原答案")
         return success({"id": str(existing.id), "already_submitted": True})
     if not session.is_current or effective_state(session) != "open" or item.closed_at:
         raise HTTPException(409, "老师已结束这道题，你的草稿仍保留")
     try:
-        validate_answer(item.question, body.answer)
+        if item.question.get("kind") == "set":
+            questions = item.question["questions"]
+            if body.answer is not None or body.answers is None or set(body.answers) - {q["id"] for q in questions}:
+                raise ValueError("请提交这组题目的回答")
+            for question in questions:
+                validate_answer(question, body.answers.get(question["id"]))
+            if not body.started_at or not body.started_at.tzinfo or not item.published_at <= body.started_at <= datetime.now(timezone.utc):
+                raise ValueError("答题开始时间无效，请重新打开问答")
+        else:
+            if body.answers is not None:
+                raise ValueError("这是一道历史单题，请使用单题提交")
+            validate_answer(item.question, body.answer)
     except ValueError as error:
         raise HTTPException(422, str(error)) from error
-    row_id = await db.scalar(insert(ClassroomResponse).values(user_id=user.id, publication_id=item.id, answer=body.answer,
+    row_id = await db.scalar(insert(ClassroomResponse).values(user_id=user.id, publication_id=item.id, answer=body.answer, answers=body.answers, started_at=body.started_at,
         class_snapshot=user.class_name or "", group_snapshot=user.experiment_group).on_conflict_do_nothing(
         constraint="uq_classroom_answer").returning(ClassroomResponse.id))
     already_submitted = row_id is None
     if already_submitted:
         existing = await db.scalar(select(ClassroomResponse).where(ClassroomResponse.user_id == user.id, ClassroomResponse.publication_id == item.id))
-        if existing.answer != body.answer:
+        if existing.answer != body.answer or existing.answers != body.answers:
             raise HTTPException(409, "已经回答，不能覆盖原答案")
         row_id = existing.id
     await db.commit()
@@ -286,5 +365,5 @@ async def list_responses(publication_id: UUID, limit: int = Query(50, ge=1, le=1
     total = await db.scalar(select(func.count()).select_from(ClassroomResponse).where(ClassroomResponse.publication_id == item.id))
     students = await db.scalar(select(func.count()).select_from(User).where(User.class_name == session.class_name, User.role.in_(LEARNER_ROLES), User.is_active.is_(True)))
     return success({"prompt": {**prompt_row(item), "source": item.source}, "responses": [
-        {"id": str(r.id), "user_id": str(u.id), "student_id": u.student_id, "name": u.name, "answer": r.answer, "created_at": r.created_at} for r, u in rows
+        {"id": str(r.id), "user_id": str(u.id), "student_id": u.student_id, "name": u.name, "answer": r.answer, "answers": r.answers, "started_at": r.started_at, "created_at": r.created_at} for r, u in rows
     ], "total": total, "total_students": students})

@@ -59,7 +59,7 @@ def unpack(response):
 @pytest.mark.asyncio
 async def test_package_complete_joinable_and_private(admin_client, package_context):
     archive, manifest = unpack(await admin_client.get('/api/admin/export/research-package?class_name=一班'))
-    assert len(manifest["tables"]) == 29
+    assert len(manifest["tables"]) == 30
     assert manifest["tables"]["research_task_submissions"]["rows"] == 1
     assert manifest["tables"]["stage_events"]["rows"] == 0
     assert archive.read("stage_events.csv").startswith(b"\xef\xbb\xbf")
@@ -75,6 +75,33 @@ async def test_package_complete_joinable_and_private(admin_client, package_conte
     assert csv_rows[0]["observation"] == "'=1+1"
     assert "system_config.jsonl" not in archive.namelist()
     assert json.loads(archive.read("knowledge_graph.jsonl"))["data"]["count"] == 99
+
+
+@pytest.mark.asyncio
+async def test_classroom_batch_answers_export_with_frozen_questions(admin_client, test_db, package_context):
+    from app.models.sql.classroom import ClassroomQuestionSet
+    from datetime import datetime, timezone
+    questions = [{"id": "q1", "text": "先做什么？", "type": "text", "required": True, "options": []}]
+    async with test_db() as db:
+        teacher_id = uuid.UUID(package_context["teacher"])
+        template = ClassroomQuestionSet(title="课中问答", questions=questions, source="调查出处", created_by=teacher_id)
+        session = ClassroomSession(class_name="一班", title="第一课", created_by=teacher_id)
+        db.add_all([template, session])
+        await db.flush()
+        publication = ClassroomPublication(session_id=session.id, created_by=teacher_id, source=template.source,
+            question={"kind": "set", "set_id": str(template.id), "title": template.title, "questions": questions})
+        db.add(publication)
+        await db.flush()
+        db.add(ClassroomResponse(user_id=uuid.UUID(package_context["student"]), publication_id=publication.id,
+            answer=None, answers={"q1": "=先看结果"}, started_at=datetime.now(timezone.utc), class_snapshot="一班", group_snapshot="pdt"))
+        await db.commit()
+    archive, _ = unpack(await admin_client.get('/api/admin/export/research-package?class_name=一班'))
+    saved = json.loads(archive.read("classroom_responses.jsonl"))
+    assert saved["answers"] == {"q1": "=先看结果"}
+    assert saved["started_at"] and saved["created_at"]
+    frozen = json.loads(archive.read("classroom_publications.jsonl"))
+    assert frozen["id"] == saved["publication_id"] and frozen["question"]["questions"] == questions
+    assert json.loads(archive.read("classroom_question_sets.jsonl"))["id"] == frozen["question"]["set_id"]
 
 
 @pytest.mark.asyncio
