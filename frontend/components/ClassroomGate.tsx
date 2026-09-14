@@ -1,28 +1,11 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Check, DoorClosed, MessageCircle, RefreshCw, X } from 'lucide-react';
 import {
-  answerClassroomPrompt, answerClassroomSet, CLASSROOM_ACCESS_EVENT, CLASSROOM_CLOSING_EVENT, CLASSROOM_OPEN_EVENT,
+  answerClassroomPrompt, CLASSROOM_ACCESS_EVENT, CLASSROOM_CLOSING_EVENT, CLASSROOM_OPEN_EVENT,
   classroomDraftKey, createClassroomPoller, getClassroomState, readClassroomDraft,
   type ClassroomPrompt, type ClassroomState,
 } from '../services/classroom';
 import './ClassroomGate.css';
-import { AssessmentConversation } from './AssessmentGate';
-
-function ClassroomQuestionSet({ prompt, userId, onAnswered, onDismiss }: {
-  prompt: ClassroomPrompt; userId: string; onAnswered: () => void; onDismiss: () => void;
-}) {
-  const dialog = useRef<HTMLDialogElement>(null);
-  useEffect(() => {
-    const previous = document.activeElement as HTMLElement | null;
-    dialog.current?.showModal();
-    return () => { dialog.current?.close(); if (previous?.isConnected) previous.focus(); };
-  }, []);
-  return <dialog ref={dialog} className="classroom-set-dialog" aria-label="课堂小问答" onCancel={event => event.preventDefault()}>
-    <AssessmentConversation round={{ id: prompt.id, questions: prompt.questions!, served_at: prompt.served_at }} userId={userId}
-      onLogout={onDismiss} onDone={async () => onAnswered()}
-      classroomSubmit={(answers, startedAt) => answerClassroomSet(prompt.id, answers, startedAt)} />
-  </dialog>;
-}
 
 export const ClassroomQuestion: React.FC<{
   prompt: ClassroomPrompt; userId: string; onAnswered: () => void; onDismiss: () => void;
@@ -84,14 +67,11 @@ export const ClassroomQuestion: React.FC<{
   </div>;
 }
 
-export const ClassroomGate: React.FC<{ userId: string; onLogout: () => void; children: React.ReactNode; preparation?: boolean; onState?: (state: ClassroomState) => void; onReturn?: () => void }> = ({ userId, onLogout, children, preparation = false, onState, onReturn }) => {
+export const ClassroomGate: React.FC<{ userId: string; onLogout: () => void; children: React.ReactNode; preparation?: boolean; onState?: (state: ClassroomState) => void; onReturn?: () => void }> = ({ onLogout, children, preparation = false, onState, onReturn }) => {
   const [state, setState] = useState<ClassroomState | null>(null);
   const [activated, setActivated] = useState(false);
   const [error, setError] = useState('');
   const [denied, setDenied] = useState<'closing' | 'closed' | null>(null);
-  const [dismissedId, setDismissedId] = useState<string | null>(null);
-  const [answeredId, setAnsweredId] = useState<string | null>(null);
-  const [notice, setNotice] = useState('');
   const active = useRef(true);
   const epoch = useRef(0);
   const statusRef = useRef<string | null>(null);
@@ -125,8 +105,8 @@ export const ClassroomGate: React.FC<{ userId: string; onLogout: () => void; chi
     return () => { active.current = false; epoch.current++; poller.stop(); document.removeEventListener('visibilitychange', onVisible); window.removeEventListener('focus', onVisible); window.removeEventListener(CLASSROOM_ACCESS_EVENT, onDenied); };
   }, [reload]);
   const status = denied || state?.session?.state || (state ? 'open' : 'loading');
-  const prompt = state?.prompt && state.prompt.id !== answeredId ? state.prompt : null;
-  const promptVisible = Boolean(prompt && prompt.id !== dismissedId && status === 'open');
+  // Classroom pop quizzes are retired. Historical answers stay on the server;
+  // initial questionnaires/scales continue through AssessmentGate.
   useEffect(() => {
     // Only transitions trigger a flush; regular 3-second polling never writes code.
     if (status === statusRef.current || status === 'loading') return;
@@ -136,12 +116,11 @@ export const ClassroomGate: React.FC<{ userId: string; onLogout: () => void; chi
     if (status === 'open' && previous !== 'open') window.dispatchEvent(new Event(CLASSROOM_OPEN_EVENT));
   }, [status]);
   const locked = !preparation && status !== 'open';
-  useEffect(() => { if (frame.current) frame.current.inert = locked || promptVisible; }, [locked, promptVisible, activated]);
-  useEffect(() => { if (!notice) return; const timer = setTimeout(() => setNotice(''), 3500); return () => clearTimeout(timer); }, [notice]);
+  useEffect(() => { if (frame.current) frame.current.inert = locked; }, [locked, activated]);
 
   return <>
     {/* Never conditionally replace a previously mounted editor with the modal/closed screen. */}
-    <div ref={frame} aria-hidden={locked || promptVisible ? true : undefined}>{activated || preparation ? children : null}</div>
+    <div ref={frame} aria-hidden={locked ? true : undefined}>{activated || preparation ? children : null}</div>
     {locked ? <div className="classroom-shade classroom-lock" role="dialog" aria-modal="true" aria-labelledby="classroom-lock-title">
       <section className="classroom-question"><DoorClosed size={34} /><h1 id="classroom-lock-title">{status === 'loading' ? '正在连接课堂…' : status === 'closing' ? '这节课先到这里' : '课堂暂时关闭'}</h1>
         <p>{status === 'loading' ? '稍等一下，正在读取老师的安排。' : status === 'closing' ? '正在同步你的最后修改，请先不要关闭页面。' : '老师开课后，这里会自动恢复。'}</p>
@@ -151,8 +130,5 @@ export const ClassroomGate: React.FC<{ userId: string; onLogout: () => void; chi
       </section>
     </div> : null}
     {status === 'open' && error ? <div className="classroom-connection" role="status">{error}</div> : null}
-    {promptVisible && prompt ? React.createElement(prompt.questions?.length ? ClassroomQuestionSet : ClassroomQuestion, { key: `${userId}:${prompt.id}`, prompt, userId, onDismiss: () => setDismissedId(prompt.id), onAnswered: () => { setAnsweredId(prompt.id); setNotice('回答已交给老师'); void refresh.current(); } }) : null}
-    {status === 'open' && prompt && !promptVisible ? <button type="button" className="classroom-question-reminder" onClick={() => setDismissedId(null)}><MessageCircle size={20} />课堂提问</button> : null}
-    {notice ? <div className="classroom-toast" role="status"><Check size={18} />{notice}</div> : null}
   </>;
 };

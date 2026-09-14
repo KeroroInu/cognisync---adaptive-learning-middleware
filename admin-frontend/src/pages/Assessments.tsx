@@ -50,11 +50,11 @@ export function Assessments() {
     setEditing(prev => prev && ({ ...prev, draft: { ...prev.draft, questions: prev.draft.questions.map((q, i) => i === index ? { ...q, ...patch } : q) } }));
   }
   return <div className="assessment-admin">
-    <header><div><h1>前后测</h1><p>编辑题目，决定什么时候开放。学生端只显示“我有几个问题想问你”。</p></div></header>
+    <header><div><h1>问卷与量表</h1><p>首次题本可包含学情问卷和量表。开放后先填写再入课，同一版本已交过的不再重复。</p></div></header>
     {error && <p className="assessment-error" role="alert">{error}<button onClick={() => void load()}>重新读取</button></p>}
     {message && <p role="status" className="assessment-message">{message}</p>}
     {loading ? <p role="status">正在读取…</p> : <div className="assessment-phases">{(['pre', 'post'] as const).map(phase => <section key={phase}>
-      <header><h2>{phase === 'pre' ? '前测' : '后测'}</h2><button disabled={busy} onClick={() => create(phase)}><Plus size={16} />新建题本</button></header>
+      <header><h2>{phase === 'pre' ? '首次填写' : '课后填写'}</h2><button disabled={busy} onClick={() => create(phase)}><Plus size={16} />新建题本</button></header>
       <p>{phase === 'pre' ? '账号注册完成后，先回答已开放的问卷，再进入课堂。' : '课堂结束后由老师开放，不需要学生重新注册。'}</p>
       {rounds.filter(r => r.phase === phase).length === 0 && <div className="assessment-empty">尚未安排 · 不会拦住学生入课</div>}
       {rounds.filter(r => r.phase === phase).map(item => <article key={item.id}>

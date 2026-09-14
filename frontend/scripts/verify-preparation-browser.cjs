@@ -8,7 +8,9 @@ const root = process.env.STUDENT_BUILD_DIR || path.resolve(__dirname, '../dist')
   try {
     const context = await browser.newContext({ viewport: { width: 1280, height: 720 } });
     await context.addInitScript(() => localStorage.setItem('cognisync-token', 'isolated-ui-test'));
-    let failLoad = true, student = 'ui-student-a', count = 0, failAnswer = true;
+    let failLoad = true, student = 'ui-student-a', count = 0, failAnswer = true, failUpload = true;
+    let pending = null, submission = { count: 0, last_submitted_at: null };
+    const uploadRequests = [];
     const records = { 'ui-student-a': [{ id: 'cloud-save', kind: 'save', payload: { request: { code: 'print(7)', message: '', output: [], error: '' }, status: 'saved' } }], 'ui-student-b': [] };
     const posts = [], errors = [], unknown = [];
     let classroom = { session: { id: 's', title: '课堂测试', state: 'open', class_name: '隔离班', closes_at: null }, prompt: null, lesson_entry: null };
@@ -18,18 +20,23 @@ const root = process.env.STUDENT_BUILD_DIR || path.resolve(__dirname, '../dist')
       const url = new URL(route.request().url()), pathname = url.pathname;
       const json = (data, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(data) });
       if (pathname === '/api/auth/me') return json({ success: true, data: { user: { id: student, name: '测试同学', experimentGroup: 'ai_pbl', hasCompletedOnboarding: true }, profile: null } });
-      if (pathname === '/api/assessments/pending') return json({ success: true, data: null });
+      if (pathname === '/api/assessments/pending') return json({ success: true, data: pending });
       if (pathname === '/api/classroom/state') return json({ success: true, data: classroom });
-      if (pathname === '/api/classroom/prompts/batch/responses') {
+      if (pathname === '/api/assessments/batch/responses') {
         const body = route.request().postDataJSON();
         if (failAnswer) { failAnswer = false; return json({ detail: '模拟提交失败，草稿保留' }, 503); }
         assert.deepEqual(body.answers, { q1: 'run', q2: '先检查结果再提问' });
-        assert.ok(body.started_at); posts.push({ kind: 'classroom-set', ...body }); classroom.prompt = null;
+        assert.ok(body.started_at); posts.push({ kind: 'assessment', ...body }); pending = null;
         return json({ success: true, data: { id: 'answer-1' } });
       }
-      if (pathname === '/api/materials') return json({ success: true, data: [{ id: 'material-1', title: '独立创作任务', kind: 'pi', filename: '', configuration: { task: '做一个小游戏，记录验证过程。' } }] });
+      if (pathname === '/api/materials') return json({ success: true, data: [{ id: 'material-1', title: '独立创作任务', kind: 'file', filename: 'task.zip', configuration: { task: '做一个小游戏，记录验证过程。', accept_submissions: true }, submission }] });
       if (pathname === '/api/materials/material-1/download') return route.fulfill({ contentType: 'application/zip', headers: { 'content-disposition': 'attachment; filename="task.zip"' }, body: Buffer.from('browser-fixture-only') });
-      if (pathname === '/api/materials/material-1/submit') { posts.push({ kind: 'submission' }); return json({ success: true, data: { id: 'receipt-1' } }); }
+      if (pathname === '/api/materials/material-1/submit') {
+        uploadRequests.push(url.searchParams.get('request_id'));
+        if (failUpload) { failUpload = false; return json({ detail: '网络暂时断开，请重试上传' }, 503); }
+        submission = { count: 1, last_submitted_at: new Date().toISOString() };
+        posts.push({ kind: 'submission' }); return json({ success: true, data: { id: 'receipt-1', created_at: submission.last_submitted_at } });
+      }
       if (pathname === '/api/preparation/records') {
         if (route.request().method() === 'GET') return failLoad ? json({ detail: '模拟读取失败' }, 503) : json({ success: true, data: records[student] });
         const body = route.request().postDataJSON(); posts.push(body);
@@ -53,13 +60,27 @@ const root = process.env.STUDENT_BUILD_DIR || path.resolve(__dirname, '../dist')
     await page.getByRole('button', { name: '重新读取', exact: true }).click();
     await page.locator('.cm-content').waitFor();
     assert.equal(await page.locator('.cm-content').innerText(), 'print(7)');
-    await page.getByRole('button', { name: /课堂资料/ }).click();
+    await page.getByRole('button', { name: /作业与资料/ }).click();
     await page.getByRole('heading', { name: '独立创作任务' }).waitFor();
-    const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: '下载 Mac 包' }).click()]);
+    const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: '下载作业包' }).click()]);
     assert.ok(download.suggestedFilename().endsWith('.zip'));
     await page.locator('input[type=file]').setInputFiles({ name: 'submission.zip', mimeType: 'application/zip', buffer: Buffer.from('fixture-only') });
-    await page.getByText('作品已收到。原文件和上传时间会一起保存。', { exact: true }).waitFor();
-    await page.getByRole('button', { name: '关闭课堂资料' }).click();
+    assert.equal(posts.filter(p => p.kind === 'submission').length, 0, 'file selection must not silently upload');
+    await page.getByRole('button', { name: '上传作品', exact: true }).click();
+    await page.getByText('网络暂时断开，请重试上传').waitFor();
+    await page.getByRole('button', { name: '上传作品', exact: true }).click();
+    await page.getByText('作品已提交，老师可以查看了。', { exact: true }).waitFor();
+    assert.equal(uploadRequests.length, 2);
+    assert.equal(uploadRequests[0], uploadRequests[1]);
+    await page.reload(); await page.locator('.cm-content').waitFor();
+    await page.getByRole('button', { name: /作业与资料/ }).click();
+    await page.getByText(/已提交 1 次/).waitFor();
+    await page.setViewportSize({ width: 390, height: 844 });
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+    await page.screenshot({ path: path.join(require('node:os').tmpdir(), 'cognisync-homework-mobile.png') });
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.screenshot({ path: path.join(require('node:os').tmpdir(), 'cognisync-homework-1280.png') });
+    await page.getByRole('button', { name: '关闭作业与资料' }).click();
     await page.getByRole('button', { name: '运行', exact: true }).click();
     await page.waitForFunction(() => document.querySelector('[aria-label="运行输出"]')?.textContent.trim() === '7', { timeout: 60000 });
     await page.locator('.cm-content').fill('print(19)');
@@ -79,13 +100,17 @@ const root = process.env.STUDENT_BUILD_DIR || path.resolve(__dirname, '../dist')
     await page.screenshot({ path: path.join(require('node:os').tmpdir(), 'cognisync-preparation-1280.png'), fullPage: true });
     const questions = [{ id: 'q1', type: 'choice', required: true, text: '遇到问题你先做什么？', options: [{ value: 'run', label: '看运行结果' }, { value: 'ai', label: '问 AI' }] }, { id: 'q2', type: 'text', required: true, text: '说说你的理由', options: [] }];
     classroom.prompt = { id: 'batch', question: questions[0], questions, title: '本课小结', served_at: new Date().toISOString() };
-    await page.getByRole('dialog', { name: '课堂小问答' }).waitFor();
+    await page.reload(); await page.locator('.cm-content').waitFor();
+    assert.equal(await page.getByRole('dialog', { name: '课堂小问答' }).count(), 0, 'retired classroom prompts must not interrupt');
+    pending = { id: 'batch', phase: 'pre', revision: 1, questions, served_at: new Date().toISOString() };
+    await page.reload();
+    await page.getByRole('region', { name: '课堂问卷' }).waitFor();
     assert.equal(await page.getByRole('button', { name: '下一题', exact: true }).isDisabled(), true);
     await page.getByLabel('看运行结果', { exact: true }).check();
     await page.getByRole('button', { name: '下一题', exact: true }).click();
     await page.getByLabel('你的回答', { exact: true }).fill('先检查结果再提问');
     await page.reload();
-    await page.getByRole('dialog', { name: '课堂小问答' }).waitFor();
+    await page.getByRole('region', { name: '课堂问卷' }).waitFor();
     assert.equal(await page.getByLabel('看运行结果', { exact: true }).isChecked(), true);
     await page.getByRole('button', { name: '下一题', exact: true }).click();
     assert.equal(await page.getByLabel('你的回答', { exact: true }).inputValue(), '先检查结果再提问');
@@ -96,10 +121,11 @@ const root = process.env.STUDENT_BUILD_DIR || path.resolve(__dirname, '../dist')
     await page.setViewportSize({ width: 1280, height: 720 });
     await page.getByRole('button', { name: '提交回答', exact: true }).click();
     await page.getByText('模拟提交失败，草稿保留', { exact: true }).waitFor();
-    assert.equal(await page.getByRole('dialog', { name: '课堂小问答' }).isVisible(), true);
+    assert.equal(await page.getByRole('region', { name: '课堂问卷' }).isVisible(), true);
     await page.getByRole('button', { name: '提交回答', exact: true }).click();
-    await page.getByRole('dialog', { name: '课堂小问答' }).waitFor({ state: 'detached' });
-    assert.equal(posts.filter(p => p.kind === 'classroom-set').length, 1);
+    await page.getByRole('region', { name: '课堂问卷' }).waitFor({ state: 'detached' });
+    await page.locator('.cm-content').waitFor();
+    assert.equal(posts.filter(p => p.kind === 'assessment').length, 1);
     assert.equal(await page.locator('.cm-content').innerText(), 'print(19)');
     classroom = { ...classroom, lesson_entry: { task_id: 't', lesson_id: 'l', session_id: 's', title: '条件判断', group: 'ai_pbl' } };
     await page.getByRole('button', { name: '进入本课：条件判断' }).waitFor();
@@ -115,6 +141,6 @@ const root = process.env.STUDENT_BUILD_DIR || path.resolve(__dirname, '../dist')
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
     await page.screenshot({ path: path.join(require('node:os').tmpdir(), 'cognisync-preparation-mobile.png'), fullPage: true });
     assert.deepEqual(errors, []); assert.deepEqual(unknown, []);
-    console.log(JSON.stringify({ passed: ['failed-load-no-overwrite', 'remote-restore', 'real-browser-python-output', 'serialized-save', 'enter-send', 'shift-enter', 'refresh', 'teacher-entry', 'closed-ai-local-python', 'student-isolation', '1280-layout', '390-layout'], posts: posts.length }));
+    console.log(JSON.stringify({ passed: ['download-upload-explicit', 'upload-retry-same-id', 'submission-refresh', 'retired-prompts-hidden', 'initial-assessment-refresh-retry', 'failed-load-no-overwrite', 'remote-restore', 'real-browser-python-output', 'serialized-save', 'enter-send', 'shift-enter', 'refresh', 'teacher-entry', 'closed-ai-local-python', 'student-isolation', '1280-layout', '390-layout'], posts: posts.length }));
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

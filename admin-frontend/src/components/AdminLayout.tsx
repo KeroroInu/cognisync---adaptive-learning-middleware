@@ -42,14 +42,16 @@ export const AdminLayout = ({ children }: AdminLayoutProps) => {
   const navItems = [
     { path: '/', icon: LayoutDashboard, label: t('nav.dashboard') },
     { path: '/users', icon: Users, label: t('nav.users') },
-    { path: '/classroom', icon: Presentation, label: '课堂互动' },
+    { path: '/classroom', icon: Presentation, label: '课堂与作业' },
     { path: '/conversations', icon: MessageSquare, label: t('nav.conversations') },
-    { path: '/emotions', icon: HeartPulse, label: t('nav.emotions') },
-    { path: '/assessments', icon: FileText, label: '前后测' },
-    { path: '/scales', icon: FileText, label: '旧量表库' },
-    { path: '/research', icon: FlaskConical, label: '贪吃蛇项目' },
+    { path: '/assessments', icon: FileText, label: '问卷与量表' },
     { path: '/exports', icon: Download, label: t('nav.exports') },
+  ];
+  const extraItems = [
+    { path: '/research', icon: FlaskConical, label: '教学任务设置' },
     { path: '/config', icon: Settings2, label: t('nav.modelConfig') },
+    { path: '/scales', icon: FileText, label: '旧量表记录' },
+    { path: '/emotions', icon: HeartPulse, label: t('nav.emotions') },
   ];
 
   return (
@@ -97,6 +99,10 @@ export const AdminLayout = ({ children }: AdminLayoutProps) => {
               </Link>
             );
           })}
+          <details open={extraItems.some(item => location.pathname.startsWith(item.path)) || undefined}>
+            <summary aria-label="更多设置与历史记录" style={{ padding: '12px', cursor: 'pointer' }}>{sidebarOpen ? '更多设置与历史记录' : '更多'}</summary>
+            {extraItems.map(item => <Link key={item.path} to={item.path} className={`admin-nav-item ${location.pathname.startsWith(item.path) ? 'is-active' : ''}`} aria-label={item.label} title={item.label}><item.icon size={20} />{sidebarOpen && item.label}</Link>)}
+          </details>
         </nav>
 
         <div className="admin-sidebar-footer">
@@ -130,7 +136,7 @@ export const AdminLayout = ({ children }: AdminLayoutProps) => {
         <header className="admin-header">
           <div>
             <h1 className="admin-page-title">
-              {navItems.find(item => (
+              {[...navItems, ...extraItems].find(item => (
                 item.path === '/' ? location.pathname === '/' : location.pathname.startsWith(item.path)
               ))?.label || t('common.adminPanel')}
             </h1>

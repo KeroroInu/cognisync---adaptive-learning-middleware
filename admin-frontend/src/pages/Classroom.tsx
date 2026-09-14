@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, DoorClosed, DoorOpen, Plus, RefreshCw } from 'lucide-react';
 import { classroomAdmin, classroomAnswerLabel, type ClassroomResponses, type ClassroomSession } from '../lib/classroom';
 import './Classroom.css';
-import { ClassroomQuestionSets } from './ClassroomQuestionSets';
 import { TEACHING_CLASSES, isTeachingClass } from '../lib/teachingClasses';
 import { LessonSetup } from './LessonSetup';
 import { LessonMaterials, LessonEvidence } from './LessonMaterials';
@@ -74,6 +73,7 @@ export function Classroom() {
   const [responseData, setResponseData] = useState<ClassroomResponses | null>(null);
   const [responseError, setResponseError] = useState('');
   const [page, setPage] = useState(0);
+  const [showOldAnswers, setShowOldAnswers] = useState(false);
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
   const requestLock = useRef(false);
   const listSequence = useRef(0);
@@ -108,7 +108,7 @@ export function Classroom() {
 
   useEffect(() => { setPage(0); setResponseData(null); setResponseError(''); }, [promptId]);
   useEffect(() => {
-    if (!promptId) return;
+    if (!promptId || !showOldAnswers) return;
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout>;
     setResponseData(null);
@@ -123,7 +123,7 @@ export function Classroom() {
     };
     void poll();
     return () => { controller.abort(); clearTimeout(timer); };
-  }, [promptId, page]);
+  }, [promptId, page, showOldAnswers]);
 
   async function act(operation: () => Promise<void>) {
     if (requestLock.current) return false;
@@ -189,7 +189,7 @@ export function Classroom() {
   }
 
   return <div className="classroom-admin">
-    <div className="classroom-toolbar"><p>选班上课，有需要时发一组小问答。</p><div className="classroom-actions">
+    <div className="classroom-toolbar"><p>选班上课，发作业、收作品。</p><div className="classroom-actions">
       <button disabled={busy} aria-label="刷新课堂" onClick={() => void load()}><RefreshCw size={18} />刷新</button>
       <button disabled={busy} className="classroom-primary" aria-expanded={creating} onClick={() => { setClassName(selected && isTeachingClass(selected.class_name) ? selected.class_name : className); setCreating(value => !value); }}><Plus size={18} />新的一课</button>
     </div></div>
@@ -215,8 +215,8 @@ export function Classroom() {
           {selected.state === 'closing' && selected.closes_at && <p className="classroom-closing-note">学生正在保存，将于 {dateLabel(selected.closes_at)} 关闭学习入口。</p>}
         </section>
         {selected.is_current && <LessonSetup key={selected.id} sessionId={selected.id} open={selected.state === 'open'} />}
-        <div className="classroom-workspace">
-          <ClassroomQuestionSets sessionId={selected.id} className={selected.class_name} canSend={selected.is_current && selected.state === 'open' && (!selected.prompt || Boolean(selected.prompt.closed_at))} onSent={() => load()} />
+        <LessonMaterials key={`materials-${selected.id}`} sessionId={selected.id} open={selected.is_current && selected.state === 'open'} />
+        {selected.prompt && <details className="classroom-history" onToggle={event => setShowOldAnswers(event.currentTarget.open)}><summary>以前的课堂问答记录</summary>
           <section className="classroom-panel classroom-results"><header><h2>本次回答</h2>{selected.prompt && !selected.prompt.closed_at && selected.is_current && <button disabled={busy} onClick={closePrompt}>结束回答</button>}</header>
             {!selected.prompt ? <p className="classroom-empty">还未发题。发布后在这里查看回答。</p> : <>
               <p className="classroom-published-question">{selected.prompt.title || selected.prompt.question.text}</p>
@@ -228,12 +228,11 @@ export function Classroom() {
               </>}
             </>}
           </section>
-        </div>
-        <LessonMaterials key={`materials-${selected.id}`} sessionId={selected.id} open={selected.is_current && selected.state === 'open'} />
+        </details>}
         <LessonEvidence key={`evidence-${selected.id}`} sessionId={selected.id} />
       </>}
     </>}
-    <footer className="classroom-footnote">课次和每位学生的回答会保留，可在 <Link to="/exports">数据导出 → 课堂研究包</Link> 下载。<details><summary>下课开关的范围</summary>只关闭本班在平台内的学习和 AI 入口，不删除数据，也不影响学生本地的 Pi。</details></footer>
+    <footer className="classroom-footnote">问卷、对话和作品可在 <Link to="/exports">数据导出</Link> 下载。<details><summary>下课开关的范围</summary>只关闭本班在平台内的学习和 AI 入口，不删除数据，也不影响学生本地的 Pi。</details></footer>
     {confirmation && <ClassroomConfirmation {...confirmation} busy={busy} error={error} onConfirm={() => void confirmAction()} onCancel={() => { if (!requestLock.current) { setConfirmation(null); setError(''); } }} />}
   </div>;
 }
