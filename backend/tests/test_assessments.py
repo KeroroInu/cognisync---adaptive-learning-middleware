@@ -88,6 +88,46 @@ async def test_validation_close_and_single_active_version(admin_client, client, 
 
 @pytest.mark.asyncio
 async def test_assessment_authorization(client, auth_headers):
+    from uuid import uuid4
     assert (await client.get('/api/assessments/pending')).status_code in (401, 403)
     assert (await client.get('/api/admin/assessments', headers=auth_headers)).status_code == 403
+    assert (await client.get(f'/api/admin/assessments/{uuid4()}/export', headers=auth_headers)).status_code == 403
     assert (await client.post('/api/admin/assessments', headers=auth_headers, json=draft())).status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_survey_branch_validation_and_csv(admin_client, client, auth_headers):
+    import csv
+    import io
+    import json
+    from pathlib import Path
+    survey = json.loads((Path(__file__).parents[1] / 'app/resources/programming_ai_survey_v1.json').read_text())
+    item = await publish(admin_client, survey)
+    pending = (await client.get('/api/assessments/pending', headers=auth_headers)).json()['data']
+    answers = {'q1': ['none'], 'q2': ['none'], 'q3': 'none', 'q8': 'never', 'q17': ['comments', 'blanks'], 'q18': ['unused'], 'q19': None}
+    url = f"/api/assessments/{item['id']}/responses"
+    for invalid in ({**answers, 'q12': ['generate']}, {**answers, 'q17': ['none', 'comments']}, {**answers, 'q17': ['comments'] * 2}, {**answers, 'q17': ['comments', 'blanks', 'debug', 'test']}, {**answers, 'q1': 'none'}):
+        assert (await client.post(url, headers=auth_headers, json={'answers': invalid, 'started_at': pending['served_at']})).status_code == 422
+    body = {'answers': answers, 'started_at': pending['served_at']}
+    assert (await client.post(url, headers=auth_headers, json=body)).status_code == 200
+    assert (await client.post(url, headers=auth_headers, json=body)).json()['data']['already_submitted']
+    export_url = f"/api/admin/assessments/{item['id']}/export"
+    exported = await admin_client.get(export_url)
+    assert exported.status_code == 200, exported.text
+    rows = {row['question_id']: row for row in csv.DictReader(io.StringIO(exported.content.decode('utf-8-sig')))}
+    assert len(rows) == 20
+    assert rows['q12']['status'] == 'skipped_by_rule'
+    assert rows['q19']['status'] == 'unanswered'
+    assert rows['q17']['status'] == 'answered'
+    assert json.loads(rows['q17']['answer_value']) == ['comments', 'blanks']
+    assert '简短注释' in rows['q17']['answer_label']
+
+
+@pytest.mark.asyncio
+async def test_cyclic_or_unknown_branch_rejected(admin_client):
+    body = draft()
+    body['questions'][0]['show_if'] = [{'question_id': 'q2', 'values': ['1']}]
+    assert (await admin_client.post('/api/admin/assessments', json=body)).status_code == 422
+    body = draft()
+    body['questions'][1]['show_if'] = [{'question_id': 'q1', 'values': ['fake']}]
+    assert (await admin_client.post('/api/admin/assessments', json=body)).status_code == 422

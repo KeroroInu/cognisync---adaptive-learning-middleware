@@ -49,6 +49,16 @@ export function Assessments() {
   function patchQuestion(index: number, patch: Partial<AssessmentQuestion>) {
     setEditing(prev => prev && ({ ...prev, draft: { ...prev.draft, questions: prev.draft.questions.map((q, i) => i === index ? { ...q, ...patch } : q) } }));
   }
+  async function exportRound(item: AssessmentRound) {
+    setBusy(true); setError('');
+    try {
+      const response = await fetch(`/api/admin/assessments/${item.id}/export`, { headers: { Authorization: `Bearer ${localStorage.getItem('auth_token') || ''}` } });
+      if (!response.ok) { const error = await response.json(); throw new Error(typeof error.detail === 'string' ? error.detail : '导出失败'); }
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement('a'); link.href = url; link.download = `问卷答卷-${item.id}.csv`; link.click(); setTimeout(() => URL.revokeObjectURL(url), 10000);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : '导出失败，请重试'); }
+    finally { setBusy(false); }
+  }
   return <div className="assessment-admin">
     <header><div><h1>问卷与量表</h1><p>首次题本可包含学情问卷和量表。开放后先填写再入课，同一版本已交过的不再重复。</p></div></header>
     {error && <p className="assessment-error" role="alert">{error}<button onClick={() => void load()}>重新读取</button></p>}
@@ -64,6 +74,7 @@ export function Assessments() {
           <button disabled={busy} className={item.enabled ? '' : 'assessment-primary'} onClick={() => item.enabled ? void toggle(item) : setConfirmation(item)}>{item.enabled ? '关闭' : '开放'}</button>
           <button disabled={busy} onClick={() => edit(item, false)}>{item.published_at ? '修改为新版' : '编辑题目'}</button>
           <button disabled={busy} onClick={() => edit(item, true)} title="复制题本"><Copy size={16} />复制</button>
+          <button disabled={busy} onClick={() => void exportRound(item)}>导出答卷 CSV</button>
         </div>
       </article>)}
     </section>)}</div>}
@@ -80,16 +91,19 @@ export function Assessments() {
         <label>班级（留空为所有班级）<input disabled={Boolean(editing.id)} maxLength={100} value={editing.draft.class_name} onChange={e => setEditing({ ...editing, draft: { ...editing.draft, class_name: e.target.value } })} /></label></div>
         <label>来源与计分说明（教师备查，不展示给学生）<textarea maxLength={2000} rows={2} placeholder="填写量表来源、版本及计分说明；不要把示例题当作正式量表。" value={editing.draft.source} onChange={e => setEditing({ ...editing, draft: { ...editing.draft, source: e.target.value } })} /></label>
         {editing.draft.questions.map((q, index) => <fieldset key={q.id} className="assessment-question"><legend>第 {index + 1} 题</legend>
-          <div className="assessment-actions"><select aria-label={`第${index + 1}题类型`} value={q.type} onChange={e => patchQuestion(index, { type: e.target.value as AssessmentQuestion['type'], options: e.target.value === 'text' ? [] : emptyQuestion().options })}><option value="choice">单选 / 量表题</option><option value="text">简答题</option></select>
+          <div className="assessment-actions"><select aria-label={`第${index + 1}题类型`} value={q.type} onChange={e => patchQuestion(index, { type: e.target.value as AssessmentQuestion['type'], max_selections: null, options: e.target.value === 'text' ? [] : q.options.length ? q.options : emptyQuestion().options })}><option value="choice">单选 / 量表题</option><option value="multiple">多选题</option><option value="text">简答题</option></select>
             <label className="assessment-checkbox"><input type="checkbox" checked={q.required} onChange={e => patchQuestion(index, { required: e.target.checked })} />必答</label>
             <button aria-label={`上移第${index + 1}题`} disabled={index === 0} onClick={() => { const questions = [...editing.draft.questions]; [questions[index - 1], questions[index]] = [questions[index], questions[index - 1]]; setEditing({ ...editing, draft: { ...editing.draft, questions } }); }}><ArrowUp size={15} /></button>
             <button aria-label={`下移第${index + 1}题`} disabled={index === editing.draft.questions.length - 1} onClick={() => { const questions = [...editing.draft.questions]; [questions[index + 1], questions[index]] = [questions[index], questions[index + 1]]; setEditing({ ...editing, draft: { ...editing.draft, questions } }); }}><ArrowDown size={15} /></button>
             <button aria-label={`删除第${index + 1}题`} disabled={editing.draft.questions.length === 1} onClick={() => setEditing({ ...editing, draft: { ...editing.draft, questions: editing.draft.questions.filter((_, i) => i !== index) } })}><Trash2 size={15} /></button>
           </div>
           <textarea aria-label={`第${index + 1}题题目`} maxLength={2000} rows={2} placeholder="粘贴题目原文，不需要改成聊天口吻。" value={q.text} onChange={e => patchQuestion(index, { text: e.target.value })} />
-          {q.type === 'choice' && <div className="assessment-option-list">{q.options.map((option, j) => <div key={j}>
+          {q.show_if?.length ? <p>显示条件：{q.show_if.map(c => { const source = editing.draft.questions.find(other => other.id === c.question_id); return `“${source?.text || c.question_id}”选择${c.values.map(v => source?.options.find(o => o.value === v)?.label || v).join('或')}`; }).join('，并且')}。修改引用的选项后需同步题本规则。</p> : null}
+          {q.type === 'multiple' && <label>最多选几项（留空不限）<input type="number" min={1} max={q.options.length} value={q.max_selections ?? ''} onChange={e => patchQuestion(index, { max_selections: e.target.value ? Number(e.target.value) : null })} /></label>}
+          {q.type !== 'text' && <div className={`assessment-option-list${q.type === 'multiple' ? ' is-multiple' : ''}`}>{q.options.map((option, j) => <div key={j}>
             <input aria-label={`第${index + 1}题选项${j + 1}值`} maxLength={100} value={option.value} onChange={e => patchQuestion(index, { options: q.options.map((o, k) => k === j ? { ...o, value: e.target.value } : o) })} />
             <input aria-label={`第${index + 1}题选项${j + 1}文字`} maxLength={300} placeholder="选项原文" value={option.label} onChange={e => patchQuestion(index, { options: q.options.map((o, k) => k === j ? { ...o, label: e.target.value } : o) })} />
+            {q.type === 'multiple' && <label><input type="checkbox" checked={Boolean(option.exclusive)} onChange={e => patchQuestion(index, { options: q.options.map((o, k) => k === j ? { ...o, exclusive: e.target.checked } : o) })} />单独选择</label>}
             <button aria-label={`删除选项${j + 1}`} disabled={q.options.length <= 2} onClick={() => patchQuestion(index, { options: q.options.filter((_, k) => k !== j) })}><X size={15} /></button>
           </div>)}<button disabled={q.options.length >= 12} onClick={() => patchQuestion(index, { options: [...q.options, { value: String(q.options.length + 1), label: '' }] })}><Plus size={15} />添加选项</button></div>}
         </fieldset>)}

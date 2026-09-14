@@ -1,6 +1,9 @@
 export interface AssessmentQuestion {
-  id: string; text: string; type: 'choice' | 'text'; required: boolean;
-  options: { value: string; label: string }[];
+  hint?: string;
+  id: string; text: string; type: 'choice' | 'multiple' | 'text'; required: boolean;
+  options: { value: string; label: string; exclusive?: boolean }[];
+  max_selections?: number | null;
+  show_if?: { question_id: string; values: string[] }[];
 }
 export interface AssessmentDraft {
   phase: 'pre' | 'post'; name: string; class_name: string; source: string; questions: AssessmentQuestion[];

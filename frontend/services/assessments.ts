@@ -1,6 +1,33 @@
 export interface AssessmentQuestion {
-  id: string; text: string; type: 'choice' | 'text'; required: boolean;
-  options: { value: string; label: string }[];
+  hint?: string;
+  id: string; text: string; type: 'choice' | 'multiple' | 'text'; required: boolean;
+  options: { value: string; label: string; exclusive?: boolean }[];
+  max_selections?: number | null;
+  show_if?: { question_id: string; values: string[] }[];
+}
+export type AssessmentAnswers = Record<string, string | string[] | null>;
+export function visibleQuestions(questions: AssessmentQuestion[], answers: AssessmentAnswers) {
+  const visible = new Set<string>();
+  return questions.filter(q => {
+    const show = (q.show_if || []).every(c => visible.has(c.question_id) && c.values.some(v => Array.isArray(answers[c.question_id]) ? (answers[c.question_id] as string[]).includes(v) : answers[c.question_id] === v));
+    if (show) visible.add(q.id);
+    return show;
+  });
+}
+export function cleanVisibleAnswers(questions: AssessmentQuestion[], answers: AssessmentAnswers): AssessmentAnswers {
+  return Object.fromEntries(visibleQuestions(questions, answers).filter(q => q.id in answers).map(q => [q.id, answers[q.id]]));
+}
+export function toggleMultiple(q: AssessmentQuestion, current: string[], value: string): string[] {
+  if (current.includes(value)) return current.filter(v => v !== value);
+  if (q.options.find(o => o.value === value)?.exclusive) return [value];
+  const next = current.filter(v => !q.options.find(o => o.value === v)?.exclusive);
+  return next.length >= (q.max_selections || q.options.length) ? current : [...next, value];
+}
+export function validDraftAnswer(q: AssessmentQuestion, answer: unknown): answer is string | string[] | null {
+  if (answer === null) return true;
+  if (q.type === 'multiple') return Array.isArray(answer) && answer.length <= (q.max_selections || q.options.length) && new Set(answer).size === answer.length
+    && answer.every(v => typeof v === 'string' && q.options.some(o => o.value === v)) && (answer.length <= 1 || !answer.some(v => q.options.find(o => o.value === v)?.exclusive));
+  return typeof answer === 'string' && answer.length <= 4000 && (q.type === 'text' || answer === '' || q.options.some(o => o.value === answer));
 }
 export interface PendingAssessment {
   id: string; phase: 'pre' | 'post'; revision: number; served_at: string;
