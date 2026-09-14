@@ -25,6 +25,7 @@
 | --- | --- |
 | 学生入口与课堂路由 | [App.tsx](../frontend/App.tsx)、[Research.tsx](../frontend/views/Research.tsx) |
 | 共同准备区和课次绑定 | [Preparation.tsx](../frontend/views/Preparation.tsx)、[preparation.py](../backend/app/api/endpoints/preparation.py)、[lesson_service.py](../backend/app/services/lesson_service.py) |
+| 课堂资料、本地包与逐课证据 | [materials.py](../backend/app/api/endpoints/materials.py)、[pi_package.py](../backend/app/services/pi_package.py)、[lesson_evidence.py](../backend/app/api/endpoints/lesson_evidence.py) |
 | 学生工作区与运行器 | [components](../frontend/components)、[pythonModuleRunner.ts](../frontend/services/pythonModuleRunner.ts)、[sceneRenderer.ts](../frontend/data/sceneRenderer.ts) |
 | 教师应用 | [admin-frontend/src](../admin-frontend/src) |
 | API 注册、认证与业务 | [backend/main.py](../backend/main.py)、[api](../backend/app/api)、[services](../backend/app/services) |
@@ -107,6 +108,7 @@ Worker 超时隔离、受限 Python 能力、状态结构校验和输出限额�
 | 固定任务依据 | `project_blueprint_versions` | 首次绑定冻结版本，后续发布不静默改变在做任务的条件 |
 | 教师与测量 | 教师点评、前后测轮次与回答、课堂互动记录 | 为过程解释与独立测量保留原始证据，互不冒充 |
 | 课次与准备 | `classroom_lesson_plans`、`preparation_records` | 冻结本课任务/知识目标；分开保存准备区代码、运行与对话 |
+| 文件与本地作品 | `classroom_materials`、`classroom_material_receipts` | 发布时任务/脚本快照；按学生绑定下载、提交和原文件哈希 |
 
 [research_event_service.py](../backend/app/services/research_event_service.py) 负责事件和版本，[research_task_service.py](../backend/app/services/research_task_service.py) 负责工作区。产物使用稳定 ID，不以数组位置代替身份；相同内容可复用版本，但重复运行仍产生不同测试事件。保存失败不得展示虚假的“已完成”。
 
@@ -136,7 +138,7 @@ Worker 超时隔离、受限 Python 能力、状态结构校验和输出限额�
 
 ## 7. 导出与性能
 
-[research_package.py](../backend/app/services/research_package.py) 从允许清单导出 27 张 SQL 表、CSV/JSONL、图谱快照、教材资料和字段说明，附清单、行数与摘要哈希。课堂答案与题目、课次和教师标识保留关联；按当前班级/组别筛选学生时，补入其历史答案、准备记录和课堂证据引用的课次。身份字段单独控制；即便不导出姓名，学生自由文本仍可能包含个人信息，不能称为完全匿名数据。
+[research_package.py](../backend/app/services/research_package.py) 从允许清单导出 29 张 SQL 表、CSV/JSONL、图谱快照、教材资料和字段说明，附清单、行数与摘要哈希。课堂答案与题目、课次和教师标识保留关联；按当前班级/组别筛选学生时，补入其历史答案、准备记录、资料收取和课堂证据引用的课次。身份字段单独控制；即便不导出姓名，学生自由文本仍可能包含个人信息，不能称为完全匿名数据。上传原件位于 `originals/<表名>/<UUID>.bin`，实际文件名和 SHA-256 在对应表；二进制不重复编码进 CSV/JSONL。
 
 SQL 导出使用一致性只读事务，Neo4j 是另一次读取，不能声称跨库原子快照；知识图谱当前快照也不等于完整变更历史。导出采取分批读取、临时文件、大小和时间限制，并限制同时导出数量，以免占满普通教学请求的内存与连接。
 
@@ -160,6 +162,20 @@ Compose 已用 Neo4j 5 配置名显式设置：初始堆 512 MiB、最大堆 1 G
 
 本机核心 WASM 由 10,104,029 字节压为 3,169,854 字节，减少约 69%；这不等于整站快 69%。按当前五个 Pyodide 文件估算，40 台全冷浏览器合计仍约需 232 MB 传输；若共享出口仅 20 Mbps，理想传输下限就约 93 秒，尚未算界面资源、协议开销和初始化。因此带宽与预热应和内存一起规划。上述数字是资源测量与算术估计，不是 40 台真实设备测速；当前未承诺某个人数“绝不卡”。
 
-## 8. 尚未实现的架构设想
+## 8. 本地 Pi 任务包与逐课证据
 
-本地 Pi 前后测任务包、任意新游戏的生成画布、后台按学生执行完整工程、多智能体规划，以及具有正式效度证据的动态画像与支架渐隐，都不能写成现有实现。讨论保留在教学设计和开发待办，不再为每个想法创建独立“最新架构”文档。
+教师在课堂页填写任务和支持要求，发布时冻结文本及安装脚本；学生下载时注入本人 ID、课次资料 ID 和下载记录 ID。Mac/Windows 包只含配置与脚本，不含主密钥。首次脚本运行在本文件夹 `.runtime` 中安装固定 Node 22.23.2、uv 0.8.22、Python 3.12.11 与 Pi 0.85.1；Node/uv 下载有固定 SHA-256，npm 使用完整性校验和 Pi 发布包的依赖锁。没有全局 npm 安装、sudo 或系统安全策略修改。Windows 限 x64，学校禁脚本时需教师处理，不绕过限制。
+
+Pi 当前官方包是 `@earendil-works/pi-coding-agent`，其 Node 要求、Windows PowerShell 工具及会话目录参数依据 [官方说明](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent)、[Windows 文档](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/windows.md) 核对；Node 校验来自 [官方清单](https://nodejs.org/dist/v22.23.2/SHASUMS256.txt)，uv 来自 [固定版本发布](https://github.com/astral-sh/uv/releases/tag/0.8.22)。不要把旧 `@mariozechner` 包名或最新版浮动安装写回脚本。实际 Mac 环境安装检查通过；Windows、Intel Mac、学校代理与桌面游戏依赖尚待实机验证。
+
+学生用 `/login` 输入教师另发的独立密钥，保存在 `.runtime/pi-user`，不打入回收包。平台尚未实现每学生限额代理码。Pi 有本地工具权限，AGENTS.md 的目录约定不是安全沙箱；仅在学校允许的实验账户启动。关闭网页课堂不会停止本地 Pi。脚本不自动启用第三方扩展，不收集任务目录外的文件。
+
+回收仅打包 `project` 中的允许类型文件、`evidence` 会话/启动记录及清单，跳过运行环境、隐藏目录和链接。下载时间是服务端开始发送，安装/启动/退出时间是可改写的本地报告，上传时间是服务端接收；不能混为实际专注时长。对话及工具编辑可作过程线索，但不是不可篡改的完整文件版本系统。主密钥不随生成包分发；文件内的隐私和手工粘贴密钥仍需人工检查，正则拦截不保证覆盖所有供应商密钥格式。
+
+文件私有存入 PostgreSQL `bytea`，列表默认不加载内容，单文件 10 MiB；ZIP 最多 500 项、展开 30 MiB，拒绝路径穿越、符号链接、重复/加密文件和常见密钥文件。平台只检查和保存，不解压到服务器、更不执行作品。每课最多 20 份资料，每学生每份最多 30 次下载、3 次提交；幂等重传不新增记录。完整研究包保持 128 MiB 总上限，超限明确报错，教师可逐件下载。大规模长期存储后应迁到私有对象存储，而非扩大接口无界限接收。
+
+逐课查看只读取带可信课次标识的准备记录、课堂消息和事件，每页 50 条，可按学生筛选；无额外模型调用。学生原话、编辑器快照和 AI 提供内容分栏，`literal-mention/v1` 只匹配教师知识点的同名词，不是语义编码或掌握度。旧记录缺课次时不按时间猜归属。现有 Neo4j 仍为累计图谱，尚不是逐课历史图谱，画像算法不变。
+
+## 9. 尚未实现的架构设想
+
+学生限额代理码、逐课语义编码与历史图谱、任意新游戏的生成画布、后台按学生执行完整工程、多智能体规划，以及具有正式效度证据的动态画像与支架渐隐，都不能写成现有实现。讨论保留在教学设计和开发待办，不再为每个想法创建独立“最新架构”文档。
