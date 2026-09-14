@@ -1,0 +1,39 @@
+.preparation { padding: 16px; min-height: 100dvh; background: #f7f6ed; color: #24271f; }
+.lesson-return { border: 0; background: transparent; color: #556332; padding: 6px 12px; cursor: pointer; }
+.preparation button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 14px; border: 1px solid #a7aa9d; border-radius: 9px; background: #fffef8; cursor: pointer; font: inherit; }
+.preparation button:disabled { opacity: .5; cursor: not-allowed; }
+.preparation button:focus-visible, .preparation textarea:focus-visible { outline: 3px solid #90a630; outline-offset: 3px; }
+.preparation .prep-primary { background: #d7f45e; color: #20251a; border-color: #637237; }
+.preparation-header, .preparation-header > div, .preparation-code > header, .preparation-code > footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.preparation-header { min-height: 48px; margin-bottom: 14px; flex-wrap: wrap; }
+.preparation-header strong { font-size: 21px; }
+.preparation-header span { color: #636a58; font-size: 14px; }
+.preparation-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(320px, 1fr); gap: 16px; height: calc(100dvh - 96px); min-height: 450px; }
+.preparation-code, .preparation-chat { min-width: 0; min-height: 0; overflow: hidden; border: 1px solid #b8bcaa; border-radius: 14px; background: #fffef8; }
+.preparation-code { display: flex; flex-direction: column; }
+.preparation-code > header, .preparation-chat > header { padding: 14px 18px; border-bottom: 1px solid #d5d8ca; }
+.preparation-code > header > span { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.preparation-code small { color: #66734a; }
+.preparation-editor { flex: 1; min-height: 180px; overflow: auto; background: #282c34; }
+.preparation-loading { color: #e4edd3; padding: 20px; }
+.preparation-editor > div, .preparation-editor .cm-editor { height: 100%; }
+.preparation-editor .cm-scroller { overflow: auto; font-size: 16px; }
+.preparation-output { background: #1e2520; color: #e4edd3; }
+.preparation-output > button { padding: 7px 16px; background: transparent; color: inherit; border: 0; }
+.preparation-output pre { margin: 0; padding: 8px 16px 16px; min-height: 70px; max-height: 150px; overflow: auto; font-size: 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.preparation-code > footer { padding: 10px 16px; }
+.preparation-code details { font-size: 13px; color: #657052; max-width: 70%; }
+.preparation-code summary { cursor: pointer; }
+.preparation-chat { display: flex; flex-direction: column; }
+.preparation-chat > header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px; }
+.preparation-chat > header span { color: #727960; font-size: 12px; }
+.preparation-messages { flex: 1; overflow: auto; padding: 20px; min-height: 0; }
+.preparation-messages article { margin-bottom: 26px; line-height: 1.7; font-size: 16px; overflow-wrap: anywhere; }
+.preparation-messages p { white-space: pre-wrap; margin: 0 0 14px; }
+.preparation-question { margin-left: 20px !important; background: #edf3d4; padding: 12px 16px; border-radius: 12px 12px 2px 12px; }
+.preparation-messages pre { overflow: auto; background: #20271f; color: #e6efcf; padding: 12px; border-radius: 8px; font-size: 14px; }
+.preparation-welcome { color: #737960; padding-top: 30px; }
+.preparation-chat form { padding: 14px; display: flex; gap: 10px; border-top: 1px solid #e0e3d4; }
+.preparation-chat textarea { flex: 1; min-width: 0; min-height: 76px; max-height: 170px; resize: vertical; padding: 12px; border: 1px solid #b7bba8; border-radius: 8px; background: #fffef8; font: inherit; }
+.preparation-error { padding: 10px 14px; background: #fff0e4; border-radius: 8px; }
+@media (max-width: 780px) { .preparation { padding: 10px; } .preparation-grid { grid-template-columns: minmax(0, 1fr); height: auto; } .preparation-code, .preparation-chat { height: 65dvh; min-height: 430px; } .preparation-header > div { flex-wrap: wrap; gap: 8px; } }

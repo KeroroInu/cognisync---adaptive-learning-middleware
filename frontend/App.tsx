@@ -10,6 +10,8 @@ import type { User, UserProfile } from './types';
 import { classroomEntry } from './utils/classroomEntry';
 import { AssessmentGate } from './components/AssessmentGate';
 import { ClassroomGate } from './components/ClassroomGate';
+import type { ClassroomState } from './services/classroom';
+const Preparation = React.lazy(() => import('./views/Preparation').then(module => ({ default: module.Preparation })));
 
 const Dashboard = React.lazy(() => import('./views/Dashboard').then(module => ({ default: module.Dashboard })));
 const Chat = React.lazy(() => import('./views/Chat').then(module => ({ default: module.Chat })));
@@ -20,7 +22,7 @@ const Research = React.lazy(() => import('./views/Research').then(module => ({ d
 const Scales = React.lazy(() => import('./views/Scales').then(module => ({ default: module.Scales })));
 
 // 视图类型定义
-type AppView = 'dashboard' | 'chat' | 'graph' | 'calibration' | 'evidence' | 'research' | 'scales';
+type AppView = 'preparation' | 'dashboard' | 'chat' | 'graph' | 'calibration' | 'evidence' | 'research' | 'scales';
 type AuthView = 'login' | 'register' | 'register-scale' | 'register-ai';
 type View = AppView | AuthView;
 
@@ -41,9 +43,10 @@ function App() {
 
   const [currentView, setCurrentView] = useState<View>(
     state.user
-      ? ((state.user.experimentGroup ?? 'unassigned') === 'unassigned' ? 'dashboard' : 'research')
+      ? 'preparation'
       : 'login'
   );
+  const [classroom, setClassroom] = useState<ClassroomState | null>(null);
 
   // 入口解析状态：已登录会话恢复期间不渲染旧学习首页，避免闪现。
   // 有持久化 token 时，必须等用户身份恢复并解析落地视图；否则首个 effect
@@ -71,26 +74,25 @@ function App() {
   useEffect(() => {
     if (!state.user) return;
     const allowed: Record<User['experimentGroup'], AppView[]> = {
-      pdt: ['evidence', 'research', 'scales'],
-      ai_pbl: ['evidence', 'research', 'scales'],
-      lecture: ['evidence', 'research', 'scales'],
-      unassigned: ['dashboard', 'scales'],
+      pdt: ['preparation', 'evidence', 'research', 'scales'],
+      ai_pbl: ['preparation', 'evidence', 'research', 'scales'],
+      lecture: ['preparation', 'evidence', 'scales'],
+      unassigned: ['preparation', 'scales'],
     };
     if (requiresAuth(currentView) && !allowed[state.user.experimentGroup ?? 'unassigned'].includes(currentView as AppView)) {
-      setCurrentView((state.user.experimentGroup ?? 'unassigned') === 'unassigned' ? 'dashboard' : 'research');
+      setCurrentView('preparation');
     }
   }, [state.user, currentView]);
 
   /**
    * 解析登录后的落地视图。
-   * 已分组学生直接进入项目，不把旧版画像问卷作为入课条件。
-   * 任务尚未发布或后端暂不可用时由工作区显示明确状态，不再绕回学习首页。
+   * 两组先进入准备区；只有教师启动的课次才能进入分组工作区。
    */
   const resolveEntryView = useCallback(async (user: User | null): Promise<View> => {
     return classroomEntry(user);
   }, []);
 
-  // 会话恢复（刷新、重新打开标签页）时同样直达唯一项目工作区
+  // 会话恢复时先回准备区，保留之前按学生与任务存储的课堂草稿。
   useEffect(() => {
     if (entryResolved) return;
     if (!state.user) {
@@ -148,6 +150,7 @@ function App() {
 
   // 登出处理
   const handleLogout = () => {
+    setClassroom(null);
     clearAuth();
     setEntryResolved(true);
     setCurrentView('login');
@@ -155,7 +158,7 @@ function App() {
 
   // 路由守卫：检查是否需要认证
   const requiresAuth = (view: View): boolean => {
-    return ['dashboard', 'chat', 'graph', 'calibration', 'evidence', 'research', 'scales'].includes(view);
+    return ['preparation', 'dashboard', 'chat', 'graph', 'calibration', 'evidence', 'research', 'scales'].includes(view);
   };
 
   // 渲染认证相关视图
@@ -213,6 +216,9 @@ function App() {
     }
 
     switch (currentView) {
+      case 'preparation':
+        return <Preparation key={state.user.id} userId={state.user.id} name={state.user.name} classroom={classroom}
+          onEnter={() => { if (classroom?.lesson_entry) setCurrentView('research'); }} onLogout={handleLogout} />;
       case 'dashboard':
         return (
           <Dashboard
@@ -279,6 +285,7 @@ function App() {
 
       case 'research':
         return (
+          <><button type="button" className="lesson-return" onClick={() => setCurrentView('preparation')}>← 准备区</button>
           <Research
             key={state.user.id}
             onUpdateProfile={updateProfile}
@@ -289,6 +296,7 @@ function App() {
             studentId={state.user?.student_id}
             experimentGroup={state.user.experimentGroup ?? 'unassigned'}
           />
+          </>
         );
 
       case 'scales':
@@ -333,7 +341,9 @@ function App() {
   // 已登录且完成 onboarding：使用 Layout 包裹应用内容
   return (
     <AssessmentGate key={state.user.id} userId={state.user.id} onLogout={handleLogout}>
-    <ClassroomGate key={state.user.id} userId={state.user.id} onLogout={handleLogout}>
+    <ClassroomGate key={state.user.id} userId={state.user.id} onLogout={handleLogout}
+      preparation={currentView === 'preparation'} onState={setClassroom} onReturn={() => setCurrentView('preparation')}>
+    {currentView === 'preparation' ? <Suspense fallback={<div role="status">正在打开准备区…</div>}>{renderProtectedContent()}</Suspense> :
     <Layout
       currentView={currentView as AppView}
       onViewChange={setCurrentView as (view: AppView) => void}
@@ -347,7 +357,7 @@ function App() {
       <Suspense fallback={<div className="view-loading" role="status">正在加载学习界面…</div>}>
         {renderProtectedContent()}
       </Suspense>
-    </Layout>
+    </Layout>}
     </ClassroomGate>
     </AssessmentGate>
   );

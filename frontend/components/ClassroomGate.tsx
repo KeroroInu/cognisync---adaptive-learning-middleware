@@ -60,14 +60,14 @@ export const ClassroomQuestion: React.FC<{
         {storageWarning ? <p role="status">本机草稿未能保存，请先提交再离开页面。</p> : null}
         {error ? <p role="alert">{error}</p> : null}
         <footer>{!question.required ? <button type="button" disabled={busy} onClick={() => update('')}>清空回答</button> : <span />}
-          <button className="classroom-primary" disabled={busy || (question.required && !answer.trim())}>{busy ? '正在提交…' : answer.trim() ? '提交回答' : '跳过这题'}<Check size={18} /></button></footer>
+          <button className="classroom-primary" disabled={busy || (question.required && !answer.trim())}>{busy ? '正在提交…' : question.required || answer.trim() ? '提交回答' : '跳过这题'}<Check size={18} /></button></footer>
         <small>回答发给老师，不会显示给同学。</small>
       </form>
     </section>
   </div>;
 }
 
-export const ClassroomGate: React.FC<{ userId: string; onLogout: () => void; children: React.ReactNode }> = ({ userId, onLogout, children }) => {
+export const ClassroomGate: React.FC<{ userId: string; onLogout: () => void; children: React.ReactNode; preparation?: boolean; onState?: (state: ClassroomState) => void; onReturn?: () => void }> = ({ userId, onLogout, children, preparation = false, onState, onReturn }) => {
   const [state, setState] = useState<ClassroomState | null>(null);
   const [activated, setActivated] = useState(false);
   const [error, setError] = useState('');
@@ -86,9 +86,10 @@ export const ClassroomGate: React.FC<{ userId: string; onLogout: () => void; chi
       const next = await getClassroomState();
       if (!active.current || epoch.current !== requestEpoch) return;
       setState(next); setError(''); setDenied(null);
+      onState?.(next);
       if (!next.session || next.session.state !== 'closed') setActivated(true);
     } catch (e) { if (active.current && epoch.current === requestEpoch) setError(e instanceof Error ? e.message : '课堂连接暂时断开，正在重试。'); }
-  }, []);
+  }, [onState]);
   useEffect(() => {
     active.current = true;
     epoch.current++;
@@ -117,18 +118,19 @@ export const ClassroomGate: React.FC<{ userId: string; onLogout: () => void; chi
     if (status === 'closing' || status === 'closed') window.dispatchEvent(new CustomEvent(CLASSROOM_CLOSING_EVENT, { detail: { state: status } }));
     if (status === 'open' && previous !== 'open') window.dispatchEvent(new Event(CLASSROOM_OPEN_EVENT));
   }, [status]);
-  useEffect(() => { if (frame.current) frame.current.inert = status !== 'open' || promptVisible; }, [status, promptVisible, activated]);
+  const locked = !preparation && status !== 'open';
+  useEffect(() => { if (frame.current) frame.current.inert = locked || promptVisible; }, [locked, promptVisible, activated]);
   useEffect(() => { if (!notice) return; const timer = setTimeout(() => setNotice(''), 3500); return () => clearTimeout(timer); }, [notice]);
 
   return <>
     {/* Never conditionally replace a previously mounted editor with the modal/closed screen. */}
-    <div ref={frame} aria-hidden={status !== 'open' || promptVisible ? true : undefined}>{activated ? children : null}</div>
-    {status === 'loading' || status === 'closed' || status === 'closing' ? <div className="classroom-shade classroom-lock" role="dialog" aria-modal="true" aria-labelledby="classroom-lock-title">
+    <div ref={frame} aria-hidden={locked || promptVisible ? true : undefined}>{activated || preparation ? children : null}</div>
+    {locked ? <div className="classroom-shade classroom-lock" role="dialog" aria-modal="true" aria-labelledby="classroom-lock-title">
       <section className="classroom-question"><DoorClosed size={34} /><h1 id="classroom-lock-title">{status === 'loading' ? '正在连接课堂…' : status === 'closing' ? '这节课先到这里' : '课堂暂时关闭'}</h1>
         <p>{status === 'loading' ? '稍等一下，正在读取老师的安排。' : status === 'closing' ? '正在同步你的最后修改，请先不要关闭页面。' : '老师开课后，这里会自动恢复。'}</p>
         {status !== 'loading' ? <p className="classroom-muted">未同步的内容请保留在此浏览器，下次开课再继续。</p> : null}
         {error ? <p role="alert">{error}</p> : null}
-        <footer><button type="button" onClick={onLogout}>退出登录</button><button type="button" className="classroom-primary" onClick={() => void refresh.current()}><RefreshCw size={18} />重新检查</button></footer>
+        <footer>{onReturn ? <button type="button" disabled={status === 'closing'} onClick={onReturn}>回到准备区</button> : <button type="button" onClick={onLogout}>退出登录</button>}<button type="button" className="classroom-primary" onClick={() => void refresh.current()}><RefreshCw size={18} />重新检查</button></footer>
       </section>
     </div> : null}
     {status === 'open' && error ? <div className="classroom-connection" role="status">{error}</div> : null}

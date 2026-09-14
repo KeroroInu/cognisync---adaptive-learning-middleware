@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight, DoorClosed, DoorOpen, MessageSquare, Plus, R
 import { emptyQuestion, type AssessmentQuestion } from '../lib/assessments';
 import { classroomAdmin, classroomAnswerLabel, validateClassroomQuestion, type ClassroomResponses, type ClassroomSession } from '../lib/classroom';
 import './Classroom.css';
+import { LessonSetup } from './LessonSetup';
 
 const PAGE_SIZE = 50;
 const stateLabel = { open: '上课中', closing: '正在下课', closed: '已下课' };
@@ -149,10 +150,10 @@ export function Classroom() {
     const payload = { class_name: className.trim(), title: title.trim() };
     const key = JSON.stringify(payload);
     if (createRequest.current?.key !== key) createRequest.current = { key, id: crypto.randomUUID() };
-    askToConfirm({ title: '开始这节课？', scope: payload.class_name, description: '本班的学习入口将开放。之前的课次和回答会保留。', confirmLabel: '开始上课', preview: payload.title, operation: async () => {
+    askToConfirm({ title: '开放准备区？', scope: payload.class_name, description: '先开放准备区和课堂问答，选好两组任务后再开始本课。之前的课次和回答会保留。', confirmLabel: '开放准备区', preview: payload.title, operation: async () => {
       const session = await classroomAdmin<ClassroomSession>('/sessions', { ...payload, request_id: createRequest.current!.id });
       setSelectedId(session.id); setCreating(false); setTitle(''); createRequest.current = null;
-      setMessage('已开始上课，可以发题了。');
+      setMessage('准备区已开放，可以发题；保存本课安排后再启动分组课堂。');
     } });
   }
 
@@ -209,7 +210,7 @@ export function Classroom() {
         <div className="classroom-actions"><button type="button" onClick={() => setCreating(false)}>取消</button><button className="classroom-primary" type="submit">开始上课</button></div>
       </fieldset>
     </form>}
-    {loading ? <p role="status">正在读取课堂…</p> : sessions.length === 0 ? <section className="classroom-empty"><DoorOpen size={32} /><h2>还没有课次</h2><p>点击“新课次”开始。没有设置过开关的班级仍可正常学习。</p></section> : <>
+    {loading ? <p role="status">正在读取课堂…</p> : sessions.length === 0 ? <section className="classroom-empty"><DoorOpen size={32} /><h2>还没有课次</h2><p>点击“新课次”设置课堂。学生会先进入共同准备区。</p></section> : <>
       {selected && <>
         <section className="classroom-panel classroom-session" aria-label="当前课次">
           <label className="classroom-picker">课次<select disabled={busy} value={selectedId} onChange={event => selectSession(event.target.value)}>{sessions.map(session => <option key={session.id} value={session.id}>{session.class_name || '所有班级'} · {session.title} · {dateLabel(session.created_at)}{session.is_current ? '' : '（历史）'}</option>)}</select></label>
@@ -217,6 +218,7 @@ export function Classroom() {
           {selected.is_current && <button disabled={busy || selected.state === 'closing'} className={selected.state === 'open' ? 'classroom-end' : 'classroom-primary'} onClick={() => changeState(selected.state === 'open' ? 'end' : 'open')}>{selected.state === 'open' ? <DoorClosed size={19} /> : <DoorOpen size={19} />}{selected.state === 'open' ? '下课' : selected.state === 'closing' ? '正在保存…' : '重新开放'}</button>}</div>
           {selected.state === 'closing' && selected.closes_at && <p className="classroom-closing-note">学生正在保存，将于 {dateLabel(selected.closes_at)} 关闭学习入口。</p>}
         </section>
+        {selected.is_current && <LessonSetup key={selected.id} sessionId={selected.id} open={selected.state === 'open'} />}
         <div className="classroom-workspace">
           <section className="classroom-panel classroom-compose"><h2><MessageSquare size={21} />发一道题</h2>
             <form onSubmit={event => { event.preventDefault(); void publish(); }}><fieldset disabled={busy || !selected.is_current || selected.state !== 'open'}>

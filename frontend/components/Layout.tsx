@@ -20,7 +20,7 @@ import {
 import { translations } from '../utils/translations';
 import type { Language, User } from '../types';
 
-type View = 'dashboard' | 'chat' | 'graph' | 'calibration' | 'evidence' | 'research' | 'scales';
+type View = 'preparation' | 'dashboard' | 'chat' | 'graph' | 'calibration' | 'evidence' | 'research' | 'scales';
 type Theme = 'light' | 'dark';
 
 interface Props {
@@ -57,6 +57,7 @@ export const Layout: React.FC<Props> = ({
   const [menuOpen, setMenuOpen] = useState(false);
 
   const allNavItems: NavigationItem[] = [
+    { id: 'preparation', label: '准备区', description: 'Python 小实验与 AI 对话', icon: <Home size={18} /> },
     {
       id: 'dashboard',
       label: t.dashboard,
@@ -105,10 +106,10 @@ export const Layout: React.FC<Props> = ({
   // 2026-08-24 裁定：知识图谱与自我校准不再作为学生端入口，相关数据迁入教师端单生详情。
   // 视图代码与后端接口保留，便于教师端承接后再决定是否清理。
   const allowedViews: Record<User['experimentGroup'], View[]> = {
-    pdt: ['research', 'evidence', 'scales'],
-    ai_pbl: ['research', 'evidence', 'scales'],
-    lecture: ['research', 'evidence', 'scales'],
-    unassigned: ['dashboard', 'scales'],
+    pdt: ['preparation', 'research', 'evidence', 'scales'],
+    ai_pbl: ['preparation', 'research', 'evidence', 'scales'],
+    lecture: ['preparation', 'evidence', 'scales'],
+    unassigned: ['preparation', 'scales'],
   };
   const navItems = allNavItems.filter(item => allowedViews[group].includes(item.id));
 
@@ -146,7 +147,7 @@ export const Layout: React.FC<Props> = ({
             <button
               type="button"
               className="workspace-brand"
-              onClick={() => navigate(group === 'unassigned' ? 'dashboard' : 'research')}
+              onClick={() => navigate('preparation')}
               aria-label={language === 'zh' ? '返回当前学习任务' : 'Return to current learning task'}
             >
               <span className="brand-mark">C</span>

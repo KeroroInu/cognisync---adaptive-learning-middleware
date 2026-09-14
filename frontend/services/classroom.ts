@@ -8,7 +8,8 @@ export interface ClassroomSession {
   state: 'open' | 'closing' | 'closed'; closes_at: string | null;
 }
 export interface ClassroomPrompt { id: string; question: AssessmentQuestion; served_at: string }
-export interface ClassroomState { session: ClassroomSession | null; prompt: ClassroomPrompt | null }
+export interface LessonEntry { task_id: string; lesson_id: string; session_id: string; title: string; group: string }
+export interface ClassroomState { session: ClassroomSession | null; prompt: ClassroomPrompt | null; lesson_entry?: LessonEntry | null }
 
 export class ClassroomError extends Error {
   constructor(message: string, public status: number, public code?: string) { super(message); this.name = 'ClassroomError'; }
