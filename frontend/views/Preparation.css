@@ -36,4 +36,13 @@
 .preparation-chat form { padding: 14px; display: flex; gap: 10px; border-top: 1px solid #e0e3d4; }
 .preparation-chat textarea { flex: 1; min-width: 0; min-height: 76px; max-height: 170px; resize: vertical; padding: 12px; border: 1px solid #b7bba8; border-radius: 8px; background: #fffef8; font: inherit; }
 .preparation-error { padding: 10px 14px; background: #fff0e4; border-radius: 8px; }
+.prep-material-dialog { width: min(680px, calc(100vw - 32px)); max-height: 85dvh; overflow: auto; padding: 24px; border: 1px solid #a7aa9d; border-radius: 16px; background: #fffef8; color: #24271f; }
+.prep-material-dialog::backdrop { background: #20251a66; }
+.prep-material-dialog header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.prep-material-dialog h2 { margin: 0; font-size: 21px; }
+.prep-material-dialog section { padding: 18px 0; border-bottom: 1px solid #d5d8ca; }
+.prep-material-dialog p { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; }
+.prep-material-dialog small { display: block; margin-top: 20px; color: #68705b; }
+.prep-material-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 14px; }
+.prep-material-actions input { display: block; max-width: 250px; margin-top: 8px; }
 @media (max-width: 780px) { .preparation { padding: 10px; } .preparation-grid { grid-template-columns: minmax(0, 1fr); height: auto; } .preparation-code, .preparation-chat { height: 65dvh; min-height: 430px; } .preparation-header > div { flex-wrap: wrap; gap: 8px; } }

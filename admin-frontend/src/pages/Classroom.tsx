@@ -5,6 +5,7 @@ import { emptyQuestion, type AssessmentQuestion } from '../lib/assessments';
 import { classroomAdmin, classroomAnswerLabel, validateClassroomQuestion, type ClassroomResponses, type ClassroomSession } from '../lib/classroom';
 import './Classroom.css';
 import { LessonSetup } from './LessonSetup';
+import { LessonMaterials, LessonEvidence } from './LessonMaterials';
 
 const PAGE_SIZE = 50;
 const stateLabel = { open: '上课中', closing: '正在下课', closed: '已下课' };
@@ -219,6 +220,8 @@ export function Classroom() {
           {selected.state === 'closing' && selected.closes_at && <p className="classroom-closing-note">学生正在保存，将于 {dateLabel(selected.closes_at)} 关闭学习入口。</p>}
         </section>
         {selected.is_current && <LessonSetup key={selected.id} sessionId={selected.id} open={selected.state === 'open'} />}
+        <LessonMaterials key={`materials-${selected.id}`} sessionId={selected.id} open={selected.is_current && selected.state === 'open'} />
+        <LessonEvidence key={`evidence-${selected.id}`} sessionId={selected.id} />
         <div className="classroom-workspace">
           <section className="classroom-panel classroom-compose"><h2><MessageSquare size={21} />发一道题</h2>
             <form onSubmit={event => { event.preventDefault(); void publish(); }}><fieldset disabled={busy || !selected.is_current || selected.state !== 'open'}>

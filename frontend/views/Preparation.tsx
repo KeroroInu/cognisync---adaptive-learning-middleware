@@ -3,6 +3,7 @@ import { ArrowRight, Code2, LogOut, Play, Send } from 'lucide-react';
 import type { ClassroomState } from '../services/classroom';
 import { preparationDraftKey, preparationRequest, type PreparationRecord } from '../services/preparation';
 import './Preparation.css';
+import { ClassroomMaterials } from '../components/ClassroomMaterials';
 
 const Editor = React.lazy(() => import('../components/ResearchCodeEditor'));
 const STARTER = '# 在这里试一小段 Python\nprint("你好，Python！")\n';
@@ -116,7 +117,7 @@ export function Preparation({ userId, name, classroom, onEnter, onLogout }: {
 
   return <main className="preparation">
     <header className="preparation-header"><div><strong>准备区</strong><span>{name}，先试一试。</span></div>
-      <div>{entry ? <button className="prep-primary" disabled={running || sending} onClick={onEnter}>进入本课：{entry.title}<ArrowRight size={18} /></button>
+      <div><ClassroomMaterials sessionId={classroom?.session?.id} />{entry ? <button className="prep-primary" disabled={running || sending} onClick={onEnter}>进入本课：{entry.title}<ArrowRight size={18} /></button>
         : <span role="status">{classroom ? '等待老师开始本课' : '正在连接课堂…'}</span>}<button aria-label="退出登录" onClick={onLogout}><LogOut size={18} /></button></div>
     </header>
     {error ? <div className="preparation-error" role="alert">{error} {!ready && <button onClick={() => setLoadAttempt(value => value + 1)}>重新读取</button>}</div> : null}

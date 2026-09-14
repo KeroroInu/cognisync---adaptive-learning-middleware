@@ -20,6 +20,9 @@ const root = process.env.STUDENT_BUILD_DIR || path.resolve(__dirname, '../dist')
       if (pathname === '/api/auth/me') return json({ success: true, data: { user: { id: student, name: '测试同学', experimentGroup: 'ai_pbl', hasCompletedOnboarding: true }, profile: null } });
       if (pathname === '/api/assessments/pending') return json({ success: true, data: null });
       if (pathname === '/api/classroom/state') return json({ success: true, data: classroom });
+      if (pathname === '/api/materials') return json({ success: true, data: [{ id: 'material-1', title: '独立创作任务', kind: 'pi', filename: '', configuration: { task: '做一个小游戏，记录验证过程。' } }] });
+      if (pathname === '/api/materials/material-1/download') return route.fulfill({ contentType: 'application/zip', headers: { 'content-disposition': 'attachment; filename="task.zip"' }, body: Buffer.from('browser-fixture-only') });
+      if (pathname === '/api/materials/material-1/submit') { posts.push({ kind: 'submission' }); return json({ success: true, data: { id: 'receipt-1' } }); }
       if (pathname === '/api/preparation/records') {
         if (route.request().method() === 'GET') return failLoad ? json({ detail: '模拟读取失败' }, 503) : json({ success: true, data: records[student] });
         const body = route.request().postDataJSON(); posts.push(body);
@@ -43,6 +46,13 @@ const root = process.env.STUDENT_BUILD_DIR || path.resolve(__dirname, '../dist')
     await page.getByRole('button', { name: '重新读取', exact: true }).click();
     await page.locator('.cm-content').waitFor();
     assert.equal(await page.locator('.cm-content').innerText(), 'print(7)');
+    await page.getByRole('button', { name: /课堂资料/ }).click();
+    await page.getByRole('heading', { name: '独立创作任务' }).waitFor();
+    const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: '下载 Mac 包' }).click()]);
+    assert.ok(download.suggestedFilename().endsWith('.zip'));
+    await page.locator('input[type=file]').setInputFiles({ name: 'submission.zip', mimeType: 'application/zip', buffer: Buffer.from('fixture-only') });
+    await page.getByText('作品已收到。原文件和上传时间会一起保存。', { exact: true }).waitFor();
+    await page.getByRole('button', { name: '关闭课堂资料' }).click();
     await page.getByRole('button', { name: '运行', exact: true }).click();
     await page.waitForFunction(() => document.querySelector('[aria-label="运行输出"]')?.textContent.trim() === '7', { timeout: 60000 });
     await page.locator('.cm-content').fill('print(19)');

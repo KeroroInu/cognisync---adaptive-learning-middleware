@@ -1,0 +1,11 @@
+.lesson-materials > summary { cursor: pointer; font-size: 18px; font-weight: 650; }
+.lesson-materials > p { color: #656d5b; line-height: 1.65; }
+.lesson-materials details { margin: 14px 0; padding: 14px; border: 1px solid #d5d8ca; border-radius: 10px; }
+.lesson-materials details > summary { cursor: pointer; }
+.lesson-materials label { display: flex; flex-direction: column; gap: 7px; margin: 12px 0; }
+.lesson-materials input, .lesson-materials select, .lesson-materials textarea { max-width: 100%; }
+.lesson-materials ul { padding: 0; list-style: none; }
+.lesson-materials li { padding: 18px 0; border-bottom: 1px solid #d5d8ca; }
+.lesson-materials li > span { display: block; color: #667058; margin: 7px 0; }
+.lesson-materials pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 320px; overflow: auto; padding: 14px; background: #f3f3e9; font-size: 14px; }
+.lesson-receipt { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; padding: 12px 0; border-bottom: 1px solid #e0e2d8; }
