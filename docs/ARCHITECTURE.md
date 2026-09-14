@@ -24,6 +24,7 @@
 | 范围 | 实现入口 |
 | --- | --- |
 | 学生入口与课堂路由 | [App.tsx](../frontend/App.tsx)、[Research.tsx](../frontend/views/Research.tsx) |
+| 共同准备区和课次绑定 | [Preparation.tsx](../frontend/views/Preparation.tsx)、[preparation.py](../backend/app/api/endpoints/preparation.py)、[lesson_service.py](../backend/app/services/lesson_service.py) |
 | 学生工作区与运行器 | [components](../frontend/components)、[pythonModuleRunner.ts](../frontend/services/pythonModuleRunner.ts)、[sceneRenderer.ts](../frontend/data/sceneRenderer.ts) |
 | 教师应用 | [admin-frontend/src](../admin-frontend/src) |
 | API 注册、认证与业务 | [backend/main.py](../backend/main.py)、[api](../backend/app/api)、[services](../backend/app/services) |
@@ -55,6 +56,10 @@
 | 编码建构 | 当前基础/创意函数、编辑器代码、可执行能力、测试反馈 | 给平台不支持的事件、状态字段或终端指令；把另一张卡的错误当当前错误 |
 
 聊天历史按任务、阶段与焦点限定，不把所有学生记录拼进一次提示。信息缺失或保存未完成时，应明确说“目前没有读到”，不能据此断言学生没有做过。
+
+新发布课次还绑定 `lesson_id`、`session_id` 和服务器核定的组别/任务；新课堂消息先按本课过滤，再按环节/功能聚焦，不调用跨课历史摘要。教师任务提示由服务器读取冻结快照，普通课堂对话也不信任客户端自行指定的教学提示。已有提交优先保留原蓝图版本；新提交使用课次发布版本。教师关闭任务 AI 仍可即时拒绝新请求，不因快照曾开放而绕过。
+
+准备区使用独立的短上下文调用：当前代码、上次实际运行代码与输出、本人本课次最近六轮准备区对话。旧输出明确对应 `last_run_code`，不是自动代表当前编辑器版本。该入口不读取教师蓝图、课堂卡片或画像，不改画像算法；两组使用同一政策。共享既有模型队列，等待模型前提交并释放 SQL 事务；请求按用户＋请求编号幂等保存，不自动重发模型调用。
 
 ### 模型没有学生和教师的最终操作权
 
@@ -101,12 +106,15 @@ Worker 超时隔离、受限 Python 能力、状态结构校验和输出限额�
 | 行为及关联 | `stage_events`、`stage_event_artifacts`、`scaffold_events` | 记录运行、修改、求助和对应产物版本 |
 | 固定任务依据 | `project_blueprint_versions` | 首次绑定冻结版本，后续发布不静默改变在做任务的条件 |
 | 教师与测量 | 教师点评、前后测轮次与回答、课堂互动记录 | 为过程解释与独立测量保留原始证据，互不冒充 |
+| 课次与准备 | `classroom_lesson_plans`、`preparation_records` | 冻结本课任务/知识目标；分开保存准备区代码、运行与对话 |
 
 [research_event_service.py](../backend/app/services/research_event_service.py) 负责事件和版本，[research_task_service.py](../backend/app/services/research_task_service.py) 负责工作区。产物使用稳定 ID，不以数组位置代替身份；相同内容可复用版本，但重复运行仍产生不同测试事件。保存失败不得展示虚假的“已完成”。
 
 事件请求的幂等按用户和任务限定：同一请求重放不重复记录，不同内容复用同一键应拒绝。最终提交需要与有效测试证据对应；历史迁移记录继续可读，不意味着恢复已撤下的迁移界面。
 
 求助、模型生成、服务端保存、学生实际阅读和采纳是不同事实。已生成回复不能证明学生已读；`adopted = null` 表示未知，不当作拒绝。缺失的早期时间、模型版本或错误详情不能靠整理历史补造。
+
+新阶段事件的 `detail.lesson` 由服务器注入，客户端同名字段不可信。新课堂消息的 `analysis.lesson` 保留同一关联；助手记录中的 `analysis_source.message_id` 指向被分析的学生消息，不能误把 AI 生成文本的知识点算成学生已经掌握。目标知识点已可保存，逐课概念命中、原句证据与教师复核报表仍待开发，现有累计图谱不替代该报告。
 
 ## 6. 教师接口、账号与课堂开关
 
@@ -116,7 +124,7 @@ Worker 超时隔离、受限 Python 能力、状态结构校验和输出限额�
 
 学生使用 JWT 身份，后端核验账号与资源归属；管理端使用真正的管理员身份校验，不能只靠前端隐藏按钮。题本发布后保存版本，变更应形成新版本，不能覆写已经作答学生所见的题目。
 
-课堂控制按教师指定的班级作用；未配置班级开关的学生保持原行为。结束后有 10 秒保存宽限，只接受学生本人已有任务提交的 `save-workspace` / `save-progress`；新的学习活动和排队模型调用被拒绝。已经发往供应商的调用不保证撤回。宽限结束后学习 API 统一拒绝，身份、课堂状态、前后测、旧注册问卷和教师管理仍可访问；前后测开关独立控制。关课不是关闭进程、清空数据或收回已下载文件。
+课堂控制按教师指定的班级作用。新建课次自动建立未启动的空安排，不能通过旧任务 UUID 绕过“开始本课”；配置并启动后仅开放本组指定任务。历史未配置课次的直接 API 兼容仍保留，但学生登录和 active-task 不再自动挑选旧公共任务。结束后有 10 秒保存宽限，只接受学生本人已有任务提交的 `save-workspace` / `save-progress`；新的课堂活动和排队模型调用被拒绝。已经发往供应商的调用不保证撤回。身份、课堂状态、前后测、旧注册问卷和教师管理仍可访问；准备区保留本地 Python 和保存、读取记录，但拒绝新 AI 请求。关课不是关闭进程、清空数据或收回已下载文件。
 
 `classroom_sessions` 保存课次及当前状态，`classroom_control_events` 保存开课/下课/重开/替换记录，`classroom_publications` 冻结每次发布的题目与教师来源备注，`classroom_responses` 保存用户 ID、原始答案、当时班级/组别与提交时间。学生回答共享行锁，教师关闭使用排他锁；同一学生和发布记录唯一，重放不会覆盖原答卷。发布只证明教师发布，不证明学生已读；可选题 `null` 不算零分，也不触发画像更新。
 
@@ -128,7 +136,7 @@ Worker 超时隔离、受限 Python 能力、状态结构校验和输出限额�
 
 ## 7. 导出与性能
 
-[research_package.py](../backend/app/services/research_package.py) 从允许清单导出 25 张 SQL 表、CSV/JSONL、图谱快照、教材资料和字段说明，附清单、行数与摘要哈希。课堂答案与题目、课次和教师标识保留关联；按当前班级/组别筛选学生时，补入其历史答案引用的课次。身份字段单独控制；即便不导出姓名，学生自由文本仍可能包含个人信息，不能称为完全匿名数据。
+[research_package.py](../backend/app/services/research_package.py) 从允许清单导出 27 张 SQL 表、CSV/JSONL、图谱快照、教材资料和字段说明，附清单、行数与摘要哈希。课堂答案与题目、课次和教师标识保留关联；按当前班级/组别筛选学生时，补入其历史答案、准备记录和课堂证据引用的课次。身份字段单独控制；即便不导出姓名，学生自由文本仍可能包含个人信息，不能称为完全匿名数据。
 
 SQL 导出使用一致性只读事务，Neo4j 是另一次读取，不能声称跨库原子快照；知识图谱当前快照也不等于完整变更历史。导出采取分批读取、临时文件、大小和时间限制，并限制同时导出数量，以免占满普通教学请求的内存与连接。
 
