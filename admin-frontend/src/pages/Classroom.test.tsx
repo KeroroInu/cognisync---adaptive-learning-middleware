@@ -8,6 +8,8 @@ describe('classroom initial interface', () => {
     const html = renderToStaticMarkup(<MemoryRouter><Classroom /></MemoryRouter>);
     expect(html).toContain('正在读取课堂');
     expect(html).toContain('新的一课');
+    expect(html).toContain('解构班');
+    expect(html).toContain('开发班');
     expect(html).toContain('数据导出 → 课堂研究包');
     expect(html).not.toContain('发布到学生页面');
     expect(html).not.toContain('下课 · 关闭学习入口');

@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight, DoorClosed, DoorOpen, Plus, RefreshCw } from
 import { classroomAdmin, classroomAnswerLabel, type ClassroomResponses, type ClassroomSession } from '../lib/classroom';
 import './Classroom.css';
 import { ClassroomQuestionSets } from './ClassroomQuestionSets';
+import { TEACHING_CLASSES, isTeachingClass } from '../lib/teachingClasses';
 import { LessonSetup } from './LessonSetup';
 import { LessonMaterials, LessonEvidence } from './LessonMaterials';
 
@@ -68,7 +69,7 @@ export function Classroom() {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [creating, setCreating] = useState(false);
-  const [className, setClassName] = useState('');
+  const [className, setClassName] = useState('解构班');
   const [title, setTitle] = useState(new Date().toLocaleDateString('zh-CN') + ' 课堂');
   const [responseData, setResponseData] = useState<ClassroomResponses | null>(null);
   const [responseError, setResponseError] = useState('');
@@ -76,6 +77,7 @@ export function Classroom() {
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
   const requestLock = useRef(false);
   const listSequence = useRef(0);
+  const requestedClass = useRef<string | null>(null);
   const createRequest = useRef<{ key: string; id: string } | null>(null);
   const selected = sessions.find(session => session.id === selectedId);
   const promptId = selected?.prompt?.id;
@@ -86,7 +88,7 @@ export function Classroom() {
       const result = await classroomAdmin<ClassroomSession[]>('/sessions', undefined, signal);
       if (signal?.aborted || sequence !== listSequence.current) return;
       setSessions(result);
-      setSelectedId(previous => result.some(item => item.id === previous) ? previous : result[0]?.id || '');
+      setSelectedId(previous => result.some(item => item.id === previous) ? previous : result.find(item => item.is_current && isTeachingClass(item.class_name) && (!requestedClass.current || item.class_name === requestedClass.current))?.id || '');
       setLoadError('');
     } catch (cause) {
       if (!signal?.aborted && sequence === listSequence.current) setLoadError(errorMessage(cause));
@@ -143,13 +145,14 @@ export function Classroom() {
   }
 
   function create() {
-    if (!className.trim()) { setError('填写学生账号所属的班级，避免发到其他班。'); return; }
+    if (!isTeachingClass(className)) { setError('请选择解构班或开发班。'); return; }
     if (!title.trim()) { setError('给这节课起一个名字，方便以后查找。'); return; }
     const payload = { class_name: className.trim(), title: title.trim() };
     const key = JSON.stringify(payload);
     if (createRequest.current?.key !== key) createRequest.current = { key, id: crypto.randomUUID() };
     askToConfirm({ title: '开放准备区？', scope: payload.class_name, description: '先开放准备区和课堂问答，选好两组任务后再开始本课。之前的课次和回答会保留。', confirmLabel: '开放准备区', preview: payload.title, operation: async () => {
       const session = await classroomAdmin<ClassroomSession>('/sessions', { ...payload, request_id: createRequest.current!.id });
+      requestedClass.current = payload.class_name;
       setSelectedId(session.id); setCreating(false); setTitle(new Date().toLocaleDateString('zh-CN') + ' 课堂'); createRequest.current = null;
       setMessage('准备区已开放，可以发题；保存本课安排后再启动分组课堂。');
     } });
@@ -179,25 +182,32 @@ export function Classroom() {
     setSelectedId(id); setPage(0); setResponseData(null); setResponseError(''); setError(''); setMessage('');
   }
 
+  function selectClass(name: string) {
+    requestedClass.current = name;
+    const session = sessions.find(item => item.is_current && item.class_name === name);
+    setClassName(name); selectSession(session?.id || ''); setCreating(!session);
+  }
+
   return <div className="classroom-admin">
     <div className="classroom-toolbar"><p>选班上课，有需要时发一组小问答。</p><div className="classroom-actions">
       <button disabled={busy} aria-label="刷新课堂" onClick={() => void load()}><RefreshCw size={18} />刷新</button>
-      <button disabled={busy} className="classroom-primary" aria-expanded={creating} onClick={() => { setClassName(selected?.class_name || ''); setCreating(value => !value); }}><Plus size={18} />新的一课</button>
+      <button disabled={busy} className="classroom-primary" aria-expanded={creating} onClick={() => { setClassName(selected && isTeachingClass(selected.class_name) ? selected.class_name : className); setCreating(value => !value); }}><Plus size={18} />新的一课</button>
     </div></div>
     {loadError && <p className="classroom-error" role="alert">{loadError}</p>}
     {error && !confirmation && <p className="classroom-error" role="alert">{error}</p>}
     {message && <p className="classroom-message" role="status">{message}</p>}
+    <nav className="classroom-class-tabs" aria-label="切换班级">{TEACHING_CLASSES.map(item => <button key={item.name} aria-pressed={(selected?.class_name || (creating ? className : '')) === item.name} disabled={busy || loading} onClick={() => selectClass(item.name)}>{item.name}</button>)}</nav>
+    {sessions.length > 0 && <details className="classroom-history"><summary>查看以前的课</summary><label>课次<select value={selectedId} disabled={busy} onChange={event => { selectSession(event.target.value); setCreating(false); }}><option value="">选择历史课次</option>{sessions.map(session => <option key={session.id} value={session.id}>{session.class_name} · {session.title} · {dateLabel(session.created_at)}</option>)}</select></label></details>}
     {creating && <form className="classroom-panel classroom-create" onSubmit={event => { event.preventDefault(); void create(); }}>
       <h2>开始一节课</h2><fieldset disabled={busy}>
-        <div className="classroom-fields"><label>班级<input required maxLength={100} placeholder="与学生管理中的班级一致" value={className} onChange={event => setClassName(event.target.value)} /></label>
+        <div className="classroom-fields"><label>班级<select value={className} onChange={event => setClassName(event.target.value)}>{TEACHING_CLASSES.map(item => <option key={item.name} value={item.name}>{item.name}</option>)}</select></label>
           <label>课次名称<input required maxLength={120} placeholder="例如：第 2 课 · 让蛇动起来" value={title} onChange={event => setTitle(event.target.value)} /></label></div>
         <div className="classroom-actions"><button type="button" onClick={() => setCreating(false)}>取消</button><button className="classroom-primary" type="submit">开始上课</button></div>
       </fieldset>
     </form>}
     {loading ? <p role="status">正在读取课堂…</p> : sessions.length === 0 ? <section className="classroom-empty"><DoorOpen size={32} /><h2>还没有课次</h2><p>点击“新的一课”选择班级。学生先进入准备区。</p></section> : <>
+      {!selected && !creating && <p className="classroom-empty">点上面的班级开始一节课。旧课次和回答仍在“查看以前的课”中。</p>}
       {selected && <>
-        <nav className="classroom-class-tabs" aria-label="切换班级">{sessions.filter(s => s.is_current).map(session => <button key={session.id} aria-pressed={session.id === selectedId} disabled={busy} onClick={() => selectSession(session.id)}>{session.class_name}</button>)}</nav>
-        <details className="classroom-history"><summary>查看以前的课</summary><label>课次<select value={selectedId} onChange={event => selectSession(event.target.value)}>{sessions.map(session => <option key={session.id} value={session.id}>{session.class_name} · {session.title} · {dateLabel(session.created_at)}</option>)}</select></label></details>
         <section className="classroom-panel classroom-session" aria-label="当前课次">
           <div><strong>{selected.class_name}</strong><p>{selected.title}</p></div>
           <div className="classroom-session-actions"><span className={`classroom-state is-${selected.state}`}>{selected.is_current ? stateLabel[selected.state] : '历史课次'}</span>

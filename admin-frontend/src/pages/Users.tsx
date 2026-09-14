@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { adminApi } from '../lib/adminApi';
 import type { User } from '../types';
+import { TEACHING_CLASSES, isTeachingClass } from '../lib/teachingClasses';
 import { Search, ChevronLeft, ChevronRight, Edit2, Trash2, Eye, X, Save, Download, KeyRound } from 'lucide-react';
 
 const GROUP_LABELS: Record<User['experiment_group'], string> = {
@@ -314,29 +315,14 @@ export const Users = () => {
 
               <div>
                 <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-tertiary)' }}>班级</label>
-                <input
-                  type="text"
-                  value={editClassName}
-                  onChange={(e) => setEditClassName(e.target.value)}
-                  placeholder="例如：高二（3）班"
-                  className="w-full px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-                  style={inputStyle}
-                />
+                <div role="group" aria-label="学生班级" className="flex gap-3">{TEACHING_CLASSES.map(item => <button key={item.name} type="button" disabled={editLoading} aria-pressed={editClassName === item.name}
+                  className="flex-1 px-3 py-2 rounded-lg border" style={{ ...inputStyle, background: editClassName === item.name ? '#e5f7b3' : 'var(--bg-secondary)' }}
+                  onClick={() => { setEditClassName(item.name); setEditExperimentGroup(item.group); }}>{item.name}</button>)}</div>
+                {!isTeachingClass(editClassName) && <p className="text-sm mt-2" style={{ color: 'var(--text-tertiary)' }}>当前：{editClassName || '未分班'}。选班后保存，才会调整归属。</p>}
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-tertiary)' }}>实验条件</label>
-                <select
-                  value={editExperimentGroup}
-                  onChange={(e) => setEditExperimentGroup(e.target.value as User['experiment_group'])}
-                  className="w-full px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-                  style={inputStyle}
-                >
-                  <option value="unassigned">未分组（等待教师安排）</option>
-                  <option value="pdt">项目解构＋AI</option>
-                  <option value="ai_pbl">常规 AI 协作</option>
-                  {editingUser?.experiment_group === 'lecture' && <option value="lecture">历史讲授组（保留原分组）</option>}
-                </select>
+                <p className="text-sm" style={{ color: 'var(--text-tertiary)' }}>课堂类型：{GROUP_LABELS[editExperimentGroup]}（随班级保存）</p>
               </div>
 
               <div className="flex items-center gap-3">
