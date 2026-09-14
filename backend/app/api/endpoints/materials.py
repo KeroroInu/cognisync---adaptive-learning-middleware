@@ -78,10 +78,12 @@ async def publish_package(session_id: UUID, body: PackageInput, db: AsyncSession
 
 
 @admin_router.post('/sessions/{session_id}/files')
-async def publish_file(session_id: UUID, request: Request, request_id: UUID, filename: str, db: AsyncSession = Depends(get_db), teacher: User = Depends(get_current_user)):
+async def publish_file(session_id: UUID, request: Request, request_id: UUID, filename: str, accept_submissions: bool = False, db: AsyncSession = Depends(get_db), teacher: User = Depends(get_current_user)):
     filename = safe_name(filename)
     if filename.lower().rsplit('.', 1)[-1] not in {'pdf', 'md', 'txt', 'py', 'zip', 'png', 'jpg', 'pptx'}:
         raise HTTPException(422, '请上传 PDF、Markdown、Python、图片、PPTX 或 ZIP')
+    if accept_submissions and not filename.lower().endswith('.zip'):
+        raise HTTPException(422, '作业包请使用 ZIP；其他文件可作为阅读资料发布')
     data = await read_upload(request)
     if filename.lower().endswith(('.zip', '.pptx')):
         await offload(inspect_zip, data)
@@ -89,11 +91,11 @@ async def publish_file(session_id: UUID, request: Request, request_id: UUID, fil
     await locked_session(db, session_id)
     existing = await db.get(ClassroomMaterial, request_id)
     if existing:
-        if (existing.session_id, existing.created_by, existing.filename, existing.sha256) != (session_id, teacher.id, filename, digest):
+        if (existing.session_id, existing.created_by, existing.filename, existing.sha256, bool((existing.configuration or {}).get('accept_submissions'))) != (session_id, teacher.id, filename, digest, accept_submissions):
             raise HTTPException(409, '请求编号已用于其他文件')
         return success(material_row(existing))
     await publish_slot(db, session_id)
-    item = ClassroomMaterial(id=request_id, session_id=session_id, created_by=teacher.id, title=filename[:120], filename=filename, kind='file', content=data, size=len(data), sha256=digest)
+    item = ClassroomMaterial(id=request_id, session_id=session_id, created_by=teacher.id, title=filename[:120], filename=filename, kind='file', configuration={'accept_submissions': True} if accept_submissions else {}, content=data, size=len(data), sha256=digest)
     db.add(item)
     await db.commit()
     return success(material_row(item))
@@ -121,7 +123,12 @@ async def student_materials(db: AsyncSession = Depends(get_db), user: User = Dep
     if not session or effective_state(session) != 'open':
         return success([])
     items = (await db.scalars(select(ClassroomMaterial).where(ClassroomMaterial.session_id == session.id, ClassroomMaterial.closed_at.is_(None)).order_by(ClassroomMaterial.created_at))).all()
-    return success([material_row(item) for item in items])
+    # One aggregate query for this student's receipts, never another student's work.
+    receipts = (await db.execute(select(MaterialReceipt.material_id, func.count(), func.max(MaterialReceipt.created_at))
+        .where(MaterialReceipt.user_id == user.id, MaterialReceipt.kind == 'submission', MaterialReceipt.material_id.in_([item.id for item in items]))
+        .group_by(MaterialReceipt.material_id))).all() if items else []
+    summaries = {mid: {'count': count, 'last_submitted_at': at} for mid, count, at in receipts}
+    return success([{**material_row(item), 'submission': summaries.get(item.id, {'count': 0, 'last_submitted_at': None})} for item in items])
 
 
 @router.post('/{material_id}/download')
@@ -152,17 +159,25 @@ async def download_material(material_id: UUID, platform: Literal['mac', 'windows
 @router.post('/{material_id}/submit')
 async def submit_work(material_id: UUID, request: Request, request_id: UUID, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
     item = await student_material(db, user, material_id)
-    if item.kind != 'pi':
+    if item.kind != 'pi' and not (item.configuration or {}).get('accept_submissions'):
         raise HTTPException(422, '请在对应任务包下提交作品')
     data = await read_upload(request)
-    detail = await offload(inspect_zip, data, {'schema': 'cognisync-local/1', 'material_id': str(item.id), 'user_id': str(user.id)})
-    try:
-        download_id = UUID(detail['client_manifest']['download_id'])
-    except (ValueError, KeyError, TypeError) as error:
-        raise HTTPException(422, '缺少有效下载编号') from error
-    download = await db.get(MaterialReceipt, download_id)
-    if not download or (download.material_id, download.user_id, download.kind) != (item.id, user.id, 'download'):
-        raise HTTPException(422, '找不到本人的下载记录')
+    if item.kind == 'pi':
+        detail = await offload(inspect_zip, data, {'schema': 'cognisync-local/1', 'material_id': str(item.id), 'user_id': str(user.id)})
+        try:
+            download_id = UUID(detail['client_manifest']['download_id'])
+        except (ValueError, KeyError, TypeError) as error:
+            raise HTTPException(422, '缺少有效下载编号') from error
+        download = await db.get(MaterialReceipt, download_id)
+        if not download or (download.material_id, download.user_id, download.kind) != (item.id, user.id, 'download'):
+            raise HTTPException(422, '找不到本人的下载记录')
+    else:
+        # Teacher-authored packages have no platform manifest. Bind the receipt
+        # to the authenticated student/task, not to an asserted archive author.
+        detail = {**await offload(inspect_zip, data), 'source': 'unverified_teacher_package_upload'}
+        download = await db.scalar(select(MaterialReceipt.id).where(MaterialReceipt.material_id == item.id, MaterialReceipt.user_id == user.id, MaterialReceipt.kind == 'download').limit(1))
+        if not download:
+            raise HTTPException(422, '请先下载这份作业包，再上传作品')
     digest = hashlib.sha256(data).hexdigest()
     await db.execute(text('SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))'), {'key': f'materials:{user.id}'})
     previous = await db.scalar(select(MaterialReceipt).where(MaterialReceipt.user_id == user.id, MaterialReceipt.request_id == request_id))

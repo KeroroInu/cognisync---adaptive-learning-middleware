@@ -119,3 +119,44 @@ async def test_lesson_evidence_roles_and_scope(client, test_db, classroom_actors
     assert data['items'][0]['parts'][0]['mentioned_targets'] == ['列表']
     assert data['items'][0]['parts'][2]['role'] == 'assistant'
     assert (await client.get(url + '?offset=50', headers=a['teacher'])).json()['data']['items'] == []
+
+
+async def test_teacher_zip_assignment_submission_and_private_status(client, classroom_actors):
+    a = classroom_actors
+    sid = (await start(client, a))['id']
+    url = f'{ADMIN}/sessions/{sid}/files?request_id={uuid4()}&filename=homework.zip&accept_submissions=true'
+    content = archive({'TASK.md': 'Make a game', 'main.py': '# Start here'})
+    item = (await client.post(url, headers=a['teacher'], content=content)).json()['data']
+    assert item['configuration']['accept_submissions'] is True
+    assert (await client.post(url.replace('true', 'false'), headers=a['teacher'], content=content)).status_code == 409
+    mid = item['id']
+    work = archive({'main.py': 'print(1)', 'chat.jsonl': '{}'})
+    submit = f'/api/materials/{mid}/submit?request_id={uuid4()}'
+    assert (await client.post(submit, headers=a['first'], content=work)).status_code == 422
+    assert (await client.post(f'/api/materials/{mid}/download', headers=a['first'])).status_code == 200
+    assert (await client.post(submit, headers=a['other'], content=work)).status_code == 404
+    response = await client.post(submit, headers=a['first'], content=work)
+    assert response.status_code == 200, response.text
+    assert response.json()['data']['detail']['source'] == 'unverified_teacher_package_upload'
+    assert (await client.post(submit, headers=a['first'], content=work)).json() == response.json()
+    own = (await client.get('/api/materials', headers=a['first'])).json()['data'][0]['submission']
+    peer = (await client.get('/api/materials', headers=a['second'])).json()['data'][0]['submission']
+    assert own['count'] == 1 and own['last_submitted_at']
+    assert peer == {'count': 0, 'last_submitted_at': None}
+    assert (await client.post(f'/api/materials/{mid}/submit?request_id={uuid4()}', headers=a['first'], content=archive({'../bad.py': 'bad'}))).status_code == 422
+    for _ in range(2):
+        assert (await client.post(f'/api/materials/{mid}/submit?request_id={uuid4()}', headers=a['first'], content=work)).status_code == 200
+    assert (await client.post(f'/api/materials/{mid}/submit?request_id={uuid4()}', headers=a['first'], content=work)).status_code == 409
+    # An uncertain request can still retrieve its accepted receipt at the limit.
+    assert (await client.post(submit, headers=a['first'], content=work)).status_code == 200
+    await client.post(f'{ADMIN}/materials/{mid}/close', headers=a['teacher'])
+    assert (await client.post(submit, headers=a['first'], content=work)).status_code == 403
+
+
+async def test_read_only_files_cannot_receive_work(client, classroom_actors):
+    a = classroom_actors
+    sid = (await start(client, a))['id']
+    url = f'{ADMIN}/sessions/{sid}/files?request_id={uuid4()}&filename=lesson.md'
+    assert (await client.post(url + '&accept_submissions=true', headers=a['teacher'], content=b'read')).status_code == 422
+    item = (await client.post(url, headers=a['teacher'], content=b'read')).json()['data']
+    assert (await client.post(f"/api/materials/{item['id']}/submit?request_id={uuid4()}", headers=a['first'], content=archive({'main.py': 'pass'}))).status_code == 422
