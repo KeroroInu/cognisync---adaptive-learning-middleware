@@ -12,8 +12,10 @@ from app.db.postgres import async_session_factory, get_db
 from app.models.sql.classroom import ClassroomSession
 from app.models.sql.research import ResearchTaskSubmission
 from app.models.sql.user import User
+from app.models.sql.lesson import LessonPlan
 
 llm_classroom_scope: ContextVar[str | None] = ContextVar("llm_classroom_scope", default=None)
+lesson_evidence_context: ContextVar[dict | None] = ContextVar("lesson_evidence_context", default=None)
 SAVE_PATH = re.compile(r"/research/tasks/([0-9a-fA-F-]{36})/(save-workspace|save-progress)$")
 
 
@@ -48,6 +50,15 @@ async def require_classroom_access(request: Request, user: User = Depends(get_cu
         yield
         return
     session = await current_session(db, user.class_name)
+    plan = await db.scalar(select(LessonPlan).where(LessonPlan.session_id == session.id)) if session else None
+    context = None
+    if plan:
+        task = plan.configuration.get("tasks", {}).get(user.experiment_group)
+        if not plan.started_at or not task:
+            raise HTTPException(403, detail={"code": "LESSON_NOT_STARTED", "message": "老师还没有开放本组任务，请回准备区。"})
+        context = {"session_id": str(session.id), "lesson_id": str(plan.id), "task_id": task["id"],
+                   "group": user.experiment_group, "user_id": str(user.id),
+                   "blueprint_version_id": task.get("blueprint_version_id")}
     if session:
         state = effective_state(session)
         if state != "open":
@@ -62,10 +73,12 @@ async def require_classroom_access(request: Request, user: User = Depends(get_cu
             if not exists:
                 raise denied(state)
     token = llm_classroom_scope.set(user.class_name)
+    lesson_token = lesson_evidence_context.set(context)
     try:
         yield
     finally:
         llm_classroom_scope.reset(token)
+        lesson_evidence_context.reset(lesson_token)
 
 
 async def ensure_queued_llm_access():
@@ -74,5 +87,8 @@ async def ensure_queued_llm_access():
         return
     async with async_session_factory() as db:
         session = await current_session(db, class_name)
+        context = lesson_evidence_context.get()
+        if context and (not session or str(session.id) != context["session_id"]):
+            raise denied("closed")
         if session and effective_state(session) != "open":
             raise denied(effective_state(session))

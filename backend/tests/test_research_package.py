@@ -59,7 +59,7 @@ def unpack(response):
 @pytest.mark.asyncio
 async def test_package_complete_joinable_and_private(admin_client, package_context):
     archive, manifest = unpack(await admin_client.get('/api/admin/export/research-package?class_name=一班'))
-    assert len(manifest["tables"]) == 25
+    assert len(manifest["tables"]) == 27
     assert manifest["tables"]["research_task_submissions"]["rows"] == 1
     assert manifest["tables"]["stage_events"]["rows"] == 0
     assert archive.read("stage_events.csv").startswith(b"\xef\xbb\xbf")
@@ -111,6 +111,28 @@ def test_csv_keeps_numbers_and_guards_text():
     assert package_service.csv_cell("  =1+1") == "'  =1+1"
     assert package_service.csv_cell(None) == ""
     assert package_service.json_default(uuid.UUID(int=0)) == str(uuid.UUID(int=0))
+
+
+@pytest.mark.asyncio
+async def test_preparation_export_keeps_original_lesson_after_student_moves(admin_client, test_db, package_context):
+    from app.models.sql import LessonPlan, PreparationRecord, ChatMessage
+    from app.models.sql.message import MessageRole
+    async with test_db() as db:
+        session = ClassroomSession(class_name="旧班级", title="准备课", created_by=uuid.UUID(package_context["teacher"]))
+        chat_session = ClassroomSession(class_name="另一旧班级", title="正式课", created_by=uuid.UUID(package_context["teacher"]))
+        db.add_all([session, chat_session])
+        await db.flush()
+        db.add(LessonPlan(session_id=session.id, configuration={"tasks": {}, "knowledge_points": ["列表"]}))
+        db.add(PreparationRecord(user_id=uuid.UUID(package_context["student"]), session_id=session.id,
+                                request_id=uuid.uuid4(), kind="run", payload={"source": "browser_report"}))
+        db.add(ChatMessage(user_id=uuid.UUID(package_context["student"]), role=MessageRole.USER,
+                           text="条件判断", analysis={"lesson": {"session_id": str(chat_session.id)}}))
+        await db.commit()
+        ids = {str(session.id), str(chat_session.id)}
+    archive, _ = unpack(await admin_client.get('/api/admin/export/research-package?class_name=一班&include_graph=false'))
+    assert {json.loads(line)["id"] for line in archive.read("classroom_sessions.jsonl").splitlines()} == ids
+    assert json.loads(archive.read("preparation_records.jsonl"))["session_id"] in ids
+    assert json.loads(archive.read("classroom_lesson_plans.jsonl"))["configuration"]["knowledge_points"] == ["列表"]
 
 
 @pytest.mark.asyncio

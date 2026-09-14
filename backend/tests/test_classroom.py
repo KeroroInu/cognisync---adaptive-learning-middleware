@@ -126,12 +126,12 @@ async def test_cross_class_cannot_read_or_submit_another_prompt(client, test_db,
     assert own["prompt"]["id"] == prompt["id"]
     assert "source" not in own["prompt"]
     other = (await client.get(f"{STUDENT}/state", headers=actors["other"])).json()["data"]
-    assert other == {"session": None, "prompt": None}
+    assert other == {"session": None, "prompt": None, "lesson_entry": None}
     response = await client.post(f"{STUDENT}/prompts/{prompt['id']}/responses", headers=actors["other"], json={"answer": "code"})
     assert response.status_code == 404
-    # The other class keeps learning even when this class is closed.
+    # Another class keeps its preparation area; no legacy task is auto-assigned.
     await change_state(client, actors, session["id"], "end")
-    assert (await client.get("/api/research/active-task", headers=actors["other"])).status_code == 200
+    assert (await client.get("/api/preparation/records", headers=actors["other"])).status_code == 200
 
 
 async def test_create_and_publish_request_ids_are_idempotent_but_new_publications_are_distinct(client, test_db, classroom_actors):
@@ -229,6 +229,8 @@ async def test_closing_grace_only_allows_existing_own_workspace_and_progress(cli
     existing_task = await learning_task(test_db, user_id=actors["first_id"])
     new_task = await learning_task(test_db)
     session = await start(client, actors)
+    assert (await client.post(f"{ADMIN}/sessions/{session['id']}/lesson", headers=actors["teacher"], json={"tasks": {"pdt": str(existing_task)}})).status_code == 200
+    assert (await client.post(f"{ADMIN}/sessions/{session['id']}/lesson/start", headers=actors["teacher"])).status_code == 200
     before = datetime.now(timezone.utc)
     closing = await change_state(client, actors, session["id"], "end")
     deadline = datetime.fromisoformat(closing["closes_at"].replace("Z", "+00:00"))
@@ -261,6 +263,8 @@ async def test_expired_class_blocks_learning_but_preserves_identity_assessments_
     actors = classroom_actors
     task_id = await learning_task(test_db, user_id=actors["first_id"])
     session = await start(client, actors)
+    assert (await client.post(f"{ADMIN}/sessions/{session['id']}/lesson", headers=actors["teacher"], json={"tasks": {"pdt": str(task_id)}})).status_code == 200
+    assert (await client.post(f"{ADMIN}/sessions/{session['id']}/lesson/start", headers=actors["teacher"])).status_code == 200
     await change_state(client, actors, session["id"], "end")
     await expire_grace(test_db, session["id"])
     for endpoint, body in (

@@ -37,6 +37,23 @@ TEST_DATABASE_URL = os.getenv(
 TEST_ADMIN_KEY = "test_admin_key_for_testing"
 
 
+async def publish_test_lesson(session_factory, user_id, task_id):
+    """Explicit lesson fixture for older tests of blueprint/task behavior, not legacy auto-routing."""
+    from datetime import datetime, timezone
+    from app.models.sql import User, ResearchTask, ClassroomSession, LessonPlan
+    async with session_factory() as db:
+        user = await db.get(User, uuid.UUID(str(user_id)))
+        task = await db.get(ResearchTask, uuid.UUID(str(task_id)))
+        user.class_name = f"lesson-{user.id}"
+        session = ClassroomSession(class_name=user.class_name, title="任务回归课次", created_by=user.id)
+        db.add(session)
+        await db.flush()
+        snapshot = {key: getattr(task, key) for key in ("title", "description", "instructions", "ai_prompt", "code_content", "ai_enabled")}
+        snapshot.update(id=str(task.id), blueprint_version_id=str(task.current_blueprint_version_id) if task.current_blueprint_version_id else None)
+        db.add(LessonPlan(session_id=session.id, configuration={"version": 1, "tasks": {user.experiment_group: snapshot}, "knowledge_points": []}, started_at=datetime.now(timezone.utc)))
+        await db.commit()
+
+
 @pytest.fixture(autouse=True)
 def force_mock_llm():
     """集成测试不访问外部 LLM，保证离线可重复且不消耗 API 配额。"""

@@ -4,6 +4,7 @@ import pytest
 from httpx import AsyncClient
 
 from test_project_blueprint_schema import blueprint_payload
+from conftest import publish_test_lesson
 
 
 async def register_pdt_student(client: AsyncClient, suffix: str) -> dict:
@@ -28,6 +29,7 @@ async def register_pdt_student(client: AsyncClient, suffix: str) -> dict:
 async def test_published_blueprint_is_immutable_and_frozen_per_student(
     admin_client: AsyncClient,
     client: AsyncClient,
+    test_db,
 ):
     first_student = await register_pdt_student(client, "first")
     assign_first = await admin_client.patch(
@@ -76,6 +78,7 @@ async def test_published_blueprint_is_immutable_and_frozen_per_student(
     assert publish_v1.json()["data"]["status"] == "published"
 
     assert (await admin_client.post(f"/api/admin/research/tasks/{task_id}/activate")).status_code == 200
+    await publish_test_lesson(test_db, first_student["id"], task_id)
     first_active = await client.get(
         "/api/research/active-task",
         headers=first_student["headers"],
@@ -143,6 +146,7 @@ async def test_published_blueprint_is_immutable_and_frozen_per_student(
             json={"experiment_group": "pdt"},
         )
     ).status_code == 200
+    await publish_test_lesson(test_db, second_student["id"], task_id)
     second_active = await client.get(
         "/api/research/active-task",
         headers=second_student["headers"],

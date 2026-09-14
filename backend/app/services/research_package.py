@@ -28,6 +28,7 @@ EXPORT_MODELS = (
     models.ScaleTemplate, models.ScaleResponse, models.OnboardingSession, models.TeacherNote,
     models.AssessmentRound, models.AssessmentResponse,
     models.ClassroomSession, models.ClassroomPublication, models.ClassroomResponse, models.ClassroomControlEvent,
+    models.LessonPlan, models.PreparationRecord,
 )
 USER_FIELDS = {"id", "role", "class_name", "experiment_group", "is_active", "created_at", "last_active_at", "onboarding_mode", "has_completed_onboarding", "gender"}
 MAX_BYTES = 128 * 1024 * 1024  # Uncompressed, including CSV + JSONL. Fail rather than truncate.
@@ -82,7 +83,21 @@ def export_queries(class_name=None, group=None, include_identity=False):
     answered_sessions = select(models.ClassroomPublication.session_id).join(
         models.ClassroomResponse, models.ClassroomResponse.publication_id == models.ClassroomPublication.id,
     ).where(models.ClassroomResponse.user_id.in_(students))
-    classroom_ids = classroom_ids.union(answered_sessions)
+    preparation_sessions = select(models.PreparationRecord.session_id).where(
+        models.PreparationRecord.user_id.in_(students), models.PreparationRecord.session_id.is_not(None),
+    )
+    # Compare text IDs instead of casting historical JSON values to UUID.
+    from sqlalchemy import String, cast
+    lesson_messages = select(models.ChatMessage.analysis["lesson"]["session_id"].astext).where(
+        models.ChatMessage.user_id.in_(students),
+    )
+    lesson_events = select(models.StageEvent.detail["lesson"]["session_id"].astext).where(
+        models.StageEvent.user_id.in_(students),
+    )
+    evidence_sessions = select(models.ClassroomSession.id).where(
+        cast(models.ClassroomSession.id, String).in_(lesson_messages.union(lesson_events)),
+    )
+    classroom_ids = classroom_ids.union(answered_sessions, preparation_sessions, evidence_sessions)
     for model in EXPORT_MODELS:
         table = model.__table__
         columns = list(table.columns)
@@ -111,7 +126,7 @@ def export_queries(class_name=None, group=None, include_identity=False):
             query = query.where(table.c.event_id.in_(event_ids))
         elif model is models.ClassroomSession:
             query = query.where(table.c.id.in_(classroom_ids))
-        elif model in (models.ClassroomPublication, models.ClassroomControlEvent):
+        elif model in (models.ClassroomPublication, models.ClassroomControlEvent, models.LessonPlan):
             query = query.where(table.c.session_id.in_(classroom_ids))
         # Task/blueprint/scale catalogs stay complete to preserve foreign-key interpretation.
         query = query.order_by(*table.primary_key.columns)

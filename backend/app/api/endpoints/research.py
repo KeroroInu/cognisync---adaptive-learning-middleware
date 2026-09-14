@@ -386,7 +386,8 @@ async def _load_student_blueprint(
             ResearchTaskSubmission.user_id == user_id,
         )
     )
-    effective_id = blueprint_id or task.current_blueprint_version_id
+    from app.services.research_task_service import entry_blueprint_version
+    effective_id = blueprint_id or entry_blueprint_version(task, user_id)
     if effective_id is None:
         return None, None
     raw_config = await db.scalar(
@@ -471,9 +472,16 @@ async def _get_active_task_by_kind(
     current_user: User = Depends(get_current_user),
 ) -> SuccessResponse[ActiveTaskResponse]:
     """按用途读取当前学生可见的活动任务。"""
+    from app.services.lesson_service import lesson_for_user, lesson_entry
+    session, plan = await lesson_for_user(db, current_user)
+    entry = lesson_entry(session, plan, current_user.experiment_group)
+    if not entry:
+        raise HTTPException(404, "老师还没有启动本节课的任务，请先在准备区练习")
+    snapshot = plan.configuration["tasks"][current_user.experiment_group]
     result = await db.execute(
         select(ResearchTask)
         .where(
+            ResearchTask.id == UUID(entry["task_id"]),
             ResearchTask.status == ResearchTaskStatus.ACTIVE,
             ResearchTask.task_kind == kind,
             or_(
@@ -504,21 +512,21 @@ async def _get_active_task_by_kind(
     effective_blueprint_id = (
         submission.blueprint_version_id
         if submission and submission.blueprint_version_id
-        else task.current_blueprint_version_id
+        else snapshot.get("blueprint_version_id")
     )
 
     return SuccessResponse(data=ActiveTaskResponse(
         id=str(task.id),
-        title=task.title,
-        description=task.description,
-        instructions=task.instructions,
-        ai_prompt=task.ai_prompt,
-        code_content=task.code_content,
+        title=snapshot["title"],
+        description=snapshot["description"],
+        instructions=snapshot["instructions"],
+        ai_prompt=None,  # Teacher instructions are loaded on the server, not sent as student resources.
+        code_content=snapshot["code_content"],
         language=task.language,
         target_group=task.target_group,
         task_kind=task.task_kind.value,
         test_template=task.test_template,
-        ai_enabled=task.ai_enabled,
+        ai_enabled=task.ai_enabled and snapshot["ai_enabled"],
         is_completed=submission.is_completed if submission else False,
         code_submitted=submission.code_submitted if submission else None,
         workspace_data=submission.workspace_data if submission else None,

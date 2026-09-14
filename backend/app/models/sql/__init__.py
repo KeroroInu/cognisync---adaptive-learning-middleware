@@ -34,6 +34,7 @@ from app.models.sql.behavior_log import BehaviorLog
 from app.models.sql.teacher_note import TeacherNote
 from app.models.sql.assessment import AssessmentRound, AssessmentResponse
 from app.models.sql.classroom import ClassroomSession, ClassroomPublication, ClassroomResponse, ClassroomControlEvent
+from app.models.sql.lesson import LessonPlan, PreparationRecord
 
 __all__ = [
     "Base",
@@ -76,4 +77,6 @@ __all__ = [
     "ClassroomPublication",
     "ClassroomResponse",
     "ClassroomControlEvent",
+    "LessonPlan",
+    "PreparationRecord",
 ]

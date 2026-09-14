@@ -14,6 +14,9 @@ from app.core.security import verify_admin_key
 from app.db.postgres import get_db
 from app.models.sql.classroom import ClassroomControlEvent, ClassroomPublication, ClassroomResponse, ClassroomSession
 from app.models.sql.user import User
+from app.models.sql.lesson import LessonPlan
+from app.models.sql.research import ResearchTask, ResearchTaskStatus, ResearchTaskKind
+from app.services.lesson_service import lesson_entry
 from app.schemas.assessment import Question, validate_answer
 from app.services.classroom_service import current_session, effective_state
 
@@ -107,6 +110,8 @@ async def create_session(body: SessionInput, db: AsyncSession = Depends(get_db),
     item = ClassroomSession(id=body.request_id, class_name=body.class_name, title=body.title, created_by=teacher.id)
     db.add(item)
     await db.flush()
+    # A newly opened preparation area must not authorize legacy task UUIDs.
+    db.add(LessonPlan(session_id=item.id, configuration={"version": 1, "tasks": {}, "knowledge_points": []}))
     db.add(ClassroomControlEvent(session_id=item.id, teacher_id=teacher.id, action="create"))
     await db.commit()
     return success(session_row(item))
@@ -159,7 +164,7 @@ async def close_prompt(publication_id: UUID, db: AsyncSession = Depends(get_db))
 async def student_state(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
     session = await current_session(db, user.class_name)
     if not session:
-        return success({"session": None, "prompt": None})
+        return success({"session": None, "prompt": None, "lesson_entry": None})
     prompt = None
     if effective_state(session) == "open":
         answered = select(ClassroomResponse.publication_id).where(ClassroomResponse.user_id == user.id)
@@ -169,7 +174,71 @@ async def student_state(db: AsyncSession = Depends(get_db), user: User = Depends
         ).order_by(ClassroomPublication.published_at.desc()).limit(1))
         if item:
             prompt = {"id": str(item.id), "question": item.question, "served_at": datetime.now(timezone.utc).isoformat()}
-    return success({"session": session_row(session), "prompt": prompt})
+    plan = await db.scalar(select(LessonPlan).where(LessonPlan.session_id == session.id))
+    return success({"session": session_row(session), "prompt": prompt,
+                    "lesson_entry": lesson_entry(session, plan, user.experiment_group)})
+
+
+class LessonInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    tasks: dict[Literal["pdt", "ai_pbl"], UUID] = Field(default_factory=dict, max_length=2)
+    knowledge_points: list[str] = Field(default_factory=list, max_length=20)
+
+
+@admin_router.get("/lesson-tasks")
+async def lesson_tasks(db: AsyncSession = Depends(get_db)):
+    tasks = (await db.scalars(select(ResearchTask).where(
+        ResearchTask.status == ResearchTaskStatus.ACTIVE, ResearchTask.task_kind == ResearchTaskKind.LEARNING,
+    ).order_by(ResearchTask.title))).all()
+    return success([{"id": str(t.id), "title": t.title, "target_group": t.target_group} for t in tasks])
+
+
+@admin_router.get("/sessions/{session_id}/lesson")
+async def get_lesson(session_id: UUID, db: AsyncSession = Depends(get_db)):
+    if not await db.get(ClassroomSession, session_id):
+        raise HTTPException(404, "课次不存在")
+    plan = await db.scalar(select(LessonPlan).where(LessonPlan.session_id == session_id))
+    return success(None if not plan else {"id": str(plan.id), "configuration": plan.configuration, "started_at": plan.started_at})
+
+
+@admin_router.post("/sessions/{session_id}/lesson")
+async def configure_lesson(session_id: UUID, body: LessonInput, db: AsyncSession = Depends(get_db)):
+    await locked_session(db, session_id)
+    plan = await db.scalar(select(LessonPlan).where(LessonPlan.session_id == session_id))
+    if plan and plan.started_at:
+        raise HTTPException(409, "本课已经开始，不能改写教学安排；请创建新课次")
+    if any(not point.strip() or len(point) > 100 for point in body.knowledge_points):
+        raise HTTPException(422, "每个知识点请写 1–100 字")
+    tasks = {}
+    for group, task_id in body.tasks.items():
+        task = await db.get(ResearchTask, task_id)
+        if not task or task.status != ResearchTaskStatus.ACTIVE or task.task_kind != ResearchTaskKind.LEARNING or task.target_group not in ("all", group):
+            raise HTTPException(422, "所选任务未发布或不适用于该组")
+        tasks[group] = {"id": str(task.id), "title": task.title, "description": task.description,
+                        "instructions": task.instructions, "ai_prompt": task.ai_prompt,
+                        "code_content": task.code_content, "ai_enabled": task.ai_enabled,
+                        "blueprint_version_id": str(task.current_blueprint_version_id) if task.current_blueprint_version_id else None}
+    config = {"version": 1, "tasks": tasks, "knowledge_points": list(dict.fromkeys(body.knowledge_points))}
+    if plan:
+        plan.configuration = config
+    else:
+        plan = LessonPlan(session_id=session_id, configuration=config)
+        db.add(plan)
+    await db.commit()
+    return success({"id": str(plan.id), "configuration": plan.configuration, "started_at": plan.started_at})
+
+
+@admin_router.post("/sessions/{session_id}/lesson/start")
+async def start_lesson(session_id: UUID, db: AsyncSession = Depends(get_db), teacher: User = Depends(get_current_user)):
+    session = await locked_session(db, session_id)
+    plan = await db.scalar(select(LessonPlan).where(LessonPlan.session_id == session_id))
+    if effective_state(session) != "open" or not plan or not plan.configuration.get("tasks"):
+        raise HTTPException(409, "先开放课次并保存本课任务")
+    if not plan.started_at:
+        plan.started_at = datetime.now(timezone.utc)
+        db.add(ClassroomControlEvent(session_id=session_id, teacher_id=teacher.id, action="start_lesson"))
+    await db.commit()
+    return success({"id": str(plan.id), "started_at": plan.started_at})
 
 
 @router.post("/prompts/{publication_id}/responses")

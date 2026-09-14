@@ -236,7 +236,8 @@ async def _load_scaffold_workspace_context(
     blueprint_id = submission.blueprint_version_id if submission else None
 
     if blueprint_id is None:
-        blueprint_id = task.current_blueprint_version_id
+        from app.services.research_task_service import entry_blueprint_version
+        blueprint_id = entry_blueprint_version(task, user_id)
 
     if blueprint_id is None:
         return summarize_project_workspace(workspace), None, None, []
@@ -453,6 +454,7 @@ async def get_recent_messages(
         {
             "role": msg.role.value,
             "text": msg.text,
+            "lesson": msg.analysis.get("lesson") if isinstance(msg.analysis, dict) else None,
             "scaffoldContext": (
                 msg.analysis.get("scaffoldContext")
                 if isinstance(msg.analysis, dict)
@@ -742,6 +744,16 @@ async def chat(
         # ========== 1. 获取认证用户 ==========
         user = current_user
         user_id = user.id
+        from app.services.classroom_service import lesson_evidence_context
+        lesson_context = lesson_evidence_context.get()
+        if lesson_context:
+            from app.models.sql.lesson import LessonPlan
+            plan = await db.get(LessonPlan, UUID(lesson_context["lesson_id"]))
+            task_snapshot = plan.configuration["tasks"][user.experiment_group]
+            task = await get_visible_task(db, user, UUID(task_snapshot["id"]), require_active=True)
+            if not task_snapshot["ai_enabled"] or not task.ai_enabled:
+                raise HTTPException(403, "老师没有开放本课 AI")
+            request = request.model_copy(update={"isResearchMode": True, "taskPrompt": task_snapshot["ai_prompt"] or task_snapshot["instructions"] or ""})
 
         logger.info(f"User identified: {user.email} (id={user_id})")
 
@@ -812,7 +824,8 @@ async def chat(
             role=MessageRole.USER,
             text=request.message,
             timestamp=datetime.now(timezone.utc),
-            analysis={"scaffoldContext": scaffold_metadata} if scaffold_metadata else None,
+            analysis={**({"scaffoldContext": scaffold_metadata} if scaffold_metadata else {}),
+                      **({"lesson": lesson_context} if lesson_context else {})} or None,
         )
         db.add(user_message)
         await db.flush()
@@ -843,6 +856,9 @@ async def chat(
             user_id,
             limit=80 if scaffold_context else 20,
         )
+        if lesson_context:
+            raw_recent_messages = [message for message in raw_recent_messages
+                if (message.get("lesson") or {}).get("lesson_id") == lesson_context["lesson_id"]]
         agent_turn = (
             learning_agent_harness.prepare_turn(
                 scaffold_context,
@@ -1026,7 +1042,9 @@ state 含 snake、direction、food、score、game_over，可选 interval（秒�
 
         # 注入跨会话上下文（让 AI 能自然引用上次讨论内容）
         # 项目智能体使用任务作用域记忆；普通自由对话才允许引用跨会话主题。
-        cross_session_ctx = None if scaffold_context else await get_cross_session_context(db, user_id)
+        cross_session_ctx = None if scaffold_context or lesson_context else await get_cross_session_context(db, user_id)
+        if lesson_context:
+            user_message.analysis = {**(user_message.analysis or {}), "lesson": lesson_context}
         # 两组都先落下本轮元数据并释放连接，再等待模型；PDT 的画像 refresh
         # 同样会开启读事务，不能占着连接再排队申请课堂状态检查的连接。
         await db.commit()
@@ -1119,6 +1137,9 @@ state 含 snake、direction、food、score、game_over，可选 interval（秒�
 
         # ========== 7. 保存 AI 回复 ==========
         assistant_analysis = analysis.model_dump()
+        assistant_analysis["analysis_source"] = {"role": "user", "message_id": str(user_message.id)}
+        if lesson_context:
+            assistant_analysis["lesson"] = lesson_context
         if request.isResearchMode:
             assistant_analysis["textbookSources"] = list(textbook_sources)
         if scaffold_metadata:

@@ -73,6 +73,16 @@ logger = logging.getLogger(__name__)
 _UNSET: Any = object()
 
 
+def entry_blueprint_version(task: ResearchTask, user_id: uuid.UUID) -> Optional[uuid.UUID]:
+    """New evidence uses the published lesson version; existing submissions still win."""
+    from app.services.classroom_service import lesson_evidence_context
+    context = lesson_evidence_context.get()
+    if context and context.get("task_id") == str(task.id) and context.get("user_id") == str(user_id):
+        value = context.get("blueprint_version_id")
+        return uuid.UUID(value) if value else None
+    return task.current_blueprint_version_id
+
+
 def parse_task_uuid(task_id: str) -> uuid.UUID:
     """把路径参数解析成 UUID，格式非法返回 400。
 
@@ -107,6 +117,8 @@ async def get_visible_task(
     - 任务可见但不是 ACTIVE 且 ``require_active`` → **409 TASK_NOT_ACTIVE**，
       前端据此提示「任务已归档」，而不是误导成「任务不存在」。
     """
+    from app.services.lesson_service import check_lesson_task
+    await check_lesson_task(db, user, task_id)
     task = await db.scalar(
         select(ResearchTask).where(
             ResearchTask.id == task_id,
@@ -171,7 +183,7 @@ async def upsert_submission(
         "task_id": task.id,
         "user_id": user_id,
         # 冻结点：第一次产生记录时就绑定教师当前版本。
-        "blueprint_version_id": task.current_blueprint_version_id,
+        "blueprint_version_id": entry_blueprint_version(task, user_id),
         "code_submitted": "" if code_submitted is _UNSET else (code_submitted or ""),
         "is_completed": False if is_completed is _UNSET else bool(is_completed),
     }

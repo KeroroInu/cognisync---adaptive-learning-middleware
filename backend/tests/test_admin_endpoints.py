@@ -221,7 +221,7 @@ async def test_analytics_overview(admin_client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_experiment_group_assignment_and_task_isolation(
-    admin_client: AsyncClient, client: AsyncClient
+    admin_client: AsyncClient, client: AsyncClient, test_db,
 ):
     """管理员分组后，学生只能看到并提交所在实验组的任务。"""
     registration = await client.post(
@@ -268,6 +268,8 @@ async def test_experiment_group_assignment_and_task_isolation(
     ai_task_id = await create_task("常规 AI 协作任务", "ai_pbl")
     assert (await admin_client.post(f"/api/admin/research/tasks/{pdt_task_id}/activate")).status_code == 200
     assert (await admin_client.post(f"/api/admin/research/tasks/{ai_task_id}/activate")).status_code == 200
+    from conftest import publish_test_lesson
+    await publish_test_lesson(test_db, user_id, pdt_task_id)
 
     active = await client.get("/api/research/active-task", headers=auth)
     assert active.status_code == 200

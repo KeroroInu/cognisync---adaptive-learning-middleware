@@ -474,6 +474,13 @@ async def record_stage_event(
         (event, created)。``created=False`` 表示这是一次重放，调用方不应再追加
         产物关联，也不应把它当作新的关键时刻。
     """
+    from app.services.classroom_service import lesson_evidence_context
+    lesson = lesson_evidence_context.get()
+    event_detail = dict(detail or {})
+    # The client cannot assign a classroom or carry an old lesson into a new event.
+    event_detail.pop("lesson", None)
+    if lesson:
+        event_detail["lesson"] = dict(lesson)
     stmt = (
         pg_insert(StageEvent)
         .values(
@@ -485,7 +492,7 @@ async def record_stage_event(
             stage=stage,
             event_type=event_type,
             blueprint_version_id=blueprint_version_id,
-            detail=detail or {},
+            detail=event_detail,
         )
         .on_conflict_do_nothing(constraint="uq_stage_event_request")
         .returning(StageEvent.id)
