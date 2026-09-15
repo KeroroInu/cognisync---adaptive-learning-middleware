@@ -1,0 +1,40 @@
+/* Keep the form in the first viewport; decoration never pushes controls down. */
+.auth-shell.auth-shell-login { min-height:100dvh; padding:16px; }
+.auth-shell-login .login-stage {
+  min-height:0; height:calc(100dvh - 32px);
+  grid-template-columns:minmax(340px, .9fr) minmax(0, 1.1fr);
+  box-shadow:5px 6px 0 #1a1b17;
+}
+.auth-shell-login .login-panel { min-height:0; max-width:none; overflow:auto; padding:clamp(20px,3vw,42px); }
+.auth-shell-login .login-brandline { margin-bottom:20px; flex-shrink:0; font-size:11px; }
+.auth-shell-login .login-header { margin-bottom:18px; }
+.auth-shell-login .login-kicker { display:none; }
+.auth-shell-login .login-header .auth-title { font-size:clamp(30px,3.4vw,48px); line-height:1.08; }
+.auth-shell-login .login-header .auth-copy { margin-top:10px; font-size:14px; line-height:1.6; }
+.auth-shell-login .login-card { width:100%; padding:20px; flex-shrink:0; }
+.auth-shell-login .login-card form { display:flex; flex-direction:column; gap:14px; }
+.auth-shell-login .login-card form > * { margin-top:0; margin-bottom:0; }
+.auth-shell-login .login-card form.space-y-6 > :not([hidden]) { margin:0; }
+.auth-shell-login .login-card input { min-height:44px; height:44px; font-size:16px; }
+.auth-shell-login .login-card label { font-size:14px; }
+.auth-shell-login .login-submit { min-height:44px; }
+.auth-shell-login .auth-footer { font-size:13px; line-height:1.5; }
+.auth-shell-login .login-footnote { margin-top:14px; font-size:10px; }
+.auth-shell-login .login-visual { position:relative; min-height:0; padding:20px; }
+.auth-shell-login .retro-terminal-scene { position:absolute; width:640px; transform:scale(var(--terminal-scene-scale,.6)); transform-origin:center; }
+.auth-shell-login .terminal-scene-label { font-size:10px; }
+@media (max-width:760px) {
+  .auth-shell.auth-shell-login { padding:12px; }
+  .auth-shell-login .login-stage { height:calc(100dvh - 24px); grid-template-columns:1fr; max-width:480px; }
+  .auth-shell-login .login-visual { display:none; }
+  .auth-shell-login .login-panel { padding:24px; }
+}
+@media (max-height:650px) {
+  .auth-shell-login .login-panel { padding:18px 24px; }
+  .auth-shell-login .login-brandline { margin-bottom:12px; }
+  .auth-shell-login .login-header { margin-bottom:12px; }
+  .auth-shell-login .login-header .auth-title { font-size:30px; }
+  .auth-shell-login .login-card { padding:16px; }
+  .auth-shell-login .login-card form { gap:10px; }
+  .auth-shell-login .login-footnote { display:none; }
+}

@@ -1,10 +1,10 @@
-.classroom-register { min-height:100dvh; display:flex; align-items:center; justify-content:center; padding:28px 18px; background:#f3f3eb; color:#242b1d; }
-.classroom-register > section { width:min(100%,430px); padding:32px; border:1px solid #d0d4c5; border-radius:20px; background:#fffef8; box-shadow:0 10px 35px #2932160d; }
-.classroom-register header { margin-bottom:26px; }
+.classroom-register { min-height:100dvh; display:flex; align-items:center; justify-content:center; padding:16px; background:#f3f3eb; color:#242b1d; }
+.classroom-register > section { width:min(100%,460px); padding:20px 24px; border:1px solid #d0d4c5; border-radius:20px; background:#fffef8; box-shadow:0 10px 35px #2932160d; }
+.classroom-register header { margin-bottom:16px; }
 .classroom-register-mark { display:inline-flex; align-items:center; justify-content:center; width:48px; height:48px; border-radius:15px; background:#e7f7b9; color:#4e6829; }
-.classroom-register header p { font-size:13px; color:#70805a; margin:18px 0 7px; }
+.classroom-register header p { font-size:13px; color:#70805a; margin:10px 0 5px; }
 .classroom-register h1 { font-size:27px; font-weight:650; margin:0; }
-.classroom-register form { display:flex; flex-direction:column; gap:18px; }
+.classroom-register form { display:flex; flex-direction:column; gap:12px; }
 .classroom-register input:not([type=radio]) { height:46px; font-size:16px; }
 .classroom-register-password { position:relative; }
 .classroom-register-password input { padding-right:48px; }
@@ -23,3 +23,11 @@
 .classroom-register :focus-visible { outline:3px solid #74963f; outline-offset:2px; }
 .classroom-register [role=alert] { margin:0; color:#a03d2b; font-size:14px; }
 @media(max-width:440px) { .classroom-register > section { padding:24px; } .classroom-register-gender label { padding:10px 8px; } }
+@media(max-height:700px) {
+  .classroom-register > section { padding:16px 22px; }
+  .classroom-register header { margin-bottom:12px; }
+  .classroom-register-mark { display:none; }
+  .classroom-register header p { margin-top:0; }
+  .classroom-register form { gap:10px; }
+  .classroom-register input:not([type=radio]) { height:40px; }
+}

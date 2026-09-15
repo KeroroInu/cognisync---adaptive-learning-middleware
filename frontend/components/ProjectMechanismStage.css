@@ -1,8 +1,8 @@
 .project-mechanism-stage {
   --mechanism-line: color-mix(in srgb, var(--line-strong) 88%, #161713);
   min-width: 0;
-  height: calc(100dvh - 116px);
-  min-height: 540px;
+  height: 100%;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -12,7 +12,7 @@
 }
 
 .project-mechanism-stage.is-empty {
-  min-height: 560px;
+  min-height: 0;
   align-items: center;
   justify-content: center;
   text-align: center;
@@ -104,7 +104,7 @@
 .mechanism-card-list button.is-active { border-color: #161713; background: color-mix(in srgb, var(--brand-cyan) 42%, var(--surface-strong)); box-shadow: 3px 3px 0 #161713; }
 .mechanism-card-list button.is-complete i { color: #6f8432; }
 
-.mechanism-canvas { min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.mechanism-canvas { position:relative; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 .mechanism-canvas-toolbar {
   min-height: 56px;
   flex: none;
@@ -276,7 +276,8 @@
   left: 50%;
   top: 46%;
   z-index: 1;
-  width: 330px;
+  width: min(330px, 90%);
+  pointer-events: none;
   display: grid;
   justify-items: center;
   gap: 8px;
@@ -288,6 +289,11 @@
 .mechanism-board-empty span { font-size: .68rem; line-height: 1.5; }
 
 .mechanism-toolbox { display: flex; flex-direction: column; gap: 12px; }
+.mechanism-toolbox-content { display:flex; flex-direction:column; gap:12px; }
+.mechanism-toolbox-content > * { flex-shrink:0; }
+.mechanism-card-context { margin-top:8px; font-size:13px; color:var(--text-secondary); }
+.mechanism-card-context summary { cursor:pointer; }
+.mechanism-card-context summary:focus-visible { outline:2px solid #789944; outline-offset:3px; }
 .mechanism-card-brief,
 .mechanism-toolbox-section,
 .mechanism-selection { padding-bottom: 12px; border-bottom: 1px solid var(--line); }
@@ -368,4 +374,20 @@
 
 @media (prefers-reduced-motion: reduce) {
   .project-mechanism-stage * { transition: none !important; }
+}
+
+@media (min-width:981px) {
+  .project-mechanism-stage { height:100%; min-height:0; overflow:hidden; padding:12px; gap:10px; }
+  .mechanism-stage-heading { align-items:center; }
+  .mechanism-stage-heading h3 { margin:0 0 4px; font-size:20px; }
+  .mechanism-workspace { grid-template-columns:170px minmax(0,1fr) 240px; }
+  .mechanism-card-rail { grid-column:auto; overflow:auto; }
+  .mechanism-card-rail, .mechanism-toolbox { padding:10px; }
+  .mechanism-toolbox { display:flex; flex-direction:column; overflow:hidden; }
+  .mechanism-toolbox-content { flex:1; min-height:0; overflow:auto; }
+  .mechanism-confirm { flex-shrink:0; margin-top:10px; min-height:40px; }
+  .mechanism-card-list { grid-template-columns:1fr; overflow:visible; }
+  .mechanism-canvas { min-height:0; }
+  .mechanism-canvas-toolbar { flex-wrap:wrap; gap:6px; min-height:44px; padding:6px 8px; }
+  .mechanism-stage-footer { padding-top:6px; }
 }

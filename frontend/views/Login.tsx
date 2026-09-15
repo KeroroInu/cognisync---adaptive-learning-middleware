@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Hash, AlertCircle } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Input } from '../components/Input';
@@ -7,6 +7,7 @@ import { RetroLearningTerminal } from '../components/RetroLearningTerminal';
 import { login } from '../services/api';
 import { translations } from '../utils/translations';
 import type { Language } from '../types';
+import './Login.css';
 
 export interface LoginProps {
   language: Language;
@@ -24,6 +25,20 @@ export const Login: React.FC<LoginProps> = ({
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const visualRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const visual = visualRef.current;
+    if (!visual) return;
+    const fit = () => visual.style.setProperty('--terminal-scene-scale', String(Math.min(
+      Math.max(0, visual.clientWidth - 40) / 640,
+      Math.max(0, visual.clientHeight - 40) / 740,
+      1,
+    )));
+    fit();
+    const observer = new ResizeObserver(fit);
+    observer.observe(visual);
+    return () => observer.disconnect();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -135,7 +150,7 @@ export const Login: React.FC<LoginProps> = ({
           <p className="login-footnote">OBSERVE · DECONSTRUCT · REBUILD · VERIFY</p>
         </section>
 
-        <section className="login-visual animate-fade-in stagger-2">
+        <section ref={visualRef} className="login-visual">
           <RetroLearningTerminal language={language} />
         </section>
       </div>

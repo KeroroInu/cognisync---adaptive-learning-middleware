@@ -338,6 +338,7 @@ export const ProjectFunctionStage: React.FC<Props> = ({
             </article>
           </div>
 
+          <div className="function-results-panel">
           <section className="saved-function-section">
             <div className="function-section-label">
               <span>03</span>
@@ -399,6 +400,7 @@ export const ProjectFunctionStage: React.FC<Props> = ({
                 : 'Hints only tell you how many are missing, never the names.'}
             </p>
           </section>
+          </div>
         </>
       )}
 

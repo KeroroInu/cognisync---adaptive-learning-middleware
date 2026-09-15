@@ -802,23 +802,26 @@ export const ProjectMechanismStage: React.FC<Props> = ({
                   );
                 })}
 
-                {diagram.flowNodes.length === 0 ? (
-                  <div className="mechanism-board-empty">
-                    <MousePointer2 size={28} />
-                    <strong>{isZh ? '从右侧放入第一个流程元素' : 'Add the first flow element'}</strong>
-                    <span>{isZh ? '建议从“开始”或“输入”出发，再添加处理和判断。' : 'Start with Start or Input, then add process and decisions.'}</span>
-                  </div>
-                ) : null}
               </div>
             </div>
           </div>
+          {diagram.flowNodes.length === 0 ? (
+            <div className="mechanism-board-empty">
+              <MousePointer2 size={28} />
+              <strong>{isZh ? '从右侧放入第一个流程元素' : 'Add the first flow element'}</strong>
+              <span>{isZh ? '从“开始”出发，再添加处理和判断。' : 'Start with Start, then add process and decisions.'}</span>
+            </div>
+          ) : null}
         </section>
 
         <aside className="mechanism-toolbox">
+          <div className="mechanism-toolbox-content">
           {activeCard ? (
             <section className="mechanism-card-brief">
               <span>{isZh ? '当前功能' : 'CURRENT FUNCTION'}</span>
               <h4>{activeCard.responsibility}</h4>
+              <details className="mechanism-card-context">
+                <summary>{isZh ? '查看观察与实现描述' : 'View observation and description'}</summary>
               <div className="mechanism-card-source">
                 <small>{isZh ? '引用观察' : 'OBSERVATION'}</small>
                 <p>{activeCard.observationText}</p>
@@ -827,6 +830,7 @@ export const ProjectMechanismStage: React.FC<Props> = ({
                 <small>{isZh ? '我的实现描述' : 'MY DESCRIPTION'}</small>
                 <p>{activeCard.implementation || (isZh ? '这张旧卡还没有实现描述，可以返回功能卡补充。' : 'This older card has no implementation sentence yet.')}</p>
               </div>
+              </details>
             </section>
           ) : null}
 
@@ -886,6 +890,7 @@ export const ProjectMechanismStage: React.FC<Props> = ({
             </div>
           ) : null}
 
+          </div>
           <button
             type="button"
             className="mechanism-confirm"

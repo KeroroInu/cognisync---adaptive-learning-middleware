@@ -216,6 +216,7 @@ export const SnakeBuildPreview: React.FC<SnakeBuildPreviewProps> = React.memo(({
   const creativeRuntimeRef = useRef(creativeFunctions);
   const creativeErrorHandlerRef = useRef(onCreativeRuntimeErrors);
   const runtimeOutputHandlerRef = useRef(onRuntimeOutput);
+  const lastTickStartedRef = useRef(0);
   const has = useCallback((id: string) => capabilities.has(id), [capabilities]);
   const tickMs = Math.round(Math.min(2, Math.max(0.08, game.interval ?? 0.36)) * 1000);
 
@@ -252,6 +253,7 @@ export const SnakeBuildPreview: React.FC<SnakeBuildPreviewProps> = React.memo(({
 
   const reset = useCallback(async () => {
     setRunning(false);
+    lastTickStartedRef.current = 0;
     inputRef.current = null;
     setRuntimeMessage('');
     if (!has('initial-state')) {
@@ -295,8 +297,11 @@ export const SnakeBuildPreview: React.FC<SnakeBuildPreviewProps> = React.memo(({
     if (!running || game.game_over || !has('movement')) return undefined;
     let cancelled = false;
     const timer = window.setTimeout(async () => {
+      lastTickStartedRef.current = performance.now();
       try {
         const userInput = inputRef.current;
+        // Consume this frame's input now; preserve keys pressed while Python is busy.
+        inputRef.current = null;
         // 计时器由平台每帧统一减一，保证所有创意卡看到同一条时间线。
         let before = advanceCreativeTimers(gameRef.current);
         if (userInput) before = await runCreativeHook('key_input', before, { input: userInput });
@@ -304,7 +309,6 @@ export const SnakeBuildPreview: React.FC<SnakeBuildPreviewProps> = React.memo(({
         const scoreBefore = before.score;
         let next = await stepPythonGame(codeByNode, before, userInput, lines => runtimeOutputHandlerRef.current('游戏', lines));
         const baseScoreAfter = next.score;
-        inputRef.current = null;
         next = await runCreativeHook('after_move', next, { scoreBefore, scoreAfter: baseScoreAfter });
         if (baseScoreAfter > scoreBefore) {
           next = await runCreativeHook('food_eaten', next, { scoreBefore, scoreAfter: baseScoreAfter });
@@ -319,7 +323,9 @@ export const SnakeBuildPreview: React.FC<SnakeBuildPreviewProps> = React.memo(({
         setRunning(false);
         setRuntimeMessage(formatPythonRunnerError(error, language));
       }
-    }, tickMs);
+    }, lastTickStartedRef.current
+      ? Math.max(0, tickMs - (performance.now() - lastTickStartedRef.current))
+      : tickMs);
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
@@ -377,17 +383,19 @@ export const SnakeBuildPreview: React.FC<SnakeBuildPreviewProps> = React.memo(({
 
   return (
     <section className="construction-preview">
-      <div className="construction-scorebar">
-        <div><small>{isZh ? '得分' : 'SCORE'}</small><strong>{String(game.score).padStart(3, '0')}</strong></div>
-        <div><small>{isZh ? '间隔' : 'TICK'}</small><strong>{tickMs}<i>ms</i></strong></div>
-        <div><small>{isZh ? '方向' : 'DIRECTION'}</small><strong>{game.direction.toUpperCase()}</strong></div>
-      </div>
       {demonstration && (
         <div className="construction-behavior-feedback" key={`${demonstration.nodeId}-${demonstration.run}`}>
           <CheckCircle2 size={14} /><span>{isZh ? '刚刚通过测试并接入同一运行器' : 'Just tested and connected to the shared runner'}</span><strong>{demonstration.label}</strong>
         </div>
       )}
       {runtimeMessage && <div className="construction-runtime-error" role="alert"><CircleAlert size={14} />{runtimeMessage}</div>}
+      <div className="construction-viewport">
+      <div className="construction-scene">
+      <div className="construction-scorebar">
+        <div><small>{isZh ? '得分' : 'SCORE'}</small><strong>{String(game.score).padStart(3, '0')}</strong></div>
+        <div><small>{isZh ? '间隔' : 'TICK'}</small><strong>{tickMs}<i>ms</i></strong></div>
+        <div><small>{isZh ? '方向' : 'DIRECTION'}</small><strong>{game.direction.toUpperCase()}</strong></div>
+      </div>
       <div
         ref={boardRef}
         className="construction-board"
@@ -421,6 +429,8 @@ export const SnakeBuildPreview: React.FC<SnakeBuildPreviewProps> = React.memo(({
         })}
         {game.game_over && <div className="construction-over"><strong>{isZh ? '你的碰撞判断结束了游戏' : 'Your collision check ended the game'}</strong><button type="button" onClick={() => void reset()}>{isZh ? '重新运行' : 'Reset'}</button></div>}
       </div>
+      </div>
+      </div>
       <div className="construction-controls">
         <div className="construction-dpad">
           <button type="button" className="is-up" onClick={() => changeDirection('up')} disabled={!has('direction-input')}><ArrowUp size={17} /></button>
@@ -428,7 +438,7 @@ export const SnakeBuildPreview: React.FC<SnakeBuildPreviewProps> = React.memo(({
           <button type="button" className="is-right" onClick={() => changeDirection('right')} disabled={!has('direction-input')}><ArrowRight size={17} /></button>
           <button type="button" className="is-down" onClick={() => changeDirection('down')} disabled={!has('direction-input')}><ArrowDown size={17} /></button>
         </div>
-        <button type="button" className="construction-run" onClick={() => setRunning(value => !value)} disabled={!has('movement') || game.game_over}>
+        <button type="button" className="construction-run" onClick={() => { lastTickStartedRef.current = 0; setRunning(value => !value); }} disabled={!has('movement') || game.game_over}>
           <Play size={16} />{running ? (isZh ? '暂停' : 'Pause') : (isZh ? '运行当前版本' : 'Run current build')}
         </button>
         <button type="button" className="construction-reset" onClick={() => void reset()} disabled={!has('initial-state')}><RotateCcw size={16} />{isZh ? '执行重置函数' : 'Run reset function'}</button>
@@ -502,9 +512,6 @@ export const ProjectBuildStage: React.FC<Props> = ({
   const currentProgress = resolveProgress(progress, selectedNode.id);
   const currentCode = currentProgress?.code ?? selectedNode.starterCode;
   const completedCount = SNAKE_BUILD_FUNCTIONS.filter(node => resolveProgress(progress, node.id)?.verified).length;
-  const capabilities = useMemo(() => new Set(
-    SNAKE_BUILD_FUNCTIONS.filter(node => resolveProgress(progress, node.id)?.verified).map(node => node.id),
-  ), [progress]);
   const verifiedCodeSnapshot = JSON.stringify(SNAKE_BUILD_FUNCTIONS.flatMap(node => {
     const item = resolveProgress(progress, node.id);
     return item?.verified ? [[node.id, item.code]] : [];
@@ -515,6 +522,9 @@ export const ProjectBuildStage: React.FC<Props> = ({
     () => Object.fromEntries(JSON.parse(verifiedCodeSnapshot) as [string, string][]),
     [verifiedCodeSnapshot],
   );
+  // Only installed code changes capabilities. Draft keystrokes must not replace
+  // the Set: the preview's reset effect depends on its identity.
+  const capabilities = useMemo(() => new Set(Object.keys(codeByNode)), [codeByNode]);
   const creativeRuntimeSnapshot = JSON.stringify(
     creativeFunctions.filter(card => card.enabled && card.verified).slice(0, MAX_CREATIVE_FUNCTIONS),
   );
