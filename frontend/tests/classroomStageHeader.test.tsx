@@ -9,7 +9,7 @@ describe('两组阶段导航', () => {
   function header(experimentGroup: 'pdt' | 'ai_pbl') {
     return renderToStaticMarkup(<ProjectFactoryHeader language="zh" experimentGroup={experimentGroup}
       activeStage="build" onStageChange={noop} onOpenProject={noop} onOpenAssistant={noop}
-      onOpenClassTask={noop} onLogout={noop} saveLabel="已保存" />);
+      onOpenClassTask={noop} onReturnToPreparation={noop} saveLabel="已保存" />);
   }
   it('常规 AI 不展示解构、系统关系或路径门槛', () => {
     const html = header('ai_pbl');

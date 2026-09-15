@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { FloatingCompanion } from '../components/FloatingCompanion';
-import { Send, CheckCircle, FlaskConical, Loader, LogOut, Save, Play, Terminal, Trash2, X } from 'lucide-react';
+import { Send, CheckCircle, FlaskConical, Loader, ArrowLeft, Save, Play, Terminal, Trash2, X } from 'lucide-react';
 import type { ChatMessage, Language, User, UserProfile, ResearchTask } from '../types';
 import {
   sendChatMessage,
@@ -73,7 +73,7 @@ interface TerminalLine {
 
 interface Props {
   onUpdateProfile: (profile: UserProfile) => void;
-  onLogout: () => void;
+  onReturnToPreparation: () => void;
   language: Language;
   theme: 'light' | 'dark';
   userId: string;
@@ -210,7 +210,7 @@ const restoreProjectStage = (
 
 export const Research: React.FC<Props> = ({
   onUpdateProfile,
-  onLogout,
+  onReturnToPreparation,
   language,
   theme,
   userId,
@@ -1135,9 +1135,9 @@ export const Research: React.FC<Props> = ({
             ? '教师发布任务后，将会在此处显示。'
             : 'Tasks will appear here once published by your instructor.'}
         </p>
-        <button type="button" className="project-empty-logout" onClick={onLogout}>
-          <LogOut size={17} />
-          {isZh ? '退出登录' : 'Sign out'}
+        <button type="button" className="project-empty-return" onClick={onReturnToPreparation}>
+          <ArrowLeft size={17} />
+          {isZh ? '返回准备区' : 'Back to preparation'}
         </button>
       </div>
     );
@@ -1159,7 +1159,7 @@ export const Research: React.FC<Props> = ({
         onOpenProject={() => setDemoOpen(true)}
         onOpenAssistant={() => { if (experimentGroup === 'pdt') setAssistantOpen(true); else setNormalChatOpen(value => !value); }}
         onOpenClassTask={() => setClassTaskOpen(true)}
-        onLogout={onLogout}
+        onReturnToPreparation={onReturnToPreparation}
         saveLabel={factorySaveLabel}
       />
 

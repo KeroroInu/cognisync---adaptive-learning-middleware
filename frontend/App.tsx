@@ -285,18 +285,16 @@ function App() {
 
       case 'research':
         return (
-          <><button type="button" className="lesson-return" onClick={() => setCurrentView('preparation')}>← 准备区</button>
           <Research
             key={state.user.id}
             onUpdateProfile={updateProfile}
-            onLogout={handleLogout}
+            onReturnToPreparation={() => setCurrentView('preparation')}
             language={state.language}
             theme={theme}
             userId={state.user.id}
             studentId={state.user?.student_id}
             experimentGroup={state.user.experimentGroup ?? 'unassigned'}
           />
-          </>
         );
 
       case 'scales':

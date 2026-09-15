@@ -11,7 +11,9 @@ describe('student workspace labels', () => {
   it('distinguishes the example from running student code and names icon buttons', () => {
     const html = renderToStaticMarkup(<ProjectFactoryHeader language="zh" experimentGroup="pdt"
       activeStage="observe" onStageChange={noop} onOpenProject={noop} onOpenAssistant={noop}
-      onOpenClassTask={noop} onLogout={noop} saveLabel="已保存" />);
+      onOpenClassTask={noop} onReturnToPreparation={noop} saveLabel="已保存" />);
+    expect(html).toContain('aria-label="返回准备区"');
+    expect(html).not.toContain('aria-label="退出登录"');
     expect(html).toContain('打开示例');
     expect(html).not.toContain('运行完整项目');
     expect(html).toContain('aria-label="打开示例游戏"');

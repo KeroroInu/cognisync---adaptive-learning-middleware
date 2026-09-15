@@ -103,7 +103,7 @@
 .project-demo-button,
 .project-hint-button,
 .project-class-task-button,
-.project-logout-button {
+.project-return-button {
   min-height: 42px;
   display: inline-flex;
   align-items: center;
@@ -132,8 +132,7 @@
 .project-hint-button:hover { box-shadow: 2px 3px 0 #161713; }
 .project-hint-button span { white-space: nowrap; }
 
-.project-class-task-button,
-.project-logout-button {
+.project-class-task-button {
   width: 42px;
   padding: 0;
   background: var(--surface-strong);
@@ -141,9 +140,10 @@
 }
 
 .project-class-task-button:hover { background: var(--brand-cyan); }
-.project-logout-button:hover { background: #fee2e2; color: #991b1b; }
+.project-return-button { background:var(--surface-muted); color:var(--text-primary); }
+.project-return-button:hover { background:var(--surface-strong); }
 
-.project-empty-logout {
+.project-empty-return {
   min-height: 42px;
   display: inline-flex;
   align-items: center;
@@ -158,7 +158,7 @@
   font-weight: 850;
 }
 
-.project-empty-logout:hover { background: #fee2e2; color: #991b1b; }
+.project-empty-return:hover { background: var(--surface-strong); }
 
 .project-observation-stage,
 .project-stage-preview,
@@ -169,7 +169,8 @@
 
 .project-observation-stage {
   display: grid;
-  grid-template-columns: minmax(270px, .7fr) minmax(0, 1.3fr);
+  grid-template-columns: minmax(0, 1.08fr) minmax(0, 1fr);
+  align-items: start;
   gap: 12px;
   overflow: auto;
   padding: 1px 5px 8px 1px;
@@ -177,6 +178,7 @@
 
 .project-brief-card,
 .observation-capture-card,
+.observation-summary-card,
 .project-stage-preview {
   position: relative;
   overflow: hidden;
@@ -187,10 +189,12 @@
 }
 
 .project-brief-card {
-  min-height: 360px;
-  display: flex;
-  flex-direction: column;
-  padding: clamp(18px, 2vw, 28px);
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0,1fr) auto;
+  align-items: center;
+  gap: 8px 16px;
+  padding: 14px 16px;
   background: var(--surface-strong);
 }
 
@@ -220,51 +224,58 @@
 .project-brief-kicker > span:last-child { display: inline-flex; align-items: center; gap: 5px; }
 .project-brief-kicker > span:last-child.is-complete { color: #657c22; }
 
-.project-brief-copy { margin-top: 24px; }
+.project-brief-card .project-brief-kicker { grid-column:1 / -1; }
+.project-brief-copy { margin-top: 0; }
 .project-brief-copy > p { margin: 0 0 9px; color: #6c812e; font-size: 0.72rem; font-weight: 900; }
-.project-brief-copy h3 { max-width: 620px; margin: 0; font-family: inherit; font-size: clamp(24px, 2.2vw, 30px); font-weight: 700; line-height: 1.5; }
-.project-brief-copy > span { display: block; max-width: 620px; margin-top: 16px; color: var(--text-secondary); font-size: 16px; line-height: 1.75; }
+.project-brief-copy h3 { margin: 0; font-family: inherit; font-size: 18px; font-weight: 700; line-height: 1.4; }
+.project-brief-copy > span { display: block; margin-top: 4px; color: var(--text-secondary); font-size: 14px; line-height: 1.5; }
 
 .project-run-card {
-  width: min(100%, 480px);
-  min-height: 82px;
+  width: auto;
+  min-height: 44px;
   display: grid;
-  grid-template-columns: 52px minmax(0, 1fr) auto;
+  grid-template-columns: 24px minmax(0, 1fr);
   align-items: center;
-  gap: 13px;
-  margin-top: 28px;
+  gap: 8px;
+  margin-top: 0;
   padding: 10px 15px 10px 10px;
   border: 1.5px solid #161713;
   border-radius: 9px;
   background: var(--brand-cyan);
   color: #161713;
   text-align: left;
-  box-shadow: 5px 6px 0 #161713;
+  box-shadow: 2px 3px 0 #161713;
   transition: transform 150ms ease, box-shadow 150ms ease;
 }
 
-.project-run-card:hover { transform: translate(-2px, -2px); box-shadow: 7px 8px 0 #161713; }
-.project-run-icon { width: 52px; height: 52px; display: grid; place-items: center; border: 1.5px solid #161713; border-radius: 7px; background: rgba(255,255,255,.28); }
+.project-run-card:hover { transform: translateY(-1px); box-shadow: 2px 4px 0 #161713; }
+.project-run-card > svg { display:none; }
+.project-run-icon { width: 24px; height: 24px; display: grid; place-items: center; }
+.project-run-icon svg { width:20px; height:20px; }
 .project-run-card > span:nth-child(2) { min-width: 0; display: grid; }
 .project-run-card small { font-family: 'Google Sans Code', ui-monospace, monospace; font-size: 0.58rem; font-weight: 800; opacity: .66; }
-.project-run-card strong { font-size: 1rem; }
+.project-run-card strong { font-size: 15px; white-space:nowrap; }
 
-.project-observe-method { display: flex; align-items: flex-start; gap: 10px; margin-top: auto; padding-top: 32px; color: var(--text-secondary); }
-.project-observe-method svg { flex: 0 0 auto; color: #6c812e; }
-.project-observe-method p { display: grid; gap: 2px; margin: 0; }
-.project-observe-method strong { color: var(--text-primary); font-size: 0.68rem; }
-.project-observe-method span { font-size: 14px; line-height: 1.65; }
+.observation-work-column { min-width:0; display:grid; gap:10px; }
+.observation-summary-card { display:flex; flex-direction:column; min-height:0; height:100%; max-height:calc(100dvh - 96px); padding:16px; }
+.observation-summary-card > header { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.observation-summary-card h3 { display:flex; align-items:center; gap:8px; margin:0; font-size:20px; line-height:1.4; }
+.observation-empty-summary { flex:1; color:var(--text-secondary); font-size:15px; margin:24px 0; }
+.observation-summary-card .saved-observation-list { flex:1; min-height:0; overflow:auto; scrollbar-width:thin; padding:2px; }
+.observation-summary-card .saved-observation-list > div:last-child { grid-template-columns:1fr; }
+.observation-summary-card .saved-observation-list article { min-height:64px; padding-block:10px; }
+.observation-summary-card .observation-evidence-strip { flex-shrink:0; margin-top:14px; padding-top:14px; border-top:1px solid var(--line-strong); flex-wrap:wrap; }
 
 .observation-capture-card {
-  min-height: 535px;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   overflow-x: hidden;
-  overflow-y: auto;
+  overflow-y: visible;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
   scrollbar-width: thin;
-  padding: clamp(18px, 2vw, 26px);
+  padding: 16px;
   background:
     linear-gradient(140deg, color-mix(in srgb, var(--brand-cyan) 7%, transparent), transparent 42%),
     var(--surface-strong);
@@ -272,9 +283,9 @@
 
 .observation-capture-card > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
 .observation-capture-card header > div > span { color: var(--text-tertiary); }
-.observation-capture-card h3 { margin: 0; font-family: inherit; font-size: 22px; line-height: 1.4; }
+.observation-capture-card h3 { margin: 0; font-family: inherit; font-size: 20px; line-height: 1.4; }
 .observation-saved-count { flex-shrink: 0; padding-top: 5px; color: var(--text-secondary); font-size: 14px; line-height: 1.5; }
-.observation-capture-hint { margin: 12px 0 18px; color: var(--text-secondary); font-size: 15px; line-height: 1.6; }
+.observation-capture-hint { margin: 6px 0 12px; color: var(--text-secondary); font-size: 15px; line-height: 1.6; }
 
 .runtime-evidence-section,
 .observation-composer,
@@ -455,8 +466,8 @@
   .project-observation-stage { grid-template-columns: 1fr; overflow: visible; }
   .project-brief-card,
   .observation-capture-card { min-height: auto; }
-  .project-brief-card { padding-bottom: 30px; }
-  .project-observe-method { margin-top: 32px; }
+  .observation-summary-card { height:auto; max-height:none; min-height:220px; }
+  .observation-summary-card .saved-observation-list { overflow:visible; }
   .observation-evidence-strip { margin-top: 24px; }
   .project-preview-board { grid-template-columns: repeat(3, minmax(120px, 1fr)); }
 }
@@ -470,8 +481,9 @@
   .project-save-indicator { margin-right: auto; }
   .project-brief-card,
   .observation-capture-card { padding: 20px 16px; }
-  .project-brief-copy { margin-top: 22px; }
-  .project-brief-copy h3 { font-size: 26px; }
+  .project-brief-card { grid-template-columns:minmax(0,1fr); padding:14px; }
+  .project-run-card { justify-self:start; }
+  .project-brief-copy h3 { font-size:18px; }
   .saved-observation-list > div:last-child { grid-template-columns: 1fr; }
   .observation-evidence-strip { align-items: stretch; flex-direction: column; }
   .observation-evidence-strip button { width: 100%; }
@@ -490,7 +502,7 @@
 .saved-observation-actions button:hover { background: var(--surface-strong); }
 
 @media (min-width: 981px) and (max-width: 1180px) {
-  .project-observation-stage { grid-template-columns: minmax(260px, .7fr) minmax(0, 1.3fr); }
+  .project-observation-stage { grid-template-columns: minmax(0, 1.08fr) minmax(0, 1fr); }
   .saved-observation-list > div:last-child { grid-template-columns: 1fr; }
   .observation-evidence-strip { align-items: stretch; flex-direction: column; }
   .observation-evidence-strip button { align-self: flex-end; }

@@ -1,5 +1,4 @@
 .preparation { padding: 16px; min-height: 100dvh; background: #f7f6ed; color: #24271f; }
-.lesson-return { border: 0; background: transparent; color: #556332; padding: 6px 12px; cursor: pointer; }
 .preparation button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 14px; border: 1px solid #a7aa9d; border-radius: 9px; background: #fffef8; cursor: pointer; font: inherit; }
 .preparation button:disabled { opacity: .5; cursor: not-allowed; }
 .preparation button:focus-visible, .preparation textarea:focus-visible { outline: 3px solid #90a630; outline-offset: 3px; }

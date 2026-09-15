@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowRight,
+  ArrowLeft,
   Blocks,
   CircleDot,
   ClipboardList,
@@ -10,8 +11,6 @@ import {
   GitBranch,
   Lightbulb,
   ListChecks,
-  LogOut,
-  MousePointer2,
   PencilLine,
   Play,
   Radio,
@@ -38,7 +37,7 @@ interface FactoryHeaderProps {
   onOpenProject: () => void;
   onOpenAssistant: () => void;
   onOpenClassTask: () => void;
-  onLogout: () => void;
+  onReturnToPreparation: () => void;
   saveLabel: string;
 }
 
@@ -93,7 +92,7 @@ export const ProjectFactoryHeader: React.FC<FactoryHeaderProps> = ({
   onOpenProject,
   onOpenAssistant,
   onOpenClassTask,
-  onLogout,
+  onReturnToPreparation,
   saveLabel,
 }) => {
   const isZh = language === 'zh';
@@ -153,12 +152,12 @@ export const ProjectFactoryHeader: React.FC<FactoryHeaderProps> = ({
         </button>
         <button
           type="button"
-          className="project-logout-button"
-          onClick={onLogout}
-          title={isZh ? '退出登录' : 'Sign out'}
-          aria-label={isZh ? '退出登录' : 'Sign out'}
+          className="project-return-button"
+          onClick={onReturnToPreparation}
+          title={isZh ? '返回准备区，不会退出登录' : 'Back to preparation without signing out'}
+          aria-label={isZh ? '返回准备区' : 'Back to preparation'}
         >
-          <LogOut size={18} />
+          <ArrowLeft size={18} /><span>{isZh ? '返回' : 'Back'}</span>
         </button>
       </div>
     </header>
@@ -250,6 +249,7 @@ export const ProjectObservationStage: React.FC<ObservationStageProps> = ({
 
   return (
     <section className="project-observation-stage">
+      <div className="observation-work-column">
       <article className="project-brief-card">
         <div className="project-brief-kicker">
           <span>{isZh ? '贪吃蛇' : 'Snake'}</span>
@@ -263,7 +263,7 @@ export const ProjectObservationStage: React.FC<ObservationStageProps> = ({
           <h3>{isZh ? '先玩一局，找找变化。' : 'Play a round. Notice what changes.'}</h3>
           <span>
             {isZh
-              ? '试试转向、吃食物和重新开始。你发现了什么变化？'
+              ? '一次改变一个操作，看看转向、进食或重开后有什么变化。'
               : 'Try turning, eating food and restarting. What changes?'}
           </span>
         </div>
@@ -276,12 +276,6 @@ export const ProjectObservationStage: React.FC<ObservationStageProps> = ({
           <ArrowRight size={22} />
         </button>
 
-        <div className="project-observe-method">
-          <MousePointer2 size={17} />
-          <p>
-            <span>{isZh ? '一次改变一个操作，看看结果有什么不同。' : 'Change one action and compare the result.'}</span>
-          </p>
-        </div>
       </article>
 
       <article className="observation-capture-card">
@@ -289,7 +283,6 @@ export const ProjectObservationStage: React.FC<ObservationStageProps> = ({
           <div>
             <h3>{isZh ? '记下你的发现' : 'Your observations'}</h3>
           </div>
-          <span className="observation-saved-count" role="status">{isZh ? `已保存 ${cards.length} 条` : `${cards.length} saved`}</span>
         </header>
 
         <p className="observation-capture-hint">
@@ -357,11 +350,15 @@ export const ProjectObservationStage: React.FC<ObservationStageProps> = ({
           </div>
         </section>
 
-        {cards.length > 0 && (
+      </article>
+      </div>
+
+      <article className="observation-summary-card" aria-label={isZh ? '我的观察卡' : 'My observations'}>
+        <header><h3><ClipboardList size={18} />{isZh ? '我的观察卡' : 'My observations'}</h3>
+          <span className="observation-saved-count" role="status">{isZh ? `已保存 ${cards.length} 条` : `${cards.length} saved`}</span>
+        </header>
+        {cards.length > 0 ? (
           <section className="saved-observation-list">
-            <div className="runtime-evidence-heading">
-              <span><ClipboardList size={14} />{isZh ? '我的观察卡' : 'My observations'}</span>
-            </div>
             <div>
               {cards.map((card, index) => (
                 <article key={card.id}>
@@ -376,7 +373,7 @@ export const ProjectObservationStage: React.FC<ObservationStageProps> = ({
               ))}
             </div>
           </section>
-        )}
+        ) : <p className="observation-empty-summary">{isZh ? '保存后，你的发现会放在这里。' : 'Your saved observations will appear here.'}</p>}
 
         <div className="observation-evidence-strip">
           <div>
