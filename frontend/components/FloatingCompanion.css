@@ -1,8 +1,11 @@
 .floating-companion { position:fixed; z-index:70; width:68px; height:68px; padding:3px; border:0; border-radius:50%; background:transparent; cursor:grab; touch-action:none; user-select:none; -webkit-user-select:none; }
-.floating-companion .question-companion { width:62px; height:62px; box-sizing:border-box; pointer-events:none; transition:border-radius .18s, background .18s; }
+.companion-fluid { display:block; width:62px; height:62px; transform-origin:50% 50%; pointer-events:none; }
+.companion-fluid[data-moving] { will-change:transform; }
+.floating-companion .question-companion { width:62px; height:62px; box-sizing:border-box; pointer-events:none; animation:none; transition:border-radius .18s; }
+.companion-fluid .question-companion i, .companion-fluid .question-companion span { translate:var(--face-x, 0px) var(--face-y, 0px); }
 .floating-companion .question-companion span { bottom:16px; transition:width .18s, height .18s, background .18s; }
 .floating-companion:focus-visible { outline:3px solid #617d30; outline-offset:4px; }
-.floating-companion:hover .question-companion, .floating-companion:focus-visible .question-companion { background:#dcfa8b; border-radius:48% 52% 45% 55%; }
+.floating-companion:hover .question-companion, .floating-companion:focus-visible .question-companion { border-radius:48% 52% 45% 55%; }
 .floating-companion:hover .question-companion i { height:12px; }
 .floating-companion:hover .question-companion span, .floating-companion.is-open .question-companion span { width:17px; height:9px; background:#9abd494d; }
 .floating-companion.is-dragging { cursor:grabbing; }
@@ -12,4 +15,4 @@
 .companion-hint { position:absolute; bottom:calc(100% + 7px); left:50%; transform:translateX(-50%); padding:5px 9px; border:1px solid #d4ddbc; border-radius:10px; background:#fffef8; color:#485735; font:12px/1.4 system-ui,sans-serif; white-space:nowrap; pointer-events:none; opacity:0; transition:opacity .15s; }
 .floating-companion:hover .companion-hint, .floating-companion:focus-visible .companion-hint { opacity:1; }
 .floating-companion.is-dragging .companion-hint { opacity:0; }
-@media(prefers-reduced-motion:reduce) { .floating-companion *, .floating-companion *::before { animation:none !important; transition:none !important; } }
+@media(prefers-reduced-motion:reduce) { .floating-companion *, .floating-companion *::before { animation:none !important; transition:none !important; } .companion-fluid { transform:none !important; } .companion-fluid .question-companion i, .companion-fluid .question-companion span { translate:none; } }

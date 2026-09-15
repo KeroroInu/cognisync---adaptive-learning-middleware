@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Companion } from './Companion';
+import { useDropletMotion } from './useDropletMotion';
 import './FloatingCompanion.css';
 
 type Point = { x: number; y: number };
@@ -25,7 +26,8 @@ export function FloatingCompanion({ userId, open, busy = false, onActivate }: {
   const latestPosition = useRef(position);
   latestPosition.current = position;
   const [dragging, setDragging] = useState(false);
-  const gesture = useRef<{ id: number; start: Point; origin: Point; moved: boolean } | null>(null);
+  const fluid = useDropletMotion();
+  const gesture = useRef<{ id: number; start: Point; origin: Point; last: Point; time: number; moved: boolean } | null>(null);
   const suppressClick = useRef(false);
   const persist = (point: Point) => { try { localStorage.setItem(key, JSON.stringify(point)); } catch { /* no learning data here */ } };
   useEffect(() => { setPosition(readPosition(key)); }, [key]);
@@ -39,6 +41,7 @@ export function FloatingCompanion({ userId, open, busy = false, onActivate }: {
     if (!active || active.id !== event.pointerId) return;
     suppressClick.current = active.moved || cancelled;
     gesture.current = null; setDragging(false);
+    fluid.release();
     persist(latestPosition.current);
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
   }
@@ -49,7 +52,7 @@ export function FloatingCompanion({ userId, open, busy = false, onActivate }: {
     onPointerDown={event => {
       if (!event.isPrimary || event.button !== 0) return;
       suppressClick.current = false;
-      gesture.current = { id: event.pointerId, start: { x: event.clientX, y: event.clientY }, origin: position, moved: false };
+      gesture.current = { id: event.pointerId, start: { x: event.clientX, y: event.clientY }, origin: position, last: position, time: performance.now(), moved: false };
       event.currentTarget.setPointerCapture(event.pointerId);
     }}
     onPointerMove={event => {
@@ -59,6 +62,9 @@ export function FloatingCompanion({ userId, open, busy = false, onActivate }: {
       if (!active.moved && Math.hypot(dx, dy) < 6) return;
       active.moved = true; setDragging(true);
       const next = clamp({ x: active.origin.x + dx, y: active.origin.y + dy });
+      const now = performance.now();
+      fluid.nudge(next.x - active.last.x, next.y - active.last.y, now - active.time);
+      active.last = next; active.time = now;
       latestPosition.current = next;
       setPosition(next);
     }}
@@ -73,7 +79,7 @@ export function FloatingCompanion({ userId, open, busy = false, onActivate }: {
       const next = clamp({ x: position.x + offset.x, y: position.y + offset.y });
       setPosition(next); persist(next);
     }}>
-    <Companion busy={busy} />
+    <span className="companion-fluid" ref={fluid.surface}><Companion busy={busy} /></span>
     <span className="companion-hint" aria-hidden="true">{busy ? '想一想…' : open ? '我在呢' : '找我聊聊'}</span>
   </button>, document.body);
 }

@@ -67,8 +67,13 @@ const root = process.env.STUDENT_BUILD_DIR || path.resolve(__dirname, '../dist')
     await page.mouse.move(start.x + 34, start.y + 34); await page.mouse.down();
     await page.mouse.move(930, 180, { steps: 8 });
     assert.ok(await pet.evaluate(el => el.classList.contains('is-dragging')));
+    await page.waitForFunction(() => document.querySelector('.companion-fluid')?.hasAttribute('data-moving'));
+    assert.notEqual(await pet.locator('.companion-fluid').evaluate(el => getComputedStyle(el).transform), 'none');
     await page.screenshot({ path: path.join(require('node:os').tmpdir(), 'cognisync-companion-drag.png') });
     await page.mouse.up();
+    const releasedPosition = await pet.boundingBox();
+    await page.waitForFunction(() => !document.querySelector('.companion-fluid')?.hasAttribute('data-moving'), null, { timeout: 4000 });
+    assert.deepEqual(await pet.boundingBox(), releasedPosition, 'elastic shape must not move the drop away from its saved position');
     assert.equal(await page.getByRole('textbox', { name: '向 AI 提问', exact: true }).isVisible(), false, 'drag must not open chat');
     await pet.focus(); await pet.press('ArrowLeft');
     const moved = await pet.boundingBox();
@@ -89,6 +94,7 @@ const root = process.env.STUDENT_BUILD_DIR || path.resolve(__dirname, '../dist')
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: touchStart.x + 34, y: touchStart.y + 34 }] });
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: 90, y: 250 }] });
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    assert.equal(await pet.locator('.companion-fluid').getAttribute('data-moving'), null, 'reduced motion disables the physics loop');
     assert.equal(await page.getByRole('textbox', { name: '向 AI 提问', exact: true }).isVisible(), false);
     await page.waitForFunction(() => Math.abs(document.querySelector('.floating-companion').getBoundingClientRect().x - 56) < 2, null, { timeout: 2000 }).catch(async () => { throw Error(`Touch position: ${JSON.stringify({ start: touchStart, end: await pet.boundingBox() })}`); });
     await cdp.detach();
