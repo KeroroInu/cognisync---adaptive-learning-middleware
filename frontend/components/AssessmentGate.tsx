@@ -2,11 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight, Check, RefreshCw } from 'lucide-react';
 import { assessmentRequest, getPendingAssessment, visibleQuestions, cleanVisibleAnswers, toggleMultiple, validDraftAnswer, type AssessmentAnswers, type PendingAssessment } from '../services/assessments';
 import './AssessmentGate.css';
-
-export function Companion({ busy = false }: { busy?: boolean }) {
-  // Original CSS character, no microphone, network animation, or third-party runtime.
-  return <div className={`question-companion ${busy ? 'is-busy' : ''}`} aria-hidden="true"><i /><i /><span /></div>;
-}
+import { Companion } from './Companion';
 
 export const AssessmentConversation: React.FC<{
   round: Pick<PendingAssessment, 'id' | 'questions' | 'served_at'>; userId: string; onDone: () => Promise<void>; onLogout: () => void;

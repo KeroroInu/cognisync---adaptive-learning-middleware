@@ -1,0 +1,7 @@
+.question-companion { width:70px; height:70px; border-radius:46% 54% 51% 49%; position:relative; background:#d2f46a; border:1px solid #a8c957; box-shadow:inset 6px 8px 14px #f4ffd0, inset -6px -8px 14px #a9cc50, 0 12px 26px #a2ba7230; animation:question-float 5s ease-in-out infinite; display:flex; align-items:center; justify-content:center; gap:10px; }
+.question-companion i { height:10px; width:6px; background:#29341d; border-radius:50%; animation:question-blink 7s infinite; }
+.question-companion span { position:absolute; width:13px; height:7px; border-bottom:2px solid #29341d; border-radius:50%; bottom:19px; }
+.question-companion.is-busy { animation-duration:2s; }
+@keyframes question-float { 50% { transform:translateY(-5px) rotate(4deg); } }
+@keyframes question-blink { 0%,43%,47%,100% { transform:scaleY(1); } 45% { transform:scaleY(.1); } }
+@media(prefers-reduced-motion:reduce) { .question-companion,.question-companion i { animation:none; } }

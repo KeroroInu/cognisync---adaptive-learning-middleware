@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { FloatingCompanion } from '../components/FloatingCompanion';
 import { Send, CheckCircle, FlaskConical, Loader, LogOut, Save, Play, Terminal, Trash2, X } from 'lucide-react';
 import type { ChatMessage, Language, User, UserProfile, ResearchTask } from '../types';
 import {
@@ -1146,6 +1147,10 @@ export const Research: React.FC<Props> = ({
 
   return (
     <div className={`project-factory ${experimentGroup !== 'pdt' ? 'ordinary-classroom' : ''}`}>
+      {allowAI && <FloatingCompanion userId={userId} open={experimentGroup === 'pdt' ? assistantOpen : normalChatOpen} busy={experimentGroup !== 'pdt' && isTyping} onActivate={() => {
+        if (experimentGroup === 'pdt') setAssistantOpen(true);
+        else { setNormalChatOpen(true); requestAnimationFrame(() => chatInputRef.current?.focus()); }
+      }} />}
       <ProjectFactoryHeader
         language={language}
         experimentGroup={experimentGroup}

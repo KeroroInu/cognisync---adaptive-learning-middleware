@@ -25,6 +25,8 @@
 .preparation-code details { font-size: 13px; color: #657052; max-width: 70%; }
 .preparation-code summary { cursor: pointer; }
 .preparation-chat { display: flex; flex-direction: column; }
+.preparation-chat[hidden] { display:none; }
+.preparation-grid.chat-collapsed { grid-template-columns:minmax(0,1fr); }
 .preparation-chat > header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px; }
 .preparation-chat > header span { color: #727960; font-size: 12px; }
 .preparation-messages { flex: 1; overflow: auto; padding: 20px; min-height: 0; }

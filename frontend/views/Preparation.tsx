@@ -1,9 +1,10 @@
 import React, { Suspense, useEffect, useRef, useState } from 'react';
-import { ArrowRight, Code2, LogOut, Play, Send } from 'lucide-react';
+import { ArrowRight, Code2, LogOut, Play, Send, X } from 'lucide-react';
 import type { ClassroomState } from '../services/classroom';
 import { preparationDraftKey, preparationRequest, type PreparationRecord } from '../services/preparation';
 import './Preparation.css';
 import { ClassroomMaterials } from '../components/ClassroomMaterials';
+import { FloatingCompanion } from '../components/FloatingCompanion';
 
 const Editor = React.lazy(() => import('../components/ResearchCodeEditor'));
 const STARTER = '# 在这里试一小段 Python\nprint("你好，Python！")\n';
@@ -35,6 +36,8 @@ export function Preparation({ userId, name, classroom, onEnter, onLogout }: {
   const [running, setRunning] = useState(false);
   const [sending, setSending] = useState(false);
   const [showOutput, setShowOutput] = useState(true);
+  const [chatOpen, setChatOpen] = useState(true);
+  const chatPanel = useRef<HTMLElement>(null);
   const alive = useRef(true);
   const busyRun = useRef(false);
   const busyChat = useRef(false);
@@ -121,7 +124,11 @@ export function Preparation({ userId, name, classroom, onEnter, onLogout }: {
         : <span role="status">{classroom ? '等待老师开始本课' : '正在连接课堂…'}</span>}<button aria-label="退出登录" onClick={onLogout}><LogOut size={18} /></button></div>
     </header>
     {error ? <div className="preparation-error" role="alert">{error} {!ready && <button onClick={() => setLoadAttempt(value => value + 1)}>重新读取</button>}</div> : null}
-    <div className="preparation-grid">
+    {aiOpen && <FloatingCompanion userId={userId} open={chatOpen} busy={sending} onActivate={() => {
+      setChatOpen(true);
+      requestAnimationFrame(() => { const input = chatPanel.current?.querySelector('textarea'); input?.focus(); input?.scrollIntoView({ block: 'nearest' }); });
+    }} />}
+    <div className={`preparation-grid${chatOpen ? '' : ' chat-collapsed'}`}>
       <section className="preparation-code" aria-label="Python 小实验">
         <header><span><Code2 size={18} />Python 小实验</span><small role="status">{saveLabel}</small></header>
         <div className="preparation-editor">{ready ? <Suspense fallback={<p>正在打开编辑器…</p>}><Editor value={code} language="python" theme="dark" onChange={value => { if (value.length <= 50000) setCode(value); }} /></Suspense> : <p className="preparation-loading">先恢复你的草稿，再开始。</p>}</div>
@@ -130,7 +137,7 @@ export function Preparation({ userId, name, classroom, onEnter, onLogout }: {
           {showOutput ? <pre aria-label="运行输出">{output.join('\n') || '运行后在这里看结果。'}{runError ? `\n${runError}` : ''}</pre> : null}</div>
         <footer><details><summary>能做什么？</summary>基础 Python、print、math、random。暂不支持 input、文件和桌面窗口。</details><button className="prep-primary" disabled={running || !ready} onClick={() => void run()}><Play size={17} />{running ? '运行中…' : '运行'}</button></footer>
       </section>
-      <section className="preparation-chat" aria-label="AI 对话"><header><strong>一起试试</strong><span>AI 能看到左边的代码和运行输出</span></header>
+      <section ref={chatPanel} className="preparation-chat" aria-label="AI 对话" hidden={!chatOpen}><header><strong>一起试试</strong><span>AI 能看到左边的代码和运行输出</span>{aiOpen && <button aria-label="收起 AI 助手" onClick={() => setChatOpen(false)}><X size={17} /></button>}</header>
         <div className="preparation-messages" aria-live="polite">
           {!records.some(item => item.kind === 'chat') ? <p className="preparation-welcome">想试什么？写几行，或者问我一句。</p> : records.filter(item => item.kind === 'chat').map(item => <article key={item.id}><p className="preparation-question">{item.payload.request.message}</p><div><Reply text={item.payload.reply || '这条提问已保存，尚未收到回复。'} /></div></article>)}
           {sending ? <p role="status">AI 正在回复…</p> : null}
