@@ -11,6 +11,10 @@ describe('assessment library presentation', () => {
     expect(assessmentKind(round('a', '重命名过的 A 卷', '题本代码：knowledge_a；版本：r2'))).toBe('试卷');
     expect(assessmentKind(round('b', '重命名过的背景材料', '题本代码：background；'))).toBe('问卷');
     expect(assessmentKind(round('c', '重命名过的测量工具', '题本代码：ct_pre；'))).toBe('量表');
+    const approvedCps = round('cps12', '复杂编程问题解决自评问卷', '题本代码：cps12_20261023；');
+    expect(assessmentKind(approvedCps)).toBe('量表');
+    expect(requiresAssessmentReview(approvedCps)).toBe(false);
+    expect(filterAssessmentLibrary([approvedCps], '量表', '复杂编程')).toEqual([approvedCps]);
     expect(assessmentKind(round('d', '课堂反馈问卷'))).toBe('问卷');
     expect(assessmentKind(round('e', '学习体验量表'))).toBe('量表');
     expect(assessmentKind(round('f', 'Python 测试'))).toBe('试卷');

@@ -18,14 +18,14 @@ const clone = value => JSON.parse(JSON.stringify(value));
 
 async function repositoryFixtures() {
   const resources = path.resolve(__dirname, '../../backend/app/resources');
-  const [drafts, papers] = await Promise.all(['instrument_drafts_20261012.json', 'python_papers_20261015.json']
+  const [drafts, papers, selfReport] = await Promise.all(['instrument_drafts_20261012.json', 'python_papers_20261015.json', 'cps_programming_self_report_20261023.json']
     .map(async file => JSON.parse(await fs.readFile(path.join(resources, file), 'utf8'))));
   const draft = (catalog, key) => {
     const instrument = catalog.instruments.find(item => item.key === key);
     assert.ok(instrument?.draft, `repository catalog must contain ${key}`);
     return clone(instrument.draft);
   };
-  const templates = [draft(drafts, 'background'), draft(drafts, 'ct_pre'), draft(drafts, 'cps_pre'), draft(papers, 'knowledge_a'), draft(papers, 'knowledge_b')];
+  const templates = [draft(drafts, 'background'), draft(drafts, 'ct_pre'), draft(drafts, 'cps_pre'), draft(papers, 'knowledge_a'), draft(papers, 'knowledge_b'), draft(selfReport, 'cps12_20261023')];
   const result = templates.map((item, index) => ({ ...item, id: `library-${index}`, enabled: false, published_at: null, revision: 1, response_count: 0 }));
   // Only definitions come from repository resources; all publications and counts below are synthetic.
   result.push({ ...clone(templates[0]), id: 'open', class_name: '解构班', enabled: true, published_at: '2026-10-22T07:20:00Z', revision: 1, response_count: 34 });
@@ -45,7 +45,8 @@ async function repositoryFixtures() {
   const before = clone(rounds);
   const pythonA = rounds.find(item => /Python.*A.*卷/.test(item.name) && !item.published_at);
   const cps = rounds.find(item => item.source.includes('题本代码：cps_') && !item.published_at);
-  assert.ok(pythonA && cps, 'fixtures need a Python A paper and a withheld CPS draft');
+  const cps12 = rounds.find(item => item.source.includes('题本代码：cps12_20261023') && !item.published_at);
+  assert.ok(pythonA && cps && cps12, 'fixtures need a Python A paper, withheld old CPS draft, and confirmed CPS12');
   const writes = [], deliveries = [], exports = [], apiErrors = [], pageErrors = [], external = [], checks = [], screenshots = [];
   let failFirstDelivery = true;
   let failFirstSave = true;
@@ -164,7 +165,7 @@ async function repositoryFixtures() {
     assert.ok((await library().innerText()).includes('没有'));
     await searchable.fill('');
     const categories = page.getByRole('navigation', { name: '题本分类', exact: true });
-    for (const [category, count] of [['试卷', 2], ['问卷', 1], ['量表', 1], ['其他', 1]]) {
+    for (const [category, count] of [['试卷', 2], ['问卷', 1], ['量表', 2], ['其他', 1]]) {
       await categories.getByRole('button', { name: category, exact: true }).click();
       assert.equal(await readyCards().count(), count, `${category} count`);
     }
@@ -175,8 +176,34 @@ async function repositoryFixtures() {
     const cpsCard = page.locator('article').filter({ hasText: cps.name });
     await cpsCard.waitFor();
     assert.equal(await cpsCard.getByRole('button', { name: /发给/ }).count(), 0);
+    assert.equal(await page.locator('.assessment-review article').filter({ hasText: cps12.name }).count(), 0);
     await reviewSummary.click();
     checks.push('search, all four categories, empty state, and CPS withheld from shortcut delivery');
+
+    await categories.getByRole('button', { name: '量表', exact: true }).click();
+    const confirmedCpsCard = readyCards().filter({ hasText: cps12.name });
+    assert.equal(await confirmedCpsCard.count(), 1);
+    assert.equal(await confirmedCpsCard.getByRole('button', { name: '发给解构班', exact: true }).count(), 1);
+    const writesBeforeCpsPreview = writes.length;
+    await confirmedCpsCard.getByRole('button', { name: '预览题目', exact: true }).click();
+    const cpsDialog = page.getByRole('dialog', { name: '试填预览', exact: true });
+    await cpsDialog.waitFor();
+    assert.equal(await cpsDialog.locator('.assessment-preserve-text').innerText(), cps12.questions[0].hint);
+    await capture('cps12-preview-first-page');
+    const uniformLabels = ['非常不同意', '不同意', '中立', '同意', '非常同意'];
+    assert.equal(cps12.questions.length, 12);
+    for (let index = 0; index < 12; index += 1) {
+      assert.equal(await cpsDialog.getByRole('heading', { level: 3 }).innerText(), cps12.questions[index].text);
+      assert.ok((await cpsDialog.innerText()).includes(`${index + 1} / 12`));
+      assert.equal(await cpsDialog.getByRole('radio').count(), 5);
+      assert.deepEqual(await cpsDialog.locator('fieldset label').allInnerTexts(), uniformLabels);
+      await cpsDialog.getByRole('radio').nth(index % 5).check();
+      if (index < 11) await cpsDialog.getByRole('button', { name: '下一题', exact: true }).click();
+    }
+    await cpsDialog.getByRole('button', { name: '关闭预览', exact: true }).click();
+    assert.equal(writes.length, writesBeforeCpsPreview);
+    await categories.getByRole('button', { name: '全部', exact: true }).click();
+    checks.push('confirmed CPS12 is releasable under scales, not review-only; all 12 preview pages retain exact questions and five uniform labels');
 
     assert.ok((await sidebar().innerText()).includes('34'));
     assert.equal(await sidebar().getByText('开发班专用历史', { exact: true }).count(), 0);
@@ -277,6 +304,28 @@ async function repositoryFixtures() {
       assert.deepEqual(current.questions, original.questions);
     }
     checks.push('failed save keeps draft; published edits create new drafts with branching / child / exclusive fields intact; originals remain unchanged');
+
+    const copyStart = writes.length;
+    const confirmedCpsSource = readyCards().filter({ hasText: cps12.name });
+    await summary(confirmedCpsSource, '更多').click();
+    await confirmedCpsSource.getByRole('button', { name: '复制', exact: true }).click();
+    dialog = page.getByRole('dialog').filter({ has: page.getByRole('button', { name: '保存草稿', exact: true }) });
+    await dialog.waitFor();
+    await summary(dialog, '数据标记').click();
+    const phaseField = dialog.getByRole('combobox', { name: '测量阶段', exact: true });
+    assert.equal(await phaseField.isEnabled(), true);
+    assert.equal(await phaseField.inputValue(), 'pre');
+    await phaseField.selectOption('post');
+    await dialog.getByRole('button', { name: '保存草稿', exact: true }).click();
+    await dialog.waitFor({ state: 'hidden' });
+    const savedCpsPost = writes.slice(copyStart).find(item => item.path === '/api/admin/assessments' && item.method === 'POST');
+    assert.ok(savedCpsPost);
+    assert.equal(savedCpsPost.body.phase, 'post');
+    assert.equal(savedCpsPost.body.name, cps12.name);
+    assert.deepEqual(savedCpsPost.body.questions, cps12.questions);
+    assert.equal(rounds.find(item => item.id === cps12.id).phase, 'pre');
+    assert.deepEqual(rounds.find(item => item.id === cps12.id).questions, cps12.questions);
+    checks.push('copy CPS12 with post marker saves a new POST definition while keeping all questions/options and original pre draft unchanged');
 
     // Every group can deliberately receive the selected library item.
     for (const className of ['开发班', '体验组']) {

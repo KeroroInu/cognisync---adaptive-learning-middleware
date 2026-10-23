@@ -94,6 +94,10 @@
 .assessment-editor > footer p { margin:0; font-size:12px; }
 .assessment-editor-body { padding:24px; overflow:auto; min-height:0; overscroll-behavior:contain; }
 .assessment-meta { display:grid; grid-template-columns:1fr 1fr; gap:20px; align-items:center; }
+.assessment-data-marker { margin:0 0 20px; }
+.assessment-data-marker > label { margin-top:12px; }
+.assessment-data-marker select { margin-left:12px; }
+.assessment-data-marker > p { font-size:12px; margin:8px 0 0; }
 .assessment-editor label { font-size:14px; display:block; }
 .assessment-editor input:not([type=checkbox]):not([type=radio]), .assessment-editor textarea { width:100%; min-width:0; border:1px solid var(--line-strong); border-radius:7px; padding:10px 12px; background:var(--surface-strong); color:var(--text-primary); margin:8px 0 16px; font:inherit; }
 .assessment-question { min-width:0; border:1px solid var(--line); border-radius:8px; padding:18px; margin:24px 0; }

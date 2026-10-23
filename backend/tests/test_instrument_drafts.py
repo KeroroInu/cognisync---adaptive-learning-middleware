@@ -15,7 +15,8 @@ from scripts.prepare_instrument_drafts import load_catalog, seed_drafts
 def test_source_catalog_and_branches():
     catalog = {i["key"]: i for i in load_catalog()["instruments"]}
     assert len(catalog) == 5
-    assert "ct_post" not in catalog and "cps_post" not in catalog
+    assert "ct_post" not in catalog and "cps_post" not in catalog and "cps_pre" not in catalog
+    assert catalog['cps12_20261023']['main_questions'] == 12
     bg = catalog["background"]["draft"]["questions"]
     visible = visible_question_ids(bg, {"q3": "5", "q8": "1"})
     assert all(f"q{i}" in visible for i in range(14, 20))

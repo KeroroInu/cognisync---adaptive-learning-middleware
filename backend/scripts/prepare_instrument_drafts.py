@@ -23,11 +23,12 @@ def load_catalog():
     # Old records remain immutable; only new library imports use the revised papers.
     papers = json.loads(CATALOG.with_name("python_papers_20261015.json").read_text())
     catalog["instruments"] = [i for i in catalog["instruments"] if not i["key"].startswith("knowledge_")] + papers["instruments"]
+    cps = json.loads(CATALOG.with_name("cps_programming_self_report_20261023.json").read_text())
     # The same scale can be distributed repeatedly; no duplicate pre/post cards.
-    catalog["instruments"] = [i for i in catalog["instruments"] if i["key"] not in ("ct_post", "cps_post")]
+    # Retired CPS16 definitions stay in the historical source file, not the active catalog.
+    catalog["instruments"] = [i for i in catalog["instruments"] if i["key"] not in ("ct_post", "cps_pre", "cps_post")] + cps["instruments"]
     names = {"background": "编程学习与 AI 使用现状调查 · 19题",
-             "ct_pre": "计算思维量表 · 20题",
-             "cps_pre": "待审阅｜复杂问题解决量表 · 16题"}
+             "ct_pre": "计算思维量表 · 20题"}
     for item in catalog["instruments"]:
         if item["key"] in names:
             item["draft"]["name"] = names[item["key"]]

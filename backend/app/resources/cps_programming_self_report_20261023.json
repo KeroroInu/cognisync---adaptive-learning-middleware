@@ -1,0 +1,176 @@
+{
+  "schema": "classroom-instrument-catalog/1",
+  "version": "20261023-teacher-confirmed1",
+  "instruments": [
+    {
+      "key": "cps12_20261023",
+      "version": "20261023-teacher-confirmed1",
+      "main_questions": 12,
+      "draft": {
+        "phase": "pre",
+        "name": "复杂编程问题解决自评问卷",
+        "class_name": "",
+        "source": "题本代码：cps12_20261023；版本：20261023-teacher-confirmed1。教师确认课堂使用稿，依据教师提供的12题截图逐字转录；对应文稿：复杂编程问题解决自评问卷_审题稿.docx。自陈问卷，反映学生对自身问题解决表现的认同程度，不是客观能力测试，不宣称已经完成测量效度验证。每题单选，1—5依次为非常不同意、不同意、中立、同意、非常同意，全部正向计分，无反向题。缺失答案保留为缺答，不记0分，不自动补值。保留学生编号、施测时间及前后测标识；前后测题目与选项一致。当前模板的数据标记为前测；用于后测时复制题本，在数据标记选择后测后保存，再分班发放，不能以发放次数代替测量阶段。本12题稿与旧16题审题稿是不同版本，不能直接按题号合并；旧版历史答卷保留。",
+        "questions": [
+          {
+            "id": "cps12_01",
+            "text": "面对编程任务，我能说清楚需要解决的主要问题。",
+            "type": "choice",
+            "required": false,
+            "hint": "请回想需要同时考虑多个要求、不能直接套用现成步骤的编程任务，根据你目前的情况选择认同程度。\n每题单选，选项统一为：非常不同意、不同意、中立、同意、非常同意，依次计1—5分，全部正向计分。",
+            "options": [
+              { "value": "1", "label": "非常不同意" },
+              { "value": "2", "label": "不同意" },
+              { "value": "3", "label": "中立" },
+              { "value": "4", "label": "同意" },
+              { "value": "5", "label": "非常同意" }
+            ]
+          },
+          {
+            "id": "cps12_02",
+            "text": "我能识别编程任务中需要考虑的主要要求。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              { "value": "1", "label": "非常不同意" },
+              { "value": "2", "label": "不同意" },
+              { "value": "3", "label": "中立" },
+              { "value": "4", "label": "同意" },
+              { "value": "5", "label": "非常同意" }
+            ]
+          },
+          {
+            "id": "cps12_03",
+            "text": "我能找到解决当前编程问题所需的信息。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              { "value": "1", "label": "非常不同意" },
+              { "value": "2", "label": "不同意" },
+              { "value": "3", "label": "中立" },
+              { "value": "4", "label": "同意" },
+              { "value": "5", "label": "非常同意" }
+            ]
+          },
+          {
+            "id": "cps12_04",
+            "text": "我能根据已有信息提出解决编程问题的办法。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              { "value": "1", "label": "非常不同意" },
+              { "value": "2", "label": "不同意" },
+              { "value": "3", "label": "中立" },
+              { "value": "4", "label": "同意" },
+              { "value": "5", "label": "非常同意" }
+            ]
+          },
+          {
+            "id": "cps12_05",
+            "text": "我能比较不同解决办法的优点和不足。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              { "value": "1", "label": "非常不同意" },
+              { "value": "2", "label": "不同意" },
+              { "value": "3", "label": "中立" },
+              { "value": "4", "label": "同意" },
+              { "value": "5", "label": "非常同意" }
+            ]
+          },
+          {
+            "id": "cps12_06",
+            "text": "我能判断提出的解决办法在当前条件下是否可行。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              { "value": "1", "label": "非常不同意" },
+              { "value": "2", "label": "不同意" },
+              { "value": "3", "label": "中立" },
+              { "value": "4", "label": "同意" },
+              { "value": "5", "label": "非常同意" }
+            ]
+          },
+          {
+            "id": "cps12_07",
+            "text": "我能把选定的解决办法转化为具体的实施步骤。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              { "value": "1", "label": "非常不同意" },
+              { "value": "2", "label": "不同意" },
+              { "value": "3", "label": "中立" },
+              { "value": "4", "label": "同意" },
+              { "value": "5", "label": "非常同意" }
+            ]
+          },
+          {
+            "id": "cps12_08",
+            "text": "我能按照制订的步骤推进编程任务。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              { "value": "1", "label": "非常不同意" },
+              { "value": "2", "label": "不同意" },
+              { "value": "3", "label": "中立" },
+              { "value": "4", "label": "同意" },
+              { "value": "5", "label": "非常同意" }
+            ]
+          },
+          {
+            "id": "cps12_09",
+            "text": "遇到与预期不符的情况时，我能调整接下来的做法。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              { "value": "1", "label": "非常不同意" },
+              { "value": "2", "label": "不同意" },
+              { "value": "3", "label": "中立" },
+              { "value": "4", "label": "同意" },
+              { "value": "5", "label": "非常同意" }
+            ]
+          },
+          {
+            "id": "cps12_10",
+            "text": "我能检查程序的运行结果是否达到任务目标。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              { "value": "1", "label": "非常不同意" },
+              { "value": "2", "label": "不同意" },
+              { "value": "3", "label": "中立" },
+              { "value": "4", "label": "同意" },
+              { "value": "5", "label": "非常同意" }
+            ]
+          },
+          {
+            "id": "cps12_11",
+            "text": "我能根据检验结果判断原先的解决办法是否合适。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              { "value": "1", "label": "非常不同意" },
+              { "value": "2", "label": "不同意" },
+              { "value": "3", "label": "中立" },
+              { "value": "4", "label": "同意" },
+              { "value": "5", "label": "非常同意" }
+            ]
+          },
+          {
+            "id": "cps12_12",
+            "text": "完成任务后，我能解释所用的解决办法为什么有效或无效。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              { "value": "1", "label": "非常不同意" },
+              { "value": "2", "label": "不同意" },
+              { "value": "3", "label": "中立" },
+              { "value": "4", "label": "同意" },
+              { "value": "5", "label": "非常同意" }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}
