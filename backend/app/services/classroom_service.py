@@ -1,7 +1,6 @@
 """Deterministic classroom authorization; no LLM, graph, or student history reads."""
 from contextvars import ContextVar
 from datetime import datetime, timezone
-import re
 
 from fastapi import Depends, HTTPException, Request
 from sqlalchemy import select
@@ -10,16 +9,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.endpoints.auth import get_current_user
 from app.db.postgres import async_session_factory, get_db
 from app.models.sql.classroom import ClassroomSession
-from app.models.sql.research import ResearchTaskSubmission
 from app.models.sql.user import User
 from app.models.sql.lesson import LessonPlan
 
 llm_classroom_scope: ContextVar[str | None] = ContextVar("llm_classroom_scope", default=None)
 lesson_evidence_context: ContextVar[dict | None] = ContextVar("lesson_evidence_context", default=None)
-SAVE_PATH = re.compile(r"/research/tasks/([0-9a-fA-F-]{36})/(save-workspace|save-progress)$")
 
 
 def effective_state(session):
+    # Current class workspaces are always available. Historical containers retain
+    # their state for evidence; task publication/withdrawal is a separate check.
+    if session.is_current:
+        return "open"
     if session.state == "closing" and session.closes_at <= datetime.now(timezone.utc):
         return "closed"
     return session.state
@@ -36,42 +37,23 @@ async def current_session(db, class_name):
 def denied(state):
     return HTTPException(403, detail={
         "code": "CLASSROOM_CLOSING" if state == "closing" else "CLASSROOM_CLOSED",
-        "message": "正在下课，请保存当前内容。" if state == "closing" else "本节课已结束，等待老师重新开放。",
+        "message": "任务安排已更新，请刷新页面后重试。",
     })
 
 
 async def require_classroom_access(request: Request, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    """Gate protected learning routes, not auth, assessments, status, or admin routes.
-
-    Read once at entry; queued model calls recheck just before dispatch in a fresh
-    short transaction. A closing grace window accepts only existing workspaces.
-    """
+    """Attach evidence context; each task endpoint enforces publication scope."""
     if user.role == "admin":
         yield
         return
     session = await current_session(db, user.class_name)
     plan = await db.scalar(select(LessonPlan).where(LessonPlan.session_id == session.id)) if session else None
     context = None
-    if plan:
+    if plan and plan.started_at:
         task = plan.configuration.get("tasks", {}).get(user.experiment_group)
-        if not plan.started_at or not task:
-            raise HTTPException(403, detail={"code": "LESSON_NOT_STARTED", "message": "老师还没有开放本组任务，请回准备区。"})
         context = {"session_id": str(session.id), "lesson_id": str(plan.id), "task_id": task["id"],
                    "group": user.experiment_group, "user_id": str(user.id),
-                   "blueprint_version_id": task.get("blueprint_version_id")}
-    if session:
-        state = effective_state(session)
-        if state != "open":
-            save = SAVE_PATH.search(request.url.path)
-            if state != "closing" or request.method != "POST" or not save:
-                raise denied(state)
-            from uuid import UUID
-            exists = await db.scalar(select(ResearchTaskSubmission.id).where(
-                ResearchTaskSubmission.user_id == user.id,
-                ResearchTaskSubmission.task_id == UUID(save.group(1)),
-            ))
-            if not exists:
-                raise denied(state)
+                   "blueprint_version_id": task.get("blueprint_version_id")} if task else None
     token = llm_classroom_scope.set(user.class_name)
     lesson_token = lesson_evidence_context.set(context)
     try:
@@ -82,6 +64,10 @@ async def require_classroom_access(request: Request, user: User = Depends(get_cu
 
 
 async def ensure_queued_llm_access():
+    from app.services.project_review import review_dispatch_check
+    check = review_dispatch_check.get()
+    if check:
+        await check()
     class_name = llm_classroom_scope.get()
     if not class_name:
         return

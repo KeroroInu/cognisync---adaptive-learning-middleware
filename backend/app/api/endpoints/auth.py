@@ -6,7 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict
-from fastapi import APIRouter, HTTPException, Header, Depends
+from fastapi import APIRouter, HTTPException, Header, Depends, Request
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,6 +25,7 @@ from app.models.sql.user import User
 from app.models.sql.profile import ProfileSnapshot
 from app.db.postgres import get_db
 from app.core.config import settings
+from app.core.student_identity import student_id_filter
 
 router = APIRouter()
 
@@ -124,7 +125,8 @@ def ensure_self_scope(requested_user_id: str, current_user: User) -> None:
 
 async def get_current_user(
     authorization: Optional[str] = Header(None),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    request: Request = None,
 ) -> User:
     """从 Authorization header 中获取当前用户"""
     import logging
@@ -138,7 +140,7 @@ async def get_current_user(
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         user_id: str = payload.get("sub")
-        logger.info(f"[AUTH] Decoded user_id: {user_id}")
+        logger.debug("[AUTH] Token decoded")
 
         if user_id is None:
             logger.warning("[AUTH] No user_id in token payload")
@@ -163,7 +165,12 @@ async def get_current_user(
         logger.warning(f"[AUTH] User not found in database: {user_id}")
         raise HTTPException(status_code=401, detail="User not found")
 
-    logger.info(f"[AUTH] ✅ Authentication successful for user: {user.student_id}")
+    # Outgoing review checks run before FastAPI releases request dependencies.
+    # Reuse this live READ COMMITTED session to avoid holding one pool slot
+    # while waiting for a second. Never cache review decisions or credentials.
+    if request is not None:
+        request.state.review_guard_session = db
+    logger.debug("[AUTH] Authentication successful")
     return user
 
 
@@ -180,7 +187,7 @@ async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
     logger.info(f"[LOGIN] Attempting login for student_id: {data.student_id}")
 
     # 从数据库查找用户（用学号）
-    stmt = select(User).where(User.student_id == data.student_id)
+    stmt = select(User).where(student_id_filter(User.student_id, data.student_id))
     result = await db.execute(stmt)
     user = result.scalar_one_or_none()
 
@@ -225,6 +232,7 @@ async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
         hasCompletedOnboarding=user.has_completed_onboarding,
         onboardingMode=user.onboarding_mode,
         className=user.class_name,
+        schoolClass=user.school_class,
         experimentGroup=user.experiment_group,
     )
 
@@ -251,13 +259,21 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
     import logging
     logger = logging.getLogger(__name__)
 
+    from app.core.student_identity import TEACHING_GROUPS
+    # Older clients may omit className. The classroom form always supplies it;
+    # never silently assign a missing/unknown class to either experiment arm.
+    if data.mode == 'classroom' and data.class_name is not None:
+        data.class_name = data.class_name.strip()
+        if data.class_name not in TEACHING_GROUPS:
+            raise HTTPException(422, "请选择解构班或开发班")
+
     logger.info(f"[REGISTER] Attempting registration for student_id: {data.student_id}, mode: {data.mode}")
 
     # No SQL transaction is opened until the bounded password work finishes.
     password_hash = await hash_password_async(data.password)
 
     # 检查学号是否已存在
-    stmt = select(User).where(User.student_id == data.student_id)
+    stmt = select(User).where(student_id_filter(User.student_id, data.student_id))
     result = await db.execute(stmt)
     existing_user = result.scalar_one_or_none()
 
@@ -318,10 +334,10 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
             created_at=datetime.now(timezone.utc),
             onboarding_mode=data.mode,  # 'scale' or 'ai'
             class_name=data.class_name,
-            # 试用环境可通过 DEFAULT_EXPERIMENT_GROUP 让新用户直接落进某一组，
-            # 否则未分组用户在学生端只能看到画像与量表，进不了研究任务。
-            # 正式实验必须保持 unassigned 并改用随机分配，见 config.py 中的说明。
-            experiment_group=settings.DEFAULT_EXPERIMENT_GROUP,
+            school_class=data.school_class,
+            # 当前两班准实验按所选班级映射教学组；旧客户端省略班级时保留配置默认值。
+            # 不接受客户端自行指定实验组，也不修改既有答卷的班组快照。
+            experiment_group=('unassigned' if data.school_class and not data.class_name else TEACHING_GROUPS.get(data.class_name, settings.DEFAULT_EXPERIMENT_GROUP)) if data.mode == 'classroom' else settings.DEFAULT_EXPERIMENT_GROUP,
             has_completed_onboarding=False
         )
 
@@ -350,6 +366,7 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
             hasCompletedOnboarding=False,
             onboardingMode=new_user.onboarding_mode,
             className=new_user.class_name,
+            schoolClass=new_user.school_class,
             experimentGroup=new_user.experiment_group,
         )
 
@@ -678,6 +695,7 @@ async def get_current_user_info(
         hasCompletedOnboarding=current_user.has_completed_onboarding,
         onboardingMode=current_user.onboarding_mode,
         className=current_user.class_name,
+        schoolClass=current_user.school_class,
         experimentGroup=current_user.experiment_group,
     )
 

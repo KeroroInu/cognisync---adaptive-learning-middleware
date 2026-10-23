@@ -9,7 +9,7 @@ import zipfile
 from fastapi import HTTPException, Request
 
 MAX_FILE = 10 * 1024 * 1024
-SECRET_NAMES = {".env", "auth.json", "credentials.json", "id_rsa", "id_ed25519", ".npmrc"}
+SECRET_NAMES = {".env", "auth.json", "credentials.json", "task-access.json", "id_rsa", "id_ed25519", ".npmrc"}
 
 
 def safe_name(name):

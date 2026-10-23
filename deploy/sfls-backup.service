@@ -1,0 +1,13 @@
+[Unit]
+Description=SFLS PostgreSQL research backup (includes uploaded originals)
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+UMask=0077
+EnvironmentFile=/etc/sfls/release.env
+Environment=COMPOSE_FILE=/opt/sfls/current/deploy/compose.production.yml
+WorkingDirectory=/opt/sfls/current
+ExecStartPre=/usr/bin/install -d -m 700 /var/backups/sfls
+ExecStart=/usr/bin/python3 /opt/sfls/current/scripts/backup-research.py backup /var/backups/sfls

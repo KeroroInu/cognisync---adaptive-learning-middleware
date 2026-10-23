@@ -5,7 +5,7 @@
 from typing import List, Literal
 from urllib.parse import quote_plus
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import Field
+from pydantic import Field, field_validator
 
 
 class Settings(BaseSettings):
@@ -20,6 +20,23 @@ class Settings(BaseSettings):
     # 服务器配置
     HOST: str = "0.0.0.0"
     PORT: int = 8000
+    PUBLIC_BASE_URL: str = ""
+
+    @field_validator("PUBLIC_BASE_URL")
+    @classmethod
+    def validate_public_base_url(cls, value: str) -> str:
+        from urllib.parse import urlsplit
+        value = value.strip().rstrip("/")
+        if not value:
+            return value
+        parsed = urlsplit(value)
+        if (parsed.scheme not in {"http", "https"} or not parsed.hostname
+                or parsed.username or parsed.password or parsed.query or parsed.fragment
+                or parsed.path or any(character.isspace() for character in value)):
+            raise ValueError("PUBLIC_BASE_URL must be an HTTP(S) origin without credentials or path")
+        # Accessing port also rejects malformed/out-of-range ports.
+        _ = parsed.port
+        return value
 
     # CORS 配置
     CORS_ORIGINS: str = Field(
@@ -71,7 +88,7 @@ class Settings(BaseSettings):
     # DeepSeek 配置
     DEEPSEEK_API_KEY: str = "sk-your-key-here"
     DEEPSEEK_BASE_URL: str = "https://api.deepseek.com/v1"
-    DEEPSEEK_MODEL: str = "deepseek-chat"
+    DEEPSEEK_MODEL: str = "deepseek-flash"
     LLM_TIMEOUT_SECONDS: int = Field(default=45, ge=5, le=180)
     LLM_ANALYSIS_TIMEOUT_SECONDS: int = Field(
         default=15,

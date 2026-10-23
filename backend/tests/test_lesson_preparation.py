@@ -30,7 +30,7 @@ async def test_teacher_starts_explicit_task_not_old_all_task(client, test_db, cl
     session, plan = await configured(client, actors, task_id)
     state = (await client.get("/api/classroom/state", headers=actors["first"])).json()["data"]
     assert state["lesson_entry"] is None
-    assert (await client.get("/api/research/active-task", headers=actors["first"])).status_code == 403
+    assert (await client.get("/api/research/active-task", headers=actors["first"])).status_code == 404
     assert (await client.post(f"{ADMIN}/sessions/{session['id']}/lesson/start", headers=actors["first"])).status_code == 403
     started = await client.post(f"{ADMIN}/sessions/{session['id']}/lesson/start", headers=actors["teacher"])
     assert started.status_code == 200
@@ -61,7 +61,7 @@ async def test_lesson_snapshot_does_not_overwrite_student_code(client, test_db, 
     assert data["code_content"] == "# starter"
     assert data["code_submitted"] == "score = 1"
     await change_state(client, actors, session["id"], "end")
-    # Same lesson still accepts its existing workspace during the saving grace.
+    # A retired end request does not interrupt workspace saves.
     saved = await client.post(f"/api/research/tasks/{task_id}/save-progress", headers=actors["first"], json={"code_submitted": "score = 2"})
     assert saved.status_code == 200, saved.text
 
@@ -71,7 +71,7 @@ async def test_invalid_group_or_unpublished_task_rejected(client, test_db, class
     session = await start(client, actors)
     old_task = await learning_task(test_db)
     blocked = await client.post(f"/api/research/tasks/{old_task}/save-progress", headers=actors["first"], json={"code_submitted": "print(7)"})
-    assert blocked.status_code == 403 and blocked.json()["detail"]["code"] == "LESSON_NOT_STARTED"
+    assert blocked.status_code == 404
     async with test_db() as db:
         task = ResearchTask(title="Not for this group", code_content="", target_group="ai_pbl", status=ResearchTaskStatus.ACTIVE)
         db.add(task)
@@ -94,25 +94,25 @@ async def test_preparation_is_private_idempotent_and_not_a_task_submission(clien
         assert len(records) == 1 and records[0].session_id is None
 
 
-async def test_preparation_chat_scope_and_closed_class(client, test_db, classroom_actors, monkeypatch):
+async def test_preparation_chat_scope_and_retired_class_control(client, test_db, classroom_actors, monkeypatch):
     actors = classroom_actors
-    from app.api.endpoints import preparation
+    from app.api.endpoints import chat
     captured = []
     async def reply(provider, **kwargs):
         captured.append(kwargs)
         return "试试 print(7)"
-    monkeypatch.setattr(preparation, "_complete_chat_reply", reply)
+    monkeypatch.setattr(chat, "_complete_chat_reply", reply)
     session = await start(client, actors)
     body = {"request_id": str(uuid4()), "kind": "chat", "code": "print(7)", "message": "这句是什么意思"}
     response = await client.post("/api/preparation/records", headers=actors["first"], json=body)
     assert response.status_code == 200, response.text
     assert response.json()["data"]["session_id"] == session["id"]
-    assert "尚未进入分组课堂" in captured[0]["system_prompt"]
+    assert "COGNISYNC_COMMON_SUPPORT_V1" in captured[0]["system_prompt"]
     assert "print(7)" in captured[0]["user_prompt"]
     await client.post("/api/preparation/records", headers=actors["first"], json=body)
     assert len(captured) == 1
     await change_state(client, actors, session["id"], "end")
-    assert (await client.post("/api/preparation/records", headers=actors["first"], json={**body, "request_id": str(uuid4())})).status_code == 403
+    assert (await client.post("/api/preparation/records", headers=actors["first"], json={**body, "request_id": str(uuid4())})).status_code == 200
     assert (await client.post("/api/preparation/records", headers=actors["first"], json={"kind": "run", "request_id": str(uuid4()), "code": "print(7)", "output": ["7"]})).status_code == 200
     assert (await client.get("/api/preparation/records", headers=actors["first"])).status_code == 200
 
@@ -143,6 +143,23 @@ async def test_stage_evidence_uses_server_lesson_not_client_detail(client, test_
         event = await db.scalar(select(StageEvent).where(StageEvent.user_id == actors["first_id"]))
         assert event.detail["lesson"]["lesson_id"] == plan["id"]
         assert event.detail["lesson"]["user_id"] == str(actors["first_id"])
+    # Versions are joined from their actual event, never inferred from timestamps.
+    for value in ['before', 'after']:
+        response = await client.post(f'/api/research/tasks/{task_id}/stage-events', headers=actors['first'], json={
+            'request_id': str(uuid4()), 'stage': 'observe', 'event_type': 'structure_change',
+            'artifacts': [{'artifact_type': 'observation', 'artifact_key': 'observation:test',
+                           'content': {'observationText': value, 'provenance': {'kind': 'student-note'}},
+                           'change_source': 'structure_edit'}],
+        })
+        assert response.status_code == 200, response.text
+    data = (await client.get(f'{ADMIN}/sessions/{session["id"]}/evidence?source=process', headers=actors['teacher'])).json()['data']
+    assert data['total'] == 3
+    changed = next(item for item in data['items'] if item['payload'].get('artifact_changes'))
+    version = changed['payload']['artifact_changes'][0]
+    assert version['before']['observationText'] == 'before'
+    assert version['after']['observationText'] == 'after'
+    assert version['previous_version_id'] and version['version'] == 2
+    assert len(changed['parts']) == 2
 
 
 async def test_current_task_ai_disable_overrides_published_allow(client, test_db, classroom_actors):
@@ -223,3 +240,8 @@ async def test_classroom_chat_keeps_lesson_and_student_evidence(client, test_db,
         question = next(m for m in current if m.role == MessageRole.USER)
         reply = next(m for m in current if m.role == MessageRole.ASSISTANT)
         assert reply.analysis["analysis_source"] == {"role": "user", "message_id": str(question.id)}
+        assert question.analysis['learningEvidence']['code_snapshot'] == 'print(7)'
+        assert question.analysis['learningEvidence']['mastery'] is None
+        assert reply.analysis['learningEvidence']['response_to'] == str(question.id)
+        assert reply.analysis['learningEvidence']['adopted'] is None
+        assert reply.analysis['learningEvidence']['reply_generation_ms'] >= 0

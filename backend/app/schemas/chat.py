@@ -4,6 +4,8 @@ Chat Schema - 对话相关数据结构（与前端完全对齐）
 from typing import Optional, List, Literal
 from pydantic import BaseModel, ConfigDict, Field
 from app.schemas.profile import UserProfile, ProfileDelta
+from app.services.common_support import Action
+from uuid import UUID
 
 
 class EmotionDetail(BaseModel):
@@ -92,6 +94,7 @@ class ProjectScaffoldContext(BaseModel):
         description="当前阶段产物的压缩摘要，不包含无关工作区数据",
     )
     currentModule: Optional[str] = Field(default=None, max_length=300, description="建构阶段正在实现的模块")
+    interaction: Optional[Literal["function_discussion"]] = Field(default=None, description="功能卡内的步骤讨论；仅解构阶段生效")
     testFeedback: Optional[str] = Field(default=None, max_length=2000, description="最近一次模块测试反馈")
 
 
@@ -123,6 +126,10 @@ class ChatRequest(BaseModel):
         default=None,
         description="项目工坊阶段感知支架上下文",
     )
+    supportAction: Action = "message"
+    supportRequestId: UUID | None = None
+    supportPracticeId: UUID | None = None
+    supportAnswer: str = Field(default="", max_length=1000)
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -164,6 +171,7 @@ class ChatResponse(BaseModel):
     必须包含 message, analysis, updatedProfile 三个字段
     """
     message: str = Field(..., description="AI 助手回复")
+    support: dict | None = None
     analysis: ChatAnalysis = Field(..., description="对话分析结果")
     updatedProfile: UserProfile = Field(..., description="更新后的学习者画像")
     updatedGraph: Optional[List[dict]] = Field(None, alias="updatedGraph", description="更新后的知识图谱")
@@ -218,4 +226,7 @@ class ChatMessage(BaseModel):
     role: Literal["user", "assistant"]
     text: str
     timestamp: str
-    analysis: Optional[ChatAnalysis] = None
+    # Stored messages can contain process evidence without a complete inferred
+    # ChatAnalysis. Preserve that JSON in logs/exports instead of inventing
+    # missing intent/emotion scores or dropping the evidence fields.
+    analysis: Optional[dict] = None

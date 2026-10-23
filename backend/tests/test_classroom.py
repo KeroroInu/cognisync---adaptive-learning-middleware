@@ -71,8 +71,8 @@ async def publish(client, actors, session_id, *, request_id=None, item=None):
 
 async def change_state(client, actors, session_id, action):
     response = await client.post(f"{ADMIN}/sessions/{session_id}/state", headers=actors["teacher"], json={"action": action})
-    assert response.status_code == 200, response.text
-    return response.json()["data"]
+    assert response.status_code == 410, response.text
+    return response.json()
 
 
 async def learning_task(test_db, *, user_id=None):
@@ -205,7 +205,7 @@ async def test_cross_class_cannot_read_or_submit_another_prompt(client, test_db,
     assert own["prompt"]["id"] == prompt["id"]
     assert "source" not in own["prompt"]
     other = (await client.get(f"{STUDENT}/state", headers=actors["other"])).json()["data"]
-    assert other == {"session": None, "prompt": None, "lesson_entry": None}
+    assert other == {"session": None, "prompt": None, "lesson_entry": None, "notice": None, "notices": []}
     response = await client.post(f"{STUDENT}/prompts/{prompt['id']}/responses", headers=actors["other"], json={"answer": "code"})
     assert response.status_code == 404
     # Another class keeps its preparation area; no legacy task is auto-assigned.
@@ -248,7 +248,7 @@ async def test_new_session_archives_old_pointer_without_erasing_raw_answers(clie
     assert answer.status_code == 200
     second = await start(client, actors, title="下一节课")
     assert second["id"] != first["id"]
-    assert (await client.post(f"{ADMIN}/sessions/{first['id']}/state", headers=actors["teacher"], json={"action": "open"})).status_code == 409
+    assert (await client.post(f"{ADMIN}/sessions/{first['id']}/state", headers=actors["teacher"], json={"action": "open"})).status_code == 410
     history = await client.get(f"{ADMIN}/prompts/{prompt['id']}/responses", headers=actors["teacher"])
     assert history.status_code == 200
     assert history.json()["data"]["responses"][0]["answer"] == "result"
@@ -303,69 +303,31 @@ async def test_optional_text_and_closed_prompt_semantics(client, classroom_actor
     assert (await client.get(f"{STUDENT}/state", headers=actors["second"])).json()["data"]["prompt"] is None
 
 
-async def test_closing_grace_only_allows_existing_own_workspace_and_progress(client, test_db, classroom_actors):
-    actors = classroom_actors
-    existing_task = await learning_task(test_db, user_id=actors["first_id"])
-    new_task = await learning_task(test_db)
-    session = await start(client, actors)
-    assert (await client.post(f"{ADMIN}/sessions/{session['id']}/lesson", headers=actors["teacher"], json={"tasks": {"pdt": str(existing_task)}})).status_code == 200
-    assert (await client.post(f"{ADMIN}/sessions/{session['id']}/lesson/start", headers=actors["teacher"])).status_code == 200
-    before = datetime.now(timezone.utc)
-    closing = await change_state(client, actors, session["id"], "end")
-    deadline = datetime.fromisoformat(closing["closes_at"].replace("Z", "+00:00"))
-    assert 8 <= (deadline - before).total_seconds() <= 12
-    assert closing["state"] == "closing"
-    repeat = await change_state(client, actors, session["id"], "end")
-    assert repeat["closes_at"] == closing["closes_at"]
-    for endpoint, body in (
-        ("save-workspace", {"workspace_data": {"saved_during_grace": True}}),
-        ("save-progress", {"code_submitted": "score = 2"}),
-    ):
-        saved = await client.post(f"/api/research/tasks/{existing_task}/{endpoint}", headers=actors["first"], json=body)
-        assert saved.status_code == 200, saved.text
-        # A classmate's existing submission cannot authorize this student's new one.
-        denied = await client.post(f"/api/research/tasks/{existing_task}/{endpoint}", headers=actors["second"], json=body)
-        assert denied.status_code == 403 and denied.json()["detail"]["code"] == "CLASSROOM_CLOSING"
-        denied = await client.post(f"/api/research/tasks/{new_task}/{endpoint}", headers=actors["first"], json=body)
-        assert denied.status_code == 403
-    denied = await client.get("/api/research/active-task", headers=actors["first"])
-    assert denied.status_code == 403 and denied.json()["detail"]["code"] == "CLASSROOM_CLOSING"
-    async with test_db() as db:
-        submissions = (await db.scalars(select(ResearchTaskSubmission))).all()
-        assert len(submissions) == 1
-        assert submissions[0].code_submitted == "score = 2"
-        assert submissions[0].workspace_data["saved_during_grace"] is True
-        assert await db.scalar(select(func.count()).select_from(ClassroomControlEvent).where(ClassroomControlEvent.action == "end")) == 1
-
-
-async def test_expired_class_blocks_learning_but_preserves_identity_assessments_admin_and_reopen(client, test_db, classroom_actors):
+async def test_retired_class_controls_do_not_block_published_task_saves(client, test_db, classroom_actors):
     actors = classroom_actors
     task_id = await learning_task(test_db, user_id=actors["first_id"])
+    other_task = await learning_task(test_db)
     session = await start(client, actors)
     assert (await client.post(f"{ADMIN}/sessions/{session['id']}/lesson", headers=actors["teacher"], json={"tasks": {"pdt": str(task_id)}})).status_code == 200
     assert (await client.post(f"{ADMIN}/sessions/{session['id']}/lesson/start", headers=actors["teacher"])).status_code == 200
     await change_state(client, actors, session["id"], "end")
-    await expire_grace(test_db, session["id"])
-    for endpoint, body in (
-        ("save-workspace", {"workspace_data": {"too_late": True}}),
-        ("save-progress", {"code_submitted": "too late"}),
-    ):
-        response = await client.post(f"/api/research/tasks/{task_id}/{endpoint}", headers=actors["first"], json=body)
-        assert response.status_code == 403 and response.json()["detail"]["code"] == "CLASSROOM_CLOSED"
-    assert (await client.get("/api/research/active-task", headers=actors["first"])).status_code == 403
-    for path in ("/api/auth/me", f"{STUDENT}/state", "/api/assessments/pending"):
-        response = await client.get(path, headers=actors["first"])
-        assert response.status_code == 200, response.text
-    state = (await client.get(f"{STUDENT}/state", headers=actors["first"])).json()["data"]
-    assert state["session"]["state"] == "closed"
-    assert (await client.get(f"{ADMIN}/sessions", headers=actors["teacher"])).status_code == 200
-    refused = await client.post(f"{ADMIN}/sessions/{session['id']}/prompts", headers=actors["teacher"], json={"question": question()})
-    assert refused.status_code == 409
-    opened = await change_state(client, actors, session["id"], "open")
-    assert opened["state"] == "open" and opened["closes_at"] is None
+    # A stored legacy closed state no longer blocks the current class.
+    async with test_db() as db:
+        item = await db.get(ClassroomSession, UUID(session["id"]))
+        item.state, item.closes_at = "closed", datetime.now(timezone.utc)
+        await db.commit()
+    assert (await client.get(f"{STUDENT}/state", headers=actors["first"])).json()["data"]["session"]["state"] == "open"
+    for who in ("first", "second"):
+        saved = await client.post(f"/api/research/tasks/{task_id}/save-progress", headers=actors[who], json={"code_submitted": "score = 2"})
+        assert saved.status_code == 200, saved.text
+    # Removing the class gate never grants access to an unpublished task UUID.
+    assert (await client.post(f"/api/research/tasks/{other_task}/save-progress", headers=actors["first"], json={"code_submitted": "no"})).status_code == 404
     assert (await client.get("/api/research/active-task", headers=actors["first"])).status_code == 200
-    saved = await client.post(f"/api/research/tasks/{task_id}/save-progress", headers=actors["first"], json={"code_submitted": "score = 3"})
-    assert saved.status_code == 200
+    async with test_db() as db:
+        submissions = (await db.scalars(select(ResearchTaskSubmission))).all()
+        assert len(submissions) == 2
+        assert all(item.code_submitted == "score = 2" for item in submissions)
+        assert await db.scalar(select(func.count()).select_from(ClassroomControlEvent).where(ClassroomControlEvent.action == "end")) == 0
 
 
 async def test_reset_password_revokes_old_token_without_replacing_student_or_evidence(client, test_db, classroom_actors):

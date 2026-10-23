@@ -264,6 +264,12 @@ async def test_complete_auth_and_chat_flow(client: AsyncClient):
     assert "messages" in logs
     assert "calibrationLogs" in logs
     assert len(logs["messages"]) >= 1
+    student_message = next(message for message in logs["messages"] if message["role"] == "user")
+    assistant_message = next(message for message in logs["messages"] if message["role"] == "assistant")
+    assert "learningEvidence" in student_message["analysis"]
+    assert "intent" not in student_message["analysis"]
+    assert "learningEvidence" in assistant_message["analysis"]
+    assert assistant_message["analysis"]["intent"] == chat_response.json()["data"]["analysis"]["intent"]
 
     print(
         f"\n✅ Complete flow test passed: "

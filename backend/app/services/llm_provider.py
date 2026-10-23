@@ -15,6 +15,7 @@ from typing import Dict, Any
 import httpx
 import json
 import re
+from urllib.parse import urlsplit
 from fastapi import HTTPException
 
 from app.core.config import settings
@@ -174,7 +175,14 @@ class OpenAICompatibleProvider(BaseProvider):
     ):
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
+        # Upgrade retired official aliases at the request boundary, including
+        # already-saved DB configurations. Do not rewrite third-party models.
         self.model = model
+        if self._is_official_deepseek() and model in {
+            "deepseek-chat", "deepseek-reasoner", "deepseek-v4-flash",
+            "deepseek-v4-flash-vision-exp",
+        }:
+            self.model = "deepseek-flash"
         self.timeout = timeout
         self.request_role = request_role
         self.request_priority = request_priority
@@ -192,7 +200,24 @@ class OpenAICompatibleProvider(BaseProvider):
             },
         )
 
-        logger.info(f"Initialized OpenAICompatibleProvider: {base_url} | {model}")
+        logger.info("Initialized OpenAICompatibleProvider: host=%s model=%s",
+                    urlsplit(self.base_url).hostname, self.model)
+
+    def _is_official_deepseek(self) -> bool:
+        try:
+            parsed = urlsplit(self.base_url)
+            return (parsed.scheme == "https" and parsed.hostname == "api.deepseek.com"
+                    and not (parsed.username or parsed.password or parsed.query or parsed.fragment)
+                    and parsed.port in (None, 443) and parsed.path in ("", "/v1"))
+        except ValueError:
+            return False
+
+    @staticmethod
+    def _response_content(data: Any) -> str:
+        content = data["choices"][0]["message"]["content"]
+        if not isinstance(content, str) or not content.strip():
+            raise ValueError("missing visible text")
+        return content
 
     async def complete(
         self,
@@ -212,6 +237,7 @@ class OpenAICompatibleProvider(BaseProvider):
             "temperature": temperature,
             "max_tokens": max_tokens,
         }
+        payload.update(self._classroom_options())
 
         try:
             response: httpx.Response | None = None
@@ -245,11 +271,11 @@ class OpenAICompatibleProvider(BaseProvider):
             data = response.json()
 
             # 提取生成的文本
-            content = data["choices"][0]["message"]["content"]
+            content = self._response_content(data)
 
             logger.debug(
                 f"LLM response received: {len(content)} chars, "
-                f"model={self.model}, tokens={data.get('usage', {})}"
+                f"model={self.model}"
             )
             logger.info(
                 "LLM request complete role=%s model=%s status=%s queue_wait_ms=%.1f "
@@ -265,16 +291,28 @@ class OpenAICompatibleProvider(BaseProvider):
             return content
 
         except httpx.HTTPStatusError as e:
-            logger.error(f"HTTP error from LLM API: {e.response.status_code} - {e.response.text}")
-            raise RuntimeError(f"LLM API request failed: {e}")
+            # Upstreams may echo an invalid API key in their error body.
+            # Record only the status, never response bodies or request headers.
+            logger.error("HTTP error from LLM API: status=%s model=%s",
+                         e.response.status_code, self.model)
+            raise RuntimeError(f"LLM API request failed (HTTP {e.response.status_code})") from None
 
         except httpx.RequestError as e:
-            logger.error(f"Request error: {e}")
-            raise RuntimeError(f"Failed to connect to LLM API: {e}")
+            logger.error("LLM connection error: %s", type(e).__name__)
+            raise RuntimeError("Failed to connect to LLM API") from None
 
-        except (KeyError, IndexError) as e:
-            logger.error(f"Unexpected API response format: {e}")
-            raise RuntimeError(f"Invalid LLM API response: {e}")
+        except (KeyError, IndexError, TypeError, ValueError) as e:
+            logger.error("Unexpected LLM API response format: %s", type(e).__name__)
+            raise RuntimeError("Invalid LLM API response: missing visible answer") from None
+
+    def _classroom_options(self) -> dict:
+        # Flash defaults to reasoning. Short classroom replies need the token
+        # budget for the visible answer, not an invisible reasoning preamble.
+        if (self.request_role == "chat"
+                and self._is_official_deepseek()
+                and self.model == "deepseek-flash"):
+            return {"thinking": {"type": "disabled"}}
+        return {}
 
     async def health_check(self) -> bool:
         """检查 LLM API 是否可用"""
@@ -287,13 +325,15 @@ class OpenAICompatibleProvider(BaseProvider):
                         "model": self.model,
                         "messages": [{"role": "user", "content": "Hi"}],
                         "max_tokens": 5,
+                        **self._classroom_options(),
                     },
                 )
             response.raise_for_status()
+            self._response_content(response.json())
             return True
 
         except Exception as e:
-            logger.warning(f"LLM health check failed: {e}")
+            logger.warning("LLM health check failed: %s", type(e).__name__)
             return False
 
     async def close(self):
@@ -317,7 +357,30 @@ class MockProvider(BaseProvider):
         temperature: float = 0.7,
         max_tokens: int = 1000,
     ) -> str:
-        """返回模拟的 JSON 响应"""
+        """对话返回明确标注的离线文本，旧分析接口仍返回 JSON。"""
+
+        # Common classroom dialogue is not the legacy analysis endpoint.
+        if "COGNISYNC_COMMON_SUPPORT_V1" in system_prompt:
+            try:
+                request = json.loads(user_prompt)
+                request = request if isinstance(request, dict) else {}
+                context = json.loads(request.get('context') or '{}')
+            except (ValueError, TypeError):
+                request, context = {}, {}
+            context = context if isinstance(context, dict) else {}
+            name = str(context.get('functionName', ''))
+            if "COGNISYNC_FUNCTION_IDEAS_V1" in system_prompt:
+                if '当前操作：organize' in system_prompt:
+                    return '【离线演示】真实 AI 尚未接通，暂时不能替你整理对话。可以点“我想自己写步骤”，按“先做什么 → 什么情况下做什么 → 最后怎样”写短句。'
+                hint = '什么时候会用到这个功能？发生之后，画面或数据要改变什么？'
+                if any(word in name for word in ('方向', '转向')):
+                    hint = '蛇正在向右走，这时按下左键，应该立刻掉头吗？'
+                elif any(word in name for word in ('吃', '进食', '得分', '增长')):
+                    hint = '蛇头碰到食物后，你想让蛇身和分数各发生什么变化？'
+                elif any(word in name for word in ('移动', '前进')):
+                    hint = '蛇向前走一格，头部和尾部分别要怎样变化？'
+                return '【离线演示】' + hint
+            return '【离线演示】当前未接通真实 AI。可以先记录你的问题或自己尝试；请老师在模型设置中接通对话模型后再继续讨论。'
 
         # 项目支架对话在离线开发模式下也返回可读建议；文本分析仍返回 JSON。
         if "COGNISYNC_SCAFFOLD_MODE" in system_prompt:

@@ -12,12 +12,17 @@ class UserSummary(BaseModel):
     student_id: str = Field(..., description="学号")
     email: Optional[str] = Field(None, description="用户邮箱（可选）")
     name: str = Field("", description="用户名称")
+    gender: Optional[str] = None
     role: str = Field("user", description="用户角色")
     is_active: bool = Field(True, description="是否激活")
     created_at: datetime = Field(..., description="创建时间")
     message_count: int = Field(0, description="消息数量")
     last_active_at: Optional[datetime] = Field(None, description="最后活跃时间")
+    submission_count: int = Field(0, description="服务器已收到的作品版本数（不含下载记录）")
+    download_count: int = Field(0, description="任务资料下载次数")
+    last_submitted_at: Optional[datetime] = Field(None, description="最近作品提交时间")
     class_name: Optional[str] = Field(None, description="班级名称或代码")
+    school_class: Optional[str] = None
     experiment_group: str = Field("unassigned", description="实验条件")
 
 

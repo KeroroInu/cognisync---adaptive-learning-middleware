@@ -1,6 +1,8 @@
 """模型共享并发预算与优先级调度。"""
 import asyncio
+import json
 
+import httpx
 import pytest
 from fastapi import HTTPException
 
@@ -17,6 +19,134 @@ class _SuccessResponse:
 
     def json(self):
         return {"choices": [{"message": {"content": "ok"}}], "usage": {}}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('model', [
+    'deepseek-chat', 'deepseek-reasoner', 'deepseek-v4-flash',
+    'deepseek-v4-flash-vision-exp', 'deepseek-flash',
+])
+async def test_official_deepseek_legacy_configuration_uses_current_flash(monkeypatch, model):
+    """An existing saved model must work without the teacher re-entering the key."""
+    original_client = httpx.AsyncClient
+    requests = []
+
+    def handle(request):
+        payload = json.loads(request.content)
+        requests.append(payload)
+        assert request.url == 'https://api.deepseek.com/v1/chat/completions'
+        assert request.headers['authorization'] == 'Bearer sk-unit-test-only'
+        assert payload['model'] == 'deepseek-flash'
+        assert payload['thinking'] == {'type': 'disabled'}
+        return httpx.Response(200, json={'choices': [{'message': {'content': '先确定蛇头的位置。'}}]})
+
+    monkeypatch.setattr(llm_provider.httpx, 'AsyncClient', lambda **kwargs:
+        original_client(transport=httpx.MockTransport(handle), **kwargs))
+    provider = OpenAICompatibleProvider('https://api.deepseek.com/v1', 'sk-unit-test-only', model)
+    try:
+        assert await provider.complete('system', 'user', max_tokens=600) == '先确定蛇头的位置。'
+        assert await provider.health_check()
+        assert len(requests) == 2
+    finally:
+        await provider.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('base_url,model', [
+    ('https://gateway.example/v1', 'deepseek-chat'),
+    ('https://api.deepseek.com.evil.example/v1', 'deepseek-chat'),
+    ('https://api.deepseek.com/v1', 'custom-model'),
+    ('https://api.deepseek.com/v1', 'deepseek-v4-pro'),
+])
+async def test_deepseek_migration_does_not_override_custom_endpoints_or_models(base_url, model):
+    provider = OpenAICompatibleProvider(base_url, 'sk-unit-test-only', model)
+    try:
+        assert provider.model == model
+    finally:
+        await provider.close()
+
+
+@pytest.mark.parametrize('base_url', [
+    'https://api.deepseek.com:invalid/v1',
+    'https://api.deepseek.com:99999/v1',
+    'https://[api.deepseek.com/v1',
+])
+def test_official_deepseek_detection_rejects_malformed_urls_without_raising(base_url):
+    # Exercise only detection: no HTTP client, network, or configuration writes.
+    provider = OpenAICompatibleProvider.__new__(OpenAICompatibleProvider)
+    provider.base_url = base_url
+    assert provider._is_official_deepseek() is False
+    assert provider.base_url == base_url
+
+
+def test_deepseek_default_is_current_flash():
+    from app.core.config import Settings
+    assert Settings.model_fields['DEEPSEEK_MODEL'].default == 'deepseek-flash'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('content', [None, '', '   ', ['not a text answer']])
+async def test_provider_rejects_empty_or_non_text_answers_and_health_check(monkeypatch, content):
+    original_client = httpx.AsyncClient
+    monkeypatch.setattr(llm_provider.httpx, 'AsyncClient', lambda **kwargs:
+        original_client(transport=httpx.MockTransport(lambda request:
+            httpx.Response(200, json={'choices': [{'message': {'content': content}}]})), **kwargs))
+    provider = OpenAICompatibleProvider('https://api.deepseek.com', 'sk-unit-test-only', 'deepseek-flash')
+    try:
+        with pytest.raises(RuntimeError, match='Invalid LLM API response'):
+            await provider.complete('system', 'user')
+        assert not await provider.health_check()
+    finally:
+        await provider.close()
+
+
+@pytest.mark.asyncio
+async def test_upstream_errors_do_not_log_or_return_echoed_credentials(monkeypatch, caplog):
+    original_client = httpx.AsyncClient
+    secret = 'sk-unit-test-do-not-echo'
+    monkeypatch.setattr(llm_provider.httpx, 'AsyncClient', lambda **kwargs:
+        original_client(transport=httpx.MockTransport(lambda request:
+            httpx.Response(401, json={'error': {'message': f'Invalid key: {secret}'}})), **kwargs))
+    provider = OpenAICompatibleProvider('https://api.deepseek.com', secret, 'deepseek-flash')
+    try:
+        with pytest.raises(RuntimeError) as error:
+            await provider.complete('system', 'user')
+        assert secret not in str(error.value)
+        assert secret not in caplog.text
+        assert '401' in str(error.value)
+    finally:
+        await provider.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('base_url,model,role,disabled', [
+    ('https://api.deepseek.com/v1', 'deepseek-flash', 'chat', True),
+    ('https://api.deepseek.com', 'deepseek-v4-flash', 'chat', True),
+    ('https://api.deepseek.com/v1', 'deepseek-flash', 'analysis', False),
+    ('https://api.deepseek.com/v1', 'deepseek-v4-pro', 'chat', False),
+    ('https://example.invalid/v1', 'deepseek-flash', 'chat', False),
+])
+async def test_flash_classroom_disables_thinking_without_affecting_other_models(monkeypatch, base_url, model, role, disabled):
+    requests = []
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            pass
+
+        async def post(self, *args, **kwargs):
+            requests.append(kwargs['json'])
+            return _SuccessResponse()
+
+        async def aclose(self):
+            pass
+
+    monkeypatch.setattr(llm_provider.httpx, 'AsyncClient', FakeClient)
+    provider = OpenAICompatibleProvider(base_url, 'test-key', model, request_role=role)
+    assert await provider.complete('system', 'user', max_tokens=600) == 'ok'
+    assert await provider.health_check()
+    for request in requests:
+        assert request.get('thinking') == ({'type':'disabled'} if disabled else None)
+    assert requests[0]['max_tokens'] == 600
 
 
 @pytest.mark.asyncio

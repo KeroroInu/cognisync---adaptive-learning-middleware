@@ -1,0 +1,454 @@
+{
+  "schema": "classroom-instrument-catalog/1",
+  "version": "20261015-r2",
+  "instruments": [
+    {
+      "key": "knowledge_a",
+      "version": "20261015-r2",
+      "main_questions": 8,
+      "total_points": 20,
+      "field_points": {
+        "q1": 2,
+        "q2": 2,
+        "q3": 2,
+        "q4": 1,
+        "q4_output": 1,
+        "q5": 1,
+        "q5_second": 1,
+        "q6": 3,
+        "q7": 1,
+        "q7_condition": 2,
+        "q8": 1,
+        "q8_actual": 1,
+        "q8_expected": 1,
+        "q8_fix": 1
+      },
+      "source_file": "编程知识与程序理解测试_AB卷_学生用卷.docx",
+      "source_sha256": "fab59ce47c1b0aa324522a74440e79ba7ee47b2cd9e38eec40eb2039962fdae0",
+      "scoring_source_sha256": "eed683fac346ab749021d2bcaf7edfbf38426f3333466ac9f3cf96bed1420f21",
+      "draft": {
+        "phase": "pre",
+        "class_name": "",
+        "name": "Python 基础水平测试 A 卷 · 8题20分",
+        "source": "题本代码：knowledge_a；版本：20261015-r2；预计约10分钟（未经实测确认）；A/B等值性待检验，不与旧30分卷混合。\n来源：编程知识与程序理解测试_AB卷_学生用卷.docx；SHA256：fab59ce47c1b0aa324522a74440e79ba7ee47b2cd9e38eec40eb2039962fdae0。\n教师评分文件SHA256：eed683fac346ab749021d2bcaf7edfbf38426f3333466ac9f3cf96bed1420f21。\n判分补充\n第6—7题不得仅对示例列表硬编码。第7题可用任一现有列表元素初始化，或用适当无穷值；不能无依据地固定为0。A卷value >= best、B卷value <= best同样正确。\n第8题：A卷反例可为任意n≥10的整数，B卷可为0至4的任意整数。原输出必须说明先A后B两行；写“A、B”也可。输入不是反例时，该空0分，但按所填合法输入分别核对原输出和正确输出，不连带扣分。修改独立计分；只写“改成elif”而未指明位置得0分。输出允许合理空格及有无引号。\n未作答按相应题目0分并保留漏答标记；缺考、技术故障或施测中断另记，不直接计为0分。评分争议先按统一规则复核，不按学生组别改变标准。\n题号 | A卷答案 | B卷答案 | 评分标准\n1 | B | D | 2分；错选、多选或未作答得0分。\n2 | C | A | 2分；错选、多选或未作答得0分。\n3 | D | C | 2分；错选、多选或未作答得0分。\n4 | 3；7 | 3；8 | 每空1分，分别计分。\n5 | 5；6 | 4；6 | 每空1分，分别计分。第二轮须读取第一轮更新后的元素。\n6 | value >= 6 | value < 5 | 条件正确得3分；能表达正确比较方向，但边界有误得1分；其他0分。\n7 | ① data[0]\n② value > best | ① data[0]\n② value < best | 初始化有效得1分；比较条件有效得2分。各空分别计分，接受完整、等价的正确写法。\n8 | 例：n = 10；\n原输出A、B两行；\n正确只输出A。\n将第二个if改为elif。 | 例：n = 3；\n原输出A、B两行；\n正确只输出A。\n将第二个if改为elif。 | 有效反例1分；原输出和正确输出各1分；有效修改1分。反例不唯一；接受其他对所有非负整数均正确的一处修改。",
+        "questions": [
+          {
+            "id": "q1",
+            "text": "输入 14 后，程序输出的是（    ）。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "A",
+                "label": "A. 141"
+              },
+              {
+                "value": "B",
+                "label": "B. 15"
+              },
+              {
+                "value": "C",
+                "label": "C. 13"
+              },
+              {
+                "value": "D",
+                "label": "D. 程序报错"
+              }
+            ],
+            "code": "n = int(input())\nprint(n + 1)",
+            "hint": "每题2分。作答时间约10分钟，满分20分。独立作答，不使用AI、教材、搜索或代码运行工具。代码均为Python 3。",
+            "parent_id": null
+          },
+          {
+            "id": "q2",
+            "text": "程序输出的是（    ）。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "A",
+                "label": "A. 2"
+              },
+              {
+                "value": "B",
+                "label": "B. 6"
+              },
+              {
+                "value": "C",
+                "label": "C. 7"
+              },
+              {
+                "value": "D",
+                "label": "D. 9"
+              }
+            ],
+            "code": "data = [6, 2, 9]\ndata[1] = data[0] + 1\nprint(data[1])",
+            "hint": "本题2分。",
+            "parent_id": null
+          },
+          {
+            "id": "q3",
+            "text": "n 是整数，表示“n 不小于 0 且小于 5”的条件是（    ）。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "A",
+                "label": "A. n >= 0 or n < 5"
+              },
+              {
+                "value": "B",
+                "label": "B. n > 0 and n < 5"
+              },
+              {
+                "value": "C",
+                "label": "C. n >= 0 and n <= 5"
+              },
+              {
+                "value": "D",
+                "label": "D. n >= 0 and n < 5"
+              }
+            ],
+            "code": "",
+            "hint": "本题2分。",
+            "parent_id": null
+          },
+          {
+            "id": "q4",
+            "text": "阅读程序，填写执行次数和输出结果。循环体执行多少次？",
+            "type": "text",
+            "required": false,
+            "options": [],
+            "code": "x = 1\nwhile x < 6:\n    x = x + 2\nprint(x)",
+            "hint": "本题共2分，每空1分。",
+            "parent_id": null
+          },
+          {
+            "id": "q4_output",
+            "text": "最终输出",
+            "type": "text",
+            "required": false,
+            "options": [],
+            "code": "",
+            "hint": "1分",
+            "parent_id": "q4"
+          },
+          {
+            "id": "q5",
+            "text": "循环结束后，列表中的两个元素分别是多少？data[1] =",
+            "type": "text",
+            "required": false,
+            "options": [],
+            "code": "data = [2, 3, 1]\nfor i in [1, 2]:\n    data[i] = data[i] + data[i - 1]",
+            "hint": "本题共2分，每空1分。",
+            "parent_id": null
+          },
+          {
+            "id": "q5_second",
+            "text": "data[2] =",
+            "type": "text",
+            "required": false,
+            "options": [],
+            "code": "",
+            "hint": "1分",
+            "parent_id": "q5"
+          },
+          {
+            "id": "q6",
+            "text": "统计列表中不小于 6 的数据个数，只补全判断条件。",
+            "type": "text",
+            "required": false,
+            "options": [],
+            "code": "data = [4, 7, 6, 2]\ncount = 0\nfor value in data:\n    if ____________________:\n        count = count + 1\nprint(count)",
+            "hint": "本题3分。补全后，程序应对符合题意的其他整数列表同样有效。",
+            "parent_id": null
+          },
+          {
+            "id": "q7",
+            "text": "补全程序，求非空整数列表的最大值。列表中的数也可能全部为负数。 填写①：",
+            "type": "text",
+            "required": false,
+            "options": [],
+            "code": "data = [-4, -7, -2, -6]\nbest = __________  # ①\nfor value in data:\n    if ____________________:  # ②\n        best = value\nprint(best)",
+            "hint": "本题共3分，①1分，②2分。补全后，程序应对符合题意的其他整数列表同样有效。",
+            "parent_id": null
+          },
+          {
+            "id": "q7_condition",
+            "text": "填写②：",
+            "type": "text",
+            "required": false,
+            "options": [],
+            "code": "",
+            "hint": "2分",
+            "parent_id": "q7"
+          },
+          {
+            "id": "q8",
+            "text": "输入非负整数n，只输出一个类别：n不小于10为A，5至9为B，小于5为C。下面程序有错。（1）给出一个能暴露错误的输入：n =",
+            "type": "text",
+            "required": false,
+            "options": [],
+            "code": "n = int(input())\nif n >= 10:\n    print(\"A\")\nif n >= 5:\n    print(\"B\")\nelse:\n    print(\"C\")",
+            "hint": "本题共4分，每空1分。",
+            "parent_id": null
+          },
+          {
+            "id": "q8_actual",
+            "text": "原程序输出：",
+            "type": "text",
+            "required": false,
+            "options": [],
+            "code": "",
+            "hint": "1分",
+            "parent_id": "q8"
+          },
+          {
+            "id": "q8_expected",
+            "text": "正确输出：",
+            "type": "text",
+            "required": false,
+            "options": [],
+            "code": "",
+            "hint": "1分",
+            "parent_id": "q8"
+          },
+          {
+            "id": "q8_fix",
+            "text": "（2）修改一处，让程序对任意非负整数n都正确。",
+            "type": "text",
+            "required": false,
+            "options": [],
+            "code": "",
+            "hint": "1分",
+            "parent_id": "q8"
+          }
+        ]
+      }
+    },
+    {
+      "key": "knowledge_b",
+      "version": "20261015-r2",
+      "main_questions": 8,
+      "total_points": 20,
+      "field_points": {
+        "q1": 2,
+        "q2": 2,
+        "q3": 2,
+        "q4": 1,
+        "q4_output": 1,
+        "q5": 1,
+        "q5_second": 1,
+        "q6": 3,
+        "q7": 1,
+        "q7_condition": 2,
+        "q8": 1,
+        "q8_actual": 1,
+        "q8_expected": 1,
+        "q8_fix": 1
+      },
+      "source_file": "编程知识与程序理解测试_AB卷_学生用卷.docx",
+      "source_sha256": "fab59ce47c1b0aa324522a74440e79ba7ee47b2cd9e38eec40eb2039962fdae0",
+      "scoring_source_sha256": "eed683fac346ab749021d2bcaf7edfbf38426f3333466ac9f3cf96bed1420f21",
+      "draft": {
+        "phase": "post",
+        "class_name": "",
+        "name": "Python 基础水平测试 B 卷 · 8题20分",
+        "source": "题本代码：knowledge_b；版本：20261015-r2；预计约10分钟（未经实测确认）；A/B等值性待检验，不与旧30分卷混合。\n来源：编程知识与程序理解测试_AB卷_学生用卷.docx；SHA256：fab59ce47c1b0aa324522a74440e79ba7ee47b2cd9e38eec40eb2039962fdae0。\n教师评分文件SHA256：eed683fac346ab749021d2bcaf7edfbf38426f3333466ac9f3cf96bed1420f21。\n判分补充\n第6—7题不得仅对示例列表硬编码。第7题可用任一现有列表元素初始化，或用适当无穷值；不能无依据地固定为0。A卷value >= best、B卷value <= best同样正确。\n第8题：A卷反例可为任意n≥10的整数，B卷可为0至4的任意整数。原输出必须说明先A后B两行；写“A、B”也可。输入不是反例时，该空0分，但按所填合法输入分别核对原输出和正确输出，不连带扣分。修改独立计分；只写“改成elif”而未指明位置得0分。输出允许合理空格及有无引号。\n未作答按相应题目0分并保留漏答标记；缺考、技术故障或施测中断另记，不直接计为0分。评分争议先按统一规则复核，不按学生组别改变标准。\n题号 | A卷答案 | B卷答案 | 评分标准\n1 | B | D | 2分；错选、多选或未作答得0分。\n2 | C | A | 2分；错选、多选或未作答得0分。\n3 | D | C | 2分；错选、多选或未作答得0分。\n4 | 3；7 | 3；8 | 每空1分，分别计分。\n5 | 5；6 | 4；6 | 每空1分，分别计分。第二轮须读取第一轮更新后的元素。\n6 | value >= 6 | value < 5 | 条件正确得3分；能表达正确比较方向，但边界有误得1分；其他0分。\n7 | ① data[0]\n② value > best | ① data[0]\n② value < best | 初始化有效得1分；比较条件有效得2分。各空分别计分，接受完整、等价的正确写法。\n8 | 例：n = 10；\n原输出A、B两行；\n正确只输出A。\n将第二个if改为elif。 | 例：n = 3；\n原输出A、B两行；\n正确只输出A。\n将第二个if改为elif。 | 有效反例1分；原输出和正确输出各1分；有效修改1分。反例不唯一；接受其他对所有非负整数均正确的一处修改。",
+        "questions": [
+          {
+            "id": "q1",
+            "text": "输入 23 后，程序输出的是（    ）。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "A",
+                "label": "A. 22"
+              },
+              {
+                "value": "B",
+                "label": "B. 程序报错"
+              },
+              {
+                "value": "C",
+                "label": "C. 231"
+              },
+              {
+                "value": "D",
+                "label": "D. 24"
+              }
+            ],
+            "code": "n = int(input())\nprint(n + 1)",
+            "hint": "每题2分。作答时间约10分钟，满分20分。独立作答，不使用AI、教材、搜索或代码运行工具。代码均为Python 3。",
+            "parent_id": null
+          },
+          {
+            "id": "q2",
+            "text": "程序输出的是（    ）。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "A",
+                "label": "A. 6"
+              },
+              {
+                "value": "B",
+                "label": "B. 8"
+              },
+              {
+                "value": "C",
+                "label": "C. 5"
+              },
+              {
+                "value": "D",
+                "label": "D. 4"
+              }
+            ],
+            "code": "data = [3, 8, 5]\ndata[1] = data[2] + 1\nprint(data[1])",
+            "hint": "本题2分。",
+            "parent_id": null
+          },
+          {
+            "id": "q3",
+            "text": "n 是整数，表示“n 大于 2 且不大于 7”的条件是（    ）。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "A",
+                "label": "A. n >= 2 and n < 7"
+              },
+              {
+                "value": "B",
+                "label": "B. n > 2 or n <= 7"
+              },
+              {
+                "value": "C",
+                "label": "C. n > 2 and n <= 7"
+              },
+              {
+                "value": "D",
+                "label": "D. n > 2 and n < 7"
+              }
+            ],
+            "code": "",
+            "hint": "本题2分。",
+            "parent_id": null
+          },
+          {
+            "id": "q4",
+            "text": "阅读程序，填写执行次数和输出结果。循环体执行多少次？",
+            "type": "text",
+            "required": false,
+            "options": [],
+            "code": "x = 2\nwhile x < 7:\n    x = x + 2\nprint(x)",
+            "hint": "本题共2分，每空1分。",
+            "parent_id": null
+          },
+          {
+            "id": "q4_output",
+            "text": "最终输出",
+            "type": "text",
+            "required": false,
+            "options": [],
+            "code": "",
+            "hint": "1分",
+            "parent_id": "q4"
+          },
+          {
+            "id": "q5",
+            "text": "循环结束后，列表中的两个元素分别是多少？data[1] =",
+            "type": "text",
+            "required": false,
+            "options": [],
+            "code": "data = [3, 1, 2]\nfor i in [1, 2]:\n    data[i] = data[i] + data[i - 1]",
+            "hint": "本题共2分，每空1分。",
+            "parent_id": null
+          },
+          {
+            "id": "q5_second",
+            "text": "data[2] =",
+            "type": "text",
+            "required": false,
+            "options": [],
+            "code": "",
+            "hint": "1分",
+            "parent_id": "q5"
+          },
+          {
+            "id": "q6",
+            "text": "统计列表中小于 5 的数据个数，只补全判断条件。",
+            "type": "text",
+            "required": false,
+            "options": [],
+            "code": "data = [3, 6, 5, 1]\ncount = 0\nfor value in data:\n    if ____________________:\n        count = count + 1\nprint(count)",
+            "hint": "本题3分。补全后，程序应对符合题意的其他整数列表同样有效。",
+            "parent_id": null
+          },
+          {
+            "id": "q7",
+            "text": "补全程序，求非空整数列表的最小值。列表中的数也可能全部为正数。 填写①：",
+            "type": "text",
+            "required": false,
+            "options": [],
+            "code": "data = [6, 3, 8, 4]\nbest = __________  # ①\nfor value in data:\n    if ____________________:  # ②\n        best = value\nprint(best)",
+            "hint": "本题共3分，①1分，②2分。补全后，程序应对符合题意的其他整数列表同样有效。",
+            "parent_id": null
+          },
+          {
+            "id": "q7_condition",
+            "text": "填写②：",
+            "type": "text",
+            "required": false,
+            "options": [],
+            "code": "",
+            "hint": "2分",
+            "parent_id": "q7"
+          },
+          {
+            "id": "q8",
+            "text": "输入非负整数n，只输出一个类别：n小于5为A，5至9为B，不小于10为C。下面程序有错。（1）给出一个能暴露错误的输入：n =",
+            "type": "text",
+            "required": false,
+            "options": [],
+            "code": "n = int(input())\nif n < 5:\n    print(\"A\")\nif n < 10:\n    print(\"B\")\nelse:\n    print(\"C\")",
+            "hint": "本题共4分，每空1分。",
+            "parent_id": null
+          },
+          {
+            "id": "q8_actual",
+            "text": "原程序输出：",
+            "type": "text",
+            "required": false,
+            "options": [],
+            "code": "",
+            "hint": "1分",
+            "parent_id": "q8"
+          },
+          {
+            "id": "q8_expected",
+            "text": "正确输出：",
+            "type": "text",
+            "required": false,
+            "options": [],
+            "code": "",
+            "hint": "1分",
+            "parent_id": "q8"
+          },
+          {
+            "id": "q8_fix",
+            "text": "（2）修改一处，让程序对任意非负整数n都正确。",
+            "type": "text",
+            "required": false,
+            "options": [],
+            "code": "",
+            "hint": "1分",
+            "parent_id": "q8"
+          }
+        ]
+      }
+    }
+  ]
+}

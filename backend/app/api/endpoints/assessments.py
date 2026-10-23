@@ -1,13 +1,14 @@
 """Teacher-controlled, versioned assessments. Never calls the profile/LLM pipeline."""
 from datetime import datetime, timezone
 from typing import Literal
-from uuid import UUID
+from uuid import UUID, uuid5
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import case, func, or_, select, text, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import load_only
 
 from app.api.endpoints.auth import get_current_user
 from app.core.security import verify_admin_key
@@ -35,6 +36,8 @@ class RoundInput(BaseModel):
             raise ValueError("题目编号不能重复")
         previous = {}
         for q in self.questions:
+            if q.parent_id and (q.parent_id not in previous or previous[q.parent_id].parent_id):
+                raise ValueError('补充字段必须关联前面的一道主问题')
             for condition in q.show_if:
                 source = previous.get(condition.question_id)
                 if not source or source.type == 'text' or not set(condition.values) <= {o.value for o in source.options}:
@@ -46,6 +49,12 @@ class RoundInput(BaseModel):
 class ToggleInput(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     enabled: bool
+
+
+class DistributeInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    request_id: UUID
+    class_name: Literal["解构班", "开发班"]
 
 
 class AnswerInput(BaseModel):
@@ -64,23 +73,36 @@ def present(item, *, student=False):
     return result
 
 
-async def pending_round(db, user):
-    # Class-specific publication takes precedence over a school-wide one for that phase.
-    rounds = (await db.scalars(select(AssessmentRound).where(
+async def pending_round(db, user, *, metadata_only=False):
+    # The latest class assignment wins across legacy pre/post labels. Labels are
+    # retained for historical exports, not used to schedule classroom delivery.
+    query = select(AssessmentRound)
+    if metadata_only:
+        query = query.options(load_only(AssessmentRound.id, AssessmentRound.revision))
+    rounds = (await db.scalars(query.where(
         AssessmentRound.enabled.is_(True),
         or_(AssessmentRound.class_name == "", AssessmentRound.class_name == (user.class_name or "")),
-    ).order_by(AssessmentRound.phase.desc(), case((AssessmentRound.class_name != "", 0), else_=1), AssessmentRound.created_at.desc()))).all()
-    selected = {}
-    for item in rounds:
-        selected.setdefault(item.phase, item)
-    done = set((await db.scalars(select(AssessmentResponse.round_id).where(AssessmentResponse.user_id == user.id))).all())
-    return next((selected[phase] for phase in ("pre", "post") if phase in selected and selected[phase].id not in done), None)
+    ).order_by(case((AssessmentRound.class_name != "", 0), else_=1), AssessmentRound.created_at.desc(), AssessmentRound.id.desc()).limit(1))).first()
+    if not rounds:
+        return None
+    done = await db.scalar(select(AssessmentResponse.id).where(
+        AssessmentResponse.user_id == user.id, AssessmentResponse.round_id == rounds.id))
+    return None if done else rounds
 
 
 @router.get("/pending")
-async def pending(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+async def pending(response: Response, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    response.headers["Cache-Control"] = "no-store"
     item = await pending_round(db, user)
     return {"success": True, "data": present(item, student=True) if item else None}
+
+
+@router.get("/status")
+async def assessment_status(response: Response, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    """Small authenticated poll: do not read or transfer the question JSON."""
+    response.headers["Cache-Control"] = "no-store"
+    item = await pending_round(db, user, metadata_only=True)
+    return {"success": True, "data": {"id": str(item.id), "revision": item.revision} if item else None}
 
 
 @admin_router.get("")
@@ -88,6 +110,27 @@ async def list_rounds(db: AsyncSession = Depends(get_db)):
     counts = select(AssessmentResponse.round_id, func.count().label("n")).group_by(AssessmentResponse.round_id).subquery()
     rows = (await db.execute(select(AssessmentRound, counts.c.n).outerjoin(counts, counts.c.round_id == AssessmentRound.id).order_by(AssessmentRound.created_at.desc()).limit(200))).all()
     return {"success": True, "data": [{**present(item), "response_count": n or 0} for item, n in rows]}
+
+
+@admin_router.get('/templates/learning-background')
+async def background_template():
+    """Read-only template: never replaces a published round or its responses."""
+    import json
+    from pathlib import Path
+    template = Path(__file__).resolve().parents[2] / 'resources/programming_ai_survey_v2.json'
+    return {"success": True, "data": RoundInput.model_validate(json.loads(template.read_text())).model_dump()}
+
+
+@admin_router.get('/{round_id}/definition')
+async def export_definition(round_id: UUID, db: AsyncSession = Depends(get_db)):
+    import json
+    item = await db.get(AssessmentRound, round_id)
+    if not item:
+        raise HTTPException(404, '找不到这份题本')
+    return Response(json.dumps(present(item), ensure_ascii=False, indent=2, default=str),
+                    media_type='application/json', headers={
+                        'Content-Disposition': f'attachment; filename="assessment-{round_id}.json"',
+                        'Cache-Control': 'no-store'})
 
 
 @admin_router.get('/{round_id}/export')
@@ -110,7 +153,7 @@ async def export_answers(round_id: UUID, db: AsyncSession = Depends(get_db)):
     def encode():
         output = io.StringIO()
         writer = csv.writer(output)
-        writer.writerow(['round_id', 'revision', 'response_id', 'user_id', 'student_id', 'class', 'group', 'started_at', 'submitted_at', 'question_id', 'question', 'type', 'status', 'answer_value', 'answer_label'])
+        writer.writerow(['round_id', 'revision', 'response_id', 'user_id', 'student_id', 'class', 'group', 'started_at', 'submitted_at', 'question_id', 'question', 'type', 'status', 'answer_value', 'answer_label', 'parent_id', 'code', 'hint'])
         for rid, uid, sid, cls, group, started, submitted, answers in records:
             visible = visible_question_ids(questions, answers)
             for q in questions:
@@ -119,8 +162,10 @@ async def export_answers(round_id: UUID, db: AsyncSession = Depends(get_db)):
                 status = 'skipped_by_rule' if q['id'] not in visible else 'unanswered' if empty else 'answered'
                 options = {o['value']: o['label'] for o in q['options']}
                 label = '；'.join(options.get(v, v) for v in value) if isinstance(value, list) else options.get(value, value or '')
+                if value == '__skip__' and q.get('skip_label'):
+                    label = q['skip_label']
                 raw = json.dumps(value, ensure_ascii=False) if isinstance(value, list) else value
-                writer.writerow([csv_cell(v) for v in [str(round_id), revision, str(rid), str(uid), sid, cls, group, started.isoformat(), submitted.isoformat(), q['id'], q['text'], q['type'], status, raw, label]])
+                writer.writerow([csv_cell(v) for v in [str(round_id), revision, str(rid), str(uid), sid, cls, group, started.isoformat(), submitted.isoformat(), q['id'], q['text'], q['type'], status, raw, label, q.get('parent_id'), q.get('code', ''), q.get('hint', '')]])
         return ('\ufeff' + output.getvalue()).encode('utf-8')
     content = await offload(encode)
     return Response(content, media_type='text/csv; charset=utf-8', headers={'Content-Disposition': f'attachment; filename="survey-{round_id}.csv"', 'Cache-Control': 'no-store'})
@@ -158,9 +203,33 @@ async def toggle_round(round_id: UUID, data: ToggleInput, db: AsyncSession = Dep
     if not item:
         raise HTTPException(404, "找不到这份题本")
     if data.enabled:
-        await db.execute(update(AssessmentRound).where(AssessmentRound.phase == item.phase, AssessmentRound.class_name == item.class_name, AssessmentRound.id != item.id).values(enabled=False))
+        await db.execute(update(AssessmentRound).where(AssessmentRound.class_name == item.class_name, AssessmentRound.id != item.id).values(enabled=False))
         item.published_at = item.published_at or datetime.now(timezone.utc)
     item.enabled = data.enabled
+    await db.commit()
+    return {"success": True, "data": present(item)}
+
+
+@admin_router.post("/{round_id}/distribute")
+async def distribute_round(round_id: UUID, data: DistributeInput, db: AsyncSession = Depends(get_db)):
+    """Freeze a class-specific copy; never retarget an existing response history."""
+    await db.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": LOCK})
+    source = await db.get(AssessmentRound, round_id)
+    if not source:
+        raise HTTPException(404, "找不到这份题本")
+    delivery_id = uuid5(round_id, f"classroom:{data.class_name}:{data.request_id}")
+    existing = await db.get(AssessmentRound, delivery_id)
+    if existing:
+        # Retrying a timed-out request must not reopen a subsequently closed round.
+        return {"success": True, "data": present(existing)}
+    revision = (await db.scalar(select(func.max(AssessmentRound.revision)).where(
+        AssessmentRound.phase == source.phase, AssessmentRound.class_name == data.class_name)) or 0) + 1
+    await db.execute(update(AssessmentRound).where(
+        AssessmentRound.class_name == data.class_name, AssessmentRound.enabled.is_(True)).values(enabled=False))
+    item = AssessmentRound(id=delivery_id, phase=source.phase, class_name=data.class_name,
+        name=source.name, source=source.source, questions=source.questions, revision=revision,
+        enabled=True, published_at=datetime.now(timezone.utc))
+    db.add(item)
     await db.commit()
     return {"success": True, "data": present(item)}
 

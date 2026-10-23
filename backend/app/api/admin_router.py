@@ -2,10 +2,15 @@
 Admin API Router - 聚合所有 admin 端点
 """
 from fastapi import APIRouter
+from app.api.endpoints.project_review import admin_router as project_review_router
 from app.api.endpoints.assessments import admin_router as assessments_router
 from app.api.endpoints.classroom import admin_router as classroom_router
+from app.api.endpoints.classroom_polls import router as classroom_polls_router
+from app.api.endpoints.classroom_notices import router as classroom_notices_router
 from app.api.endpoints.materials import admin_router as materials_router
+from app.api.endpoints.worksheets import admin_router as worksheet_router
 from app.api.endpoints.lesson_evidence import router as evidence_router
+from app.api.endpoints.student_advice import admin_router as advice_router
 
 from app.api.endpoints.admin import (
     users,
@@ -20,13 +25,19 @@ from app.api.endpoints.admin import (
     auth as admin_auth,
     teacher_notes,
     research_package,
+    conversation_browser,
 )
 
 # 创建 admin 主路由
 admin_router = APIRouter(prefix="/admin")
+admin_router.include_router(advice_router)
+admin_router.include_router(project_review_router)
 admin_router.include_router(assessments_router)
 admin_router.include_router(classroom_router)
+admin_router.include_router(classroom_polls_router)
+admin_router.include_router(classroom_notices_router)
 admin_router.include_router(materials_router)
+admin_router.include_router(worksheet_router)
 admin_router.include_router(evidence_router)
 
 # 认证端点（PUBLIC，无需 admin key，用于登录）
@@ -44,3 +55,4 @@ admin_router.include_router(admin_research.router, tags=["Admin - Research Manag
 admin_router.include_router(admin_config.router, tags=["Admin - Model Config"])
 admin_router.include_router(teacher_notes.router)
 admin_router.include_router(research_package.router)
+admin_router.include_router(conversation_browser.router)

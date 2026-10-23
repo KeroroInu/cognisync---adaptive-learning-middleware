@@ -5,14 +5,22 @@ from fastapi import APIRouter, Depends
 
 from app.api.endpoints import auth, chat, profile, graph, calibration, logs, export, forms, ai_onboarding, research, assessments
 from app.api.endpoints import classroom, preparation, materials
+from app.api.endpoints import learning_support
+from app.api.endpoints import project_review
+from app.api.endpoints import worksheets
+from app.api.endpoints import student_advice
 from app.services.classroom_service import require_classroom_access
 
 # 创建主路由器
 api_router = APIRouter()
+api_router.include_router(student_advice.router)
+api_router.include_router(project_review.router)
 api_router.include_router(assessments.router)
 api_router.include_router(classroom.router)
 api_router.include_router(preparation.router)
+api_router.include_router(learning_support.router)
 api_router.include_router(materials.router)
+api_router.include_router(worksheets.router)
 
 # 注册各模块路由
 api_router.include_router(auth.router, prefix="/auth", tags=["Authentication"])

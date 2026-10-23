@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Literal
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, select, text, update
 from sqlalchemy.dialects.postgresql import insert
@@ -19,6 +19,7 @@ from app.models.sql.research import ResearchTask, ResearchTaskStatus, ResearchTa
 from app.services.lesson_service import lesson_entry
 from app.schemas.assessment import Question, validate_answer
 from app.services.classroom_service import current_session, effective_state
+from app.services.classroom_notice import active_notices
 
 router = APIRouter(prefix="/classroom", tags=["Classroom"])
 admin_router = APIRouter(prefix="/classroom", tags=["Admin Classroom"], dependencies=[Depends(verify_admin_key)])
@@ -36,6 +37,25 @@ class SessionInput(BaseModel):
 class StateInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     action: Literal["open", "end"]
+
+
+class WorkspaceInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    class_name: Literal["解构班", "开发班"]
+
+
+@admin_router.post("/workspace")
+async def ensure_workspace(body: WorkspaceInput, db: AsyncSession = Depends(get_db), teacher: User = Depends(get_current_user)):
+    """Resolve a stable class container without a start/end lesson workflow."""
+    await db.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": CONTROL_LOCK})
+    item = await current_session(db, body.class_name)
+    if not item:
+        item = ClassroomSession(class_name=body.class_name, title=body.class_name, created_by=teacher.id)
+        db.add(item)
+        await db.flush()
+        db.add(LessonPlan(session_id=item.id, configuration={"version": 1, "tasks": {}, "knowledge_points": []}))
+    await db.commit()
+    return success(session_row(item))
 
 
 class PromptInput(BaseModel):
@@ -79,6 +99,7 @@ def session_row(item):
 def prompt_row(item):
     batch = item.question.get("kind") == "set"
     return {"id": str(item.id), "question": item.question["questions"][0] if batch else item.question,
+            **({"kind": "poll"} if item.question.get("kind") == "poll" else {}),
             **({"questions": item.question["questions"], "title": item.question["title"]} if batch else {}),
             "published_at": item.published_at, "closed_at": item.closed_at}
 
@@ -187,17 +208,7 @@ async def create_session(body: SessionInput, db: AsyncSession = Depends(get_db),
 
 @admin_router.post("/sessions/{session_id}/state")
 async def change_state(session_id: UUID, body: StateInput, db: AsyncSession = Depends(get_db), teacher: User = Depends(get_current_user)):
-    item = await locked_session(db, session_id)
-    # Repeated end clicks never extend the grace deadline.
-    if body.action == "end" and item.state == "open":
-        item.state, item.closes_at = "closing", datetime.now(timezone.utc) + timedelta(seconds=10)
-        await db.execute(update(ClassroomPublication).where(ClassroomPublication.session_id == item.id, ClassroomPublication.closed_at.is_(None)).values(closed_at=datetime.now(timezone.utc)))
-        db.add(ClassroomControlEvent(session_id=item.id, teacher_id=teacher.id, action="end"))
-    elif body.action == "open" and item.state != "open":
-        item.state, item.closes_at = "open", None
-        db.add(ClassroomControlEvent(session_id=item.id, teacher_id=teacher.id, action="open"))
-    await db.commit()
-    return success(session_row(item))
+    raise HTTPException(410, "已取消上课/下课开关，请直接发布或撤回任务、投票。")
 
 
 @admin_router.post("/sessions/{session_id}/prompts")
@@ -229,10 +240,13 @@ async def close_prompt(publication_id: UUID, db: AsyncSession = Depends(get_db))
 
 
 @router.get("/state")
-async def student_state(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+async def student_state(response: Response, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    response.headers["Cache-Control"] = "no-store"
+    notices = await active_notices(db, user.class_name, user.id) if user.role in LEARNER_ROLES else []
+    notice = notices[0] if notices else None
     session = await current_session(db, user.class_name)
     if not session:
-        return success({"session": None, "prompt": None, "lesson_entry": None})
+        return success({"session": None, "prompt": None, "lesson_entry": None, "notice": notice, "notices": notices})
     prompt = None
     if effective_state(session) == "open":
         answered = select(ClassroomResponse.publication_id).where(ClassroomResponse.user_id == user.id)
@@ -243,7 +257,7 @@ async def student_state(db: AsyncSession = Depends(get_db), user: User = Depends
         if item:
             prompt = {**prompt_row(item), "served_at": datetime.now(timezone.utc).isoformat()}
     plan = await db.scalar(select(LessonPlan).where(LessonPlan.session_id == session.id))
-    return success({"session": session_row(session), "prompt": prompt,
+    return success({"session": session_row(session), "prompt": prompt, "notice": notice, "notices": notices,
                     "lesson_entry": lesson_entry(session, plan, user.experiment_group)})
 
 

@@ -88,6 +88,8 @@ class User(Base, UUIDMixin):
         comment="是否完成引导"
     )
 
+    school_class: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
+
     class_name: Mapped[Optional[str]] = mapped_column(
         String(100),
         nullable=True,

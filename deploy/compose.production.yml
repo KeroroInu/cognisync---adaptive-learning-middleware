@@ -1,0 +1,81 @@
+name: sfls-classroom
+
+x-service: &service
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options:
+      max-size: 10m
+      max-file: '3'
+
+services:
+  nginx-proxy:
+    <<: *service
+    image: nginx:alpine
+    # Expose only via a TLS reverse proxy (or an SSH tunnel during acceptance).
+    ports: ['127.0.0.1:8003:8003']
+    volumes:
+      - ../nginx-proxy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on: [backend, frontend, admin-frontend]
+    mem_limit: 128m
+
+  backend:
+    <<: *service
+    image: sfls/backend:${RELEASE:?Set RELEASE}
+    env_file: [/etc/sfls/backend.env]
+    environment:
+      APP_ENV: production
+      DEBUG: 'false'
+      POSTGRES_HOST: postgres
+      DATABASE_URL: ''
+      NEO4J_URI: bolt://neo4j:7687
+      SEED_DEFAULT_ADMIN: 'false'
+      SEED_TEST_DATA: 'false'
+    depends_on:
+      postgres: {condition: service_healthy}
+      neo4j: {condition: service_healthy}
+    mem_limit: 1536m
+
+  frontend:
+    <<: *service
+    image: sfls/frontend:${RELEASE:?Set RELEASE}
+    mem_limit: 192m
+
+  admin-frontend:
+    <<: *service
+    image: sfls/admin-frontend:${RELEASE:?Set RELEASE}
+    mem_limit: 128m
+
+  postgres:
+    <<: *service
+    image: postgres:15-alpine
+    env_file: [/etc/sfls/postgres.env]
+    volumes: [postgres-data:/var/lib/postgresql/data]
+    mem_limit: 1536m
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  neo4j:
+    <<: *service
+    image: neo4j:5.15-community
+    env_file: [/etc/sfls/neo4j.env]
+    environment:
+      NEO4J_server_memory_heap_initial__size: 256m
+      NEO4J_server_memory_heap_max__size: 768m
+      NEO4J_server_memory_pagecache_size: 256m
+    volumes: [neo4j-data:/data, neo4j-logs:/logs]
+    mem_limit: 2g
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -q -O /dev/null http://127.0.0.1:7474 || exit 1']
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 30s
+
+volumes:
+  postgres-data:
+  neo4j-data:
+  neo4j-logs:

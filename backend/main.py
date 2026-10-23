@@ -3,10 +3,12 @@ CogniSync Backend - Main Application Entry Point
 本地 MVP 版本，与前端状态结构完全对齐
 """
 import logging
-from contextlib import asynccontextmanager
+import asyncio
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from app.core.project_review_guard import ProjectReviewGuard
 from fastapi.responses import JSONResponse
 
 from app.core.config import settings
@@ -80,7 +82,14 @@ async def lifespan(app: FastAPI):
     logger.info(f"🔧 Environment: {settings.APP_ENV}")
     logger.info(f"🤖 LLM Provider: {settings.LLM_PROVIDER}")
 
-    yield
+    from app.services.classroom_notice import expire_notices_loop
+    notice_cleanup = asyncio.create_task(expire_notices_loop())
+    try:
+        yield
+    finally:
+        notice_cleanup.cancel()
+        with suppress(asyncio.CancelledError):
+            await notice_cleanup
 
     # 关闭时清理资源
     logger.info("🛑 Shutting down CogniSync Backend...")
@@ -152,6 +161,7 @@ async def root():
 
 
 # 注册 API 路由（前缀为 /api）
+app.add_middleware(ProjectReviewGuard)
 app.include_router(api_router, prefix=settings.API_PREFIX)
 
 # 注册 Admin API 路由（前缀为 /api/admin）

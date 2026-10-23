@@ -57,6 +57,10 @@ backend/.env
 frontend/.env
 admin-frontend/.env
 
+# Machine-specific deployment environment (keep local; examples may be tracked).
+deploy/*.env
+!deploy/*.env.example
+
 # Compiled frontend assets
 admin-frontend/dist/
 frontend/dist/
@@ -113,3 +117,9 @@ temp/
 # Pyodide 运行时：构建期由 frontend/scripts/fetch-pyodide.sh 下载（约 5.6 MB），
 # 不入库。CI/镜像构建会自动获取；本地跑 npm run dev/build 也会自动获取。
 frontend/public/pyodide/
+frontend/public/drawio/
+frontend/public/.drawio-stage-*/
+
+# Frontend services and tests are source, not Python's generated lib/ directory.
+!admin-frontend/src/lib/
+!admin-frontend/src/lib/**

@@ -1,0 +1,503 @@
+{
+  "phase": "pre",
+  "name": "编程经历与协作起点 · 精简版 20260915",
+  "class_name": "",
+  "source": "learning-background/v2；根据课堂研究需求精简的自编背景调查，不是已验证能力量表，不计总分、不更新画像。姓名学号班级由账号关联；选项用于描述经历，不代表能力高低。所有题可跳过。保留原题ID便于核对，但不同题本版本不可无条件合并。未做编程/未用AI时跳过相关经历题；新模板需教师审阅、保存并明确开放，旧题本和答卷不变。",
+  "questions": [
+    {
+      "id": "q1",
+      "hint": "这不是考试，不计入成绩。不愿回答的题可以留空。回答会与账号关联，仅供教师和研究使用，不向其他同学展示。研究参与和退出方式以老师提供的知情说明为准。",
+      "text": "你接触过哪些编程语言或工具？",
+      "type": "multiple",
+      "required": false,
+      "options": [
+        {
+          "value": "scratch",
+          "label": "Scratch 等图形化编程"
+        },
+        {
+          "value": "python",
+          "label": "Python"
+        },
+        {
+          "value": "other",
+          "label": "其他编程语言或工具"
+        },
+        {
+          "value": "none",
+          "label": "没有接触过",
+          "exclusive": true
+        },
+        {
+          "value": "unsure",
+          "label": "不确定",
+          "exclusive": true
+        }
+      ]
+    },
+    {
+      "id": "q2",
+      "text": "你学过哪些 Python 内容？",
+      "type": "multiple",
+      "required": false,
+      "options": [
+        {
+          "value": "variable",
+          "label": "变量与数据类型"
+        },
+        {
+          "value": "io",
+          "label": "输入与输出"
+        },
+        {
+          "value": "condition",
+          "label": "条件判断"
+        },
+        {
+          "value": "loop",
+          "label": "循环"
+        },
+        {
+          "value": "function",
+          "label": "函数"
+        },
+        {
+          "value": "list",
+          "label": "列表"
+        },
+        {
+          "value": "other",
+          "label": "其他内容"
+        },
+        {
+          "value": "none",
+          "label": "还没有学过 Python",
+          "exclusive": true
+        },
+        {
+          "value": "unsure",
+          "label": "记不清楚",
+          "exclusive": true
+        }
+      ],
+      "show_if": [
+        {
+          "question_id": "q1",
+          "values": [
+            "python"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "q3",
+      "text": "最近一次你动手做的编程任务主要是哪一种？",
+      "type": "choice",
+      "required": false,
+      "options": [
+        {
+          "value": "exercise",
+          "label": "短小的语法练习"
+        },
+        {
+          "value": "complete",
+          "label": "补全或修改已有程序"
+        },
+        {
+          "value": "project",
+          "label": "制作包含多个功能的作品，例如小游戏"
+        },
+        {
+          "value": "other",
+          "label": "其他任务"
+        },
+        {
+          "value": "none",
+          "label": "还没有动手做过"
+        }
+      ]
+    },
+    {
+      "id": "q5",
+      "text": "回想最近一次任务，拿到要求后，你首先做了什么？",
+      "type": "choice",
+      "required": false,
+      "options": [
+        {
+          "value": "code",
+          "label": "直接尝试写代码"
+        },
+        {
+          "value": "example",
+          "label": "查看或运行示例"
+        },
+        {
+          "value": "plan",
+          "label": "列出要完成的事情"
+        },
+        {
+          "value": "help",
+          "label": "先向老师、同学或 AI 求助"
+        },
+        {
+          "value": "follow",
+          "label": "按老师指定的步骤开始"
+        },
+        {
+          "value": "other",
+          "label": "其他做法"
+        },
+        {
+          "value": "unsure",
+          "label": "记不清楚"
+        }
+      ],
+      "show_if": [
+        {
+          "question_id": "q3",
+          "values": [
+            "exercise",
+            "complete",
+            "project",
+            "other"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "q8",
+      "text": "最近一个月，你使用 AI 对话工具的情况是怎样的？",
+      "type": "choice",
+      "required": false,
+      "options": [
+        {
+          "value": "never",
+          "label": "从未用过"
+        },
+        {
+          "value": "past",
+          "label": "以前用过，最近一个月没用"
+        },
+        {
+          "value": "few",
+          "label": "用了 1—3 天"
+        },
+        {
+          "value": "weekly",
+          "label": "用了 4—10 天"
+        },
+        {
+          "value": "often",
+          "label": "用了 11 天及以上"
+        },
+        {
+          "value": "unsure",
+          "label": "用过，但记不清天数"
+        }
+      ]
+    },
+    {
+      "id": "q11",
+      "text": "你亲自用过 AI 帮助完成编程任务吗？",
+      "type": "choice",
+      "required": false,
+      "options": [
+        {
+          "value": "yes",
+          "label": "用过"
+        },
+        {
+          "value": "no",
+          "label": "没有"
+        },
+        {
+          "value": "unsure",
+          "label": "不确定"
+        }
+      ],
+      "show_if": [
+        {
+          "question_id": "q8",
+          "values": [
+            "past",
+            "few",
+            "weekly",
+            "often",
+            "unsure"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "q12",
+      "text": "最近一次用 AI 帮助编程，你让它做了什么？",
+      "type": "multiple",
+      "required": false,
+      "options": [
+        {
+          "value": "task",
+          "label": "解释任务要求"
+        },
+        {
+          "value": "plan",
+          "label": "讨论实现思路"
+        },
+        {
+          "value": "explain",
+          "label": "解释知识或代码"
+        },
+        {
+          "value": "generate",
+          "label": "生成一部分或完整代码"
+        },
+        {
+          "value": "debug",
+          "label": "找错误或修改程序"
+        },
+        {
+          "value": "test",
+          "label": "提供检查或测试方法"
+        },
+        {
+          "value": "other",
+          "label": "其他事情"
+        },
+        {
+          "value": "unsure",
+          "label": "记不清楚",
+          "exclusive": true
+        }
+      ],
+      "show_if": [
+        {
+          "question_id": "q11",
+          "values": [
+            "yes"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "q13",
+      "text": "那次收到 AI 的回答后，你做过哪些事情？",
+      "type": "multiple",
+      "required": false,
+      "options": [
+        {
+          "value": "use",
+          "label": "直接按回答操作"
+        },
+        {
+          "value": "ask",
+          "label": "继续提问，请它解释"
+        },
+        {
+          "value": "compare",
+          "label": "与任务要求或其他资料对照"
+        },
+        {
+          "value": "edit",
+          "label": "修改它给的方案或代码"
+        },
+        {
+          "value": "run",
+          "label": "运行程序或测试"
+        },
+        {
+          "value": "human",
+          "label": "向老师、同学核实"
+        },
+        {
+          "value": "reject",
+          "label": "决定不采用"
+        },
+        {
+          "value": "other",
+          "label": "其他做法"
+        },
+        {
+          "value": "unsure",
+          "label": "记不清楚",
+          "exclusive": true
+        }
+      ],
+      "show_if": [
+        {
+          "question_id": "q11",
+          "values": [
+            "yes"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "q14",
+      "text": "最近一次任务中，你怎样检查程序是否达到要求？",
+      "type": "multiple",
+      "required": false,
+      "options": [
+        {
+          "value": "run",
+          "label": "看能不能运行"
+        },
+        {
+          "value": "requirements",
+          "label": "逐项核对任务要求"
+        },
+        {
+          "value": "cases",
+          "label": "试不同的输入或操作"
+        },
+        {
+          "value": "read",
+          "label": "阅读代码，检查思路"
+        },
+        {
+          "value": "help",
+          "label": "请老师、同学或 AI 检查"
+        },
+        {
+          "value": "other",
+          "label": "其他方法"
+        },
+        {
+          "value": "none",
+          "label": "没有检查",
+          "exclusive": true
+        },
+        {
+          "value": "unsure",
+          "label": "记不清楚",
+          "exclusive": true
+        }
+      ],
+      "show_if": [
+        {
+          "question_id": "q3",
+          "values": [
+            "exercise",
+            "complete",
+            "project",
+            "other"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "q15",
+      "text": "最近一次程序报错或结果不对，你首先做了什么？",
+      "type": "choice",
+      "required": false,
+      "options": [
+        {
+          "value": "output",
+          "label": "读报错或检查运行结果"
+        },
+        {
+          "value": "read",
+          "label": "回看相关代码"
+        },
+        {
+          "value": "edit",
+          "label": "修改代码试试"
+        },
+        {
+          "value": "resource",
+          "label": "查教材或资料"
+        },
+        {
+          "value": "human",
+          "label": "请老师、同学帮助"
+        },
+        {
+          "value": "ai",
+          "label": "向 AI 求助"
+        },
+        {
+          "value": "skip",
+          "label": "暂时跳过"
+        },
+        {
+          "value": "other",
+          "label": "其他做法"
+        },
+        {
+          "value": "none",
+          "label": "没有这样的经历或记不清楚"
+        }
+      ],
+      "show_if": [
+        {
+          "question_id": "q3",
+          "values": [
+            "exercise",
+            "complete",
+            "project",
+            "other"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "q17",
+      "text": "接下来学编程，你最希望得到哪些帮助？最多选 3 项。",
+      "type": "multiple",
+      "required": false,
+      "options": [
+        {
+          "value": "example",
+          "label": "可以运行的示例"
+        },
+        {
+          "value": "task",
+          "label": "讲清任务要求"
+        },
+        {
+          "value": "knowledge",
+          "label": "解释需要的知识点"
+        },
+        {
+          "value": "plan",
+          "label": "给一点实现思路"
+        },
+        {
+          "value": "comments",
+          "label": "有简短注释、方便读懂的代码"
+        },
+        {
+          "value": "blanks",
+          "label": "只需补写关键部分的代码模板"
+        },
+        {
+          "value": "debug",
+          "label": "帮我找到和修改错误"
+        },
+        {
+          "value": "test",
+          "label": "教我怎么检查程序"
+        },
+        {
+          "value": "discussion",
+          "label": "与老师、同学讨论"
+        },
+        {
+          "value": "other",
+          "label": "其他帮助"
+        },
+        {
+          "value": "none",
+          "label": "暂时没有明确需要",
+          "exclusive": true
+        }
+      ],
+      "max_selections": 3
+    },
+    {
+      "id": "q19",
+      "text": "关于接下来的编程课，还有什么希望老师知道的？",
+      "type": "text",
+      "required": false,
+      "options": []
+    }
+  ]
+}

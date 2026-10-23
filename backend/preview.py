@@ -14,6 +14,15 @@ if settings.APP_ENV == "production":
 
 
 root = Path(__file__).resolve().parent.parent
+
+@app.middleware('http')
+async def local_diagram_headers(request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith('/drawio/'):
+        response.headers['Content-Security-Policy'] = "default-src 'self' data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data: blob:; font-src 'self' data:; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'none'"
+        response.headers['Referrer-Policy'] = 'no-referrer'
+    return response
+
 for folder in ("frontend", "admin-frontend"):
     if not (root / folder / "dist/index.html").exists():
         raise RuntimeError(f"Build {folder} before starting local preview")

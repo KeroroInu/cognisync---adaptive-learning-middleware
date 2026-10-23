@@ -57,7 +57,7 @@ def stage_resource_contract(context: ProjectScaffoldContext, language: str = "zh
             "Acknowledge a student reporting an earlier run; do not repeatedly restart or infer an eagerness to code.",
         ),
         "decompose": (
-            "已保存观察卡和功能卡；学生可引用观察、给功能命名、写一句实现描述。"
+            "已保存观察卡和功能卡；学生可引用观察、命名功能，通过对话整理可编辑的短句步骤或伪代码。"
             "不增加输入输出、知识点等表单，不公布教师七函数答案清单，不要求开始编码。",
             "Saved observations and function cards; students can reference an observation, name a function and describe its implementation briefly. "
             "Do not add input/output or knowledge forms, reveal the teacher's function list or demand coding.",
@@ -187,7 +187,9 @@ class LearningAgentHarness:
     """为项目学习助手装配权威上下文和同作用域记忆。"""
 
     def context_key(self, context: ProjectScaffoldContext) -> LearningContextKey:
-        focus_id = context.currentModule if context.stage in {"build", "transfer"} else context.stage
+        focus_id = context.currentModule if context.stage in {"build", "transfer", "decompose", "model"} else context.stage
+        if context.stage == "decompose" and not focus_id:
+            focus_id = "decompose"
         return LearningContextKey(
             task_id=str(context.taskId),
             stage=context.stage,
@@ -228,6 +230,8 @@ class LearningAgentHarness:
             return False
         if str(metadata.get("stage") or "") != key.stage:
             return False
+        if key.stage in {"decompose", "model"}:
+            return _one_line(metadata.get("currentModule") or ("decompose" if key.stage == "decompose" else "build-unselected"), 300) == key.focus_id
         if key.stage not in {"build", "transfer"}:
             return True
         return _one_line(metadata.get("currentModule") or "build-unselected", 300) == key.focus_id

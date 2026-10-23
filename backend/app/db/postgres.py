@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 engine: AsyncEngine = create_async_engine(
     settings.database_url,
     echo=settings.DEBUG,
+    hide_parameters=True,  # Notices can carry temporary API keys; never log SQL values.
     pool_pre_ping=True,
     pool_size=settings.DB_POOL_SIZE,
     max_overflow=settings.DB_MAX_OVERFLOW,
@@ -56,6 +57,8 @@ async def init_db():
         await _migrate_student_id()
 
         await _run_migration_sql("ALTER TABLE users ADD COLUMN IF NOT EXISTS gender VARCHAR(10)", "ADD optional gender")
+        await _run_migration_sql("ALTER TABLE users ADD COLUMN IF NOT EXISTS school_class VARCHAR(30)", "ADD actual school class")
+        await _run_migration_sql("ALTER TABLE classroom_notices ADD COLUMN IF NOT EXISTS target_user_ids JSONB NOT NULL DEFAULT '[]'::jsonb", "ADD notice recipients")
         await _run_migration_sql("ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_version INTEGER NOT NULL DEFAULT 0", "ADD token revocation version")
 
         # 迁移：为 scale_responses 添加 started_at 列

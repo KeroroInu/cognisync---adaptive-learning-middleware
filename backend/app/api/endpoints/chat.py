@@ -3,6 +3,7 @@ Chat Endpoint - 对话接口（完整实现）
 """
 import asyncio
 import logging
+from time import perf_counter
 from uuid import UUID
 from datetime import datetime, timedelta, timezone
 from typing import Any, List, Dict, Optional
@@ -22,6 +23,7 @@ from app.services.emotion_log_service import record_emotion_log
 from app.services.text_analyzer import TextAnalyzer
 from app.services.llm_config import get_chat_provider
 from app.services.learning_agent_harness import learning_agent_harness
+from app.services.learning_evidence import turn_evidence, evidence_support_prompt
 from app.services.textbook_library import retrieve_textbook, textbook_prompt
 from app.models.sql.message import ChatMessage, MessageRole
 from app.models.sql.chat_session import ChatSession
@@ -768,6 +770,27 @@ async def chat(
         active_session = await get_or_create_active_session(db, user_id)
 
         current_profile = await profile_service.get_profile(user_id)
+        # Published classrooms use the same protocol, including legacy clients.
+        # Keep old message/profile evidence intact; the new ledger does not infer mastery.
+        if lesson_context:
+            from uuid import uuid4
+            from app.api.endpoints.learning_support import reply as common_reply
+            from app.services.common_support import SupportInput
+            sc = request.scaffoldContext
+            action = request.supportAction
+            if action == "message" and sc:
+                action = {"level_up": "more", "l3_confirmed": "complete"}.get(sc.trigger, "message")
+            result = await common_reply(SupportInput(
+                request_id=request.supportRequestId or uuid4(), message=request.message,
+                code=request.currentCode or "", task_id=UUID(sc.taskId) if sc else task.id,
+                stage=sc.stage if sc else "build", focus=(sc.currentModule or "workspace") if sc else "workspace",
+                entry="function_discussion" if sc and sc.interaction == "function_discussion" else "classroom",
+                action=action, practice_id=request.supportPracticeId, answer=request.supportAnswer,
+                context=((sc.artifactSummary or "") + "\n" + (sc.testFeedback or "")) if sc else "",
+            ), db, user)
+            return SuccessResponse(data=ChatResponse(**result, updatedProfile=current_profile,
+                analysis=ChatAnalysis(intent="learning-support", emotion="unknown", detectedConcepts=[],
+                                      delta=ProfileDelta(cognition=0, affect=0, behavior=0))))
         scaffold_context = request.scaffoldContext
         scaffold_metadata = None
         scaffold_policy = None
@@ -824,7 +847,8 @@ async def chat(
             role=MessageRole.USER,
             text=request.message,
             timestamp=datetime.now(timezone.utc),
-            analysis={**({"scaffoldContext": scaffold_metadata} if scaffold_metadata else {}),
+            analysis={"learningEvidence": turn_evidence(request.currentCode, scaffold_context),
+                      **({"scaffoldContext": scaffold_metadata} if scaffold_metadata else {}),
                       **({"lesson": lesson_context} if lesson_context else {})} or None,
         )
         db.add(user_message)
@@ -1012,7 +1036,7 @@ async def chat(
                 scaffold_metadata["learnerSupport"] = learner_support.metadata()
                 # 用户消息先落库是为了让求助行为在模型失败时也可追踪；支架计划
                 # 要在图谱读取后才能形成，因此这里重设完整 JSONB，供本轮复建。
-                user_message.analysis = {"scaffoldContext": scaffold_metadata}
+                user_message.analysis = {**(user_message.analysis or {}), "scaffoldContext": scaffold_metadata}
             if agent_turn:
                 system_prompt += agent_turn.prompt_section
             system_prompt += build_scaffold_prompt(
@@ -1041,6 +1065,8 @@ state 含 snake、direction、food、score、game_over，可选 interval（秒�
 """
 
         # 注入跨会话上下文（让 AI 能自然引用上次讨论内容）
+        if request.isResearchMode or scaffold_context or lesson_context:
+            system_prompt += evidence_support_prompt(request.language or "zh")
         # 项目智能体使用任务作用域记忆；普通自由对话才允许引用跨会话主题。
         cross_session_ctx = None if scaffold_context or lesson_context else await get_cross_session_context(db, user_id)
         if lesson_context:
@@ -1101,7 +1127,8 @@ state 含 snake、direction、food、score、game_over，可选 interval（秒�
         student_msg_lower = request.message.lower().strip()
         is_understanding_claim = any(kw in student_msg_lower for kw in understanding_keywords) and len(request.message) < 30
 
-        if is_understanding_claim:
+        function_discussion = bool(scaffold_context and scaffold_context.stage == "decompose" and scaffold_context.interaction == "function_discussion")
+        if is_understanding_claim and not function_discussion:
             verification_hint = '\n（注意：学生刚说自己理解了，请立即用一个具体问题反问来验证，不要只说"很好"。）'
         else:
             verification_hint = ""
@@ -1115,6 +1142,8 @@ state 含 snake、direction、food、score、game_over，可选 interval（秒�
         # 固定七函数的 L0-L3 都由服务端按等级返回受控代码，避免模型越级或改写
         # 已通过本地行为检查的完整函数；其他项目与阶段仍走 LLM。
         assistant_reply = ""
+        response_started = perf_counter()
+        response_source = "controlled_template"
         if scaffold_context and scaffold_metadata:
             assistant_reply = build_controlled_scaffold_response(
                 scaffold_context,
@@ -1125,18 +1154,25 @@ state 含 snake、direction、food、score、game_over，可选 interval（秒�
                 learner_support=learner_support,
             ) or ""
         if not assistant_reply:
+            response_source = "model"
             llm_provider = get_chat_provider()
             assistant_reply = await _complete_chat_reply(
                 llm_provider,
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
-                max_tokens=900 if confirmed_build_l3 or (request.isResearchMode and not scaffold_context) or (scaffold_metadata and scaffold_metadata["level"] == 2) else 300,
+                max_tokens=900 if confirmed_build_l3 or (request.isResearchMode and not scaffold_context) or (scaffold_metadata and scaffold_metadata["level"] == 2) else 600 if function_discussion else 300,
             )
 
         logger.info(f"AI reply generated: {len(assistant_reply)} characters")
 
         # ========== 7. 保存 AI 回复 ==========
         assistant_analysis = analysis.model_dump()
+        assistant_analysis["learningEvidence"] = {
+            "version": "learning-evidence/v1", "record_type": "ai_suggestion",
+            "response_to": str(user_message.id), "response_source": response_source,
+            "reply_generation_ms": round((perf_counter() - response_started) * 1000),
+            "adopted": None, "understood": None,
+        }
         assistant_analysis["analysis_source"] = {"role": "user", "message_id": str(user_message.id)}
         if lesson_context:
             assistant_analysis["lesson"] = lesson_context

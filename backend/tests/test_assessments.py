@@ -22,6 +22,22 @@ async def publish(admin_client, body):
 
 
 @pytest.mark.asyncio
+async def test_background_template_readonly_and_valid(admin_client, client, auth_headers):
+    before = (await admin_client.get('/api/admin/assessments')).json()['data']
+    url = '/api/admin/assessments/templates/learning-background'
+    response = await admin_client.get(url)
+    assert response.status_code == 200, response.text
+    template = response.json()['data']
+    assert len(template['questions']) == 12
+    assert all(not q['required'] for q in template['questions'])
+    assert any(q['show_if'] for q in template['questions'])
+    assert (await admin_client.get('/api/admin/assessments')).json()['data'] == before
+    created = await admin_client.post('/api/admin/assessments', json=template)
+    assert created.status_code == 200, created.text
+    assert created.json()['data']['enabled'] is False
+
+
+@pytest.mark.asyncio
 async def test_assessment_closed_open_submit_resume_no_profile(admin_client, client, auth_headers, test_db):
     assert (await client.get('/api/assessments/pending', headers=auth_headers)).json()['data'] is None
     response = await admin_client.post('/api/admin/assessments', json=draft())
@@ -91,6 +107,7 @@ async def test_assessment_authorization(client, auth_headers):
     from uuid import uuid4
     assert (await client.get('/api/assessments/pending')).status_code in (401, 403)
     assert (await client.get('/api/admin/assessments', headers=auth_headers)).status_code == 403
+    assert (await client.get('/api/admin/assessments/templates/learning-background', headers=auth_headers)).status_code == 403
     assert (await client.get(f'/api/admin/assessments/{uuid4()}/export', headers=auth_headers)).status_code == 403
     assert (await client.post('/api/admin/assessments', headers=auth_headers, json=draft())).status_code == 403
 

@@ -21,10 +21,11 @@ async def export_research_package(
     group: Literal["pdt", "ai_pbl", "lecture", "unassigned"] | None = None,
     include_identity: bool = False,
     include_graph: bool = True,
+    include_originals: bool = True,
     db: AsyncSession = Depends(get_db),
 ):
     try:
-        package = await build_package(db, class_name=class_name, group=group, include_identity=include_identity, include_graph=include_graph)
+        package = await build_package(db, class_name=class_name, group=group, include_identity=include_identity, include_graph=include_graph, include_originals=include_originals)
     except TimeoutError:
         raise HTTPException(503, "导出超时，请缩小班级范围后重试")
 

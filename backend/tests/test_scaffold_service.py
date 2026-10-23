@@ -78,6 +78,45 @@ def test_profile_changes_wording_not_requested_level():
     assert build_profile_adaptation(profile)["cognitionBand"] == "low"
 
 
+@pytest.mark.parametrize('stage', ['decompose', 'model'])
+def test_function_discussions_isolate_each_card_and_general_assistant(stage):
+    context = ProjectScaffoldContext(requestId="r", taskId="t", stage="decompose", level=0,
+                                     trigger="student_message", currentModule="function-discussion:a", interaction="function_discussion")
+    messages = [
+        {"role": "user", "text": text, "scaffoldContext": {"taskId": task, "stage": stage, "currentModule": module}}
+        for text, task, stage, module in [
+            ("same", "t", "decompose", "function-discussion:a"),
+            ("other card", "t", "decompose", "function-discussion:b"),
+            ("general", "t", "decompose", None),
+            ("other task", "other", "decompose", "function-discussion:a"),
+            ("other stage", "t", "build", "function-discussion:a"),
+        ]
+    ]
+    context.stage = stage
+    for message in messages:
+        if message['scaffoldContext']['stage'] == 'decompose':
+            message['scaffoldContext']['stage'] = stage
+    assert learning_agent_harness.scope_history(messages, context) == [{"role": "user", "text": "same"}]
+    context.currentModule = None
+    assert learning_agent_harness.scope_history(messages, context) == [{"role": "user", "text": "general"}]
+
+
+@pytest.mark.parametrize("language", ["zh", "en"])
+def test_function_discussion_prompt_allows_planning_but_not_executable_code(language):
+    context = ProjectScaffoldContext(requestId="r", taskId="t", stage="decompose", level=0,
+                                     trigger="student_message", currentModule="function-discussion:a", interaction="function_discussion")
+    profile = UserProfile(cognition=30, affect=50, behavior=50)
+    prompt = build_scaffold_prompt(context, profile, language)
+    assert "FUNCTION_DISCUSSION_V1" in prompt
+    assert "steps" in prompt
+    assert ("不再强行追问" if language == "zh" else "instead of another compulsory question") in prompt
+    assert ("不是可执行Python" if language == "zh" else "NOT executable Python") in prompt
+    metadata = build_scaffold_metadata(context, profile, None)
+    assert metadata["interaction"] == "function_discussion"
+    context.stage = "observe"
+    assert "FUNCTION_DISCUSSION_V1" not in build_scaffold_prompt(context, profile, language)
+
+
 def test_metadata_records_profile_and_code_fingerprint_without_code_copy():
     profile = UserProfile(cognition=45, affect=60, behavior=80)
     metadata = build_scaffold_metadata(scaffold_context(level=3), profile, "def move():\n    pass")

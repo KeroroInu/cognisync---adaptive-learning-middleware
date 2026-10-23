@@ -2,6 +2,10 @@
 SQL Models - 导出所有模型
 """
 from app.models.sql.base import Base, metadata
+from app.models.sql.student_advice import StudentAdvice
+from app.models.sql.classroom_notice import ClassroomNotice
+from app.models.sql.learning_support import LearningSupportTurn, LearningPracticeReview
+from app.models.sql.project_review import ProjectReviewRound, ProjectReviewResponse, ProjectReviewEvent
 from app.models.sql.user import User
 from app.models.sql.message import ChatMessage, MessageRole
 from app.models.sql.profile import ProfileSnapshot, ProfileSource
@@ -38,6 +42,8 @@ from app.models.sql.lesson import LessonPlan, PreparationRecord
 from app.models.sql.classroom_material import ClassroomMaterial, MaterialReceipt
 
 __all__ = [
+    "StudentAdvice",
+    "ProjectReviewRound", "ProjectReviewResponse", "ProjectReviewEvent",
     "Base",
     "metadata",
     "User",

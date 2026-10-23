@@ -1,0 +1,3557 @@
+{
+  "schema": "classroom-instrument-catalog/1",
+  "version": "20261012-draft1",
+  "instruments": [
+    {
+      "key": "background",
+      "main_questions": 19,
+      "source_file": "高中生编程学习与AI使用现状调查问卷_待审查稿.docx",
+      "source_sha256": "f4feef5c79636d337fc75a1637581dc0db1bdac4231640804b3f368c42f6fa3f",
+      "draft": {
+        "phase": "pre",
+        "name": "待审阅｜现状调查 · 19个主问题｜20261012",
+        "class_name": "预试班",
+        "source": "研究阶段：未分配（不是正式前测，也不是已施测预试）；题本代码：background；版本：20261012-draft1。来源：高中生编程学习与AI使用现状调查问卷_待审查稿.docx；SHA256：f4feef5c79636d337fc75a1637581dc0db1bdac4231640804b3f368c42f6fa3f。自编背景调查，不计能力总分。19个主问题，其他说明及分支为子字段。保持Word跳题：无编程经历跳至8；从未用AI跳至14；未用AI编程跳至14。Q10勾选不记得名称保存为__skip__，不等于留空。 正式开放前确认样本、用途及版本；前后测分别开放，不混总分。",
+        "questions": [
+          {
+            "id": "q1",
+            "text": "你接触或学习过哪些编程语言或工具？（多选）",
+            "type": "multiple",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "Scratch等图形化编程工具"
+              },
+              {
+                "value": "2",
+                "label": "Python"
+              },
+              {
+                "value": "3",
+                "label": "其他"
+              },
+              {
+                "value": "4",
+                "label": "没有接触过",
+                "exclusive": true
+              },
+              {
+                "value": "5",
+                "label": "不确定",
+                "exclusive": true
+              }
+            ],
+            "show_if": [],
+            "hint": "同学你好！本问卷了解你的编程学习经历，不计入成绩，请如实填写。你可以跳过不愿回答的问题；资料使用与退出方式见知情同意说明。 AI指可以通过对话提供回答或帮助完成任务的人工智能工具。"
+          },
+          {
+            "id": "q1_other",
+            "parent_id": "q1",
+            "text": "第1题补充：其他",
+            "type": "text",
+            "required": false,
+            "options": [],
+            "show_if": [
+              {
+                "question_id": "q1",
+                "values": [
+                  "3"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "q2",
+            "text": "下列Python内容，你曾在课堂或自学中学过哪些？（多选）",
+            "type": "multiple",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "变量与数据类型"
+              },
+              {
+                "value": "2",
+                "label": "输入与输出"
+              },
+              {
+                "value": "3",
+                "label": "条件判断"
+              },
+              {
+                "value": "4",
+                "label": "循环"
+              },
+              {
+                "value": "5",
+                "label": "函数"
+              },
+              {
+                "value": "6",
+                "label": "列表等数据组织方式"
+              },
+              {
+                "value": "7",
+                "label": "其他"
+              },
+              {
+                "value": "8",
+                "label": "尚未学过Python",
+                "exclusive": true
+              },
+              {
+                "value": "9",
+                "label": "记不清楚",
+                "exclusive": true
+              }
+            ],
+            "show_if": []
+          },
+          {
+            "id": "q2_other",
+            "parent_id": "q2",
+            "text": "第2题补充：其他",
+            "type": "text",
+            "required": false,
+            "options": [],
+            "show_if": [
+              {
+                "question_id": "q2",
+                "values": [
+                  "7"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "q3",
+            "text": "最近一次你实际动手做的编程任务主要属于哪一类？",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "短小的知识或语法练习"
+              },
+              {
+                "value": "2",
+                "label": "补全、修改已有程序"
+              },
+              {
+                "value": "3",
+                "label": "制作含多个功能的作品（如小游戏）"
+              },
+              {
+                "value": "4",
+                "label": "其他"
+              },
+              {
+                "value": "5",
+                "label": "没有动手做过编程任务"
+              }
+            ],
+            "show_if": []
+          },
+          {
+            "id": "q3_other",
+            "parent_id": "q3",
+            "text": "第3题补充：其他",
+            "type": "text",
+            "required": false,
+            "options": [],
+            "show_if": [
+              {
+                "question_id": "q3",
+                "values": [
+                  "4"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "q4",
+            "text": "你是否参与制作过一个包含多个功能的编程作品？",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "没有"
+              },
+              {
+                "value": "2",
+                "label": "有"
+              }
+            ],
+            "show_if": [
+              {
+                "question_id": "q3",
+                "values": [
+                  "1",
+                  "2",
+                  "3",
+                  "4"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "q4_detail",
+            "parent_id": "q4",
+            "text": "第4题补充：作品名称或内容",
+            "type": "text",
+            "required": false,
+            "options": [],
+            "show_if": [
+              {
+                "question_id": "q4",
+                "values": [
+                  "2"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "q4_role",
+            "parent_id": "q4",
+            "text": "第4题补充：你实际负责了什么？",
+            "type": "text",
+            "required": false,
+            "options": [],
+            "show_if": [
+              {
+                "question_id": "q4",
+                "values": [
+                  "2"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "q5",
+            "text": "回想最近一次编程任务，拿到要求后，你首先做了什么？",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "直接尝试写代码"
+              },
+              {
+                "value": "2",
+                "label": "查看或运行示例"
+              },
+              {
+                "value": "3",
+                "label": "列出要完成的事情"
+              },
+              {
+                "value": "4",
+                "label": "先向老师、同学或AI求助"
+              },
+              {
+                "value": "5",
+                "label": "按教师指定步骤开始"
+              },
+              {
+                "value": "6",
+                "label": "其他"
+              },
+              {
+                "value": "7",
+                "label": "记不清楚"
+              }
+            ],
+            "show_if": [
+              {
+                "question_id": "q3",
+                "values": [
+                  "1",
+                  "2",
+                  "3",
+                  "4"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "q5_other",
+            "parent_id": "q5",
+            "text": "第5题补充：其他",
+            "type": "text",
+            "required": false,
+            "options": [],
+            "show_if": [
+              {
+                "question_id": "q5",
+                "values": [
+                  "6"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "q6",
+            "text": "那次任务中，你是否表达或记录过准备怎样完成它？",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "没有"
+              },
+              {
+                "value": "2",
+                "label": "有"
+              },
+              {
+                "value": "3",
+                "label": "记不清楚"
+              }
+            ],
+            "show_if": [
+              {
+                "question_id": "q3",
+                "values": [
+                  "1",
+                  "2",
+                  "3",
+                  "4"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "q6_methods",
+            "parent_id": "q6",
+            "text": "第6题补充：准备怎样完成任务？（可勾选多种方式）",
+            "type": "multiple",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "口头说明"
+              },
+              {
+                "value": "2",
+                "label": "文字步骤"
+              },
+              {
+                "value": "3",
+                "label": "图示"
+              },
+              {
+                "value": "4",
+                "label": "其他"
+              }
+            ],
+            "show_if": [
+              {
+                "question_id": "q6",
+                "values": [
+                  "2"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "q6_other",
+            "parent_id": "q6",
+            "text": "第6题补充：其他方式",
+            "type": "text",
+            "required": false,
+            "options": [],
+            "show_if": [
+              {
+                "question_id": "q6_methods",
+                "values": [
+                  "4"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "q7",
+            "text": "最近一次看到不熟悉的程序时，你首先怎样处理？",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "运行观察结果"
+              },
+              {
+                "value": "2",
+                "label": "逐行阅读"
+              },
+              {
+                "value": "3",
+                "label": "先找主要功能或执行顺序"
+              },
+              {
+                "value": "4",
+                "label": "请老师、同学或AI解释"
+              },
+              {
+                "value": "5",
+                "label": "直接修改试一试"
+              },
+              {
+                "value": "6",
+                "label": "其他"
+              },
+              {
+                "value": "7",
+                "label": "记不清楚／没有这样的经历"
+              }
+            ],
+            "show_if": [
+              {
+                "question_id": "q3",
+                "values": [
+                  "1",
+                  "2",
+                  "3",
+                  "4"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "q7_other",
+            "parent_id": "q7",
+            "text": "第7题补充：其他",
+            "type": "text",
+            "required": false,
+            "options": [],
+            "show_if": [
+              {
+                "question_id": "q7",
+                "values": [
+                  "6"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "q8",
+            "text": "你使用AI工具的情况最接近哪一种？",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "从未使用过"
+              },
+              {
+                "value": "2",
+                "label": "以前用过，但最近一个月没有使用"
+              },
+              {
+                "value": "3",
+                "label": "最近一个月使用了1—3天"
+              },
+              {
+                "value": "4",
+                "label": "使用了4—10天"
+              },
+              {
+                "value": "5",
+                "label": "使用了11—20天"
+              },
+              {
+                "value": "6",
+                "label": "使用了21天及以上"
+              },
+              {
+                "value": "7",
+                "label": "使用过，但记不清使用天数"
+              }
+            ],
+            "show_if": []
+          },
+          {
+            "id": "q9",
+            "text": "截至目前，你用AI做过哪些事情？（多选）",
+            "type": "multiple",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "查询或解释知识"
+              },
+              {
+                "value": "2",
+                "label": "写作、翻译或修改文字"
+              },
+              {
+                "value": "3",
+                "label": "生成图片、音频或视频"
+              },
+              {
+                "value": "4",
+                "label": "编程学习或制作程序"
+              },
+              {
+                "value": "5",
+                "label": "日常交流或娱乐"
+              },
+              {
+                "value": "6",
+                "label": "其他"
+              },
+              {
+                "value": "7",
+                "label": "记不清楚",
+                "exclusive": true
+              }
+            ],
+            "show_if": [
+              {
+                "question_id": "q8",
+                "values": [
+                  "2",
+                  "3",
+                  "4",
+                  "5",
+                  "6",
+                  "7"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "q9_other",
+            "parent_id": "q9",
+            "text": "第9题补充：其他",
+            "type": "text",
+            "required": false,
+            "options": [],
+            "show_if": [
+              {
+                "question_id": "q9",
+                "values": [
+                  "6"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "q10",
+            "text": "请写出你用过的AI工具名称。",
+            "type": "text",
+            "required": false,
+            "options": [],
+            "show_if": [
+              {
+                "question_id": "q8",
+                "values": [
+                  "2",
+                  "3",
+                  "4",
+                  "5",
+                  "6",
+                  "7"
+                ]
+              }
+            ],
+            "skip_label": "不记得名称"
+          },
+          {
+            "id": "q11",
+            "text": "你是否亲自使用过AI帮助完成编程相关任务？",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "使用过"
+              },
+              {
+                "value": "2",
+                "label": "没有使用过"
+              },
+              {
+                "value": "3",
+                "label": "不确定"
+              }
+            ],
+            "show_if": [
+              {
+                "question_id": "q8",
+                "values": [
+                  "2",
+                  "3",
+                  "4",
+                  "5",
+                  "6",
+                  "7"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "q12",
+            "text": "最近一次用AI帮助编程时，你让它做了什么？（多选）",
+            "type": "multiple",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "解释任务要求"
+              },
+              {
+                "value": "2",
+                "label": "讨论实现思路"
+              },
+              {
+                "value": "3",
+                "label": "解释知识或代码"
+              },
+              {
+                "value": "4",
+                "label": "生成部分或完整代码"
+              },
+              {
+                "value": "5",
+                "label": "查找错误或修改程序"
+              },
+              {
+                "value": "6",
+                "label": "提供测试方法"
+              },
+              {
+                "value": "7",
+                "label": "其他"
+              },
+              {
+                "value": "8",
+                "label": "记不清楚",
+                "exclusive": true
+              }
+            ],
+            "show_if": [
+              {
+                "question_id": "q11",
+                "values": [
+                  "1"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "q12_other",
+            "parent_id": "q12",
+            "text": "第12题补充：其他",
+            "type": "text",
+            "required": false,
+            "options": [],
+            "show_if": [
+              {
+                "question_id": "q12",
+                "values": [
+                  "7"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "q12_task",
+            "parent_id": "q12",
+            "text": "第12题补充：当时的任务是什么？",
+            "type": "text",
+            "required": false,
+            "options": [],
+            "show_if": [
+              {
+                "question_id": "q11",
+                "values": [
+                  "1"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "q13",
+            "text": "那次收到AI的回答后，你做过哪些事情？（多选）",
+            "type": "multiple",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "直接按回答操作"
+              },
+              {
+                "value": "2",
+                "label": "继续提问，请它解释"
+              },
+              {
+                "value": "3",
+                "label": "与题目要求或其他资料对照"
+              },
+              {
+                "value": "4",
+                "label": "修改它给出的方案或代码"
+              },
+              {
+                "value": "5",
+                "label": "运行程序或进行测试"
+              },
+              {
+                "value": "6",
+                "label": "向老师、同学核实"
+              },
+              {
+                "value": "7",
+                "label": "决定不采用它的回答"
+              },
+              {
+                "value": "8",
+                "label": "其他"
+              },
+              {
+                "value": "9",
+                "label": "记不清楚",
+                "exclusive": true
+              }
+            ],
+            "show_if": [
+              {
+                "question_id": "q11",
+                "values": [
+                  "1"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "q13_other",
+            "parent_id": "q13",
+            "text": "第13题补充：其他",
+            "type": "text",
+            "required": false,
+            "options": [],
+            "show_if": [
+              {
+                "question_id": "q13",
+                "values": [
+                  "8"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "q14",
+            "text": "最近一次编程任务中，你怎样检查程序是否达到要求？（多选）",
+            "type": "multiple",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "看能否运行"
+              },
+              {
+                "value": "2",
+                "label": "逐项核对任务要求"
+              },
+              {
+                "value": "3",
+                "label": "尝试不同输入或操作"
+              },
+              {
+                "value": "4",
+                "label": "阅读代码，检查实现思路"
+              },
+              {
+                "value": "5",
+                "label": "请老师、同学或AI检查"
+              },
+              {
+                "value": "6",
+                "label": "其他"
+              },
+              {
+                "value": "7",
+                "label": "没有检查",
+                "exclusive": true
+              },
+              {
+                "value": "8",
+                "label": "记不清楚／没有相关经历",
+                "exclusive": true
+              }
+            ],
+            "show_if": []
+          },
+          {
+            "id": "q14_other",
+            "parent_id": "q14",
+            "text": "第14题补充：其他",
+            "type": "text",
+            "required": false,
+            "options": [],
+            "show_if": [
+              {
+                "question_id": "q14",
+                "values": [
+                  "6"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "q15",
+            "text": "最近一次程序报错或结果不符合预期时，你首先做了什么？",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "阅读报错或检查运行结果"
+              },
+              {
+                "value": "2",
+                "label": "回看相关代码"
+              },
+              {
+                "value": "3",
+                "label": "修改代码试一试"
+              },
+              {
+                "value": "4",
+                "label": "查教材或资料"
+              },
+              {
+                "value": "5",
+                "label": "请老师、同学帮助"
+              },
+              {
+                "value": "6",
+                "label": "向AI求助"
+              },
+              {
+                "value": "7",
+                "label": "暂时跳过"
+              },
+              {
+                "value": "8",
+                "label": "其他"
+              },
+              {
+                "value": "9",
+                "label": "记不清楚／没有相关经历"
+              }
+            ],
+            "show_if": []
+          },
+          {
+            "id": "q15_other",
+            "parent_id": "q15",
+            "text": "第15题补充：其他",
+            "type": "text",
+            "required": false,
+            "options": [],
+            "show_if": [
+              {
+                "question_id": "q15",
+                "values": [
+                  "8"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "q16",
+            "text": "在你做过的编程任务中，哪些地方较容易遇到困难？（最多选3项）",
+            "type": "multiple",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "看懂任务要求"
+              },
+              {
+                "value": "2",
+                "label": "确定先做什么、后做什么"
+              },
+              {
+                "value": "3",
+                "label": "理解程序执行过程"
+              },
+              {
+                "value": "4",
+                "label": "把自己的思路写成代码"
+              },
+              {
+                "value": "5",
+                "label": "找到错误原因"
+              },
+              {
+                "value": "6",
+                "label": "检查程序是否满足要求"
+              },
+              {
+                "value": "7",
+                "label": "理解AI给出的回答"
+              },
+              {
+                "value": "8",
+                "label": "其他"
+              },
+              {
+                "value": "9",
+                "label": "暂未遇到明显困难",
+                "exclusive": true
+              },
+              {
+                "value": "10",
+                "label": "没有相关经历",
+                "exclusive": true
+              }
+            ],
+            "show_if": [],
+            "max_selections": 3
+          },
+          {
+            "id": "q16_other",
+            "parent_id": "q16",
+            "text": "第16题补充：其他",
+            "type": "text",
+            "required": false,
+            "options": [],
+            "show_if": [
+              {
+                "question_id": "q16",
+                "values": [
+                  "8"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "q17",
+            "text": "学习一个新的编程项目时，你希望得到哪些帮助？（最多选3项）",
+            "type": "multiple",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "可运行的示例"
+              },
+              {
+                "value": "2",
+                "label": "任务要求的说明"
+              },
+              {
+                "value": "3",
+                "label": "知识点解释"
+              },
+              {
+                "value": "4",
+                "label": "实现思路提示"
+              },
+              {
+                "value": "5",
+                "label": "编程操作示范"
+              },
+              {
+                "value": "6",
+                "label": "错误原因与修改提示"
+              },
+              {
+                "value": "7",
+                "label": "检查程序的方法"
+              },
+              {
+                "value": "8",
+                "label": "与老师、同学讨论的机会"
+              },
+              {
+                "value": "9",
+                "label": "其他"
+              },
+              {
+                "value": "10",
+                "label": "暂时没有明确需要",
+                "exclusive": true
+              }
+            ],
+            "show_if": [],
+            "max_selections": 3
+          },
+          {
+            "id": "q17_other",
+            "parent_id": "q17",
+            "text": "第17题补充：其他",
+            "type": "text",
+            "required": false,
+            "options": [],
+            "show_if": [
+              {
+                "question_id": "q17",
+                "values": [
+                  "9"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "q18",
+            "text": "使用编程软件或AI时，你遇到过哪些实际困难？（多选）",
+            "type": "multiple",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "账号登录"
+              },
+              {
+                "value": "2",
+                "label": "网络连接"
+              },
+              {
+                "value": "3",
+                "label": "软件安装或运行"
+              },
+              {
+                "value": "4",
+                "label": "看不懂操作提示"
+              },
+              {
+                "value": "5",
+                "label": "不知道怎样提出问题"
+              },
+              {
+                "value": "6",
+                "label": "其他"
+              },
+              {
+                "value": "7",
+                "label": "没有明显困难",
+                "exclusive": true
+              },
+              {
+                "value": "8",
+                "label": "尚未使用过",
+                "exclusive": true
+              }
+            ],
+            "show_if": []
+          },
+          {
+            "id": "q18_other",
+            "parent_id": "q18",
+            "text": "第18题补充：其他",
+            "type": "text",
+            "required": false,
+            "options": [],
+            "show_if": [
+              {
+                "question_id": "q18",
+                "values": [
+                  "6"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "q19",
+            "text": "关于接下来的编程课，你还有什么希望老师了解的？（选答）",
+            "type": "text",
+            "required": false,
+            "options": []
+          }
+        ]
+      }
+    },
+    {
+      "key": "ct_pre",
+      "main_questions": 20,
+      "source_file": "计算思维量表_20题.docx",
+      "source_sha256": "36ac665ca52af7f9315dfa7e47e8a0934e5f163b5eccfded9fa8a411a2ed098c",
+      "draft": {
+        "phase": "pre",
+        "name": "待审阅｜CT20 · 前测｜20261012",
+        "class_name": "预试班",
+        "source": "研究阶段：未分配（不是正式前测，也不是已施测预试）；题本代码：ct_pre；版本：20261012-draft1。来源：计算思维量表_20题.docx；SHA256：36ac665ca52af7f9315dfa7e47e8a0934e5f163b5eccfded9fa8a411a2ed098c。Korkmaz与Bai（2019）20题中文版，非21题版。1—5对应从不至总是。16—20题拟按6−原分处理，来自题意核对，尚无作者计分程序确认。保留原分，缺答不记0；当前不自动评分。 正式开放前确认样本、用途及版本；前后测分别开放，不混总分。",
+        "questions": [
+          {
+            "id": "ct01",
+            "text": "我喜欢那些对自己做出的决定很有信心的人",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "从不"
+              },
+              {
+                "value": "2",
+                "label": "很少"
+              },
+              {
+                "value": "3",
+                "label": "有时"
+              },
+              {
+                "value": "4",
+                "label": "通常"
+              },
+              {
+                "value": "5",
+                "label": "总是"
+              }
+            ],
+            "hint": "请根据自己的实际情况，每题选择一项。"
+          },
+          {
+            "id": "ct02",
+            "text": "我相信当我在一个新的环境中遇到困难时，我可以解决出现的问题。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "从不"
+              },
+              {
+                "value": "2",
+                "label": "很少"
+              },
+              {
+                "value": "3",
+                "label": "有时"
+              },
+              {
+                "value": "4",
+                "label": "通常"
+              },
+              {
+                "value": "5",
+                "label": "总是"
+              }
+            ]
+          },
+          {
+            "id": "ct03",
+            "text": "在解决问题的时候，我相信自己对“正确”和“错误”的直觉判断。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "从不"
+              },
+              {
+                "value": "2",
+                "label": "很少"
+              },
+              {
+                "value": "3",
+                "label": "有时"
+              },
+              {
+                "value": "4",
+                "label": "通常"
+              },
+              {
+                "value": "5",
+                "label": "总是"
+              }
+            ]
+          },
+          {
+            "id": "ct04",
+            "text": "我会立即想到通过列方程的方式来解决问题",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "从不"
+              },
+              {
+                "value": "2",
+                "label": "很少"
+              },
+              {
+                "value": "3",
+                "label": "有时"
+              },
+              {
+                "value": "4",
+                "label": "通常"
+              },
+              {
+                "value": "5",
+                "label": "总是"
+              }
+            ]
+          },
+          {
+            "id": "ct05",
+            "text": "我认为如果老师在课上使用数学符号和概念，我会学的更加容易一些。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "从不"
+              },
+              {
+                "value": "2",
+                "label": "很少"
+              },
+              {
+                "value": "3",
+                "label": "有时"
+              },
+              {
+                "value": "4",
+                "label": "通常"
+              },
+              {
+                "value": "5",
+                "label": "总是"
+              }
+            ]
+          },
+          {
+            "id": "ct06",
+            "text": "我认为我可以很容易的理解数字之间的关系",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "从不"
+              },
+              {
+                "value": "2",
+                "label": "很少"
+              },
+              {
+                "value": "3",
+                "label": "有时"
+              },
+              {
+                "value": "4",
+                "label": "通常"
+              },
+              {
+                "value": "5",
+                "label": "总是"
+              }
+            ]
+          },
+          {
+            "id": "ct07",
+            "text": "我可以把一个用语言表达的数学问题转化成数学模型（例如，列方程）",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "从不"
+              },
+              {
+                "value": "2",
+                "label": "很少"
+              },
+              {
+                "value": "3",
+                "label": "有时"
+              },
+              {
+                "value": "4",
+                "label": "通常"
+              },
+              {
+                "value": "5",
+                "label": "总是"
+              }
+            ]
+          },
+          {
+            "id": "ct08",
+            "text": "我喜欢和同学一起进行合作学习",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "从不"
+              },
+              {
+                "value": "2",
+                "label": "很少"
+              },
+              {
+                "value": "3",
+                "label": "有时"
+              },
+              {
+                "value": "4",
+                "label": "通常"
+              },
+              {
+                "value": "5",
+                "label": "总是"
+              }
+            ]
+          },
+          {
+            "id": "ct09",
+            "text": "我认为我能够在合作学习中取得更好的成绩，因为我是和小组成员一起学习的。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "从不"
+              },
+              {
+                "value": "2",
+                "label": "很少"
+              },
+              {
+                "value": "3",
+                "label": "有时"
+              },
+              {
+                "value": "4",
+                "label": "通常"
+              },
+              {
+                "value": "5",
+                "label": "总是"
+              }
+            ]
+          },
+          {
+            "id": "ct10",
+            "text": "在合作学习中，我喜欢和好朋友一起解决与小组项目有关的问题。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "从不"
+              },
+              {
+                "value": "2",
+                "label": "很少"
+              },
+              {
+                "value": "3",
+                "label": "有时"
+              },
+              {
+                "value": "4",
+                "label": "通常"
+              },
+              {
+                "value": "5",
+                "label": "总是"
+              }
+            ]
+          },
+          {
+            "id": "ct11",
+            "text": "我认为在与其他同学一起进行合作学习的过程中，我容易产生更多的想法。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "从不"
+              },
+              {
+                "value": "2",
+                "label": "很少"
+              },
+              {
+                "value": "3",
+                "label": "有时"
+              },
+              {
+                "value": "4",
+                "label": "通常"
+              },
+              {
+                "value": "5",
+                "label": "总是"
+              }
+            ]
+          },
+          {
+            "id": "ct12",
+            "text": "我擅长制定解决复杂问题的计划",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "从不"
+              },
+              {
+                "value": "2",
+                "label": "很少"
+              },
+              {
+                "value": "3",
+                "label": "有时"
+              },
+              {
+                "value": "4",
+                "label": "通常"
+              },
+              {
+                "value": "5",
+                "label": "总是"
+              }
+            ]
+          },
+          {
+            "id": "ct13",
+            "text": "我认为试图解决一些复杂的问题是很有趣的",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "从不"
+              },
+              {
+                "value": "2",
+                "label": "很少"
+              },
+              {
+                "value": "3",
+                "label": "有时"
+              },
+              {
+                "value": "4",
+                "label": "通常"
+              },
+              {
+                "value": "5",
+                "label": "总是"
+              }
+            ]
+          },
+          {
+            "id": "ct14",
+            "text": "我愿意学习具有挑战性的东西",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "从不"
+              },
+              {
+                "value": "2",
+                "label": "很少"
+              },
+              {
+                "value": "3",
+                "label": "有时"
+              },
+              {
+                "value": "4",
+                "label": "通常"
+              },
+              {
+                "value": "5",
+                "label": "总是"
+              }
+            ]
+          },
+          {
+            "id": "ct15",
+            "text": "在作出选择和决定时候，我会进行系统的考虑。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "从不"
+              },
+              {
+                "value": "2",
+                "label": "很少"
+              },
+              {
+                "value": "3",
+                "label": "有时"
+              },
+              {
+                "value": "4",
+                "label": "通常"
+              },
+              {
+                "value": "5",
+                "label": "总是"
+              }
+            ]
+          },
+          {
+            "id": "ct16",
+            "text": "把脑海中解决问题的方案展示出来，对我来说有点儿难。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "从不"
+              },
+              {
+                "value": "2",
+                "label": "很少"
+              },
+              {
+                "value": "3",
+                "label": "有时"
+              },
+              {
+                "value": "4",
+                "label": "通常"
+              },
+              {
+                "value": "5",
+                "label": "总是"
+              }
+            ]
+          },
+          {
+            "id": "ct17",
+            "text": "在解决问题的过程中，我不知道在哪儿以及如何使用X和Y等变量。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "从不"
+              },
+              {
+                "value": "2",
+                "label": "很少"
+              },
+              {
+                "value": "3",
+                "label": "有时"
+              },
+              {
+                "value": "4",
+                "label": "通常"
+              },
+              {
+                "value": "5",
+                "label": "总是"
+              }
+            ]
+          },
+          {
+            "id": "ct18",
+            "text": "我不能逐步应用我所设计的问题解决方案",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "从不"
+              },
+              {
+                "value": "2",
+                "label": "很少"
+              },
+              {
+                "value": "3",
+                "label": "有时"
+              },
+              {
+                "value": "4",
+                "label": "通常"
+              },
+              {
+                "value": "5",
+                "label": "总是"
+              }
+            ]
+          },
+          {
+            "id": "ct19",
+            "text": "在考虑解决一个问题的方法时，我不能想出来很多方法来。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "从不"
+              },
+              {
+                "value": "2",
+                "label": "很少"
+              },
+              {
+                "value": "3",
+                "label": "有时"
+              },
+              {
+                "value": "4",
+                "label": "通常"
+              },
+              {
+                "value": "5",
+                "label": "总是"
+              }
+            ]
+          },
+          {
+            "id": "ct20",
+            "text": "在合作学习的环境中，我无法形成自己的想法",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "从不"
+              },
+              {
+                "value": "2",
+                "label": "很少"
+              },
+              {
+                "value": "3",
+                "label": "有时"
+              },
+              {
+                "value": "4",
+                "label": "通常"
+              },
+              {
+                "value": "5",
+                "label": "总是"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "key": "ct_post",
+      "main_questions": 20,
+      "source_file": "计算思维量表_20题.docx",
+      "source_sha256": "36ac665ca52af7f9315dfa7e47e8a0934e5f163b5eccfded9fa8a411a2ed098c",
+      "draft": {
+        "phase": "post",
+        "name": "待审阅｜CT20 · 后测｜20261012",
+        "class_name": "预试班",
+        "source": "研究阶段：未分配（不是正式前测，也不是已施测预试）；题本代码：ct_post；版本：20261012-draft1。来源：计算思维量表_20题.docx；SHA256：36ac665ca52af7f9315dfa7e47e8a0934e5f163b5eccfded9fa8a411a2ed098c。Korkmaz与Bai（2019）20题中文版，非21题版。1—5对应从不至总是。16—20题拟按6−原分处理，来自题意核对，尚无作者计分程序确认。保留原分，缺答不记0；当前不自动评分。 正式开放前确认样本、用途及版本；前后测分别开放，不混总分。",
+        "questions": [
+          {
+            "id": "ct01",
+            "text": "我喜欢那些对自己做出的决定很有信心的人",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "从不"
+              },
+              {
+                "value": "2",
+                "label": "很少"
+              },
+              {
+                "value": "3",
+                "label": "有时"
+              },
+              {
+                "value": "4",
+                "label": "通常"
+              },
+              {
+                "value": "5",
+                "label": "总是"
+              }
+            ],
+            "hint": "请根据自己的实际情况，每题选择一项。"
+          },
+          {
+            "id": "ct02",
+            "text": "我相信当我在一个新的环境中遇到困难时，我可以解决出现的问题。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "从不"
+              },
+              {
+                "value": "2",
+                "label": "很少"
+              },
+              {
+                "value": "3",
+                "label": "有时"
+              },
+              {
+                "value": "4",
+                "label": "通常"
+              },
+              {
+                "value": "5",
+                "label": "总是"
+              }
+            ]
+          },
+          {
+            "id": "ct03",
+            "text": "在解决问题的时候，我相信自己对“正确”和“错误”的直觉判断。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "从不"
+              },
+              {
+                "value": "2",
+                "label": "很少"
+              },
+              {
+                "value": "3",
+                "label": "有时"
+              },
+              {
+                "value": "4",
+                "label": "通常"
+              },
+              {
+                "value": "5",
+                "label": "总是"
+              }
+            ]
+          },
+          {
+            "id": "ct04",
+            "text": "我会立即想到通过列方程的方式来解决问题",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "从不"
+              },
+              {
+                "value": "2",
+                "label": "很少"
+              },
+              {
+                "value": "3",
+                "label": "有时"
+              },
+              {
+                "value": "4",
+                "label": "通常"
+              },
+              {
+                "value": "5",
+                "label": "总是"
+              }
+            ]
+          },
+          {
+            "id": "ct05",
+            "text": "我认为如果老师在课上使用数学符号和概念，我会学的更加容易一些。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "从不"
+              },
+              {
+                "value": "2",
+                "label": "很少"
+              },
+              {
+                "value": "3",
+                "label": "有时"
+              },
+              {
+                "value": "4",
+                "label": "通常"
+              },
+              {
+                "value": "5",
+                "label": "总是"
+              }
+            ]
+          },
+          {
+            "id": "ct06",
+            "text": "我认为我可以很容易的理解数字之间的关系",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "从不"
+              },
+              {
+                "value": "2",
+                "label": "很少"
+              },
+              {
+                "value": "3",
+                "label": "有时"
+              },
+              {
+                "value": "4",
+                "label": "通常"
+              },
+              {
+                "value": "5",
+                "label": "总是"
+              }
+            ]
+          },
+          {
+            "id": "ct07",
+            "text": "我可以把一个用语言表达的数学问题转化成数学模型（例如，列方程）",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "从不"
+              },
+              {
+                "value": "2",
+                "label": "很少"
+              },
+              {
+                "value": "3",
+                "label": "有时"
+              },
+              {
+                "value": "4",
+                "label": "通常"
+              },
+              {
+                "value": "5",
+                "label": "总是"
+              }
+            ]
+          },
+          {
+            "id": "ct08",
+            "text": "我喜欢和同学一起进行合作学习",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "从不"
+              },
+              {
+                "value": "2",
+                "label": "很少"
+              },
+              {
+                "value": "3",
+                "label": "有时"
+              },
+              {
+                "value": "4",
+                "label": "通常"
+              },
+              {
+                "value": "5",
+                "label": "总是"
+              }
+            ]
+          },
+          {
+            "id": "ct09",
+            "text": "我认为我能够在合作学习中取得更好的成绩，因为我是和小组成员一起学习的。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "从不"
+              },
+              {
+                "value": "2",
+                "label": "很少"
+              },
+              {
+                "value": "3",
+                "label": "有时"
+              },
+              {
+                "value": "4",
+                "label": "通常"
+              },
+              {
+                "value": "5",
+                "label": "总是"
+              }
+            ]
+          },
+          {
+            "id": "ct10",
+            "text": "在合作学习中，我喜欢和好朋友一起解决与小组项目有关的问题。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "从不"
+              },
+              {
+                "value": "2",
+                "label": "很少"
+              },
+              {
+                "value": "3",
+                "label": "有时"
+              },
+              {
+                "value": "4",
+                "label": "通常"
+              },
+              {
+                "value": "5",
+                "label": "总是"
+              }
+            ]
+          },
+          {
+            "id": "ct11",
+            "text": "我认为在与其他同学一起进行合作学习的过程中，我容易产生更多的想法。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "从不"
+              },
+              {
+                "value": "2",
+                "label": "很少"
+              },
+              {
+                "value": "3",
+                "label": "有时"
+              },
+              {
+                "value": "4",
+                "label": "通常"
+              },
+              {
+                "value": "5",
+                "label": "总是"
+              }
+            ]
+          },
+          {
+            "id": "ct12",
+            "text": "我擅长制定解决复杂问题的计划",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "从不"
+              },
+              {
+                "value": "2",
+                "label": "很少"
+              },
+              {
+                "value": "3",
+                "label": "有时"
+              },
+              {
+                "value": "4",
+                "label": "通常"
+              },
+              {
+                "value": "5",
+                "label": "总是"
+              }
+            ]
+          },
+          {
+            "id": "ct13",
+            "text": "我认为试图解决一些复杂的问题是很有趣的",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "从不"
+              },
+              {
+                "value": "2",
+                "label": "很少"
+              },
+              {
+                "value": "3",
+                "label": "有时"
+              },
+              {
+                "value": "4",
+                "label": "通常"
+              },
+              {
+                "value": "5",
+                "label": "总是"
+              }
+            ]
+          },
+          {
+            "id": "ct14",
+            "text": "我愿意学习具有挑战性的东西",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "从不"
+              },
+              {
+                "value": "2",
+                "label": "很少"
+              },
+              {
+                "value": "3",
+                "label": "有时"
+              },
+              {
+                "value": "4",
+                "label": "通常"
+              },
+              {
+                "value": "5",
+                "label": "总是"
+              }
+            ]
+          },
+          {
+            "id": "ct15",
+            "text": "在作出选择和决定时候，我会进行系统的考虑。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "从不"
+              },
+              {
+                "value": "2",
+                "label": "很少"
+              },
+              {
+                "value": "3",
+                "label": "有时"
+              },
+              {
+                "value": "4",
+                "label": "通常"
+              },
+              {
+                "value": "5",
+                "label": "总是"
+              }
+            ]
+          },
+          {
+            "id": "ct16",
+            "text": "把脑海中解决问题的方案展示出来，对我来说有点儿难。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "从不"
+              },
+              {
+                "value": "2",
+                "label": "很少"
+              },
+              {
+                "value": "3",
+                "label": "有时"
+              },
+              {
+                "value": "4",
+                "label": "通常"
+              },
+              {
+                "value": "5",
+                "label": "总是"
+              }
+            ]
+          },
+          {
+            "id": "ct17",
+            "text": "在解决问题的过程中，我不知道在哪儿以及如何使用X和Y等变量。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "从不"
+              },
+              {
+                "value": "2",
+                "label": "很少"
+              },
+              {
+                "value": "3",
+                "label": "有时"
+              },
+              {
+                "value": "4",
+                "label": "通常"
+              },
+              {
+                "value": "5",
+                "label": "总是"
+              }
+            ]
+          },
+          {
+            "id": "ct18",
+            "text": "我不能逐步应用我所设计的问题解决方案",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "从不"
+              },
+              {
+                "value": "2",
+                "label": "很少"
+              },
+              {
+                "value": "3",
+                "label": "有时"
+              },
+              {
+                "value": "4",
+                "label": "通常"
+              },
+              {
+                "value": "5",
+                "label": "总是"
+              }
+            ]
+          },
+          {
+            "id": "ct19",
+            "text": "在考虑解决一个问题的方法时，我不能想出来很多方法来。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "从不"
+              },
+              {
+                "value": "2",
+                "label": "很少"
+              },
+              {
+                "value": "3",
+                "label": "有时"
+              },
+              {
+                "value": "4",
+                "label": "通常"
+              },
+              {
+                "value": "5",
+                "label": "总是"
+              }
+            ]
+          },
+          {
+            "id": "ct20",
+            "text": "在合作学习的环境中，我无法形成自己的想法",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "从不"
+              },
+              {
+                "value": "2",
+                "label": "很少"
+              },
+              {
+                "value": "3",
+                "label": "有时"
+              },
+              {
+                "value": "4",
+                "label": "通常"
+              },
+              {
+                "value": "5",
+                "label": "总是"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "key": "cps_pre",
+      "main_questions": 16,
+      "source_file": "复杂编程问题解决自评问卷_审题稿.docx",
+      "source_sha256": "3095d3c9a40a2bac495402543da52577b6deacd6a98c15a176310e35212b82ac",
+      "draft": {
+        "phase": "pre",
+        "name": "待审阅｜CPS16 · 前测审题稿｜20261012",
+        "class_name": "预试班",
+        "source": "研究阶段：未分配（不是正式前测，也不是已施测预试）；题本代码：cps_pre；版本：20261012-draft1。来源：复杂编程问题解决自评问卷_审题稿.docx；SHA256：3095d3c9a40a2bac495402543da52577b6deacd6a98c15a176310e35212b82ac。研究者自编四领域16题审题建议，尚未经用户/导师定题、专家审查或预试。不是Promma8，不是已验证量表，不用于正式施测；目前只供审阅。不自动评分。 正式开放前确认样本、用途及版本；前后测分别开放，不混总分。",
+        "questions": [
+          {
+            "id": "cps01",
+            "text": "面对不熟悉的编程任务，我能说清楚最终要达到什么结果。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "完全不符合"
+              },
+              {
+                "value": "2",
+                "label": "比较不符合"
+              },
+              {
+                "value": "3",
+                "label": "不确定"
+              },
+              {
+                "value": "4",
+                "label": "比较符合"
+              },
+              {
+                "value": "5",
+                "label": "完全符合"
+              }
+            ],
+            "hint": "请回想需要同时处理多个要求、不能直接套用现成步骤的编程任务，根据你目前的实际情况选择。不计入成绩，不愿回答或没有相关经历的题可以留空。每题选择一项。"
+          },
+          {
+            "id": "cps02",
+            "text": "我能找出完成编程任务时必须满足的条件。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "完全不符合"
+              },
+              {
+                "value": "2",
+                "label": "比较不符合"
+              },
+              {
+                "value": "3",
+                "label": "不确定"
+              },
+              {
+                "value": "4",
+                "label": "比较符合"
+              },
+              {
+                "value": "5",
+                "label": "完全符合"
+              }
+            ]
+          },
+          {
+            "id": "cps03",
+            "text": "当任务提供的信息不足时，我能指出还需要了解什么。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "完全不符合"
+              },
+              {
+                "value": "2",
+                "label": "比较不符合"
+              },
+              {
+                "value": "3",
+                "label": "不确定"
+              },
+              {
+                "value": "4",
+                "label": "比较符合"
+              },
+              {
+                "value": "5",
+                "label": "完全符合"
+              }
+            ]
+          },
+          {
+            "id": "cps04",
+            "text": "面对不同的解释或资料，我能找出与当前问题有关的信息。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "完全不符合"
+              },
+              {
+                "value": "2",
+                "label": "比较不符合"
+              },
+              {
+                "value": "3",
+                "label": "不确定"
+              },
+              {
+                "value": "4",
+                "label": "比较符合"
+              },
+              {
+                "value": "5",
+                "label": "完全符合"
+              }
+            ]
+          },
+          {
+            "id": "cps05",
+            "text": "我能把一个较大的编程问题分成可以着手处理的部分。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "完全不符合"
+              },
+              {
+                "value": "2",
+                "label": "比较不符合"
+              },
+              {
+                "value": "3",
+                "label": "不确定"
+              },
+              {
+                "value": "4",
+                "label": "比较符合"
+              },
+              {
+                "value": "5",
+                "label": "完全符合"
+              }
+            ]
+          },
+          {
+            "id": "cps06",
+            "text": "解决同一个编程问题时，我能想到不止一种办法。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "完全不符合"
+              },
+              {
+                "value": "2",
+                "label": "比较不符合"
+              },
+              {
+                "value": "3",
+                "label": "不确定"
+              },
+              {
+                "value": "4",
+                "label": "比较符合"
+              },
+              {
+                "value": "5",
+                "label": "完全符合"
+              }
+            ]
+          },
+          {
+            "id": "cps07",
+            "text": "选择实现办法时，我能根据任务条件说明选择的理由。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "完全不符合"
+              },
+              {
+                "value": "2",
+                "label": "比较不符合"
+              },
+              {
+                "value": "3",
+                "label": "不确定"
+              },
+              {
+                "value": "4",
+                "label": "比较符合"
+              },
+              {
+                "value": "5",
+                "label": "完全符合"
+              }
+            ]
+          },
+          {
+            "id": "cps08",
+            "text": "任务要求发生变化时，我能判断原有方案的哪些部分会受影响。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "完全不符合"
+              },
+              {
+                "value": "2",
+                "label": "比较不符合"
+              },
+              {
+                "value": "3",
+                "label": "不确定"
+              },
+              {
+                "value": "4",
+                "label": "比较符合"
+              },
+              {
+                "value": "5",
+                "label": "完全符合"
+              }
+            ]
+          },
+          {
+            "id": "cps09",
+            "text": "开始实现一个方案时，我能确定各项工作的先后顺序。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "完全不符合"
+              },
+              {
+                "value": "2",
+                "label": "比较不符合"
+              },
+              {
+                "value": "3",
+                "label": "不确定"
+              },
+              {
+                "value": "4",
+                "label": "比较符合"
+              },
+              {
+                "value": "5",
+                "label": "完全符合"
+              }
+            ]
+          },
+          {
+            "id": "cps10",
+            "text": "得到他人或AI的建议时，我能判断它是否适合当前任务。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "完全不符合"
+              },
+              {
+                "value": "2",
+                "label": "比较不符合"
+              },
+              {
+                "value": "3",
+                "label": "不确定"
+              },
+              {
+                "value": "4",
+                "label": "比较符合"
+              },
+              {
+                "value": "5",
+                "label": "完全符合"
+              }
+            ]
+          },
+          {
+            "id": "cps11",
+            "text": "程序结果与预期不同时，我能找出需要进一步检查的位置。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "完全不符合"
+              },
+              {
+                "value": "2",
+                "label": "比较不符合"
+              },
+              {
+                "value": "3",
+                "label": "不确定"
+              },
+              {
+                "value": "4",
+                "label": "比较符合"
+              },
+              {
+                "value": "5",
+                "label": "完全符合"
+              }
+            ]
+          },
+          {
+            "id": "cps12",
+            "text": "尝试的办法行不通时，我能根据得到的反馈调整下一步做法。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "完全不符合"
+              },
+              {
+                "value": "2",
+                "label": "比较不符合"
+              },
+              {
+                "value": "3",
+                "label": "不确定"
+              },
+              {
+                "value": "4",
+                "label": "比较符合"
+              },
+              {
+                "value": "5",
+                "label": "完全符合"
+              }
+            ]
+          },
+          {
+            "id": "cps13",
+            "text": "我能选择有助于检查任务要求是否满足的测试情况。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "完全不符合"
+              },
+              {
+                "value": "2",
+                "label": "比较不符合"
+              },
+              {
+                "value": "3",
+                "label": "不确定"
+              },
+              {
+                "value": "4",
+                "label": "比较符合"
+              },
+              {
+                "value": "5",
+                "label": "完全符合"
+              }
+            ]
+          },
+          {
+            "id": "cps14",
+            "text": "程序可以运行后，我能检查它是否遗漏了某些任务要求。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "完全不符合"
+              },
+              {
+                "value": "2",
+                "label": "比较不符合"
+              },
+              {
+                "value": "3",
+                "label": "不确定"
+              },
+              {
+                "value": "4",
+                "label": "比较符合"
+              },
+              {
+                "value": "5",
+                "label": "完全符合"
+              }
+            ]
+          },
+          {
+            "id": "cps15",
+            "text": "完成一个编程任务后，我能说明哪些做法有效以及为什么。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "完全不符合"
+              },
+              {
+                "value": "2",
+                "label": "比较不符合"
+              },
+              {
+                "value": "3",
+                "label": "不确定"
+              },
+              {
+                "value": "4",
+                "label": "比较符合"
+              },
+              {
+                "value": "5",
+                "label": "完全符合"
+              }
+            ]
+          },
+          {
+            "id": "cps16",
+            "text": "面对新的编程任务，我能判断以前的方法哪些可以继续使用。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "完全不符合"
+              },
+              {
+                "value": "2",
+                "label": "比较不符合"
+              },
+              {
+                "value": "3",
+                "label": "不确定"
+              },
+              {
+                "value": "4",
+                "label": "比较符合"
+              },
+              {
+                "value": "5",
+                "label": "完全符合"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "key": "cps_post",
+      "main_questions": 16,
+      "source_file": "复杂编程问题解决自评问卷_审题稿.docx",
+      "source_sha256": "3095d3c9a40a2bac495402543da52577b6deacd6a98c15a176310e35212b82ac",
+      "draft": {
+        "phase": "post",
+        "name": "待审阅｜CPS16 · 后测审题稿｜20261012",
+        "class_name": "预试班",
+        "source": "研究阶段：未分配（不是正式前测，也不是已施测预试）；题本代码：cps_post；版本：20261012-draft1。来源：复杂编程问题解决自评问卷_审题稿.docx；SHA256：3095d3c9a40a2bac495402543da52577b6deacd6a98c15a176310e35212b82ac。研究者自编四领域16题审题建议，尚未经用户/导师定题、专家审查或预试。不是Promma8，不是已验证量表，不用于正式施测；目前只供审阅。不自动评分。 正式开放前确认样本、用途及版本；前后测分别开放，不混总分。",
+        "questions": [
+          {
+            "id": "cps01",
+            "text": "面对不熟悉的编程任务，我能说清楚最终要达到什么结果。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "完全不符合"
+              },
+              {
+                "value": "2",
+                "label": "比较不符合"
+              },
+              {
+                "value": "3",
+                "label": "不确定"
+              },
+              {
+                "value": "4",
+                "label": "比较符合"
+              },
+              {
+                "value": "5",
+                "label": "完全符合"
+              }
+            ],
+            "hint": "请回想需要同时处理多个要求、不能直接套用现成步骤的编程任务，根据你目前的实际情况选择。不计入成绩，不愿回答或没有相关经历的题可以留空。每题选择一项。"
+          },
+          {
+            "id": "cps02",
+            "text": "我能找出完成编程任务时必须满足的条件。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "完全不符合"
+              },
+              {
+                "value": "2",
+                "label": "比较不符合"
+              },
+              {
+                "value": "3",
+                "label": "不确定"
+              },
+              {
+                "value": "4",
+                "label": "比较符合"
+              },
+              {
+                "value": "5",
+                "label": "完全符合"
+              }
+            ]
+          },
+          {
+            "id": "cps03",
+            "text": "当任务提供的信息不足时，我能指出还需要了解什么。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "完全不符合"
+              },
+              {
+                "value": "2",
+                "label": "比较不符合"
+              },
+              {
+                "value": "3",
+                "label": "不确定"
+              },
+              {
+                "value": "4",
+                "label": "比较符合"
+              },
+              {
+                "value": "5",
+                "label": "完全符合"
+              }
+            ]
+          },
+          {
+            "id": "cps04",
+            "text": "面对不同的解释或资料，我能找出与当前问题有关的信息。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "完全不符合"
+              },
+              {
+                "value": "2",
+                "label": "比较不符合"
+              },
+              {
+                "value": "3",
+                "label": "不确定"
+              },
+              {
+                "value": "4",
+                "label": "比较符合"
+              },
+              {
+                "value": "5",
+                "label": "完全符合"
+              }
+            ]
+          },
+          {
+            "id": "cps05",
+            "text": "我能把一个较大的编程问题分成可以着手处理的部分。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "完全不符合"
+              },
+              {
+                "value": "2",
+                "label": "比较不符合"
+              },
+              {
+                "value": "3",
+                "label": "不确定"
+              },
+              {
+                "value": "4",
+                "label": "比较符合"
+              },
+              {
+                "value": "5",
+                "label": "完全符合"
+              }
+            ]
+          },
+          {
+            "id": "cps06",
+            "text": "解决同一个编程问题时，我能想到不止一种办法。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "完全不符合"
+              },
+              {
+                "value": "2",
+                "label": "比较不符合"
+              },
+              {
+                "value": "3",
+                "label": "不确定"
+              },
+              {
+                "value": "4",
+                "label": "比较符合"
+              },
+              {
+                "value": "5",
+                "label": "完全符合"
+              }
+            ]
+          },
+          {
+            "id": "cps07",
+            "text": "选择实现办法时，我能根据任务条件说明选择的理由。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "完全不符合"
+              },
+              {
+                "value": "2",
+                "label": "比较不符合"
+              },
+              {
+                "value": "3",
+                "label": "不确定"
+              },
+              {
+                "value": "4",
+                "label": "比较符合"
+              },
+              {
+                "value": "5",
+                "label": "完全符合"
+              }
+            ]
+          },
+          {
+            "id": "cps08",
+            "text": "任务要求发生变化时，我能判断原有方案的哪些部分会受影响。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "完全不符合"
+              },
+              {
+                "value": "2",
+                "label": "比较不符合"
+              },
+              {
+                "value": "3",
+                "label": "不确定"
+              },
+              {
+                "value": "4",
+                "label": "比较符合"
+              },
+              {
+                "value": "5",
+                "label": "完全符合"
+              }
+            ]
+          },
+          {
+            "id": "cps09",
+            "text": "开始实现一个方案时，我能确定各项工作的先后顺序。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "完全不符合"
+              },
+              {
+                "value": "2",
+                "label": "比较不符合"
+              },
+              {
+                "value": "3",
+                "label": "不确定"
+              },
+              {
+                "value": "4",
+                "label": "比较符合"
+              },
+              {
+                "value": "5",
+                "label": "完全符合"
+              }
+            ]
+          },
+          {
+            "id": "cps10",
+            "text": "得到他人或AI的建议时，我能判断它是否适合当前任务。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "完全不符合"
+              },
+              {
+                "value": "2",
+                "label": "比较不符合"
+              },
+              {
+                "value": "3",
+                "label": "不确定"
+              },
+              {
+                "value": "4",
+                "label": "比较符合"
+              },
+              {
+                "value": "5",
+                "label": "完全符合"
+              }
+            ]
+          },
+          {
+            "id": "cps11",
+            "text": "程序结果与预期不同时，我能找出需要进一步检查的位置。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "完全不符合"
+              },
+              {
+                "value": "2",
+                "label": "比较不符合"
+              },
+              {
+                "value": "3",
+                "label": "不确定"
+              },
+              {
+                "value": "4",
+                "label": "比较符合"
+              },
+              {
+                "value": "5",
+                "label": "完全符合"
+              }
+            ]
+          },
+          {
+            "id": "cps12",
+            "text": "尝试的办法行不通时，我能根据得到的反馈调整下一步做法。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "完全不符合"
+              },
+              {
+                "value": "2",
+                "label": "比较不符合"
+              },
+              {
+                "value": "3",
+                "label": "不确定"
+              },
+              {
+                "value": "4",
+                "label": "比较符合"
+              },
+              {
+                "value": "5",
+                "label": "完全符合"
+              }
+            ]
+          },
+          {
+            "id": "cps13",
+            "text": "我能选择有助于检查任务要求是否满足的测试情况。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "完全不符合"
+              },
+              {
+                "value": "2",
+                "label": "比较不符合"
+              },
+              {
+                "value": "3",
+                "label": "不确定"
+              },
+              {
+                "value": "4",
+                "label": "比较符合"
+              },
+              {
+                "value": "5",
+                "label": "完全符合"
+              }
+            ]
+          },
+          {
+            "id": "cps14",
+            "text": "程序可以运行后，我能检查它是否遗漏了某些任务要求。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "完全不符合"
+              },
+              {
+                "value": "2",
+                "label": "比较不符合"
+              },
+              {
+                "value": "3",
+                "label": "不确定"
+              },
+              {
+                "value": "4",
+                "label": "比较符合"
+              },
+              {
+                "value": "5",
+                "label": "完全符合"
+              }
+            ]
+          },
+          {
+            "id": "cps15",
+            "text": "完成一个编程任务后，我能说明哪些做法有效以及为什么。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "完全不符合"
+              },
+              {
+                "value": "2",
+                "label": "比较不符合"
+              },
+              {
+                "value": "3",
+                "label": "不确定"
+              },
+              {
+                "value": "4",
+                "label": "比较符合"
+              },
+              {
+                "value": "5",
+                "label": "完全符合"
+              }
+            ]
+          },
+          {
+            "id": "cps16",
+            "text": "面对新的编程任务，我能判断以前的方法哪些可以继续使用。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "1",
+                "label": "完全不符合"
+              },
+              {
+                "value": "2",
+                "label": "比较不符合"
+              },
+              {
+                "value": "3",
+                "label": "不确定"
+              },
+              {
+                "value": "4",
+                "label": "比较符合"
+              },
+              {
+                "value": "5",
+                "label": "完全符合"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "key": "knowledge_a",
+      "main_questions": 10,
+      "source_file": "编程知识与程序理解测试_AB卷_学生用卷.docx",
+      "source_sha256": "d631495acb596e0abe0fd58e34870157d6ea7e5d163789ebdcc98b9c33fb4a65",
+      "draft": {
+        "phase": "pre",
+        "name": "待审阅｜编程知识与程序理解 · A卷｜20261012",
+        "class_name": "预试班",
+        "source": "研究阶段：未分配（不是正式前测，也不是已施测预试）；题本代码：knowledge_a；版本：20261012-draft1。来源：编程知识与程序理解测试_AB卷_学生用卷.docx；SHA256：d631495acb596e0abe0fd58e34870157d6ea7e5d163789ebdcc98b9c33fb4a65。自编10题30分，A/B尚未证明等值，需审查与试做计时。独立作答，不使用AI、教材、搜索或运行工具；平台不能阻止本机其他工具，需教师组织。Q7—10按题保留多空文本，按独立评分标准人工核分。 正式开放前确认样本、用途及版本；前后测分别开放，不混总分。",
+        "questions": [
+          {
+            "id": "a01",
+            "text": "输入 14 后，以下程序输出的结果是（    ）。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "A",
+                "label": "A. 141"
+              },
+              {
+                "value": "B",
+                "label": "B. 15"
+              },
+              {
+                "value": "C",
+                "label": "C. 13"
+              },
+              {
+                "value": "D",
+                "label": "D. 程序报错"
+              }
+            ],
+            "code": "n = input()\nprint(int(n) + 1)",
+            "hint": "请独立作答，不使用 AI、教材、搜索或程序运行工具。所有代码均为 Python 3；选择题只有一个正确选项。不会的题可以留空。"
+          },
+          {
+            "id": "a02",
+            "text": "以下程序输出的 x 和 y 分别是（    ）。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "A",
+                "label": "A. 4 和 6"
+              },
+              {
+                "value": "B",
+                "label": "B. 5 和 7"
+              },
+              {
+                "value": "C",
+                "label": "C. 5 和 6"
+              },
+              {
+                "value": "D",
+                "label": "D. 6 和 5"
+              }
+            ],
+            "code": "x = 4\ny = x + 2\nx = x + 1\nprint(x, y)",
+            "hint": ""
+          },
+          {
+            "id": "a03",
+            "text": "已知 n 是整数。表示“n 不小于 0 且小于 5”的条件是（    ）。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "A",
+                "label": "A. n >= 0 or n < 5"
+              },
+              {
+                "value": "B",
+                "label": "B. n > 0 and n < 5"
+              },
+              {
+                "value": "C",
+                "label": "C. n >= 0 and n <= 5"
+              },
+              {
+                "value": "D",
+                "label": "D. n >= 0 and n < 5"
+              }
+            ],
+            "code": "",
+            "hint": ""
+          },
+          {
+            "id": "a04",
+            "text": "已知 data = [6, 2, 9]，data[1] 的值是（    ）。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "A",
+                "label": "A. 2"
+              },
+              {
+                "value": "B",
+                "label": "B. 6"
+              },
+              {
+                "value": "C",
+                "label": "C. 9"
+              },
+              {
+                "value": "D",
+                "label": "D. 程序报错"
+              }
+            ],
+            "code": "",
+            "hint": ""
+          },
+          {
+            "id": "a05",
+            "text": "以下程序输出的结果是（    ）。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "A",
+                "label": "A. 未达标"
+              },
+              {
+                "value": "B",
+                "label": "B. 达标"
+              },
+              {
+                "value": "C",
+                "label": "C. 两者都输出"
+              },
+              {
+                "value": "D",
+                "label": "D. 没有输出"
+              }
+            ],
+            "code": "score = 6\nif score >= 6:\n    print(\"达标\")\nelse:\n    print(\"未达标\")",
+            "hint": ""
+          },
+          {
+            "id": "a06",
+            "text": "程序需要读入一个整数，计算它的 2 倍并输出。合理的执行顺序是（    ）。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "A",
+                "label": "A. 计算 → 读入 → 输出"
+              },
+              {
+                "value": "B",
+                "label": "B. 输出 → 计算 → 读入"
+              },
+              {
+                "value": "C",
+                "label": "C. 读入 → 计算 → 输出"
+              },
+              {
+                "value": "D",
+                "label": "D. 读入 → 输出 → 计算"
+              }
+            ],
+            "code": "",
+            "hint": ""
+          },
+          {
+            "id": "a07",
+            "text": "阅读程序，填写结果。",
+            "type": "text",
+            "required": false,
+            "options": [],
+            "code": "total = 0\nfor value in [2, 4, 1]:\n    total = total + value\nprint(total)",
+            "hint": "第二轮循环结束时 total = ________（1 分）；最终输出 ________（2 分）。"
+          },
+          {
+            "id": "a08",
+            "text": "阅读程序，填写结果。",
+            "type": "text",
+            "required": false,
+            "options": [],
+            "code": "x = 1\nwhile x < 4:\n    x = x + 1\nprint(x)",
+            "hint": "循环体执行 ________ 次（1 分）；最终输出 ________（2 分）。"
+          },
+          {
+            "id": "a09",
+            "text": "下面程序统计列表中不小于 6 的数据个数。请补全两处空白，使程序对列表中任意整数数据都能正确计数。",
+            "type": "text",
+            "required": false,
+            "options": [],
+            "code": "data = [4, 7, 6, 2]\ncount = ________          # ① 初始化计数器\nfor value in data:\n    if ________________: # ② 判断当前数据\n        count = count + 1\nprint(count)",
+            "hint": "① ____________________　② ________________________________"
+          },
+          {
+            "id": "a10",
+            "text": "某任务规定，积分 n 为整数，达到 10 分即显示“通过”。下面的程序存在一处条件错误。",
+            "type": "text",
+            "required": false,
+            "options": [],
+            "code": "n = int(input())\nif n > 10:\n    print(\"通过\")\nelse:\n    print(\"未通过\")",
+            "hint": "（1）只修改 if 后的条件，写出正确条件（3 分）：____________________\n（2）填写一组能够暴露原程序错误的测试数据及结果（每空 1 分，共 3 分）。\n输入 n = ________；原程序输出 ________；正确结果应为 ________。"
+          }
+        ]
+      }
+    },
+    {
+      "key": "knowledge_b",
+      "main_questions": 10,
+      "source_file": "编程知识与程序理解测试_AB卷_学生用卷.docx",
+      "source_sha256": "d631495acb596e0abe0fd58e34870157d6ea7e5d163789ebdcc98b9c33fb4a65",
+      "draft": {
+        "phase": "post",
+        "name": "待审阅｜编程知识与程序理解 · B卷｜20261012",
+        "class_name": "预试班",
+        "source": "研究阶段：未分配（不是正式前测，也不是已施测预试）；题本代码：knowledge_b；版本：20261012-draft1。来源：编程知识与程序理解测试_AB卷_学生用卷.docx；SHA256：d631495acb596e0abe0fd58e34870157d6ea7e5d163789ebdcc98b9c33fb4a65。自编10题30分，A/B尚未证明等值，需审查与试做计时。独立作答，不使用AI、教材、搜索或运行工具；平台不能阻止本机其他工具，需教师组织。Q7—10按题保留多空文本，按独立评分标准人工核分。 正式开放前确认样本、用途及版本；前后测分别开放，不混总分。",
+        "questions": [
+          {
+            "id": "b01",
+            "text": "输入 23 后，以下程序输出的结果是（    ）。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "A",
+                "label": "A. 22"
+              },
+              {
+                "value": "B",
+                "label": "B. 程序报错"
+              },
+              {
+                "value": "C",
+                "label": "C. 231"
+              },
+              {
+                "value": "D",
+                "label": "D. 24"
+              }
+            ],
+            "code": "n = input()\nprint(int(n) + 1)",
+            "hint": "请独立作答，不使用 AI、教材、搜索或程序运行工具。所有代码均为 Python 3；选择题只有一个正确选项。不会的题可以留空。"
+          },
+          {
+            "id": "b02",
+            "text": "以下程序输出的 x 和 y 分别是（    ）。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "A",
+                "label": "A. 7 和 8"
+              },
+              {
+                "value": "B",
+                "label": "B. 6 和 8"
+              },
+              {
+                "value": "C",
+                "label": "C. 7 和 9"
+              },
+              {
+                "value": "D",
+                "label": "D. 8 和 7"
+              }
+            ],
+            "code": "x = 6\ny = x + 2\nx = x + 1\nprint(x, y)",
+            "hint": ""
+          },
+          {
+            "id": "b03",
+            "text": "已知 n 是整数。表示“n 不小于 3 且小于 8”的条件是（    ）。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "A",
+                "label": "A. n > 3 and n < 8"
+              },
+              {
+                "value": "B",
+                "label": "B. n >= 3 or n < 8"
+              },
+              {
+                "value": "C",
+                "label": "C. n >= 3 and n < 8"
+              },
+              {
+                "value": "D",
+                "label": "D. n >= 3 and n <= 8"
+              }
+            ],
+            "code": "",
+            "hint": ""
+          },
+          {
+            "id": "b04",
+            "text": "已知 data = [3, 8, 5]，data[1] 的值是（    ）。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "A",
+                "label": "A. 程序报错"
+              },
+              {
+                "value": "B",
+                "label": "B. 5"
+              },
+              {
+                "value": "C",
+                "label": "C. 3"
+              },
+              {
+                "value": "D",
+                "label": "D. 8"
+              }
+            ],
+            "code": "",
+            "hint": ""
+          },
+          {
+            "id": "b05",
+            "text": "以下程序输出的结果是（    ）。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "A",
+                "label": "A. 达标"
+              },
+              {
+                "value": "B",
+                "label": "B. 没有输出"
+              },
+              {
+                "value": "C",
+                "label": "C. 两者都输出"
+              },
+              {
+                "value": "D",
+                "label": "D. 未达标"
+              }
+            ],
+            "code": "score = 4\nif score >= 4:\n    print(\"达标\")\nelse:\n    print(\"未达标\")",
+            "hint": ""
+          },
+          {
+            "id": "b06",
+            "text": "程序需要读入一个整数，计算它的 3 倍并输出。合理的执行顺序是（    ）。",
+            "type": "choice",
+            "required": false,
+            "options": [
+              {
+                "value": "A",
+                "label": "A. 读入 → 输出 → 计算"
+              },
+              {
+                "value": "B",
+                "label": "B. 读入 → 计算 → 输出"
+              },
+              {
+                "value": "C",
+                "label": "C. 输出 → 计算 → 读入"
+              },
+              {
+                "value": "D",
+                "label": "D. 计算 → 读入 → 输出"
+              }
+            ],
+            "code": "",
+            "hint": ""
+          },
+          {
+            "id": "b07",
+            "text": "阅读程序，填写结果。",
+            "type": "text",
+            "required": false,
+            "options": [],
+            "code": "total = 0\nfor value in [3, 2, 4]:\n    total = total + value\nprint(total)",
+            "hint": "第二轮循环结束时 total = ________（1 分）；最终输出 ________（2 分）。"
+          },
+          {
+            "id": "b08",
+            "text": "阅读程序，填写结果。",
+            "type": "text",
+            "required": false,
+            "options": [],
+            "code": "x = 2\nwhile x < 5:\n    x = x + 1\nprint(x)",
+            "hint": "循环体执行 ________ 次（1 分）；最终输出 ________（2 分）。"
+          },
+          {
+            "id": "b09",
+            "text": "下面程序统计列表中不小于 5 的数据个数。请补全两处空白，使程序对列表中任意整数数据都能正确计数。",
+            "type": "text",
+            "required": false,
+            "options": [],
+            "code": "data = [3, 6, 5, 1]\ncount = ________          # ① 初始化计数器\nfor value in data:\n    if ________________: # ② 判断当前数据\n        count = count + 1\nprint(count)",
+            "hint": "① ____________________　② ________________________________"
+          },
+          {
+            "id": "b10",
+            "text": "某任务规定，积分 n 为整数，达到 8 分即显示“通过”。下面的程序存在一处条件错误。",
+            "type": "text",
+            "required": false,
+            "options": [],
+            "code": "n = int(input())\nif n > 8:\n    print(\"通过\")\nelse:\n    print(\"未通过\")",
+            "hint": "（1）只修改 if 后的条件，写出正确条件（3 分）：____________________\n（2）填写一组能够暴露原程序错误的测试数据及结果（每空 1 分，共 3 分）。\n输入 n = ________；原程序输出 ________；正确结果应为 ________。"
+          }
+        ]
+      }
+    }
+  ]
+}

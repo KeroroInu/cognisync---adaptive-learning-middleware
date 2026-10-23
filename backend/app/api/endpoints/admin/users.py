@@ -2,8 +2,9 @@
 用户管理 API 端点
 """
 from uuid import UUID
-from fastapi import APIRouter, Depends, Query, HTTPException
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, Query, HTTPException, Response
+from pydantic import BaseModel, Field, field_validator
+from app.core.student_identity import TEACHING_GROUPS, clean_student_id, student_id_filter, clean_school_class
 from sqlalchemy import select, func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,10 +14,74 @@ from app.core.security import verify_admin_key
 from app.db.postgres import get_db
 from app.models.sql.user import User
 from app.models.sql.message import ChatMessage
+from app.models.sql.classroom_material import MaterialReceipt
 from app.schemas.base import SuccessResponse
 from app.schemas.admin.user_management import UserListResponse, UserSummary
+from app.services import student_artifacts
 
 router = APIRouter(tags=["Admin - User Management"])
+
+STUDENT_ROLES = ("learner", "student", "user")
+
+
+@router.get('/users/{user_id}/artifacts', dependencies=[Depends(verify_admin_key)])
+async def student_artifact_list(user_id: UUID, response: Response,
+                                page: int = Query(1, ge=1),
+                                page_size: int = Query(20, ge=1, le=50),
+                                db: AsyncSession = Depends(get_db)):
+    response.headers['Cache-Control'] = 'no-store'
+    return SuccessResponse(data=await student_artifacts.list_artifacts(db, user_id, page, page_size))
+
+
+@router.get('/users/{user_id}/artifacts/{receipt_id}', dependencies=[Depends(verify_admin_key)])
+async def student_artifact_detail(user_id: UUID, receipt_id: UUID, response: Response,
+                                  db: AsyncSession = Depends(get_db)):
+    response.headers['Cache-Control'] = 'no-store'
+    return SuccessResponse(data=await student_artifacts.artifact_detail(db, user_id, receipt_id))
+
+
+def unassigned_filters():
+    return (User.role.in_(STUDENT_ROLES),
+            or_(User.experiment_group == "unassigned", User.experiment_group.is_(None)),
+            or_(User.class_name.is_(None), User.class_name == ""))
+
+
+def search_filter(query):
+    like = f"%{query}%"
+    return or_(User.student_id.ilike(like), User.name.ilike(like), User.email.ilike(like))
+
+
+@router.get("/users/unassigned-ids", dependencies=[Depends(verify_admin_key)])
+async def unassigned_ids(query: Optional[str] = None, db: AsyncSession = Depends(get_db)):
+    """Snapshot selection across pages; later registrations are not silently included."""
+    stmt = select(User.id).where(*unassigned_filters()).order_by(User.id).limit(1001)
+    if query:
+        stmt = stmt.where(search_filter(query))
+    ids = list((await db.scalars(stmt)).all())
+    if len(ids) > 1000:
+        raise HTTPException(422, "超过 1000 人，请先搜索缩小范围")
+    return SuccessResponse(data={"ids": [str(uid) for uid in ids]})
+
+
+class AssignStudentsRequest(BaseModel):
+    user_ids: list[UUID] = Field(min_length=1, max_length=1000)
+    class_name: Literal["解构班", "开发班"]
+
+
+@router.post("/users/batch-assign", dependencies=[Depends(verify_admin_key)])
+async def assign_students(body: AssignStudentsRequest, db: AsyncSession = Depends(get_db)):
+    """Assign only unassigned students atomically; never rewrite historical evidence."""
+    ids = set(body.user_ids)
+    students = list((await db.scalars(select(User).where(User.id.in_(ids)).order_by(User.id).with_for_update())).all())
+    if len(students) != len(ids):
+        raise HTTPException(409, "名单已变化，请刷新后重新选择；本次未修改任何学生")
+    if any(student.role not in STUDENT_ROLES or student.class_name or student.experiment_group not in (None, "unassigned") for student in students):
+        raise HTTPException(409, "所选账号包含已分组学生或教师，请重新选择未分组学生；本次未修改任何学生")
+    for student in students:
+        student.class_name = body.class_name
+        student.experiment_group = TEACHING_GROUPS[body.class_name]
+    await db.commit()
+    return SuccessResponse(data={"assigned": len(students), "class_name": body.class_name})
 
 
 @router.get("/users", dependencies=[Depends(verify_admin_key)])
@@ -37,25 +102,41 @@ async def list_users(
         .group_by(ChatMessage.user_id)
         .subquery()
     )
+    # Separate aggregates avoid multiplying receipts by the student's messages.
+    # Count immutable accepted versions, not client retries or download rows;
+    # receipt content is deliberately never selected for this metadata page.
+    receipt_stats = (
+        select(
+            MaterialReceipt.user_id.label("user_id"),
+            func.count(MaterialReceipt.id).filter(MaterialReceipt.kind == "submission").label("submission_count"),
+            func.count(MaterialReceipt.id).filter(MaterialReceipt.kind == "download").label("download_count"),
+            func.max(MaterialReceipt.created_at).filter(MaterialReceipt.kind == "submission").label("last_submitted_at"),
+        )
+        .group_by(MaterialReceipt.user_id)
+        .subquery()
+    )
     base_stmt = select(
         User,
         func.coalesce(message_stats.c.message_count, 0),
         message_stats.c.last_active_at,
-    ).outerjoin(message_stats, message_stats.c.user_id == User.id)
+        func.coalesce(receipt_stats.c.submission_count, 0).label("submission_count"),
+        func.coalesce(receipt_stats.c.download_count, 0).label("download_count"),
+        receipt_stats.c.last_submitted_at,
+    ).outerjoin(message_stats, message_stats.c.user_id == User.id).outerjoin(
+        receipt_stats, receipt_stats.c.user_id == User.id
+    )
     count_stmt = select(func.count(User.id))
 
     # 支持按 student_id、name、email 搜索
     if query:
-        like = f"%{query}%"
-        condition = or_(
-            User.student_id.ilike(like),
-            User.name.ilike(like),
-            User.email.ilike(like)
-        )
+        condition = search_filter(query)
         base_stmt = base_stmt.where(condition)
         count_stmt = count_stmt.where(condition)
 
-    if experiment_group:
+    if experiment_group == "unassigned":
+        base_stmt = base_stmt.where(*unassigned_filters())
+        count_stmt = count_stmt.where(*unassigned_filters())
+    elif experiment_group:
         base_stmt = base_stmt.where(User.experiment_group == experiment_group)
         count_stmt = count_stmt.where(User.experiment_group == experiment_group)
 
@@ -68,18 +149,23 @@ async def list_users(
     rows = result.all()
 
     user_summaries = []
-    for user, msg_count, last_active in rows:
+    for user, msg_count, last_active, submission_count, download_count, last_submitted_at in rows:
         user_summaries.append(UserSummary(
             id=str(user.id),
             student_id=user.student_id,
             email=user.email,
             name=user.name or "",
+            gender=user.gender,
             role=getattr(user, "role", "user") or "user",
             is_active=getattr(user, "is_active", True) if hasattr(user, "is_active") else True,
             created_at=user.created_at,
             message_count=msg_count,
             last_active_at=last_active,
+            submission_count=submission_count,
+            download_count=download_count,
+            last_submitted_at=last_submitted_at,
             class_name=user.class_name,
+            school_class=user.school_class,
             experiment_group=user.experiment_group,
         ))
 
@@ -93,9 +179,34 @@ async def list_users(
 
 class UpdateUserRequest(BaseModel):
     name: Optional[str] = None
+    student_id: Optional[str] = None
+    gender: Optional[Literal["male", "female"]] = None
     is_active: Optional[bool] = None
     class_name: Optional[str] = None
+    school_class: Optional[str] = None
+    _valid_school_class = field_validator("school_class")(clean_school_class)
     experiment_group: Optional[Literal["unassigned", "pdt", "ai_pbl", "lecture"]] = None
+
+    @field_validator("student_id")
+    @classmethod
+    def valid_student_id(cls, value):
+        if value is None:
+            raise ValueError("学号不能为空")
+        return clean_student_id(value)
+
+    @field_validator("name")
+    @classmethod
+    def valid_name(cls, value):
+        if value is None or not value.strip() or len(value.strip()) > 50:
+            raise ValueError("请填写姓名（1—50 个字符）")
+        return value.strip()
+
+    @field_validator("class_name")
+    @classmethod
+    def valid_class(cls, value):
+        if value is not None and len(value.strip()) > 100:
+            raise ValueError("班级名称过长")
+        return value.strip() if value is not None else value
 
 
 @router.patch("/users/{user_id}", dependencies=[Depends(verify_admin_key)])
@@ -110,13 +221,28 @@ async def update_user(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid user_id")
 
-    result = await db.execute(select(User).where(User.id == uid))
+    result = await db.execute(select(User).where(User.id == uid).with_for_update())
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
     if body.experiment_group == "lecture" and user.experiment_group != "lecture":
         raise HTTPException(422, "本轮实验仅分配项目解构＋AI、常规 AI 协作两组；讲授组仅保留历史记录")
+
+    group = TEACHING_GROUPS.get(body.class_name if body.class_name is not None else user.class_name)
+    if group and body.experiment_group is not None and body.experiment_group != group:
+        raise HTTPException(422, "班级与课堂类型不一致，请重新选择班级")
+    if body.student_id is not None and body.student_id != user.student_id:
+        if user.role == 'admin':
+            raise HTTPException(422, "此入口只修改学生学号，管理员账号保持不变")
+        duplicate = await db.scalar(select(User.id).where(student_id_filter(User.student_id, body.student_id), User.id != uid))
+        if duplicate:
+            raise HTTPException(409, "这个学号已被其他账号使用，请核对后再保存")
+        user.student_id = body.student_id
+    if 'gender' in body.model_fields_set:
+        user.gender = body.gender
+    if 'school_class' in body.model_fields_set:
+        user.school_class = body.school_class
 
     if body.name is not None:
         user.name = body.name
@@ -126,8 +252,14 @@ async def update_user(
         user.class_name = body.class_name.strip() or None
     if body.experiment_group is not None:
         user.experiment_group = body.experiment_group
+    if group:
+        user.experiment_group = group
 
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(409, "这个学号已被其他账号使用，请核对后再保存")
     await db.refresh(user)
 
     return SuccessResponse(data={
@@ -135,8 +267,10 @@ async def update_user(
         "student_id": user.student_id,
         "email": user.email,
         "name": user.name or "",
+        "gender": user.gender,
         "is_active": getattr(user, "is_active", True),
         "class_name": user.class_name,
+        "school_class": user.school_class,
         "experiment_group": user.experiment_group,
     })
 

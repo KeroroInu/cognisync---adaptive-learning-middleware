@@ -96,6 +96,13 @@ class SaveWorkspaceRequest(BaseModel):
     workspace_data: dict
 
 
+class SaveBasicSnakeRequest(BaseModel):
+    runtime: Literal['basic-snake/v1']
+    code: str = Field(max_length=50000)
+    revision: int = Field(ge=0)
+    started_at: Optional[str] = None
+
+
 class StageArtifactPayload(BaseModel):
     """一次事件中随附的单个学习产物快照。"""
 
@@ -268,7 +275,7 @@ class FunctionCoverageCardRequest(BaseModel):
 
     card_id: str = Field(min_length=1, max_length=80)
     responsibility: str = Field(default="", max_length=100)
-    implementation: str = Field(default="", max_length=300)
+    implementation: str = Field(default="", max_length=800)
     observation_text: str = Field(default="", max_length=500)
 
 
@@ -1159,6 +1166,47 @@ async def save_workspace(
 
     await db.commit()
     return SuccessResponse(data={"saved": True})
+
+
+@router.post("/tasks/{task_id}/save-basic-snake")
+async def save_basic_snake(
+    task_id: str,
+    data: SaveBasicSnakeRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> SuccessResponse[dict]:
+    """Versioned classroom code; atomically retain old workspace and first legacy code.
+
+    The upsert takes a row lock through commit, including the first concurrent save.
+    Revision checking prevents a second tab silently overwriting a newer revision.
+    """
+    task = await get_visible_task(db, current_user, parse_task_uuid(task_id), require_active=True)
+    submission = await upsert_submission(db=db, task=task, user_id=current_user.id)
+    workspace = dict(submission.workspace_data or {})
+    previous = workspace.get('basicSnake') or {}
+    revision = previous.get('revision', 0)
+    if data.revision != revision:
+        # A response can be lost after commit; replaying that exact revision/code
+        # is success, not a permanent save conflict.
+        if data.revision == revision - 1 and previous.get('code') == data.code:
+            await db.commit()
+            return SuccessResponse(data={'saved': True, 'revision': revision})
+        await db.rollback()
+        raise HTTPException(status_code=409, detail='另一页面已保存新版本；请先复制本页代码，再刷新核对。')
+    saved = dict(previous)
+    if not previous and submission.code_submitted:
+        saved['legacy_code_submitted'] = submission.code_submitted
+    saved.update(runtime=data.runtime, code=data.code, revision=revision + 1)
+    workspace['basicSnake'] = saved
+    if len(json.dumps(workspace, ensure_ascii=False)) > 524_288:
+        await db.rollback()
+        raise HTTPException(status_code=413, detail='工作区过大，未覆盖原数据。')
+    submission.workspace_data = workspace
+    submission.code_submitted = data.code
+    submission.started_at = submission.started_at or _parse_client_timestamp(data.started_at)
+    submission.updated_at = datetime.now(timezone.utc)
+    await db.commit()
+    return SuccessResponse(data={'saved': True, 'revision': revision + 1})
 
 
 @router.post("/tasks/{task_id}/save-progress")
