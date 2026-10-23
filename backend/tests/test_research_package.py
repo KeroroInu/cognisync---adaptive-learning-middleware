@@ -251,11 +251,13 @@ async def test_original_opt_out_keeps_all_versions_sfls_lines_and_auditable_file
     path = '/api/admin/export/research-package?class_name=一班&include_graph=false'
     archive, manifest = unpack(await admin_client.get(path))
     assert manifest['originals']['included'] is True and manifest['originals']['records'] == 2
+    original_paths = {row['source_id']: row['archive_path'] for row in map(json.loads, archive.read('original_files.jsonl').splitlines())}
     for receipt_id, content in zip(receipt_ids, versions):
-        assert archive.read(f'originals/classroom_material_receipts/{receipt_id}.bin') == content
+        assert archive.read(original_paths[receipt_id]) == content
     full_index = archive.read('sfls_process.jsonl')
     # Force the original bytes over a bounded package limit, while indexes still fit.
-    monkeypatch.setattr(package_service, 'MAX_BYTES', 150000)
+    # Navigation indexes and the full manifest/dictionary now count toward the limit too.
+    monkeypatch.setattr(package_service, 'MAX_BYTES', 300000)
     failure = await admin_client.get(path)
     assert failure.status_code == 413 and '原件' in failure.text
     structured, manifest = unpack(await admin_client.get(path + '&include_originals=false'))

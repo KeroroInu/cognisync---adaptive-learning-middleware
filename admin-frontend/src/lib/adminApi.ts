@@ -34,6 +34,15 @@ const BASE_URL = resolveApiBaseUrl(
   import.meta.env.VITE_API_BASE_URL,
 );
 
+export interface ResearchExportLesson {
+  key: string;
+  label: string;
+  materials: number;
+  submissions: number;
+  students: number;
+  original_bytes: number;
+}
+
 class AdminApiClient {
   private getAuthHeaders(includeJsonContentType: boolean = true): Record<string, string> {
     const token = localStorage.getItem('auth_token') || '';
@@ -236,6 +245,12 @@ class AdminApiClient {
 
   async deleteSession(sessionId: string): Promise<{ deleted: boolean }> {
     return this.request<{ deleted: boolean }>(`/sessions/${sessionId}`, { method: 'DELETE' });
+  }
+
+  async getResearchExportLessons(className?: string, signal?: AbortSignal): Promise<{ lessons: ResearchExportLesson[] }> {
+    const query = new URLSearchParams();
+    if (className?.trim()) query.set('class_name', className.trim());
+    return this.request(`/export/research-lessons${query.size ? `?${query}` : ''}`, { signal });
   }
 
   async exportCsv(endpoint: string): Promise<Blob> {

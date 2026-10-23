@@ -1,6 +1,7 @@
 """Bounded, consistent SQL research exports; never include credentials/config secrets."""
 import asyncio
 import csv
+from contextlib import ExitStack
 from datetime import date, datetime, timezone
 from enum import Enum
 import hashlib
@@ -22,6 +23,7 @@ from app.services.sfls_evidence import FIELDS as SFLS_FIELDS, write_index
 from app.services.worksheet import EXPORT_FIELDS as WORKSHEET_FIELDS, export_row as worksheet_row
 from app.services.assessment_analysis import FIELDS as ASSESSMENT_FIELDS, item_rows, ANALYSIS_GUIDE
 from app.services.sfls_task_access import public_receipt_detail
+from app.services.research_archive import ArchiveLayout, INDEX_FIELD_DESCRIPTIONS
 
 # Explicit table allowlist: system_config (including model API keys) is NOT research data.
 EXPORT_MODELS = (
@@ -42,6 +44,8 @@ EXPORT_MODELS = (
 )
 USER_FIELDS = {"id", "role", "class_name", "school_class", "experiment_group", "is_active", "created_at", "last_active_at", "onboarding_mode", "has_completed_onboarding", "gender"}
 MAX_BYTES = 128 * 1024 * 1024  # Uncompressed, including CSV + JSONL. Fail rather than truncate.
+MAX_LAYOUT_BYTES = 16 * 1024 * 1024  # Bound metadata memory before writing the archive.
+MAX_ROSTER_ROWS = 20000  # Bound the current-students x selected-lessons navigation view.
 EXPORT_LOCK = 739204821
 LEARNER_ROLES = ("learner", "student", "user")  # Earlier imports used student/user.
 
@@ -237,7 +241,9 @@ def export_queries(class_name=None, group=None, include_identity=False):
                 select(models.ClassroomControlEvent.teacher_id).where(models.ClassroomControlEvent.session_id.in_(classroom_ids)),
                 select(models.ClassroomQuestionSet.created_by),
             )
-            query = query.where(table.c.id.in_(students) | table.c.id.in_(teachers))
+            # Review actors can also be learners. Author context must not broaden
+            # the selected student cohort to other classes.
+            query = query.where(table.c.id.in_(students) | (table.c.id.in_(teachers) & table.c.role.not_in(LEARNER_ROLES)))
         elif "user_id" in table.c:
             query = query.where(table.c.user_id.in_(students))
         elif model is models.TeacherNote:
@@ -315,12 +321,57 @@ async def offload(function, *args):
         raise
 
 
-async def build_package(db: AsyncSession, *, class_name=None, group=None, include_identity=False, include_graph=True, include_originals=True):
+async def archive_layout(snapshot, class_name=None, group=None, include_identity=False, lesson_key=None):
+    """Metadata only. A classroom session is a workspace, NOT a lesson."""
+    queries = {name: query for name, _, query in export_queries(class_name, group, include_identity)}
+    metadata_bytes = 0
+    async def collect(query, clean=lambda row: dict(row)):
+        nonlocal metadata_bytes
+        rows = []
+        result = await snapshot.stream(query.execution_options(yield_per=100))
+        try:
+            async for batch in result.mappings().partitions(100):
+                for row in batch:
+                    value = clean(row)
+                    if value is None:
+                        continue
+                    metadata_bytes += len(json_text(value).encode('utf-8'))
+                    if metadata_bytes > min(MAX_LAYOUT_BYTES, MAX_BYTES):
+                        raise HTTPException(413, '归档目录超过安全上限，请按班级导出，或联系教师分批整理；未截断记录')
+                    rows.append(value)
+        finally:
+            await result.close()
+        return rows
+    users = await collect(queries['users'], lambda row: dict(row) if row['role'] in LEARNER_ROLES else None)
+    materials_query = queries['classroom_materials'].add_columns(
+        models.ClassroomMaterial.content.is_not(None).label('has_original'))
+    materials = await collect(materials_query)
+    receipts_query = queries['classroom_material_receipts'].add_columns(
+        models.MaterialReceipt.content.is_not(None).label('has_original'))
+    receipts = await collect(receipts_query, lambda row: {**row, 'detail': public_receipt_detail(row['detail'])})
+    try:
+        layout = ArchiveLayout(users, materials, receipts, include_identity=include_identity, lesson_key=lesson_key)
+        layout.context_materials = materials
+        return layout
+    except ValueError as error:
+        raise HTTPException(422, '该课次已不可用，请刷新课次列表后重新选择') from error
+
+
+async def lesson_catalog(db: AsyncSession, *, class_name=None):
+    async with asyncio.timeout(30), AsyncSession(bind=db.bind) as snapshot:
+        await snapshot.connection(execution_options={'isolation_level': 'REPEATABLE READ'})
+        await snapshot.execute(text('SET TRANSACTION READ ONLY'))
+        await snapshot.execute(text("SET LOCAL statement_timeout = '15s'"))
+        layout = await archive_layout(snapshot, class_name=class_name)
+        return {'lessons': layout.lessons}
+
+
+async def build_package(db: AsyncSession, *, class_name=None, group=None, include_identity=False, include_graph=True, include_originals=True, lesson_key=None):
     output = tempfile.TemporaryFile()
     manifest = {
         "schema_version": "cognisync-research-package/1",
         "generated_at": datetime.now(timezone.utc).isoformat(),
-        "filters": {"class_name": class_name, "experiment_group": group},
+        "filters": {"class_name": class_name, "experiment_group": group, "lesson_key": lesson_key},
         "include_identity": include_identity,
         "originals": {"included": include_originals, "records": 0, "bytes": 0,
             "limitation": "Original bytes omitted only when explicitly requested; SFLS indexes are still parsed from every stored upload. See original_files.csv/jsonl for hashes and authenticated download paths."},
@@ -350,7 +401,47 @@ async def build_package(db: AsyncSession, *, class_name=None, group=None, includ
                 await snapshot.execute(text("SET LOCAL statement_timeout = '15s'"))
                 if not await snapshot.scalar(text("SELECT pg_try_advisory_xact_lock(:key)"), {"key": EXPORT_LOCK}):
                     raise HTTPException(429, "已有研究包正在生成，请稍后重试", headers={"Retry-After": "30"})
-                with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=1) as archive, tempfile.TemporaryFile() as process_raw, tempfile.TemporaryFile() as process_csv, tempfile.TemporaryFile() as sfls_raw, tempfile.TemporaryFile() as sfls_csv, tempfile.TemporaryFile() as worksheet_raw, tempfile.TemporaryFile() as worksheet_csv:
+                layout = await archive_layout(snapshot, class_name, group, include_identity, lesson_key)
+                lesson_count = 1 if lesson_key else len(layout.lessons)
+                if len(layout.users) * lesson_count > MAX_ROSTER_ROWS:
+                    raise HTTPException(413, '课次学生索引超过安全上限，请选择单课或单班导出；未截断记录')
+                def scoped_queries():
+                    for name, columns, query in export_queries(class_name, group, include_identity):
+                        if lesson_key is not None and name in ('classroom_materials', 'classroom_material_receipts'):
+                            column = models.ClassroomMaterial.id if name == 'classroom_materials' else models.MaterialReceipt.material_id
+                            query = query.where(column.in_([uuid.UUID(str(value)) for value in layout.material_ids]))
+                        yield name, columns, query
+                manifest['organization'] = {
+                    'version': 'lesson-class-student/1',
+                    'lesson_bound_tables': ['classroom_materials', 'classroom_material_receipts', 'sfls_process', 'original_files'],
+                    'shared_context': 'All other tables retain the selected current student cohort across lessons; no date/title guessing. See 归档说明.md.',
+                    'class_filter': 'current user class; record-time class/group snapshots are separate index columns',
+                    'download_originals': 'Download receipts retain hashes/context, not the original personalized download ZIP bytes.',
+                    'complete_material_catalog': '公共资料/完整发布材料.jsonl preserves publication context referenced by cross-lesson platform records.',
+                }
+                with ExitStack() as student_files, zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=1) as archive, tempfile.TemporaryFile() as process_raw, tempfile.TemporaryFile() as process_csv, tempfile.TemporaryFile() as sfls_raw, tempfile.TemporaryFile() as sfls_csv, tempfile.TemporaryFile() as worksheet_raw, tempfile.TemporaryFile() as worksheet_csv:
+                    person_streams = {}
+                    artifact_owners, event_owners = {}, {}
+                    person_bytes = 0
+                    def encode_person_records(name, rows):
+                        nonlocal person_bytes
+                        for row in rows:
+                            uid = row.get('user_id') or (row.get('student_id') if name == 'teacher_notes' else row.get('id') if name == 'users' else None)
+                            if name in ('stage_artifacts', 'stage_events'):
+                                (artifact_owners if name == 'stage_artifacts' else event_owners)[str(row['id'])] = uid
+                            elif name == 'artifact_versions':
+                                uid = artifact_owners.get(str(row.get('artifact_id')))
+                            elif name == 'stage_event_artifacts':
+                                uid = event_owners.get(str(row.get('event_id')))
+                            folder = layout.student_path(str(uid)) if uid is not None else None
+                            if not folder:
+                                continue
+                            stream = person_streams.get(folder)
+                            if stream is None:
+                                stream = person_streams[folder] = student_files.enter_context(tempfile.TemporaryFile())
+                            value = (json_text({'source_table': name, 'record': dict(row)}) + '\n').encode('utf-8')
+                            stream.write(value)
+                            person_bytes += len(value)
                     worksheet_csv.write(b'\xef\xbb\xbf' + (','.join(WORKSHEET_FIELDS) + '\r\n').encode())
                     worksheet_count = 0
                     sfls_csv.write(b'\xef\xbb\xbf' + (','.join(SFLS_FIELDS) + '\r\n').encode())
@@ -358,7 +449,7 @@ async def build_package(db: AsyncSession, *, class_name=None, group=None, includ
                     total_bytes += sfls_csv.tell()
                     process_csv.write(b'\xef\xbb\xbf' + (','.join(INDEX_FIELDS) + '\r\n').encode())
                     process_count = 0
-                    for name, columns, query in export_queries(class_name, group, include_identity):
+                    for name, columns, query in scoped_queries():
                         fields = [column.name for column in columns]
                         count = 0
                         with tempfile.TemporaryFile() as raw, tempfile.TemporaryFile() as csv_file:
@@ -371,6 +462,7 @@ async def build_package(db: AsyncSession, *, class_name=None, group=None, includ
                                     if name == "users":
                                         student_ids.extend(str(row["id"]) for row in batch if row["role"] in LEARNER_ROLES)
                                     await offload(encode_batch, batch, fields, raw, csv_file)
+                                    await offload(encode_person_records, name, batch)
                                     if name == 'preparation_records':
                                         worksheets = [value for row in batch if (value := worksheet_row(row)) is not None]
                                         await offload(encode_batch, worksheets, WORKSHEET_FIELDS, worksheet_raw, worksheet_csv)
@@ -380,7 +472,7 @@ async def build_package(db: AsyncSession, *, class_name=None, group=None, includ
                                         await offload(encode_batch, index_batch, INDEX_FIELDS, process_raw, process_csv)
                                         process_count += len(index_batch)
                                     count += len(batch)
-                                    if total_bytes + raw.tell() + csv_file.tell() + process_raw.tell() + process_csv.tell() + worksheet_raw.tell() + worksheet_csv.tell() > MAX_BYTES:
+                                    if total_bytes + person_bytes + raw.tell() + csv_file.tell() + process_raw.tell() + process_csv.tell() + worksheet_raw.tell() + worksheet_csv.tell() > MAX_BYTES:
                                         raise HTTPException(413, "研究包超过 128 MiB，请按班级或实验组分别导出")
                             finally:
                                 await result.close()
@@ -391,7 +483,9 @@ async def build_package(db: AsyncSession, *, class_name=None, group=None, includ
                             "name": c.name, "type": str(c.type), "description": column_description(c),
                             "references": sorted(f.target_fullname for f in c.foreign_keys),
                         } for c in columns]}
-                    total_bytes += process_raw.tell() + process_csv.tell() + worksheet_raw.tell() + worksheet_csv.tell()
+                    total_bytes += person_bytes + process_raw.tell() + process_csv.tell() + worksheet_raw.tell() + worksheet_csv.tell()
+                    for folder, stream in person_streams.items():
+                        manifest['files'].append(await offload(add_file, archive, f'公共资料/{folder}/平台记录.jsonl', stream))
                     for extension, source in (('jsonl', worksheet_raw), ('csv', worksheet_csv)):
                         manifest['files'].append(await offload(add_file, archive, f'worksheets.{extension}', source))
                     manifest['worksheets'] = {'rows': worksheet_count, 'research_id': 'S- followed by users.id',
@@ -436,7 +530,8 @@ async def build_package(db: AsyncSession, *, class_name=None, group=None, includ
                             'limitation': 'Submitted responses only; no inferred scores or unsubmitted attendance.'}
                     original_rows = []
                     # Private originals are separate entries, not base64 fields in every CSV row.
-                    for name, _columns, query in export_queries(class_name, group, include_identity):
+                    coverage_rows = []
+                    for name, _columns, query in scoped_queries():
                         model = {'classroom_materials': models.ClassroomMaterial, 'classroom_material_receipts': models.MaterialReceipt}.get(name)
                         if model is None:
                             continue
@@ -447,7 +542,7 @@ async def build_package(db: AsyncSession, *, class_name=None, group=None, includ
                         result = await snapshot.stream(select(*original_columns).where(model.id.in_(select(selected.c.id)), model.content.is_not(None)).execution_options(yield_per=1))
                         try:
                             async for record in result:
-                                path = f'originals/{name}/{record.id}.bin'
+                                path = layout.original_path(name, str(record.id)) or f'originals/{name}/{record.id}.bin'
                                 manifest['originals']['records'] += 1
                                 manifest['originals']['bytes'] += len(record.content)
                                 original_rows.append({'source_table': name, 'source_id': record.id,
@@ -468,6 +563,10 @@ async def build_package(db: AsyncSession, *, class_name=None, group=None, includ
                                     }, sfls_raw, sfls_csv, encode_batch, MAX_BYTES - total_bytes)
                                     sfls_count += rows
                                     total_bytes += size
+                                    coverage_rows.append({'receipt_id': record.id, 'user_id': record.user_id,
+                                        'material_id': record.material_id, 'indexed_rows': rows,
+                                        'index_status': 'inspect_sfls_process_status' if rows else 'no_indexable_sfls_logs',
+                                        'limitation': '0行不等于没有对话；可能是普通ZIP或缺少SFLS清单/日志，请核对原件。'})
                         finally:
                             await result.close()
                     with tempfile.TemporaryFile() as raw, tempfile.TemporaryFile() as csv_file:
@@ -483,6 +582,23 @@ async def build_package(db: AsyncSession, *, class_name=None, group=None, includ
                         manifest['files'].append(await offload(add_file, archive, f'sfls_process.{extension}', source))
                     manifest['sfls_process'] = {'version': 'sfls-process-index/4', 'rows': sfls_count,
                         'limitation': 'Client clocks and logs are unverified. Repeated uploads can contain the same events; do not count each receipt as new behavior. Parse errors are explicit; originals are retained.'}
+                    index_tables = await offload(layout.index_tables)
+                    material_fields = tuple(column.name for column in models.ClassroomMaterial.__table__.columns if column.name != 'content')
+                    index_tables.append(('公共资料/完整发布材料', material_fields,
+                        [{key: row[key] for key in material_fields} for row in layout.context_materials]))
+                    index_tables.append(('索引/SFLS覆盖', ('receipt_id', 'user_id', 'material_id', 'indexed_rows', 'index_status', 'limitation'), coverage_rows))
+                    for name, fields, rows in index_tables:
+                        with tempfile.TemporaryFile() as raw, tempfile.TemporaryFile() as csv_file:
+                            csv_file.write(b'\xef\xbb\xbf' + (','.join(fields) + '\r\n').encode())
+                            # Explicit opt-out must also apply to navigation indexes.
+                            if not include_originals:
+                                rows = [{**row, **{key: None for key in ('archive_path', 'original_path') if key in row}} for row in rows]
+                            await offload(encode_batch, rows, fields, raw, csv_file)
+                            total_bytes += raw.tell() + csv_file.tell()
+                            if total_bytes > MAX_BYTES:
+                                raise HTTPException(413, '归档索引超过打包上限，请按课次和班级分别导出')
+                            for extension, source in (('jsonl', raw), ('csv', csv_file)):
+                                manifest['files'].append(await offload(add_file, archive, f'{name}.{extension}', source))
                     if include_graph:
                         count = 0
                         with tempfile.TemporaryFile() as raw, tempfile.TemporaryFile() as csv_file:
@@ -502,6 +618,7 @@ async def build_package(db: AsyncSession, *, class_name=None, group=None, includ
                             for extension, source in (("jsonl", raw), ("csv", csv_file)):
                                 manifest["files"].append(await offload(add_file, archive, f"knowledge_graph.{extension}", source))
                             manifest["graph"]["rows"] = count
+                            total_bytes += raw.tell() + csv_file.tell()
                     curriculum = Path(__file__).resolve().parents[1] / "resources/curriculum/hsd_data_computing.json"
                     with curriculum.open("rb") as source:
                         manifest["files"].append(await offload(add_file, archive, "resources/textbook.json", source))
@@ -517,17 +634,51 @@ async def build_package(db: AsyncSession, *, class_name=None, group=None, includ
                     for name, fields in DERIVED_FIELDS.items():
                         for field in fields:
                             writer.writerow([name, field, 'see JSONL value', ANALYSIS_FIELD_DESCRIPTIONS[field], ''])
-                    for name, content in [('分析说明.md', ANALYSIS_GUIDE.encode('utf-8')),
+                    for name, fields, _rows in index_tables:
+                        if name.startswith('索引/'):
+                            for field in fields:
+                                writer.writerow([name, field, 'see JSONL value',
+                                    INDEX_FIELD_DESCRIPTIONS.get(field) or ANALYSIS_FIELD_DESCRIPTIONS.get(field, '导出范围或原始索引字段；结合归档说明解释'), ''])
+                    for name, content in [('归档说明.md', ARCHIVE_GUIDE.encode('utf-8')), ('分析说明.md', ANALYSIS_GUIDE.encode('utf-8')),
                                           ('数据字典.csv', ('\ufeff' + dictionary.getvalue()).encode('utf-8'))]:
                         with io.BytesIO(content) as source:
                             manifest['files'].append(await offload(add_file, archive, name, source))
-                    archive.writestr("manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2))
-                    archive.writestr("README.txt", PACKAGE_README)
+                    manifest_bytes = json.dumps(manifest, ensure_ascii=False, indent=2).encode('utf-8')
+                    readme_bytes = PACKAGE_README.encode('utf-8')
+                    if sum(item['bytes'] for item in manifest['files']) + len(manifest_bytes) + len(readme_bytes) > MAX_BYTES:
+                        raise HTTPException(413, '完整归档超过 128 MiB，请按课次和班级分别导出；未截断任何记录')
+                    archive.writestr('manifest.json', manifest_bytes)
+                    archive.writestr('README.txt', readme_bytes)
         output.seek(0)
         return output
     except BaseException:
         output.close()
         raise
+
+
+ARCHIVE_GUIDE = """# 交给分析对话之前先读
+
+这是服务器已保存数据的只读导出，不是整台服务器备份，也不证明学生没有缺交或漏传。
+
+## 文件怎样找
+
+- 课次目录按班级、学生、收件编号保存作品原件；每次提交单独保留，不用最后一版覆盖早期版本。原件只放一份，其位置见 original_files.csv 和索引中的 original_path。
+- 索引/课次、索引/学生、索引/课次学生、索引/提交版本：用 CSV 快速查看，用同名 JSONL 读取未转义的原始值。包含当前在册但未提交的学生；不是历史出勤名单。
+- 公共资料/班级/学生/平台记录.jsonl：该学生已保存的平台记录，带 source_table；问卷、量表、设计保存与其他未明确归课记录也在这里。根目录原始表与公共资料/完整发布材料保留关联上下文，可按 users.id、material_id、receipt_id 和问卷轮次关联。
+- sfls_process：上传作品中的可解析对话、工具、时间和支架索引。索引/SFLS覆盖列出有原件但未解析到日志的情况。原始 ZIP 中保留代码、README、设计与实际上传的日志；不要执行学生代码。
+
+## 课次和班级的边界
+
+选择某课只筛选其发布材料、下载/提交回执、上传原件与对应 SFLS 日志；其余平台原始表和公共资料仍保留所选学生的跨课上下文，不能把里面所有记录都算作该课发生。
+课次只使用已冻结材料中的明确编号，未知、冲突或独立任务单列，不按标题/日期猜测。班级筛选依据学生当前班级；原件目录优先收件时快照，缺快照时标记为当前班级参考。索引同时保留两者，不以当前分组覆盖历史。
+下载回执保存摘要和上下文，不保存每次个性化下载 ZIP 本体；不能用它声称逐次下载包已原样归档。教师材料与任务配置保留在原始表中。
+
+## 分析注意
+
+先核对 manifest.json 的筛选条件、数量、SHA-256 和已知缺口，再按学生、课次和提交版本分析。重复上传可能带回相同日志，须按来源、用户和事件标识去重，不能把每次收件当作新学习行为。
+问卷是自陈，AI总结和支架等级不是能力分；缺失不补0，没日志不等于没学习。图谱是当前快照，不是历史逐课图谱。默认不含结构化姓名学号，但自由文本和原件仍可能包含个人信息；新对话只用于受控研究分析，不要公开分享。
+超过安全打包上限时按课、班拆开，或明确取消原件后导出结构化资料，再逐份认证下载原件。不自动丢弃版本或静默截断。
+"""
 
 
 PACKAGE_README = """CogniSync 教师研究包（不是数据库备份，也不是匿名公开数据）
