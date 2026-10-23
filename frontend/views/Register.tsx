@@ -5,6 +5,7 @@ import { register as registerAPI, AuthError } from '../services/api';
 import { translations } from '../utils/translations';
 import type { Language } from '../types';
 import './Register.css';
+import { ClassroomRegister } from './ClassroomRegister';
 
 export interface PendingScaleRegistration {
   student_id: string;
@@ -23,7 +24,11 @@ export interface RegisterProps {
   onNavigateToLogin: () => void;
 }
 
-export const Register: React.FC<RegisterProps> = ({
+export const Register: React.FC<RegisterProps> = (props) => props.classroomOnly
+  ? <ClassroomRegister language={props.language} onRegisterSuccess={props.onRegisterSuccess} onNavigateToLogin={props.onNavigateToLogin} />
+  : <LegacyRegister {...props} />;
+
+const LegacyRegister: React.FC<RegisterProps> = ({
   language,
   classroomOnly = false,
   onRegisterSuccess,

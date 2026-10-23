@@ -1,11 +1,14 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Check, DoorClosed, MessageCircle, RefreshCw, X } from 'lucide-react';
+import { Check, MessageCircle, X } from 'lucide-react';
 import {
-  answerClassroomPrompt, CLASSROOM_ACCESS_EVENT, CLASSROOM_CLOSING_EVENT, CLASSROOM_OPEN_EVENT,
+  answerClassroomPrompt, CLASSROOM_OPEN_EVENT,
   classroomDraftKey, createClassroomPoller, getClassroomState, readClassroomDraft,
   type ClassroomPrompt, type ClassroomState,
 } from '../services/classroom';
 import './ClassroomGate.css';
+import { CompanionAvailability } from './CompanionTools';
+import { ClassroomPoll } from './ClassroomPoll';
+import { ClassroomNotice } from './ClassroomNotice';
 
 export const ClassroomQuestion: React.FC<{
   prompt: ClassroomPrompt; userId: string; onAnswered: () => void; onDismiss: () => void;
@@ -67,68 +70,53 @@ export const ClassroomQuestion: React.FC<{
   </div>;
 }
 
-export const ClassroomGate: React.FC<{ userId: string; onLogout: () => void; children: React.ReactNode; preparation?: boolean; onState?: (state: ClassroomState) => void; onReturn?: () => void }> = ({ onLogout, children, preparation = false, onState, onReturn }) => {
+
+/** Kept as the polling host, no longer a start/end classroom gate. */
+export const ClassroomGate: React.FC<{ userId: string; onLogout: () => void; children: React.ReactNode; preparation?: boolean; onState?: (state: ClassroomState) => void; onReturn?: () => void }> = ({ userId, children, onState }) => {
   const [state, setState] = useState<ClassroomState | null>(null);
-  const [activated, setActivated] = useState(false);
   const [error, setError] = useState('');
-  const [denied, setDenied] = useState<'closing' | 'closed' | null>(null);
+  const [dismissedPoll, setDismissedPoll] = useState('');
+  const [answeredPoll, setAnsweredPoll] = useState('');
+  const [noticeOpen, setNoticeOpen] = useState(false);
   const active = useRef(true);
   const epoch = useRef(0);
-  const statusRef = useRef<string | null>(null);
   const refresh = useRef<() => Promise<void>>(async () => {});
-  const frame = useRef<HTMLDivElement>(null);
   const reload = useCallback(async () => {
     const requestEpoch = epoch.current;
     try {
       const next = await getClassroomState();
       if (!active.current || epoch.current !== requestEpoch) return;
-      setState(next); setError(''); setDenied(null);
-      onState?.(next);
-      if (!next.session || next.session.state !== 'closed') setActivated(true);
-    } catch (e) { if (active.current && epoch.current === requestEpoch) setError(e instanceof Error ? e.message : '课堂连接暂时断开，正在重试。'); }
+      setState(next); setError(''); onState?.(next);
+    } catch (e) {
+      if (active.current && epoch.current === requestEpoch) {
+        setError(e instanceof Error ? e.message : '连接暂时断开，正在重试。');
+        // Sensitive notifications must not linger when auth or connectivity is lost.
+        setState(previous => previous ? { ...previous, notice: null, notices: [] } : previous);
+      }
+    }
   }, [onState]);
   useEffect(() => {
-    active.current = true;
-    epoch.current++;
+    active.current = true; epoch.current++;
+    setState(null); setDismissedPoll(''); setAnsweredPoll('');
     const poller = createClassroomPoller(reload, () => document.visibilityState !== 'hidden');
     refresh.current = poller.refresh;
     const onVisible = () => { void poller.refresh(); };
-    const onDenied = (event: Event) => {
-      const code = (event as CustomEvent).detail?.code;
-      setDenied(code === 'CLASSROOM_CLOSED' ? 'closed' : 'closing');
-      void poller.refresh();
-    };
     void poller.refresh();
+    window.dispatchEvent(new Event(CLASSROOM_OPEN_EVENT));
     document.addEventListener('visibilitychange', onVisible);
     window.addEventListener('focus', onVisible);
-    window.addEventListener(CLASSROOM_ACCESS_EVENT, onDenied);
-    return () => { active.current = false; epoch.current++; poller.stop(); document.removeEventListener('visibilitychange', onVisible); window.removeEventListener('focus', onVisible); window.removeEventListener(CLASSROOM_ACCESS_EVENT, onDenied); };
-  }, [reload]);
-  const status = denied || state?.session?.state || (state ? 'open' : 'loading');
-  // Classroom pop quizzes are retired. Historical answers stay on the server;
-  // initial questionnaires/scales continue through AssessmentGate.
-  useEffect(() => {
-    // Only transitions trigger a flush; regular 3-second polling never writes code.
-    if (status === statusRef.current || status === 'loading') return;
-    const previous = statusRef.current;
-    statusRef.current = status;
-    if (status === 'closing' || status === 'closed') window.dispatchEvent(new CustomEvent(CLASSROOM_CLOSING_EVENT, { detail: { state: status } }));
-    if (status === 'open' && previous !== 'open') window.dispatchEvent(new Event(CLASSROOM_OPEN_EVENT));
-  }, [status]);
-  const locked = !preparation && status !== 'open';
-  useEffect(() => { if (frame.current) frame.current.inert = locked; }, [locked, activated]);
-
+    return () => {
+      active.current = false; epoch.current++; poller.stop();
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+    };
+  }, [reload, userId]);
+  const poll = state?.prompt?.kind === 'poll' && state.prompt.id !== answeredPoll ? state.prompt : null;
   return <>
-    {/* Never conditionally replace a previously mounted editor with the modal/closed screen. */}
-    <div ref={frame} aria-hidden={locked ? true : undefined}>{activated || preparation ? children : null}</div>
-    {locked ? <div className="classroom-shade classroom-lock" role="dialog" aria-modal="true" aria-labelledby="classroom-lock-title">
-      <section className="classroom-question"><DoorClosed size={34} /><h1 id="classroom-lock-title">{status === 'loading' ? '正在连接课堂…' : status === 'closing' ? '这节课先到这里' : '课堂暂时关闭'}</h1>
-        <p>{status === 'loading' ? '稍等一下，正在读取老师的安排。' : status === 'closing' ? '正在同步你的最后修改，请先不要关闭页面。' : '老师开课后，这里会自动恢复。'}</p>
-        {status !== 'loading' ? <p className="classroom-muted">未同步的内容请保留在此浏览器，下次开课再继续。</p> : null}
-        {error ? <p role="alert">{error}</p> : null}
-        <footer>{onReturn ? <button type="button" disabled={status === 'closing'} onClick={onReturn}>回到准备区</button> : <button type="button" onClick={onLogout}>退出登录</button>}<button type="button" className="classroom-primary" onClick={() => void refresh.current()}><RefreshCw size={18} />重新检查</button></footer>
-      </section>
-    </div> : null}
-    {status === 'open' && error ? <div className="classroom-connection" role="status">{error}</div> : null}
+    <CompanionAvailability.Provider value={true}>{children}</CompanionAvailability.Provider>
+    {error && <div className="classroom-connection" role="status">{error}</div>}
+    <ClassroomNotice key={userId} notice={state?.notice ?? null} notices={state?.notices} userId={userId} onOpenChange={setNoticeOpen} />
+    {poll && !noticeOpen && dismissedPoll !== poll.id ? <ClassroomPoll key={poll.id} prompt={poll} onDismiss={() => setDismissedPoll(poll.id)} onDone={() => { setAnsweredPoll(poll.id); void refresh.current(); }} /> : null}
+    {poll && dismissedPoll === poll.id ? <button className="classroom-question-reminder" onClick={() => setDismissedPoll('')}>参与投票</button> : null}
   </>;
 };

@@ -5,9 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "predev": "bash scripts/fetch-pyodide.sh",
+    "predev": "bash scripts/fetch-pyodide.sh && node scripts/fetch-drawio.mjs",
     "build": "vite build",
-    "prebuild": "bash scripts/fetch-pyodide.sh",
+    "prebuild": "bash scripts/fetch-pyodide.sh && node scripts/fetch-drawio.mjs",
     "preview": "vite preview",
     "type-check": "tsc --noEmit",
     "test": "vitest",
@@ -26,6 +26,8 @@
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^5.0.0",
     "autoprefixer": "^10.4.20",
     "postcss": "^8.4.49",

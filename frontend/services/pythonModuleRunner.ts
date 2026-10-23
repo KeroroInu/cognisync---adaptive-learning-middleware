@@ -203,7 +203,7 @@ const executeSource = (source: string, generation: number) => new Promise<string
 });
 
 /** 单函数测试和游戏帧共用一个 Worker，队列串行执行，Pyodide 只加载一次。 */
-const runPythonJson = <T,>(source: string): Promise<T> => {
+export const runPythonJson = <T,>(source: string): Promise<T> => {
   const generation = runnerGeneration;
   const operation = runQueue.then(async () => {
     const raw = await executeSource(source, generation);

@@ -328,6 +328,7 @@ export interface SnakeProjectWorkspace extends Record<string, unknown> {
   evidence: SnakeRuntimeEvidence[];
   observations: StudentObservationCard[];
   functions: StudentFunctionCard[];
+  functionDiscussions?: Record<string, import('./functionDiscussion').FunctionDiscussionDraft>;
   path: StudentPathPlan;
   progress: Record<string, StudentModuleProgress>;
   creativeFunctions?: StudentCreativeFunction[];
@@ -337,6 +338,7 @@ const storageKeys = (taskId: string) => ({
   evidence: `cognisync:snake-runtime-evidence:v1:${taskId}`,
   observations: `cognisync:project-observation-cards:v2:${taskId}`,
   functions: `cognisync:project-function-cards:v1:${taskId}`,
+  functionDiscussions: `cognisync:function-discussions:v1:${taskId}`,
   path: `cognisync:project-path-plan:v1:${taskId}`,
   progress: `cognisync:project-module-progress:v1:${taskId}`,
   creativeFunctions: `cognisync:project-creative-functions:v1:${taskId}`,
@@ -356,6 +358,7 @@ export const hydrateSnakeProjectWorkspace = (taskId: string, workspace: SnakePro
   window.localStorage.setItem(keys.evidence, JSON.stringify(workspace.evidence ?? []));
   window.localStorage.setItem(keys.observations, JSON.stringify(workspace.observations ?? []));
   window.localStorage.setItem(keys.functions, JSON.stringify(workspace.functions ?? []));
+  window.localStorage.setItem(keys.functionDiscussions, JSON.stringify(workspace.functionDiscussions ?? {}));
   window.localStorage.setItem(keys.path, JSON.stringify(workspace.path ?? { orderedCardIds: [], prerequisites: {}, relationKinds: {} }));
   window.localStorage.setItem(keys.progress, JSON.stringify(workspace.progress ?? {}));
   window.localStorage.setItem(keys.creativeFunctions, JSON.stringify(workspace.creativeFunctions ?? []));
@@ -369,6 +372,7 @@ export const collectSnakeProjectWorkspace = (taskId: string): SnakeProjectWorksp
     evidence: parseStored<SnakeRuntimeEvidence[]>(keys.evidence, []),
     observations: parseStored<StudentObservationCard[]>(keys.observations, []),
     functions: parseStored<StudentFunctionCard[]>(keys.functions, []),
+    functionDiscussions: parseStored(keys.functionDiscussions, {}),
     path: parseStored<StudentPathPlan>(keys.path, { orderedCardIds: [], prerequisites: {}, relationKinds: {} }),
     progress: parseStored<Record<string, StudentModuleProgress>>(keys.progress, {}),
     creativeFunctions: parseStored<StudentCreativeFunction[]>(keys.creativeFunctions, []),

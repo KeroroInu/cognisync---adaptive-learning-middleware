@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ArrowRight,
   Boxes,
@@ -11,8 +11,10 @@ import {
   Save,
   Trash2,
 } from 'lucide-react';
-import type { FunctionCoverageResponse, FunctionMappingSuggestion, Language } from '../types';
-import { checkResearchFunctionCoverage } from '../services/api';
+import type { FunctionMappingSuggestion, Language, UserProfile } from '../types';
+import { createRequestId, functionCardArtifacts, type ReportKeyMoment } from '../services/stageEvents';
+import type { FunctionDiscussionDraft } from '../data/functionDiscussion';
+import { FunctionDiscussion } from './FunctionDiscussion';
 import type { StudentObservationCard } from './ProjectFactory';
 import './ProjectFunctionStage.css';
 
@@ -20,6 +22,10 @@ interface Props {
   language: Language;
   taskId: string;
   storageScope: string;
+  userId: string;
+  allowAI: boolean;
+  onProfileUpdate: (profile: UserProfile) => void;
+  onReportKeyMoment: ReportKeyMoment;
   onBack: () => void;
   onContinue: () => void;
   onCardCountChange?: (count: number) => void;
@@ -29,7 +35,8 @@ interface Props {
  * 学生功能卡。
  *
  * 2026-08-24 裁定后，新建卡片只保留三项内容：引用的观察卡、学生命名的功能、
- * 一句「这个功能如何实现」。`input` / `output` / `knowledge` / `verification` /
+ * 实现步骤。现在通过卡内对话整理伪代码草稿，学生确认后保存；discussion 保留过程来源。
+ * `input` / `output` / `knowledge` / `verification` /
  * `boundaryReason` / `responsibilityOwner` / `mappingDecision` 是旧版字段，
  * **保留在类型里只为读取历史工作区和历史研究产物**，新流程不再采集，
  * 也不得通过迁移删除已有数据。
@@ -41,8 +48,9 @@ export interface StudentFunctionCard {
   observationText: string;
   /** 学生为这个现象命名的功能 */
   responsibility: string;
-  /** 一句「这个功能如何实现」；旧卡可能没有 */
+  /** 学生确认的短句步骤/伪代码；旧卡可能没有 */
   implementation?: string;
+  discussion?: FunctionDiscussionDraft;
   input: string;
   output: string;
   knowledge: string[];
@@ -62,18 +70,6 @@ export interface StudentFunctionCard {
   updatedAt: string;
 }
 
-/** 淡化模板：只给句式骨架，不规定内容 */
-const IMPLEMENTATION_TEMPLATE = {
-  zh: '先……；当……时……；最后……',
-  en: 'First…; when…; finally…',
-};
-
-/** 少量快捷插入短语，点击后插入光标位置 */
-const QUICK_PHRASES = {
-  zh: ['读取按键', '判断条件', '更新坐标', '修改列表', '返回结果'],
-  en: ['read the key', 'check a condition', 'update coordinates', 'change the list', 'return a result'],
-};
-
 const readStoredList = <T,>(key: string): T[] => {
   try {
     const stored = window.localStorage.getItem(key);
@@ -88,6 +84,10 @@ export const ProjectFunctionStage: React.FC<Props> = ({
   language,
   taskId,
   storageScope,
+  userId,
+  allowAI,
+  onProfileUpdate,
+  onReportKeyMoment,
   onBack,
   onContinue,
   onCardCountChange,
@@ -99,12 +99,29 @@ export const ProjectFunctionStage: React.FC<Props> = ({
   const [cards, setCards] = useState<StudentFunctionCard[]>(() => readStoredList(functionStorageKey));
   const [selectedObservationId, setSelectedObservationId] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [responsibility, setResponsibility] = useState('');
-  const [implementation, setImplementation] = useState('');
-  const [coverage, setCoverage] = useState<FunctionCoverageResponse | null>(null);
-  const [coverageLoading, setCoverageLoading] = useState(false);
-  const [coverageError, setCoverageError] = useState('');
-  const implementationRef = useRef<HTMLTextAreaElement | null>(null);
+  const draftStorageKey = `cognisync:function-discussions:v1:${storageScope}`;
+  const [drafts, setDrafts] = useState<Record<string, FunctionDiscussionDraft>>(() => {
+    try { return JSON.parse(localStorage.getItem(draftStorageKey) || '{}'); } catch { return {}; }
+  });
+  const [discussionBusy, setDiscussionBusy] = useState(false);
+  const draftKey = editingId ?? selectedObservationId;
+  const draft = drafts[draftKey];
+  const responsibility = draft?.responsibility ?? '';
+  const implementation = draft?.implementation ?? '';
+  const updateDrafts = (next: Record<string, FunctionDiscussionDraft>) => {
+    // Synchronous local snapshot lets stage navigation/close flush the latest discussion.
+    localStorage.setItem(draftStorageKey, JSON.stringify(next));
+    setDrafts(next);
+  };
+  const updateDraft = (next: FunctionDiscussionDraft) => updateDrafts({ ...drafts, [draftKey]: next });
+  const selectObservation = (id: string) => {
+    if (discussionBusy) return;
+    setEditingId(null);
+    setSelectedObservationId(id);
+    if (!drafts[id]) updateDrafts({ ...drafts, [id]: { id: createRequestId(), responsibility: '', implementation: '', messages: [] } });
+  };
+  const [situationIndex, setSituationIndex] = useState(0);
+  const situations = isZh ? ['不按任何键，蛇也会继续向前走。这需要游戏不断做什么？', '重新开始一局时，哪些东西应该回到起点？', '吃到一个食物后，下一个食物应该出现在哪里？'] : ['Without pressing a key, the snake keeps moving. What repeats?', 'What should return to its starting state when restarting?', 'Where should the next food appear after eating?'];
 
   useEffect(() => {
     window.localStorage.setItem(functionStorageKey, JSON.stringify(cards));
@@ -116,72 +133,11 @@ export const ProjectFunctionStage: React.FC<Props> = ({
     [observations, selectedObservationId],
   );
 
-  const unreferencedObservationCount = useMemo(() => {
-    const referenced = new Set(cards.map(card => card.observationId));
-    return observations.filter(item => !referenced.has(item.id)).length;
-  }, [cards, observations]);
-
-  /**
-   * 对照冻结蓝图检查七个基础功能的覆盖情况。
-   *
-   * 按规则匹配，不调用模型；只在学生保存/删除卡片或主动点击重新检查时请求一次，
-   * 不随输入实时触发，避免 40—50 人课堂里形成持续写入。
-   */
-  const runCoverageCheck = useCallback(async (nextCards: StudentFunctionCard[]) => {
-    if (nextCards.length === 0) {
-      setCoverage(null);
-      setCoverageError('');
-      return;
-    }
-    setCoverageLoading(true);
-    setCoverageError('');
-    const referenced = new Set(nextCards.map(card => card.observationId));
-    try {
-      const result = await checkResearchFunctionCoverage(taskId, {
-        cards: nextCards.map(card => ({
-          card_id: card.id,
-          responsibility: card.responsibility,
-          implementation: card.implementation ?? '',
-          observation_text: card.observationText,
-        })),
-        unreferenced_observation_count: observations.filter(item => !referenced.has(item.id)).length,
-      });
-      setCoverage(result);
-    } catch {
-      setCoverage(null);
-      setCoverageError(isZh
-        ? '功能覆盖检查暂时不可用，你的功能卡已经保存，可以稍后再检查。'
-        : 'The coverage check is unavailable right now. Your cards are saved; retry later.');
-    } finally {
-      setCoverageLoading(false);
-    }
-  }, [isZh, observations, taskId]);
-
-  const canSave = Boolean(selectedObservation && responsibility.trim() && implementation.trim());
+  const canSave = Boolean(selectedObservation && responsibility.trim() && implementation.trim() && !discussionBusy);
 
   const resetDraft = () => {
     setEditingId(null);
     setSelectedObservationId('');
-    setResponsibility('');
-    setImplementation('');
-  };
-
-  /** 在光标位置插入快捷短语，不覆盖学生已经写下的内容 */
-  const insertPhrase = (phrase: string) => {
-    const field = implementationRef.current;
-    if (!field) {
-      setImplementation(current => `${current}${phrase}`);
-      return;
-    }
-    const start = field.selectionStart ?? implementation.length;
-    const end = field.selectionEnd ?? implementation.length;
-    const next = `${implementation.slice(0, start)}${phrase}${implementation.slice(end)}`;
-    setImplementation(next.slice(0, 120));
-    window.requestAnimationFrame(() => {
-      field.focus();
-      const caret = Math.min(start + phrase.length, 120);
-      field.setSelectionRange(caret, caret);
-    });
   };
 
   const saveCard = () => {
@@ -201,7 +157,8 @@ export const ProjectFunctionStage: React.FC<Props> = ({
       output: existing?.output ?? '',
       knowledge: existing?.knowledge ?? [],
       verification: existing?.verification ?? '',
-      source: 'student',
+      source: draft?.acceptedDraftRequestId ? 'ai-assisted' : (existing?.source ?? 'student'),
+      discussion: draft,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
     };
@@ -210,15 +167,22 @@ export const ProjectFunctionStage: React.FC<Props> = ({
       ? cards.map(item => (item.id === editingId ? nextCard : item))
       : [...cards, nextCard].slice(-12);
     setCards(nextCards);
+    localStorage.setItem(functionStorageKey, JSON.stringify(nextCards));
+    const nextDrafts = { ...drafts };
+    delete nextDrafts[draftKey];
+    updateDrafts(nextDrafts);
+    void onReportKeyMoment({ stage: 'decompose', eventType: 'structure_change',
+      detail: { action: editingId ? 'function_card_updated' : 'function_card_created', cardId: nextCard.id, discussionId: draft?.id, acceptedDraftRequestId: draft?.acceptedDraftRequestId },
+      artifacts: functionCardArtifacts([nextCard], 'structure_edit'),
+    });
     resetDraft();
-    void runCoverageCheck(nextCards);
   };
 
   const editCard = (card: StudentFunctionCard) => {
+    if (discussionBusy) return;
     setEditingId(card.id);
     setSelectedObservationId(card.observationId);
-    setResponsibility(card.responsibility);
-    setImplementation(card.implementation ?? '');
+    updateDrafts({ ...drafts, [card.id]: drafts[card.id] ?? { ...card.discussion, id: card.discussion?.id ?? createRequestId(), responsibility: card.responsibility, implementation: card.implementation ?? '', messages: card.discussion?.messages ?? [] } });
     window.requestAnimationFrame(() => {
       document.querySelector('.function-card-composer')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     });
@@ -228,10 +192,7 @@ export const ProjectFunctionStage: React.FC<Props> = ({
     const nextCards = cards.filter(item => item.id !== id);
     setCards(nextCards);
     if (editingId === id) resetDraft();
-    void runCoverageCheck(nextCards);
   };
-
-  const quickPhrases = QUICK_PHRASES[language];
 
   return (
     <section className="project-function-stage">
@@ -240,11 +201,11 @@ export const ProjectFunctionStage: React.FC<Props> = ({
           <h3>{isZh ? '这个功能叫什么？' : 'Name this function'}</h3>
           <p>
             {isZh
-              ? '选一条观察，给功能起名，再说说它怎么做。'
+              ? '从发现出发，用自己的话命名、说步骤。一条观察也能拆出几个功能。'
               : 'Pick one of your observations, name the function behind it, and describe in one sentence how it works.'}
           </p>
         </div>
-        <strong>{String(cards.length).padStart(2, '0')}<small>/07</small></strong>
+        <strong>{String(cards.length).padStart(2, '0')}<small>{isZh ? ' 张卡' : ' cards'}</small></strong>
       </header>
 
       {observations.length === 0 ? (
@@ -260,7 +221,7 @@ export const ProjectFunctionStage: React.FC<Props> = ({
             <aside className="function-observation-source">
               <div className="function-section-label">
                 <span>01</span>
-                <p><strong>{isZh ? '引用一张观察卡' : 'Choose an observation'}</strong><small>{isZh ? '这张卡是你命名功能的依据' : 'This is the evidence behind your naming'}</small></p>
+                <p><strong>{isZh ? '从一个发现出发' : 'Start from an observation'}</strong><small>{isZh ? '可以再次选择同一条，想到别的功能' : 'Reuse an observation for another function'}</small></p>
               </div>
               <div className="function-observation-list">
                 {observations.map((observation, index) => {
@@ -271,7 +232,8 @@ export const ProjectFunctionStage: React.FC<Props> = ({
                       key={observation.id}
                       type="button"
                       className={`${selected ? 'is-selected' : ''} ${used ? 'is-used' : ''}`}
-                      onClick={() => setSelectedObservationId(observation.id)}
+                      onClick={() => selectObservation(observation.id)}
+                      disabled={discussionBusy}
                       aria-pressed={selected}
                     >
                       <span>{String(index + 1).padStart(2, '0')}</span>
@@ -284,14 +246,6 @@ export const ProjectFunctionStage: React.FC<Props> = ({
             </aside>
 
             <article className="function-card-composer">
-              <div className="function-section-label">
-                <span>02</span>
-                <p>
-                  <strong>{editingId ? (isZh ? '修改功能卡' : 'Edit function card') : (isZh ? '写一张功能卡' : 'Write a function card')}</strong>
-                  <small>{isZh ? '只需要一个名称和一句实现描述' : 'Only a name and one sentence'}</small>
-                </p>
-              </div>
-
               <div className="function-evidence-quote">
                 <Eye size={15} />
                 <span>{selectedObservation?.observationText ?? (isZh ? '请先从左侧选择一张观察卡' : 'Choose an observation on the left')}</span>
@@ -301,35 +255,20 @@ export const ProjectFunctionStage: React.FC<Props> = ({
                 <span>{isZh ? '功能名称' : 'Function name'}<small>{responsibility.length}/32</small></span>
                 <input
                   value={responsibility}
-                  onChange={event => setResponsibility(event.target.value)}
+                  onChange={event => { if (draft) updateDraft({ ...draft, responsibility: event.target.value }); }}
+                  disabled={!draft || discussionBusy}
                   maxLength={32}
                   placeholder={isZh ? '例如：吃到果实后变长并加分' : 'e.g. grow and score after eating'}
                 />
               </label>
 
-              <label className="function-field is-implementation">
-                <span>{isZh ? '这个功能如何实现' : 'How this function works'}<small>{implementation.length}/120</small></span>
-                <textarea
-                  ref={implementationRef}
-                  value={implementation}
-                  onChange={event => setImplementation(event.target.value.slice(0, 120))}
-                  maxLength={120}
-                  rows={3}
-                  placeholder={IMPLEMENTATION_TEMPLATE[language]}
-                />
-              </label>
-
-              <div className="function-quick-phrases">
-                <small>{isZh ? '可以点一下插入：' : 'Tap to insert:'}</small>
-                <div>
-                  {quickPhrases.map(phrase => (
-                    <button key={phrase} type="button" onClick={() => insertPhrase(phrase)}>{phrase}</button>
-                  ))}
-                </div>
-              </div>
+              {draft && selectedObservation && <FunctionDiscussion key={draft.id}
+                language={language} taskId={taskId} userId={userId} allowAI={allowAI}
+                observation={selectedObservation.observationText} draft={draft} onChange={updateDraft}
+                onProfileUpdate={onProfileUpdate} onBusyChange={setDiscussionBusy} />}
 
               <div className="function-composer-actions">
-                {editingId && <button type="button" onClick={resetDraft}>{isZh ? '取消修改' : 'Cancel'}</button>}
+                {editingId && <button type="button" disabled={discussionBusy} onClick={resetDraft}>{isZh ? '取消修改' : 'Cancel'}</button>}
                 <button type="button" className="is-primary" disabled={!canSave} onClick={saveCard}>
                   <Save size={15} />
                   {editingId ? (isZh ? '保存修改' : 'Save changes') : (isZh ? '形成一张功能卡' : 'Create function card')}
@@ -355,7 +294,7 @@ export const ProjectFunctionStage: React.FC<Props> = ({
                       <span>{String(index + 1).padStart(2, '0')}</span>
                       <div>
                         <button type="button" onClick={() => editCard(card)} aria-label={isZh ? '编辑功能卡' : 'Edit function card'}><PencilLine size={14} /></button>
-                        <button type="button" onClick={() => removeCard(card.id)} aria-label={isZh ? '删除功能卡' : 'Delete function card'}><Trash2 size={14} /></button>
+                        <button type="button" disabled={discussionBusy} onClick={() => removeCard(card.id)} aria-label={isZh ? '删除功能卡' : 'Delete function card'}><Trash2 size={14} /></button>
                       </div>
                     </header>
                     <h4>{card.responsibility}</h4>
@@ -373,31 +312,15 @@ export const ProjectFunctionStage: React.FC<Props> = ({
 
           <section className="function-coverage-panel" aria-live="polite">
             <header>
-              <div><HelpCircle size={15} /><strong>{isZh ? '还有哪些功能没被说到？' : 'Anything still missing?'}</strong></div>
-              {coverage && (
-                <small>{isZh
-                  ? `已对应 ${coverage.covered_total} / ${coverage.required_total} 个基础功能`
-                  : `${coverage.covered_total} / ${coverage.required_total} base functions matched`}</small>
-              )}
+              <div><HelpCircle size={15} /><strong>{isZh ? '换个情境想一想' : 'Try another situation'}</strong></div>
             </header>
 
-            {coverageLoading
-              ? <p>{isZh ? '正在核对……' : 'Checking…'}</p>
-              : coverageError
-                ? <p className="function-coverage-error">{coverageError}</p>
-                : coverage
-                  ? <ul>{coverage.questions.map(question => <li key={question}>{question}</li>)}</ul>
-                  : <p>{isZh ? '保存第一张功能卡后，这里会提示还缺哪些功能。' : 'Save your first card to see what is still missing.'}</p>}
-
-            {cards.length > 0 && (
-              <button type="button" onClick={() => void runCoverageCheck(cards)} disabled={coverageLoading}>
-                <RotateCcw size={13} />{isZh ? '重新检查一次' : 'Check again'}
-              </button>
-            )}
+            <p>{situations[situationIndex]}</p>
+            <button type="button" onClick={() => setSituationIndex(i => (i + 1) % situations.length)}><RotateCcw size={13}/>{isZh ? '再想一个情境' : 'Another situation'}</button>
             <p className="function-coverage-note">
               {isZh
-                ? `提示只告诉你还差几个，不会直接给出功能名称。${unreferencedObservationCount > 0 ? `你还有 ${unreferencedObservationCount} 条观察没有被引用。` : ''}`
-                : 'Hints only tell you how many are missing, never the names.'}
+                ? '不用凑齐七张卡。开始写代码前，再和老师一起对照本课的实现方案。'
+                : 'No need to make seven cards. Compare with the lesson implementation before coding.'}
             </p>
           </section>
           </div>

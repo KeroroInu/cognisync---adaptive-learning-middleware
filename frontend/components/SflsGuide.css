@@ -1,0 +1,22 @@
+.sfls-guide { margin: 14px 0; border: 1px solid var(--line-strong); border-radius: 12px; color: var(--text-primary); background: var(--surface-muted); }
+.sfls-guide > summary { padding: 12px 16px; cursor: pointer; }
+.sfls-guide > summary strong { margin-right: 14px; }
+.sfls-guide > summary span { color: var(--text-secondary); font-size: 13px; }
+.sfls-guide summary:focus-visible, .sfls-guide button:focus-visible, .sfls-guide a:focus-visible { outline: 2px solid var(--brand-positive, #809d35); outline-offset: 3px; }
+.sfls-guide-body { padding: 0 16px 16px; max-height: min(620px, 65dvh); overflow-y: auto; overscroll-behavior: contain; }
+.sfls-guide-start { padding-left: 24px; margin: 6px 0 20px; }
+.sfls-guide-start li { margin-bottom: 10px; padding-left: 4px; line-height: 1.6; }
+.sfls-guide-start li::marker { color: var(--brand-positive); font-weight: 700; }
+.sfls-guide-start span { display: block; color: var(--text-secondary); font-size: 13px; }
+.sfls-guide .sfls-guide-group h3 { margin: 16px 0 8px; font-size: 14px; }
+.sfls-guide-command { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 12px; margin: 6px 0; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-strong); }
+.sfls-guide-command > div { flex: 1; min-width: 0; }
+.sfls-guide-command code { display: block; font-size: 15px; font-weight: 600; color: var(--text-primary); overflow-wrap: anywhere; user-select: text; }
+.sfls-guide-command span { font-size: 13px; color: var(--text-secondary); line-height: 1.6; }
+.sfls-guide .sfls-guide-command button { min-height: 36px; padding: 5px 12px; flex-shrink: 0; background: var(--surface-muted); color: var(--text-primary); border: 1px solid var(--line-strong); border-radius: 7px; font-size: 13px; cursor: pointer; }
+.sfls-guide-copy-status { flex-basis: 100%; }
+.sfls-guide-more { border-top: 1px solid var(--line); margin-top: 12px; padding-top: 12px; }
+.sfls-guide-more summary { font-size: 14px; cursor: pointer; }
+.sfls-guide .sfls-guide-more p { font-size: 13px; line-height: 1.7; color: var(--text-secondary); }
+.sfls-guide-more a { color: var(--text-primary); text-decoration: underline; text-underline-offset: 3px; font-size: 14px; }
+@media (max-width: 480px) { .sfls-guide > summary span { display: block; margin: 4px 0 0 17px; } .sfls-guide-body { padding: 0 12px 12px; } }

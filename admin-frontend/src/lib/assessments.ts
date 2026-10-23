@@ -1,5 +1,6 @@
 export interface AssessmentQuestion {
   hint?: string;
+  code?: string; skip_label?: string; parent_id?: string | null;
   id: string; text: string; type: 'choice' | 'multiple' | 'text'; required: boolean;
   options: { value: string; label: string; exclusive?: boolean }[];
   max_selections?: number | null;

@@ -2,6 +2,7 @@
  * API Service - 后端 API 调用
  */
 
+import { assertReviewResponse, reviewGeneration } from './projectReview';
 import type {
   User,
   UserProfile,
@@ -24,6 +25,7 @@ import type {
   FunctionMappingSuggestionResponse,
 } from '@/types';
 import { classroomFetch as fetch } from './classroom';
+import type { SupportAction, SupportState } from '../components/SupportTools';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
 
@@ -49,6 +51,10 @@ function getHeaders(includeAuth = true): HeadersInit {
 }
 
 export interface ChatRequest {
+  supportAction?: SupportAction;
+  supportRequestId?: string;
+  supportPracticeId?: string;
+  supportAnswer?: string;
   userId: string;
   message: string;
   language: 'zh' | 'en';
@@ -56,6 +62,20 @@ export interface ChatRequest {
   currentCode?: string;
   taskPrompt?: string;
   scaffoldContext?: Omit<ProjectScaffoldMetadata, 'profileSnapshot'>;
+}
+
+export async function saveBasicSnake(taskId: string, code: string, revision: number, startedAt: string, keepalive = false): Promise<number> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/research/tasks/${encodeURIComponent(taskId)}/save-basic-snake`, {
+      method: 'POST', headers: getHeaders(), keepalive, signal: controller.signal,
+      body: JSON.stringify({ runtime: 'basic-snake/v1', code, revision, started_at: startedAt }),
+    });
+    const result = await response.json();
+    if (!response.ok || !result.success) throw new Error(typeof result.detail === 'string' ? result.detail : '代码未能保存，请重试。');
+    return result.data.revision;
+  } finally { clearTimeout(timeout); }
 }
 
 export interface ChatAnalysis {
@@ -85,6 +105,7 @@ export interface ChatScaffoldInfo {
 }
 
 export interface ChatResponse {
+  support?: SupportState;
   message: string;
   analysis: ChatAnalysis;
   updatedProfile: UserProfile;
@@ -115,6 +136,7 @@ export class ChatRequestError extends Error {
  * 调用聊天接口
  */
 export async function sendChatMessage(request: ChatRequest): Promise<ChatResponse> {
+  const reviewEpoch = reviewGeneration();
   const unavailable = request.language === 'zh'
     ? 'AI 暂时没有连上，请稍后重试。'
     : 'AI is temporarily unavailable. Please try again shortly.';
@@ -143,6 +165,7 @@ export async function sendChatMessage(request: ChatRequest): Promise<ChatRespons
       throw new ChatRequestError(unavailable, response.status, 'INVALID_RESPONSE');
     }
 
+    assertReviewResponse(reviewEpoch);
     return result.data;
   } catch (error) {
     // No automatic POST retry: a lost response does not prove that the model

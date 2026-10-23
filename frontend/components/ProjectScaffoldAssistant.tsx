@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ArrowRight,
   Bot,
@@ -13,10 +13,11 @@ import {
 import type { Language, UserProfile } from '../types';
 import { sendChatMessage } from '../services/api';
 import { createRequestId } from '../services/stageEvents';
-import { captureCurrentSession, createWorkspaceScope } from '../data/workspaceScope';
-import { formatSnakeEvidence, hasProjectRun, type ProjectStage, type SnakeRuntimeEvidence } from '../data/snakeProjectBlueprint';
+import { captureCurrentSession } from '../data/workspaceScope';
+import { hasProjectRun, type ProjectStage, type SnakeRuntimeEvidence } from '../data/snakeProjectBlueprint';
 import './ProjectScaffoldAssistant.css';
 import { AssistantMessage } from './AssistantMessage';
+import { SupportTools, type SupportChoice, type SupportState } from './SupportTools';
 
 export interface ScaffoldCompletion {
   requestId: string;
@@ -73,27 +74,6 @@ const STAGE_LABELS: Record<ProjectStage, { zh: string; en: string }> = {
   transfer: { zh: '迁移测试', en: 'Transfer test' },
 };
 
-const LEVEL_LABELS = {
-  zh: ['一起看看', '给点提示', '具体一点', '示例参考'],
-  en: ['Clarify', 'Concept cue', 'Strategy cue', 'Minimum completion'],
-};
-
-const BUILD_LEVEL_LABELS = {
-  zh: ['测试定位', '关键代码', '函数结构', '完整函数'],
-  en: ['Locate with tests', 'Key code', 'Function structure', 'Complete function'],
-};
-
-const confirmedL3Key = (taskId: string) => `cognisync:build-l3-confirmed:v1:${taskId}`;
-
-const readConfirmedL3 = (taskId: string): Set<string> => {
-  try {
-    const parsed = JSON.parse(window.localStorage.getItem(confirmedL3Key(taskId)) ?? '[]');
-    return new Set(Array.isArray(parsed) ? parsed.filter(item => typeof item === 'string') : []);
-  } catch {
-    return new Set();
-  }
-};
-
 const getDefaultPosition = (): Position => {
   if (typeof window === 'undefined') return { x: 748, y: 92 };
   const width = Math.min(460, window.innerWidth - 24);
@@ -122,20 +102,16 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
   contextKey,
   getArtifactContext,
   onProfileUpdate,
-  onApplyCompletion,
 }) => {
-  const storageScope = createWorkspaceScope(userId, taskId);
   const sessionIsCurrent = useRef(captureCurrentSession()).current;
   const isZh = language === 'zh';
   const [position, setPosition] = useState<Position>(getDefaultPosition);
   const [panelSize, setPanelSize] = useState<PanelSize>(getDefaultSize);
-  const [levels, setLevels] = useState<Record<string, number>>({});
   const [messages, setMessages] = useState<ScaffoldMessage[]>([]);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
-  const [confirmedL3, setConfirmedL3] = useState<Set<string>>(() => readConfirmedL3(storageScope));
-  const [l3ConfirmationOpen, setL3ConfirmationOpen] = useState(false);
+  const [support, setSupport] = useState<SupportState | null>(null);
   const panelRef = useRef<HTMLElement>(null);
   const streamRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef({ pointerId: -1, offsetX: 0, offsetY: 0 });
@@ -148,24 +124,15 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
     size: { width: 0, height: 0 },
   });
   const isCodingStage = stage === 'build' || stage === 'transfer';
-  const isOpenTransfer = stage === 'transfer';
-  const activeContextKey = isCodingStage ? (contextKey || `${stage}-unselected`) : stage;
-  // 正式迁移测试用统一空白骨架测量人智协作表现；教师开启 AI 后直接
-  // 放开当前函数的完整代码讨论，不再把学习阶段的逐级解锁带进后测。
-  const l3IsConfirmed = isOpenTransfer || (isCodingStage && confirmedL3.has(activeContextKey));
-  // L3 是当前函数卡的持续协作权限，不是只对确认按钮后的第一条回复有效。
-  // 刷新或重新进入建构时，已确认的卡必须继续以 L3 讨论代码，不能悄悄退回 L0。
-  const level = l3IsConfirmed ? 3 : (levels[activeContextKey] ?? 0);
+  const activeContextKey = `${stage}:${contextKey || 'workspace'}`;
+  const level = support?.level ?? 0;
+  const l3IsConfirmed = level === 3;
+  const currentContext = useRef(activeContextKey);
+  currentContext.current = activeContextKey;
   const stageLabel = STAGE_LABELS[stage];
-  const levelLabels = isCodingStage ? BUILD_LEVEL_LABELS : LEVEL_LABELS;
   const visibleMessages = messages.filter(message => message.contextKey === activeContextKey);
   const hasOpenedProject = hasProjectRun(evidence);
   const observationStageReady = stage === 'observe' && hasOpenedProject && observationCount >= 2;
-
-  const latestEvidence = useMemo(() => {
-    const meaningful = [...evidence].reverse().find(item => !['opened', 'started', 'paused'].includes(item.type));
-    return meaningful ?? evidence[evidence.length - 1];
-  }, [evidence]);
 
   const clampPosition = useCallback((x: number, y: number): Position => {
     const width = panelRef.current?.offsetWidth ?? Math.min(520, window.innerWidth - 24);
@@ -197,14 +164,15 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
   }, [messages, sending]);
 
   useEffect(() => {
-    setL3ConfirmationOpen(false);
-  }, [activeContextKey]);
+    setSupport(null);
+  }, [activeContextKey, taskId, userId]);
 
   const submit = useCallback(async (
     text: string,
     trigger: 'hint_button' | 'student_message' | 'level_up' | 'l3_confirmed',
     requestedLevel = level,
     l3ConfirmedForRequest = requestedLevel === 3 && l3IsConfirmed,
+    choice?: SupportChoice,
   ) => {
     const clean = text.trim();
     if (!clean || sending || !sessionIsCurrent()) return;
@@ -227,6 +195,8 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
         ? `【观察阶段状态】已运行项目：${hasOpenedProject ? '是' : '未读取到运行记录'}；观察卡：${observationCount}；完成条件：${observationStageReady ? '已满足' : '未满足'}。`
         : '';
       const response = await sendChatMessage({
+        supportRequestId: requestId,
+        supportAction: choice?.action ?? 'message', supportPracticeId: choice?.practiceId, supportAnswer: choice?.answer,
         userId: userId || 'guest',
         message: clean,
         language,
@@ -247,6 +217,7 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
         },
       });
       if (!sessionIsCurrent()) return;
+      if (response.support && currentContext.current === requestContextKey) setSupport(response.support);
       // 除建构阶段已确认的 L3 外，后端仍可能按教师蓝图压低等级。
       // 气泡按实际生效等级标注；沿用请求等级会让学生高估自己拿到的支持。
       const appliedLevel = response.scaffold?.appliedLevel ?? requestedLevel;
@@ -267,60 +238,6 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
       setSending(false);
     }
   }, [activeContextKey, getArtifactContext, hasOpenedProject, isCodingStage, isZh, l3IsConfirmed, language, level, observationCount, observationStageReady, onProfileUpdate, sending, stage, taskId, taskPrompt, taskTitle, userId, sessionIsCurrent]);
-
-  const requestHint = () => void submit(
-    observationStageReady
-      ? (isZh ? '请先核对我已有的观察卡和阶段完成条件，再告诉我下一步，不要重复要求已完成的观察。' : 'Check my saved observations and stage completion first, then tell me the next step without repeating completed observation work.')
-      : (isZh ? '看看我现在做的，接下来可以做什么？' : 'Look at my current work. What can I do next?'),
-    'hint_button',
-    level,
-  );
-
-  const requestMoreSpecific = () => {
-    const nextLevel = Math.min(3, level + 1);
-    if (isCodingStage && nextLevel === 3 && !l3IsConfirmed) {
-      setL3ConfirmationOpen(true);
-      return;
-    }
-    setLevels(current => ({ ...current, [activeContextKey]: nextLevel }));
-    void submit(
-      isCodingStage && nextLevel === 3
-        ? (isZh ? '我已确认需要当前函数的完整正确实现。请给出代码，我会自行复制并运行。' : 'I confirmed that I need the complete correct implementation for this function. I will copy and run it myself.')
-        : (isZh ? '我尝试后仍然没有推进，请再具体一级。' : 'I am still stuck. Be one level more specific.'),
-      'level_up',
-      nextLevel,
-    );
-  };
-
-  const confirmBuildL3 = () => {
-    if (!isCodingStage) return;
-    const next = new Set(confirmedL3).add(activeContextKey);
-    setConfirmedL3(next);
-    setL3ConfirmationOpen(false);
-    setLevels(current => ({ ...current, [activeContextKey]: 3 }));
-    try {
-      window.localStorage.setItem(confirmedL3Key(storageScope), JSON.stringify([...next]));
-    } catch {
-      // 本轮确认仍有效；只是刷新后需要再次确认。
-    }
-    void submit(
-      isZh ? '我确认需要当前函数的完整正确实现。我会自行复制到编辑器并运行测试。' : 'I confirm that I need the complete correct implementation for this function. I will copy it into the editor and run the test.',
-      'l3_confirmed',
-      3,
-      true,
-    );
-  };
-
-  const applyMinimumCompletion = () => {
-    if (stage !== 'observe' || observationStageReady || !latestEvidence) return;
-    const evidenceText = formatSnakeEvidence(latestEvidence, language);
-    onApplyCompletion({
-      requestId: createRequestId(),
-      evidenceId: latestEvidence.id,
-      text: isZh ? `我观察到：${evidenceText}。` : `I observed that ${evidenceText}.`,
-    });
-    onOpenChange(false);
-  };
 
   const handleDragStart = (event: React.PointerEvent<HTMLDivElement>) => {
     if ((event.target as HTMLElement).closest('button')) return;
@@ -446,7 +363,7 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
 
       <div className="project-scaffold-body">
         <header className="project-scaffold-context">
-          <div><span>{isZh ? stageLabel.zh : stageLabel.en}</span><b>L{level} · {levelLabels[language][level]}</b></div>
+          <div><span>{isZh ? stageLabel.zh : stageLabel.en}</span><b>{isZh ? '一起想办法' : 'Let’s work through it'}</b></div>
         </header>
 
         <div ref={streamRef} className="project-scaffold-stream" aria-live="polite">
@@ -471,15 +388,7 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
             <article key={message.id} className={`project-scaffold-chat is-${message.role}`}>
               <span>{message.role === 'assistant' ? <Bot size={16} /> : <MessageCircleMore size={16} />}</span>
               <div>
-                <small>{message.role === 'assistant'
-                  ? `L${message.level} · ${((message.stage === 'build' || message.stage === 'transfer') ? BUILD_LEVEL_LABELS : LEVEL_LABELS)[language][message.level]}${
-                      message.clampedFrom !== undefined
-                        ? (isZh
-                            ? '（按本课提示范围）'
-                            : ' (within this lesson’s hint limit)')
-                        : ''
-                    }`
-                  : (isZh ? '我的问题' : 'My question')}</small>
+                <small>{message.role === 'assistant' ? (isZh ? '一起看看' : 'Let’s see') : (isZh ? '我的问题' : 'My question')}</small>
                 <AssistantMessage text={message.text} language={language} />
               </div>
             </article>
@@ -488,21 +397,6 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
         </div>
 
         {error ? <p className="project-scaffold-error" role="alert">{error}</p> : null}
-
-        {l3ConfirmationOpen ? (
-          <section className="project-scaffold-l3-confirm" role="alertdialog" aria-labelledby="build-l3-confirm-title">
-            <div>
-              <strong id="build-l3-confirm-title">{isZh ? '确认查看当前函数的完整实现？' : 'Show the complete implementation?'}</strong>
-              <p>{isZh
-                ? '只给当前函数。你可以复制到编辑器，再运行试试。'
-                : 'You will get this function’s code. Copy it into the editor, then run it.'}</p>
-            </div>
-            <div>
-              <button type="button" onClick={() => setL3ConfirmationOpen(false)}>{isZh ? '先不用' : 'Not now'}</button>
-              <button type="button" className="is-confirm" onClick={confirmBuildL3}>{isZh ? '确认，给我完整函数' : 'Confirm complete function'}</button>
-            </div>
-          </section>
-        ) : null}
 
         <form className="project-scaffold-composer" onSubmit={event => { event.preventDefault(); void submit(draft, 'student_message'); }}>
           <textarea
@@ -518,21 +412,12 @@ export const ProjectScaffoldAssistant: React.FC<Props> = ({
           <button type="submit" disabled={!draft.trim() || sending} aria-label={sending ? (isZh ? '正在回复' : 'Replying') : (isZh ? '发送问题' : 'Send question')}>{sending ? <LoaderCircle size={18} className="is-spinning" /> : <Send size={18} />}</button>
         </form>
 
-        <div className="project-scaffold-actions">
-          <button type="button" className="is-primary" onClick={requestHint} disabled={sending}><Lightbulb size={16} />{observationStageReady
-            ? (isZh ? '聊聊下一步' : 'Discuss next step')
-            : (isZh ? `提示一下 · L${level}` : `Hint · L${level}`)}</button>
-          {visibleMessages.some(message => message.role === 'assistant')
-            && !observationStageReady
-            && level < 3
-            ? (
-            <button type="button" onClick={requestMoreSpecific} disabled={sending}>{isZh ? '再具体一点' : 'More detail'}<ArrowRight size={16} /></button>
-          ) : null}
-          {level === 3 && stage === 'observe' && !observationStageReady && latestEvidence ? (
-            <button type="button" onClick={applyMinimumCompletion}><Check size={16} />{isZh ? '放入观察草稿' : 'Use as observation draft'}</button>
-          ) : null}
-        </div>
-
+        <SupportTools key={activeContextKey} taskId={taskId} stage={stage} focus={getArtifactContext().currentModule || 'workspace'}
+          busy={sending} response={support} onAction={choice => void submit(choice.text, 'student_message', level, false, choice)}
+          onRestore={history => setMessages(current => [...current.filter(m => m.contextKey !== activeContextKey), ...history.flatMap(item => [
+            { id: `${item.id}-user`, role: 'user' as const, text: item.question, stage, contextKey: activeContextKey, level: 0 },
+            ...(item.reply ? [{ id: `${item.id}-assistant`, role: 'assistant' as const, text: item.reply, stage, contextKey: activeContextKey, level: 0 }] : []),
+          ])])} />
         <p className="project-scaffold-footnote">{isZh ? '对话会保存，老师可查看。' : 'Conversations are saved for your teacher.'}</p>
       </div>
     </aside>

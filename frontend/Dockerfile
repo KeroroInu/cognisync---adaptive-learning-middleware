@@ -38,7 +38,7 @@ RUN if [ -n "$APK_MIRROR" ]; then \
       find /etc/apk -name 'repositories' -o -name '*.repositories' | \
         xargs -r sed -i "s|https\?://dl-cdn.alpinelinux.org/alpine|${APK_MIRROR}|g"; \
     fi && \
-    apk add --no-cache bash && \
+    apk add --no-cache bash unzip && \
     chmod +x scripts/fetch-pyodide.sh
 
 RUN npm run build

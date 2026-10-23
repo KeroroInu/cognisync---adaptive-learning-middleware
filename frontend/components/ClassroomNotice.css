@@ -1,0 +1,14 @@
+.classroom-notice { width:min(520px,calc(100vw - 32px)); max-height:85dvh; margin:auto; padding:22px; border:1px solid var(--border-color,#d9dee7); border-radius:20px; background:var(--bg-card,#fff); color:var(--text-primary,#192331); box-shadow:0 24px 90px #0004; }
+.classroom-notice::backdrop { background:#10182766; backdrop-filter:blur(3px); }
+.classroom-notice header,.classroom-notice footer { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.classroom-notice h2 { font-size:18px; margin:0; }
+.classroom-notice header button { background:transparent; color:inherit; border:0; font-size:26px; cursor:pointer; }
+.classroom-notice textarea { display:block; box-sizing:border-box; width:100%; height:150px; min-height:90px; max-height:50dvh; margin:18px 0; padding:14px; resize:vertical; background:var(--bg-secondary,#f3f5f8); color:inherit; border:1px solid var(--border-color,#d9dee7); border-radius:12px; font:14px/1.7 ui-monospace,monospace; overflow-wrap:anywhere; }
+.classroom-notice footer { flex-wrap:wrap; font-size:12px; }
+.classroom-notice footer button { padding:10px 16px; border:0; border-radius:10px; background:#d3f85a; color:#192331; font-weight:600; cursor:pointer; }
+.classroom-notice-reminder { position:fixed; bottom:72px; left:20px; z-index:100; padding:10px 16px; border-radius:999px; border:1px solid var(--border-color,#d9dee7); color:var(--text-primary,#192331); background:var(--bg-card,#fff); box-shadow:0 4px 18px #0002; cursor:pointer; }
+.notice-pages { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:14px; }
+.notice-pages button { padding:6px 12px; border:1px solid var(--border-color,#d9dee7); border-radius:8px; background:var(--bg-secondary,#f3f5f8); color:inherit; cursor:pointer; }
+.notice-pages button[aria-current="true"] { background:#d3f85a; color:#192331; }
+[data-theme="dark"] .classroom-notice,[data-theme="dark"] .classroom-notice-reminder { background:#172331; color:#eef5fc; border-color:#3a495a; }
+[data-theme="dark"] .classroom-notice textarea { background:#101b27; border-color:#3a495a; }

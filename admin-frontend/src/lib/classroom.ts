@@ -2,6 +2,7 @@ import type { AssessmentQuestion } from './assessments';
 
 export interface ClassroomPrompt {
   id: string;
+  kind?: 'poll';
   question: AssessmentQuestion;
   questions?: AssessmentQuestion[];
   title?: string;

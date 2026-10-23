@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { FloatingCompanion } from '../components/FloatingCompanion';
+import { useCompanionAssistant } from '../components/CompanionTools';
 import { Send, CheckCircle, FlaskConical, Loader, ArrowLeft, Save, Play, Terminal, Trash2, X } from 'lucide-react';
 import type { ChatMessage, Language, User, UserProfile, ResearchTask } from '../types';
+import { SupportTools, type SupportChoice, type SupportState } from '../components/SupportTools';
 import {
   sendChatMessage,
   getActiveResearchTask,
@@ -88,6 +89,7 @@ const workspaceSignature = (workspace: SnakeProjectWorkspace) => JSON.stringify(
   evidence: workspace.evidence,
   observations: workspace.observations,
   functions: workspace.functions,
+  functionDiscussions: workspace.functionDiscussions ?? {},
   path: workspace.path,
   progress: workspace.progress,
   creativeFunctions: workspace.creativeFunctions ?? [],
@@ -244,6 +246,7 @@ export const Research: React.FC<Props> = ({
   const [observationCardCount, setObservationCardCount] = useState(0);
   const [scaffoldCompletion, setScaffoldCompletion] = useState<ScaffoldCompletion | null>(null);
   const [buildAssistantContext, setBuildAssistantContext] = useState<ProjectBuildAssistantContext>({ artifactSummary: '' });
+  const [flowFocusId, setFlowFocusId] = useState('');
   /** 关键事件未能记录时给学生的提示。绝不静默失败。 */
   const [eventNotice, setEventNotice] = useState<string | null>(null);
 
@@ -274,6 +277,8 @@ export const Research: React.FC<Props> = ({
 
   // Chat state
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [support, setSupport] = useState<SupportState | null>(null);
+  useEffect(() => { setSupport(null); }, [userId, task?.id]);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
@@ -791,9 +796,12 @@ export const Research: React.FC<Props> = ({
     };
     if (factoryStage === 'model') {
       const mechanisms = workspace.path.functionMechanisms ?? {};
+      const focus = workspace.functions.find(card => card.id === flowFocusId);
       return {
+        currentModule: focus?.id,
         summary: [
           '【当前功能流程焦点】',
+          focus ? JSON.stringify({cardId: focus.id, name: focus.responsibility, steps: focus.implementation, diagram: mechanisms[focus.id] ?? null}) : '尚未选择功能卡；不要猜测目标。',
           `正在为功能卡绘制内部实现流程；已保存 ${Object.keys(mechanisms).length} 张流程图。`,
           taskWorkspaceSummary,
         ].join('\n'),
@@ -807,7 +815,7 @@ export const Research: React.FC<Props> = ({
         taskWorkspaceSummary,
       ].join('\n'),
     };
-  }, [buildAssistantContext, factoryStage, runtimeEvidence, task, storageScope, language]);
+  }, [buildAssistantContext, flowFocusId, factoryStage, runtimeEvidence, task, storageScope, language]);
 
   // ── Auto-scroll chat ────────────────────────────────────────────────────
 
@@ -856,10 +864,10 @@ export const Research: React.FC<Props> = ({
 
   // ── Chat submit ─────────────────────────────────────────────────────────
 
-  const handleChatSubmit = async (e: React.FormEvent) => {
+  const handleChatSubmit = async (e: React.FormEvent, choice?: SupportChoice) => {
     e.preventDefault();
-    if (!input.trim() || !task || !canUseSession()) return;
-    const userText = input;
+    if ((!input.trim() && !choice) || isTyping || !task || !canUseSession()) return;
+    const userText = choice?.text ?? input;
     setInput('');
     setChatError(null);
 
@@ -874,6 +882,8 @@ export const Research: React.FC<Props> = ({
 
     try {
       const response = await sendChatMessage({
+        supportRequestId: crypto.randomUUID(), supportAction: choice?.action ?? 'message',
+        supportPracticeId: choice?.practiceId, supportAnswer: choice?.answer,
         userId: userId || 'guest',
         message: userText,
         language,
@@ -882,6 +892,7 @@ export const Research: React.FC<Props> = ({
         taskPrompt: task.ai_prompt ?? undefined,
       });
       if (!canUseSession()) return;
+      if (response.support) setSupport(response.support);
       const assistantMsg: ChatMessage = {
         id: `msg_${Date.now() + 1}`,
         role: 'assistant',
@@ -1110,6 +1121,13 @@ export const Research: React.FC<Props> = ({
     }
   };
 
+  useCompanionAssistant(Boolean(task) && !loadingTask && allowAI,
+    experimentGroup === 'pdt' ? assistantOpen : normalChatOpen,
+    experimentGroup !== 'pdt' && isTyping, () => {
+      if (experimentGroup === 'pdt') setAssistantOpen(true);
+      else { setNormalChatOpen(true); requestAnimationFrame(() => chatInputRef.current?.focus()); }
+    });
+
   // ── Guard states ────────────────────────────────────────────────────────
 
   if (loadingTask) {
@@ -1147,10 +1165,6 @@ export const Research: React.FC<Props> = ({
 
   return (
     <div className={`project-factory ${experimentGroup !== 'pdt' ? 'ordinary-classroom' : ''}`}>
-      {allowAI && <FloatingCompanion userId={userId} open={experimentGroup === 'pdt' ? assistantOpen : normalChatOpen} busy={experimentGroup !== 'pdt' && isTyping} onActivate={() => {
-        if (experimentGroup === 'pdt') setAssistantOpen(true);
-        else { setNormalChatOpen(true); requestAnimationFrame(() => chatInputRef.current?.focus()); }
-      }} />}
       <ProjectFactoryHeader
         language={language}
         experimentGroup={experimentGroup}
@@ -1205,7 +1219,7 @@ export const Research: React.FC<Props> = ({
           onOpenChange={setAssistantOpen}
           evidence={runtimeEvidence}
           observationCount={observationCardCount}
-          contextKey={factoryStage === 'build' ? buildAssistantContext.currentModuleId : factoryStage}
+          contextKey={factoryStage === 'build' ? buildAssistantContext.currentModuleId : factoryStage === 'model' ? flowFocusId : factoryStage}
           getArtifactContext={getScaffoldArtifactContext}
           onProfileUpdate={onUpdateProfile}
           onApplyCompletion={setScaffoldCompletion}
@@ -1221,6 +1235,7 @@ export const Research: React.FC<Props> = ({
           onOpenProject={() => setDemoOpen(true)}
           onContinue={() => { void confirmObserveStage(); }}
           onCardCountChange={setObservationCardCount}
+          onReportKeyMoment={reportKeyMoment}
         />
       )}
 
@@ -1229,6 +1244,10 @@ export const Research: React.FC<Props> = ({
           language={language}
           taskId={task.id}
           storageScope={storageScope}
+          userId={userId}
+          allowAI={allowAI}
+          onProfileUpdate={onUpdateProfile}
+          onReportKeyMoment={reportKeyMoment}
           onBack={() => handleFactoryStageChange('observe')}
           onContinue={() => { void confirmDecomposeStage(); }}
         />
@@ -1237,6 +1256,7 @@ export const Research: React.FC<Props> = ({
       {factoryStage === 'model' && (
         experimentGroup === 'pdt'
           ? <ProjectMechanismStage
+              onFocusChange={setFlowFocusId}
               language={language}
               storageScope={storageScope}
               onBack={() => handleFactoryStageChange('decompose')}
@@ -1519,6 +1539,12 @@ export const Research: React.FC<Props> = ({
         )}
 
         {/* Input */}
+        <SupportTools taskId={task.id} busy={isTyping || completed} response={support}
+          onAction={choice => void handleChatSubmit({ preventDefault() {} } as React.FormEvent, choice)}
+          onRestore={history => setMessages(history.flatMap(item => [
+            { id: `${item.id}-user`, role: 'user' as const, text: item.question, timestamp: '' },
+            ...(item.reply ? [{ id: `${item.id}-assistant`, role: 'assistant' as const, text: item.reply, timestamp: '' }] : []),
+          ]))} />
         <form onSubmit={handleChatSubmit} className="research-composer">
           <div className="research-composer-row">
             <input

@@ -15,4 +15,15 @@
 .companion-hint { position:absolute; bottom:calc(100% + 7px); left:50%; transform:translateX(-50%); padding:5px 9px; border:1px solid #d4ddbc; border-radius:10px; background:#fffef8; color:#485735; font:12px/1.4 system-ui,sans-serif; white-space:nowrap; pointer-events:none; opacity:0; transition:opacity .15s; }
 .floating-companion:hover .companion-hint, .floating-companion:focus-visible .companion-hint { opacity:1; }
 .floating-companion.is-dragging .companion-hint { opacity:0; }
+.floating-companion.has-bubbles .companion-hint { opacity:0; }
+.companion-bubbles { position:fixed; z-index:71; width:160px; display:flex; flex-direction:column; gap:8px; padding:4px; overflow-y:auto; box-sizing:border-box; animation:companion-bubble-in .16s ease-out; }
+.companion-bubbles button { display:flex; align-items:center; justify-content:center; gap:10px; width:100%; min-height:44px; padding:10px 14px; border:1px solid #bac997; border-radius:22px 22px 8px 22px; background:#fffef4; color:#283719; box-shadow:0 2px 4px #19231114; font:600 14px/1.4 system-ui,sans-serif; cursor:pointer; }
+.companion-bubbles button:hover:not(:disabled) { background:#e8f9b4; }
+.companion-bubbles button:focus-visible { outline:2px solid #708e32; outline-offset:1px; }
+.companion-bubbles button:disabled { opacity:.55; cursor:not-allowed; }
+[data-theme="dark"] .companion-bubbles button { background:#273020; color:#eef6df; border-color:#61744a; }
+[data-theme="dark"] .companion-bubbles button:hover:not(:disabled) { background:#394b28; }
+@keyframes companion-bubble-in { from { opacity:0; translate:0 5px; } to { opacity:1; translate:0 0; } }
+@media(prefers-reduced-motion:reduce) { .companion-bubbles { animation:none; } }
+@media print { .floating-companion, .companion-bubbles { display:none; } }
 @media(prefers-reduced-motion:reduce) { .floating-companion *, .floating-companion *::before { animation:none !important; transition:none !important; } .companion-fluid { transform:none !important; } .companion-fluid .question-companion i, .companion-fluid .question-companion span { translate:none; } }

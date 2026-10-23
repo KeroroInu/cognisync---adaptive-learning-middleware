@@ -1,4 +1,21 @@
 .classroom-admin { color: var(--text-primary); font-size: 16px; line-height: 1.6; }
+.student-assistant-config { margin:16px 0; }
+.installer-downloads { margin:16px 0; display:grid; gap:12px; }
+.installer-downloads p, .installer-downloads summary { font-size:13px; }
+.installer-download-actions { display:flex; flex-wrap:wrap; gap:12px; }
+.installer-download-actions a { display:grid; gap:3px; min-width:220px; padding:12px 16px; border:1px solid var(--line-strong); border-radius:8px; background:var(--surface-muted); color:var(--text-primary); text-decoration:none; }
+.installer-download-actions a:hover { border-color:#789363; }
+.installer-download-actions span { font-size:12px; color:var(--text-secondary); }
+.installer-checksum { overflow-wrap:anywhere; font-family:monospace; }
+.classroom-admin .assistant-config-toggle { width:100%; justify-content:space-between; text-align:left; background:transparent; border:0; padding:0; }
+.assistant-config-toggle span { color:var(--text-secondary); font-size:14px; }
+.assistant-config-body { display:grid; gap:12px; padding-top:12px; max-width:780px; }
+.assistant-config-body p { font-size:13px; }
+.assistant-config-body summary { cursor:pointer; font-size:14px; padding:6px 0; }
+.assistant-model-fields { display:grid; grid-template-columns:1fr 1fr; gap:12px; padding:8px 0; }
+.assistant-model-fields > label:last-child { grid-column:1 / -1; }
+.classroom-admin .assistant-key-warning { color:var(--text-secondary); border-left:3px solid #aa7b32; padding-left:10px; }
+@media(max-width:600px) { .assistant-model-fields { grid-template-columns:1fr; } }
 .classroom-admin h2 { font-size: 20px; font-weight: 700; line-height: 1.35; margin: 0; display: flex; align-items: center; gap: 10px; }
 .classroom-admin p { margin: 0; color: var(--text-secondary); }
 .classroom-admin button, .classroom-admin select { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 9px 14px; font: inherit; color: var(--text-primary); background: var(--bg-primary); border: 1px solid var(--glass-border); border-radius: 9px; cursor: pointer; }
@@ -9,7 +26,7 @@
 .classroom-admin input:not([type=checkbox]) { min-height: 44px; }
 .classroom-admin textarea { resize: vertical; }
 .classroom-admin :focus-visible { outline: 3px solid #8cab3e; outline-offset: 3px; }
-.classroom-admin .classroom-primary { background: #c9f32f; color: #18210d; border-color: #536326; font-weight: 700; }
+.classroom-admin .classroom-primary { background: var(--teacher-primary, #376347); color: var(--teacher-primary-text, #fff); border-color: var(--teacher-primary, #376347); font-weight: 650; }
 .classroom-admin .classroom-end { border-color: #a75b3f; color: #a1492a; }
 .classroom-toolbar, .classroom-actions, .classroom-session, .classroom-results > header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
 .classroom-actions { justify-content: flex-start; gap: 10px; }
@@ -69,14 +86,15 @@
 .classroom-confirm .classroom-actions { justify-content: flex-end; margin-top: 22px; }
 .classroom-confirm .classroom-end { background: #a1492a; color: #fff; border-color: #a1492a; font-weight: 700; }
 .classroom-admin button:not(:disabled):hover { border-color: var(--line-strong); background: var(--surface-muted); }
-.classroom-admin .classroom-primary:not(:disabled):hover { background: #bdf52f; border-color: #536326; }
+.classroom-admin .classroom-primary:not(:disabled):hover { background: var(--teacher-primary-hover, #294d36); border-color: var(--teacher-primary-hover, #294d36); }
 .classroom-confirm .classroom-end:not(:disabled):hover { background: #863b23; color: #fff; }
 @media (max-width: 1000px) { .classroom-workspace { grid-template-columns: 1fr; } }
 @media (max-width: 650px) { .classroom-panel { padding: 14px; } .classroom-fields { grid-template-columns: 1fr; } .classroom-toolbar { align-items: start; } .classroom-response-count span { margin-left: 0; } .classroom-session-actions { width: 100%; justify-content: space-between; } .classroom-confirm-content { padding: 20px; } }
 .classroom-admin > section, .classroom-admin > .classroom-workspace { margin-bottom: 12px; }
 .classroom-class-tabs { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
 .classroom-class-tabs button { padding: 12px 28px; font-weight: 700; }
-.classroom-class-tabs button[aria-pressed="true"] { background: #d0fa48; border-color: #31382b; }
+.classroom-admin .classroom-class-tabs button[aria-pressed="true"],
+.classroom-admin .classroom-class-tabs button[aria-pressed="true"]:hover { background: var(--teacher-accent, #d5ed91); color: #263719; border-color: #9fb874; }
 .classroom-history { color: #6b705f; }
 .classroom-lesson-bar, .classroom-question-sets > header { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
 .classroom-lesson-bar p, .classroom-question-sets > p { margin: 8px 0; font-size: 14px; color: #626858; }
@@ -90,3 +108,25 @@
 .classroom-set-editor input[type="checkbox"] { width: auto; }
 .classroom-answer-table ol { margin: 0; padding-left: 20px; }
 .classroom-answer-table li { margin-bottom: 12px; }
+.classroom-notices textarea { display:block; box-sizing:border-box; width:100%; margin:8px 0; padding:12px; border:1px solid var(--border-color,#d9dee7); border-radius:10px; background:var(--bg-secondary,#f7f8fa); color:var(--text-primary,#192331); resize:vertical; font:14px/1.7 inherit; }
+.classroom-notices .classroom-toolbar { margin-bottom:0; }
+.classroom-admin fieldset.notice-audience { display:flex; flex-wrap:wrap; gap:18px; border:0; padding:12px 0; margin:10px 0 0; }
+.notice-audience legend { font-size:13px; color:var(--text-secondary); }
+.classroom-admin .notice-audience label,.classroom-admin .notice-students label { display:flex; align-items:center; gap:8px; cursor:pointer; }
+.classroom-admin .notice-audience input[type="radio"] { width:18px; min-width:18px; max-width:18px; height:18px; min-height:18px; padding:0; margin:0; flex:0 0 18px; }
+.notice-audience input,.notice-students input { width:16px; height:16px; accent-color:var(--accent-color,#567523); }
+.notice-picker { padding:12px; margin:0 0 14px; border:1px solid var(--border-color); border-radius:12px; }
+.notice-picker > input { box-sizing:border-box; width:100%; padding:10px; border:1px solid var(--border-color); border-radius:8px; color:var(--text-primary); background:var(--bg-secondary); }
+.notice-picker > span { display:block; margin:8px 0; font-size:12px; color:var(--text-secondary); }
+.notice-students { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:8px; max-height:180px; overflow-y:auto; }
+.notice-students label { padding:8px; border-radius:8px; background:var(--bg-secondary); }
+.notice-students small,.notice-sent small { display:block; font-size:12px; color:var(--text-secondary); }
+.notice-sent { list-style:none; padding:0; margin:14px 0 0; max-height:200px; overflow-y:auto; }
+.notice-sent li { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 0; border-top:1px solid var(--border-color); }
+.classroom-admin .classroom-info, .classroom-admin .classroom-info:not(:disabled):hover { color:var(--teacher-blue); background:var(--teacher-blue-bg); border-color:var(--teacher-blue-line); }
+.classroom-admin .classroom-poll-action, .classroom-admin .classroom-poll-action:not(:disabled):hover { color:var(--teacher-poll); background:var(--teacher-poll-bg); border-color:var(--teacher-poll-line); }
+.classroom-admin .classroom-warning, .classroom-admin .classroom-warning:not(:disabled):hover { color:var(--teacher-warning); background:var(--teacher-warning-bg); border-color:var(--teacher-warning-line); }
+.classroom-admin .classroom-danger, .classroom-admin .classroom-danger:not(:disabled):hover { color:var(--teacher-danger); background:var(--teacher-danger-bg); border-color:var(--teacher-danger-line); }
+.classroom-admin :is(.classroom-info, .classroom-poll-action, .classroom-warning, .classroom-danger):not(:disabled):hover { text-decoration:underline; text-underline-offset:3px; }
+.installer-download-actions a { border-color:var(--teacher-blue-line); color:var(--teacher-blue); background:var(--teacher-blue-bg); }
+.installer-download-actions a:hover { border-color:var(--teacher-blue); }

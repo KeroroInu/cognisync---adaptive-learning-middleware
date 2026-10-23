@@ -1,0 +1,61 @@
+.student-access {
+  --access-bg:#f2f3ed; --access-card:#fffefa; --access-text:#25302a; --access-muted:#616b63;
+  --access-line:#d4dbd1; --access-field:#fffefa; --access-accent:#284c3e; --access-picked:#edf4e8;
+  --text-primary:var(--access-text); --text-secondary:var(--access-text); --text-tertiary:var(--access-muted);
+  --surface-strong:var(--access-field); --line:var(--access-line); --brand-cyan:#557d60;
+  min-height:100dvh; display:grid; place-items:center; padding:24px 16px; background:var(--access-bg); color:var(--access-text);
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif; color-scheme:light;
+}
+.student-access-card { width:min(100%,500px); padding:28px 32px 20px; background:var(--access-card); border:1px solid var(--access-line); border-radius:20px; box-shadow:0 16px 48px #24352a09; }
+.student-access-heading { margin-bottom:22px; }
+.student-access-heading p { margin:8px 0 0; font-size:14px; line-height:1.6; color:var(--access-muted); }
+.student-access-heading .student-access-brand { display:flex; align-items:center; gap:10px; margin:0 0 16px; font-size:12px; }
+.student-access-brand span { padding:5px 8px; border:1px solid var(--access-line); border-radius:6px; color:var(--access-text); font-size:12px; font-weight:750; letter-spacing:.1em; }
+.student-access h1 { font-size:28px; line-height:1.25; letter-spacing:-.02em; font-weight:650; margin:0; }
+.student-access form { display:flex; flex-direction:column; gap:14px; }
+.student-access-fields { display:flex; flex-direction:column; gap:16px; padding:0; margin:0; border:0; min-width:0; }
+.student-access-row { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,.9fr); gap:16px; align-items:start; }
+.student-access input:not([type=radio]) { min-height:46px; height:46px; font-size:16px; box-shadow:none; border-radius:9px; padding:10px 12px; transition:border-color .15s; }
+.student-access input::placeholder { color:var(--access-muted); opacity:.85; }
+.student-access select { display:block; width:100%; min-height:46px; margin-top:6px; padding:10px 12px; border:1px solid var(--access-line); border-radius:9px; background:var(--access-field); color:var(--access-text); font:inherit; font-size:16px; }
+.student-access label, .student-access legend { font-size:14px; line-height:20px; font-weight:550; }
+.student-access-choice { padding:0; border:0; margin:0; min-width:0; }
+.student-access-choice legend { margin-bottom:6px; }
+.student-access-choice > div { display:flex; gap:8px; }
+.student-access-choice label { position:relative; flex:1; min-width:0; cursor:pointer; }
+.student-access-choice input { position:absolute; opacity:0; width:1px; height:1px; }
+.student-access-choice span { display:flex; align-items:center; justify-content:center; gap:8px; border:1px solid var(--access-line); min-height:46px; border-radius:9px; background:var(--access-field); transition:border-color .15s,background-color .15s; }
+.student-access-choice i { font-size:19px; font-style:normal; }
+.student-access-choice input:checked + span { background:var(--access-picked); border-color:#668b6f; box-shadow:inset 0 0 0 1px #668b6f; }
+.student-access-choice input:focus-visible + span { outline:3px solid #7d9c78; outline-offset:3px; }
+.student-access .student-access-hint { margin:6px 0 0; font-size:12px; line-height:1.6; color:var(--access-muted); }
+.student-access-password { position:relative; }
+.student-access-password input { padding-right:52px; }
+.student-access-password > button { display:grid; place-items:center; position:absolute; right:1px; bottom:1px; width:44px; height:44px; border:0; background:transparent; color:var(--access-muted); border-radius:8px; cursor:pointer; }
+.student-access-primary { display:flex; gap:10px; align-items:center; justify-content:center; min-height:48px; padding:12px 16px; border:0; border-radius:10px; background:var(--access-accent); color:#fff; font-size:16px; font-weight:600; cursor:pointer; transition:filter .15s; }
+.student-access-primary:hover { filter:brightness(1.1); }
+.student-access-link { min-height:44px; padding:8px; border:0; background:transparent; color:var(--access-text); font-size:14px; cursor:pointer; text-underline-offset:4px; }
+.student-access-link:hover { text-decoration:underline; }
+.student-access :focus-visible { outline:3px solid #7d9c78; outline-offset:3px; }
+.student-access button:disabled { opacity:.55; cursor:not-allowed; }
+.student-access .student-access-error { margin:0; border:1px solid #e6bdb5; border-radius:9px; padding:10px 12px; background:#fff1ed; color:#953c2a; font-size:14px; line-height:1.6; overflow-wrap:anywhere; }
+.student-access-login .student-access-card { max-width:440px; }
+.student-access-layout { width:min(100%,1120px); display:grid; grid-template-columns:minmax(0,1.2fr) minmax(320px,.9fr); align-items:center; gap:clamp(24px,4vw,64px); }
+.student-access-login .student-access-card { justify-self:end; }
+.student-access-visual { position:relative; min-width:0; width:100%; height:min(740px,calc(100dvh - 64px)); min-height:400px; overflow:hidden; }
+.student-access-login .student-access-visual .retro-terminal-scene { position:absolute; top:50%; left:50%; width:640px; max-width:none; transform:translate(-50%,-50%) scale(var(--access-terminal-scale,.6)); transform-origin:center; }
+.student-access-visual .terminal-scene-label { color:var(--access-muted); border-color:var(--access-line); }
+.student-access-visual .terminal-scene-note { margin-top:56px; color:var(--access-muted); font-family:inherit; }
+.student-access-visual .terminal-sticker-profile { background:#bed09a; }
+.student-access-visual .terminal-sticker-next { background:#d7e0be; }
+.student-access-login .student-access-heading { margin-bottom:28px; }
+.student-access-login .student-access-hint { text-align:center; }
+[data-theme=dark] .student-access, .dark .student-access {
+  --access-bg:#181f1c; --access-card:#222c26; --access-text:#edf1e8; --access-muted:#b4c0b4;
+  --access-line:#465448; --access-field:#28332c; --access-accent:#426a52; --access-picked:#354b3c; color-scheme:dark;
+}
+[data-theme=dark] .student-access-error, .dark .student-access-error { background:#422d29; border-color:#88574d; color:#ffd5cb; }
+@media(max-width:760px) { .student-access-layout { display:block; width:min(100%,440px); } .student-access-visual { display:none; } }
+@media(max-width:480px) { .student-access { padding:16px 12px; } .student-access-card { padding:24px 20px 14px; border-radius:16px; } .student-access-row { gap:12px; } }
+@media(max-height:740px) { .student-access { padding-top:12px; padding-bottom:12px; } .student-access-card { padding-top:18px; padding-bottom:12px; } .student-access-heading { margin-bottom:16px; } .student-access-heading .student-access-brand { margin-bottom:10px; } .student-access-fields { gap:12px; } .student-access form { gap:10px; } }
+@media(prefers-reduced-motion:reduce) { .student-access *, .student-access *::before, .student-access *::after { transition:none!important; animation:none!important; } }

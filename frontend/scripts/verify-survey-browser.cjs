@@ -15,6 +15,7 @@ const assert = require('node:assert/strict');
       const pathname = new URL(route.request().url()).pathname;
       const json = (data, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(data) });
       if (pathname === '/api/auth/me') return json({ success: true, data: { user: { id: 'survey-user', name: '试填同学', experimentGroup: 'ai_pbl', hasCompletedOnboarding: true }, profile: null } });
+      if (pathname === '/api/project-review/current') return json({success:true,data:null});
       if (pathname === '/api/assessments/pending') return json({ success: true, data: submitted ? null : { id: 'survey', phase: 'pre', revision: 1, questions: survey.questions, served_at: new Date().toISOString() } });
       if (pathname === '/api/assessments/survey/responses') {
         if (!failed) { failed = true; return json({ detail: '模拟网络中断，请重试' }, 503); }

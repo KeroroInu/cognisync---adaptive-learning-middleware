@@ -1,0 +1,21 @@
+.task-design label { display: flex; flex-direction: column; gap: .4rem; font-size: .9rem; }
+.task-design textarea { width: 100%; min-width: 0; border: 1px solid; border-radius: 8px; font: inherit; }
+.task-design [role=alert] { color: #c15337; }
+.task-design.task-design-studio { border: 0; margin: 0; padding: 0; height: 100%; display: flex; flex-direction: column; min-height: 0; }
+.task-design-topbar { display: flex; gap: 16px; justify-content: space-between; flex-wrap: wrap; align-items: center; border-bottom: 1px solid var(--line); padding: 0 0 12px; }
+.task-design-topbar nav, .task-design-topbar > div { display: flex; gap: 8px; align-items: center; }
+.task-design-title { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 17px; font-weight: 600; }
+.task-design-topbar small { margin-right: 10px; font-size: 11px; color: var(--text-secondary); }
+.preparation .task-design-topbar nav button { background: transparent; border-color: transparent; }
+.preparation .task-design-topbar nav button[aria-pressed=true] { background: var(--surface-muted); }
+.task-design-studio > p { font-size: 12px; padding: 7px 0; margin: 0; }
+.task-requirements { padding: 32px 20px; width: min(800px, 100%); margin: 0 auto; overflow-y: auto; }
+.task-requirements h2 { font-size: 27px; margin: 14px 0; font-weight: 600; }
+.task-requirements p, .task-requirements small { color: var(--text-secondary); line-height: 1.8; font-size: 13px; }
+.task-requirements label { margin: 24px 0 12px; }
+.task-requirements textarea { background: var(--surface-strong); color: var(--text-primary); border-color: var(--line-strong); padding: 16px; resize: vertical; line-height: 1.9; }
+.task-drawio-panel { flex: 1; min-height: 400px; margin-top: 12px; }
+.drawio-host { height: 100%; min-height: 400px; position: relative; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.drawio-host iframe { border: 0; display: block; width: 100%; height: 100%; min-height: 400px; background: white; }
+.drawio-host > p, .drawio-host > div { padding: 16px; }
+@media (max-width: 780px) { .task-drawio-panel, .drawio-host, .drawio-host iframe { height: 70dvh; min-height: 500px; } .task-design-topbar { gap: 10px; } .task-design-topbar > div { flex-wrap: wrap; } .task-requirements { padding: 24px 5px; } }

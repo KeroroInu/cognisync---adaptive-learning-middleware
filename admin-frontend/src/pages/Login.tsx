@@ -75,10 +75,10 @@ export const Login = () => {
               <Shield size={28} />
             </div>
             <h1 className="metallic-text text-3xl font-bold leading-tight">
-              CogniSync 教师端
+              SFLS 教师端
             </h1>
             <p className="mt-2 text-sm" style={{ color: 'var(--text-tertiary)' }}>
-              项目解构教学、过程诊断与研究数据控制台
+              布置任务、查看学生与导出数据
             </p>
           </div>
 

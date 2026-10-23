@@ -1,13 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Hash, AlertCircle } from 'lucide-react';
-import { Button } from '../components/Button';
+import { ArrowRight, Eye, EyeOff } from 'lucide-react';
 import { Input } from '../components/Input';
-import { SpotlightCard } from '../components/SpotlightCard';
 import { RetroLearningTerminal } from '../components/RetroLearningTerminal';
 import { login } from '../services/api';
 import { translations } from '../utils/translations';
 import type { Language } from '../types';
-import './Login.css';
+import { normalizeStudentId } from '../utils/studentRegistration';
+import './StudentAccess.css';
 
 export interface LoginProps {
   language: Language;
@@ -25,23 +24,40 @@ export const Login: React.FC<LoginProps> = ({
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showVisual, setShowVisual] = useState(() =>
+    typeof window !== 'undefined' && window.matchMedia('(min-width: 761px)').matches,
+  );
   const visualRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    const viewport = window.matchMedia('(min-width: 761px)');
+    const update = () => setShowVisual(viewport.matches);
+    update();
+    viewport.addEventListener('change', update);
+    return () => viewport.removeEventListener('change', update);
+  }, []);
+
   useEffect(() => {
     const visual = visualRef.current;
-    if (!visual) return;
-    const fit = () => visual.style.setProperty('--terminal-scene-scale', String(Math.min(
-      Math.max(0, visual.clientWidth - 40) / 640,
-      Math.max(0, visual.clientHeight - 40) / 740,
-      1,
-    )));
+    if (!visual || !showVisual) return;
+    const fit = () => {
+      const sceneHeight = visual.querySelector<HTMLElement>('.retro-terminal-scene')?.offsetHeight || 800;
+      visual.style.setProperty('--access-terminal-scale', String(Math.min(
+        Math.max(0, visual.clientWidth - 64) / 640,
+        Math.max(0, visual.clientHeight - 40) / sceneHeight,
+        1,
+      )));
+    };
     fit();
     const observer = new ResizeObserver(fit);
     observer.observe(visual);
     return () => observer.disconnect();
-  }, []);
+  }, [showVisual]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isLoading) return;
     setError(null);
 
     if (!studentId || !password) {
@@ -52,7 +68,7 @@ export const Login: React.FC<LoginProps> = ({
     setIsLoading(true);
 
     try {
-      const response = await login({ student_id: studentId, password });
+      const response = await login({ student_id: normalizeStudentId(studentId), password });
 
       if (response.success && response.data) {
         onLoginSuccess(
@@ -76,41 +92,38 @@ export const Login: React.FC<LoginProps> = ({
   };
 
   return (
-    <div className="auth-shell auth-shell-login">
-      <div className="login-stage">
-        <section className="auth-wrap login-panel animate-scale-in">
-          <div className="login-brandline">
-            <span className="login-brandmark">C</span>
-            <span>COGNISYNC / PROJECT DECONSTRUCTION</span>
-          </div>
-          <div className="auth-header login-header">
-            <p className="login-kicker">WELCOME BACK / 2026</p>
-            <h1 className="auth-title">{t.loginTitle}</h1>
-            <p className="auth-copy">{t.loginDesc}</p>
-          </div>
-
-          <SpotlightCard className="auth-card login-card" spotlightColor="rgba(142, 169, 68, 0.13)">
-            <form onSubmit={handleSubmit} className="space-y-6">
+    <main className="student-access student-access-login">
+      <div className="student-access-layout">
+        {showVisual && <aside ref={visualRef} className="student-access-visual" aria-hidden="true">
+          <RetroLearningTerminal language={language} />
+        </aside>}
+        <section className="student-access-card" aria-labelledby="login-title">
+          <header className="student-access-heading">
+            <p className="student-access-brand"><span>SFLS</span> 编程课堂</p>
+            <h1 id="login-title">登录课堂</h1>
+            <p>查看本课任务，继续你的作品。</p>
+          </header>
+            <form onSubmit={handleSubmit} aria-busy={isLoading}>
               {error && (
-                <div className="auth-error animate-fade-in">
-                  <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0" />
-                  <p className="m-0 text-sm">{error}</p>
-                </div>
+                <p className="student-access-error" role="alert">{error}</p>
               )}
 
               <Input
                 type="text"
                 label={t.studentId}
-                placeholder={t.studentIdPlaceholder}
+                placeholder="填写完整学号"
                 value={studentId}
                 onChange={(e) => setStudentId(e.target.value)}
                 disabled={isLoading}
                 autoComplete="username"
+                autoCapitalize="characters"
+                spellCheck={false}
+                maxLength={50}
                 required
               />
 
-              <Input
-                type="password"
+              <div className="student-access-password"><Input
+                type={showPassword ? 'text' : 'password'}
                 label={t.password}
                 placeholder={t.passwordPlaceholder}
                 value={password}
@@ -119,41 +132,13 @@ export const Login: React.FC<LoginProps> = ({
                 autoComplete="current-password"
                 required
               />
-
-              <Button type="submit" variant="primary" size="lg" isLoading={isLoading} className="w-full login-submit">
-                <Hash className="w-5 h-5 mr-2" />
-                {isLoading ? t.loggingIn : t.loginButton}
-              </Button>
-
-              <div className="auth-footer">
-                {t.noAccount}{' '}
-                <button type="button" onClick={onNavigateToRegister} className="auth-link">
-                  {t.signUp}
-                </button>
-              </div>
-
-              {/*
-                忘记密码的出路。
-
-                系统没有自助找回（学生多数没填邮箱，也不宜为测试期引入新的认证面），
-                管理端本来就有重置密码功能，缺的只是让学生知道该找谁。
-                另外注册中断的账号只能用原密码登录续做，忘了密码就彻底卡死，
-                这里必须给一句明确指引，否则学生只会反复重填学号。
-              */}
-              <p className="auth-footer" style={{ marginTop: '0.5rem', opacity: 0.75 }}>
-                {language === 'zh'
-                  ? '忘记密码，或注册中断后登不进来？请联系老师重置密码。'
-                  : 'Forgot your password, or stuck after an interrupted sign-up? Ask your teacher to reset it.'}
-              </p>
+              <button type="button" disabled={isLoading} aria-label={showPassword ? '隐藏密码' : '显示密码'} aria-pressed={showPassword} onClick={() => setShowPassword(value => !value)}>{showPassword ? <EyeOff size={19} /> : <Eye size={19} />}</button></div>
+              <button type="submit" disabled={isLoading} className="student-access-primary">{isLoading ? '正在登录…' : '登录'}<ArrowRight size={18} aria-hidden="true" /></button>
+              <button type="button" disabled={isLoading} onClick={onNavigateToRegister} className="student-access-link">第一次来？创建账号</button>
+              <p className="student-access-hint">忘记密码或资料填错了？请联系老师。</p>
             </form>
-          </SpotlightCard>
-          <p className="login-footnote">OBSERVE · DECONSTRUCT · REBUILD · VERIFY</p>
-        </section>
-
-        <section ref={visualRef} className="login-visual">
-          <RetroLearningTerminal language={language} />
         </section>
       </div>
-    </div>
+    </main>
   );
 };

@@ -65,10 +65,11 @@ export interface ProjectScaffoldMetadata {
   requestId: string;
   taskId: string;
   taskTitle?: string;
-  stage: 'observe' | 'decompose' | 'model' | 'plan' | 'build';
+  stage: 'observe' | 'decompose' | 'model' | 'plan' | 'build' | 'transfer';
   level: 0 | 1 | 2 | 3;
   trigger: 'hint_button' | 'student_message' | 'level_up' | 'minimum_completion' | 'l3_confirmed';
   l3Confirmed?: boolean;
+  interaction?: 'function_discussion';
   artifactSummary?: string;
   currentModule?: string;
   testFeedback?: string;
@@ -135,6 +136,7 @@ export interface LoginRequest {
 }
 
 export interface RegisterRequest {
+  schoolClass?: string;
   student_id: string;
   name: string;
   password: string;

@@ -20,11 +20,13 @@ beforeEach(() => {
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 describe('classroom registration and question', () => {
-  it('classroom registration only asks for name, student ID, password and optional gender', () => {
+  it('classroom registration asks for identity, gender, grade/class and password without research groups', () => {
     const html = renderToStaticMarkup(<Register classroomOnly language="zh" onRegisterSuccess={() => {}} onPendingScale={() => {}} onNavigateToLogin={() => {}} />);
     expect(html).toContain('姓名'); expect(html).toContain('学号'); expect(html).toContain('密码');
     expect(html).toContain('minLength="6"'); expect(html).toContain('显示密码');
-    expect(html).toContain('暂不填写'); expect(html).toContain('男'); expect(html).toContain('女');
+    expect(html).toContain('高一'); expect(html).toContain('高三'); expect(html).toContain('7 班'); expect(html).not.toContain('8 班');
+    expect(html).not.toContain('解构班'); expect(html).not.toContain('开发班'); expect(html).toContain('男'); expect(html).toContain('女');
+    expect(html).toContain('G 开头、含 20xx'); expect(html).not.toContain('暂不填写');
     expect(html).not.toContain('确认密码'); expect(html).not.toContain('邮箱'); expect(html).not.toContain('例如：高二');
     expect(html).not.toContain('认知'); expect(html).not.toContain('选择测评');
   });

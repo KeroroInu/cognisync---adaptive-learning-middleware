@@ -264,6 +264,8 @@ export const observationArtifacts = (
       observationText: card.observationText,
       source: card.source,
       createdAt: card.createdAt,
+      updatedAt: card.updatedAt,
+      provenance: card.provenance,
     },
     change_source: changeSource,
   }));
@@ -281,6 +283,7 @@ export const functionCardArtifacts = (
       observationText: card.observationText,
       responsibility: card.responsibility,
       implementation: card.implementation ?? '',
+      discussion: card.discussion,
       input: card.input,
       output: card.output,
       knowledge: card.knowledge,

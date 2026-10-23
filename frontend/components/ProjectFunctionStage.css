@@ -12,6 +12,17 @@
 
 .function-results-panel { display:contents; }
 
+/* Neutral surfaces need light text; lime actions keep dark ink. */
+[data-theme='dark'] .project-function-stage :is(.function-composer-actions button, .function-stage-footer button, .function-stage-empty button) { color:var(--text-primary); border-color:var(--line-strong); }
+[data-theme='dark'] .project-function-stage :is(.function-composer-actions button.is-primary, .function-stage-footer button.is-primary, .mapping-decision-actions button.is-primary, .function-section-label > span, .function-discussion-suggestion button, .function-discussion-input button) { color:#161713; }
+[data-theme='dark'] .project-function-stage :is(.function-stage-heading > div > span, .function-observation-list button > span, .saved-function-grid article > header > span, .saved-function-grid dt, .mapping-accepted-state > p) { color:var(--brand-blue); }
+[data-theme='dark'] .project-function-stage :is(.function-discussion-error, .function-mapping-error, .function-coverage-error) { color:#ffb4a0; }
+[data-theme='dark'] .project-function-stage :is(.function-observation-list button.is-selected, .function-observation-list button:hover) { background:color-mix(in srgb, var(--brand-cyan) 10%, var(--surface-strong)); border-color:var(--brand-blue); }
+[data-theme='dark'] .project-function-stage :is(.function-observation-source, .function-card-composer, .saved-function-section, .function-stage-empty, .saved-function-grid > article) { border-color:var(--line-strong); }
+[data-theme='dark'] .project-function-stage :is(input, textarea)::placeholder { color:var(--text-tertiary); opacity:1; }
+[data-theme='dark'] .project-function-stage button:focus-visible { outline:2px solid var(--brand-cyan); outline-offset:3px; }
+[data-theme='dark'] .project-function-stage :is(.function-composer-actions button, .function-stage-footer button):disabled { color:var(--text-tertiary); }
+
 .function-stage-heading {
   display: flex;
   align-items: flex-start;
@@ -500,25 +511,10 @@
 .function-field textarea:focus { border-color: #161713; box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand-cyan) 48%, transparent); }
 .function-field textarea::placeholder { color: var(--text-tertiary); }
 
-.function-quick-phrases { display: grid; gap: 6px; margin-top: 9px; }
-.function-quick-phrases > small { color: var(--text-tertiary); font-size: .62rem; }
-.function-quick-phrases > div { display: flex; flex-wrap: wrap; gap: 6px; }
-.function-quick-phrases button {
-  min-height: 30px;
-  padding: 0 10px;
-  border: 1px solid var(--line-strong);
-  border-radius: 999px;
-  background: var(--surface-muted);
-  color: var(--text-secondary);
-  font-size: .68rem;
-  font-weight: 700;
-  cursor: pointer;
-}
-.function-quick-phrases button:hover { border-color: #161713; color: #161713; }
-
 .function-observation-list button.is-used { border-style: dashed; }
 
 .saved-function-implementation {
+  white-space: pre-wrap;
   margin: 0;
   padding: 8px 10px;
   border-left: 3px solid var(--brand-cyan);
@@ -529,6 +525,34 @@
 }
 .saved-function-implementation.is-empty { border-left-color: var(--line-strong); color: var(--text-tertiary); font-size: .66rem; }
 
+.function-discussion { display:flex; flex-direction:column; gap:10px; margin-top:12px; min-width:0; }
+.function-discussion > header { display:flex; align-items:center; gap:8px; font-size:14px; }
+.function-discussion > header strong { flex:1; }
+.function-discussion > header button { flex:none; font-size:12px; }
+.function-discussion-pet { position:relative; width:34px; height:34px; overflow:hidden; flex:none; }
+.function-discussion-pet .question-companion { position:absolute; margin:0; transform:scale(.46); transform-origin:top left; animation:none; }
+.function-discussion-stream { min-height:88px; max-height:230px; overflow:auto; overscroll-behavior:contain; display:flex; flex-direction:column; gap:10px; padding:10px; background:var(--surface-muted); border-radius:8px; }
+.function-discussion-stream[hidden] { display:none; }
+.function-discussion-message { padding:9px 11px; border:1px solid var(--line-strong); border-radius:9px; background:var(--surface-strong); overflow-wrap:anywhere; font-size:14px; line-height:1.55; }
+.function-discussion-message.is-user { margin-left:24px; background:color-mix(in srgb, var(--brand-cyan) 16%, var(--surface-strong)); }
+.function-discussion-message small { color:var(--text-secondary); font-size:12px; }
+.function-discussion-message p { margin:4px 0; white-space:pre-wrap; }
+.function-discussion-empty { margin:0; font-size:14px; color:var(--text-secondary); }
+.function-discussion-suggestion pre { white-space:pre-wrap; overflow-wrap:anywhere; font:inherit; margin:8px 0; }
+.function-discussion button { min-height:34px; padding:5px 10px; border:1px solid var(--line-strong); border-radius:7px; color:var(--text-primary); background:var(--surface-strong); cursor:pointer; }
+.function-discussion button:disabled { opacity:.5; cursor:not-allowed; }
+.function-discussion-suggestion button { background:var(--brand-cyan); color:var(--brand-ink); }
+.function-discussion-input { display:flex; align-items:stretch; gap:7px; }
+.function-discussion-input textarea { flex:1; min-width:0; resize:vertical; padding:9px; border:1px solid var(--line-strong); border-radius:8px; font:inherit; font-size:14px; background:var(--surface-strong); color:var(--text-primary); }
+.function-discussion-input button { flex:none; background:var(--brand-cyan); color:var(--brand-ink); }
+.function-discussion-error { color:#9a4b3b; margin:0; font-size:13px; }
+.function-write-steps { align-self:flex-start; }
+.function-discussion :is(button,textarea):focus-visible { outline:2px solid var(--brand-positive); outline-offset:2px; }
+@media (max-height:700px) and (min-width:981px) { .function-discussion-stream { max-height:170px; } }
+
+.function-idea-tools { display:flex; flex-wrap:wrap; gap:8px; margin:10px 0; }
+.function-idea-tools button { padding:8px 12px; border:1px solid var(--line-strong); border-radius:10px; background:var(--surface-strong); color:var(--text-primary); font:inherit; cursor:pointer; }
+.function-idea-tools button:disabled { opacity:.45; cursor:not-allowed; }
 .function-coverage-panel {
   display: grid;
   gap: 9px;
@@ -609,6 +633,14 @@
   .function-field > span { font-size:14px; }
   .function-stage-footer { margin:0; padding:8px 0 0; }
   .function-stage-footer > div { font-size:12px; }
-  .function-composer-actions { position:sticky; bottom:-12px; padding:10px 0; background:var(--surface-strong); }
+  .function-card-composer { display:flex; flex-direction:column; overflow:hidden; }
+  .function-card-composer > .function-evidence-quote { flex:none; margin:0 0 6px; }
+  .function-card-composer > .function-field { flex:none; margin-top:0; }
+  .function-card-composer .function-discussion { flex:1; min-height:0; gap:7px; margin-top:8px; }
+  .function-discussion-stream { flex:1; min-height:50px; max-height:none; }
+  .function-discussion .function-field { display:flex; flex-direction:column; flex:1; min-height:0; margin-top:0; }
+  .function-discussion .function-field textarea { flex:1; min-height:60px; resize:none; }
+  .function-discussion-input, .function-write-steps, .function-discussion > header { flex:none; }
+  .function-composer-actions { flex:none; margin-top:8px; padding:8px 0 0; background:var(--surface-strong); }
   .function-stage-empty { grid-column:1 / -1; min-height:0; }
 }

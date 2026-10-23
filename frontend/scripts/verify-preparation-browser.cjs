@@ -10,6 +10,7 @@ const root = process.env.STUDENT_BUILD_DIR || path.resolve(__dirname, '../dist')
     await context.addInitScript(() => localStorage.setItem('cognisync-token', 'isolated-ui-test'));
     let failLoad = true, student = 'ui-student-a', count = 0, failAnswer = true, failUpload = true;
     let pending = null, submission = { count: 0, last_submitted_at: null };
+    let chatGate = Promise.resolve(), failChat = false;
     const uploadRequests = [];
     const records = { 'ui-student-a': [{ id: 'cloud-save', kind: 'save', payload: { request: { code: 'print(7)', message: '', output: [], error: '' }, status: 'saved' } }], 'ui-student-b': [] };
     const posts = [], errors = [], unknown = [];
@@ -21,6 +22,8 @@ const root = process.env.STUDENT_BUILD_DIR || path.resolve(__dirname, '../dist')
       const json = (data, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(data) });
       if (pathname === '/api/auth/me') return json({ success: true, data: { user: { id: student, name: '测试同学', experimentGroup: 'ai_pbl', hasCompletedOnboarding: true }, profile: null } });
       if (pathname === '/api/assessments/pending') return json({ success: true, data: pending });
+      if (pathname === '/api/project-review/current') return json({success:true,data:null});
+      if (pathname === '/api/learning-support/state') return json({ success: true, data: { level: 0, paused: false, history: [] } });
       if (pathname === '/api/classroom/state') return json({ success: true, data: classroom });
       if (pathname === '/api/assessments/batch/responses') {
         const body = route.request().postDataJSON();
@@ -40,6 +43,10 @@ const root = process.env.STUDENT_BUILD_DIR || path.resolve(__dirname, '../dist')
       if (pathname === '/api/preparation/records') {
         if (route.request().method() === 'GET') return failLoad ? json({ detail: '模拟读取失败' }, 503) : json({ success: true, data: records[student] });
         const body = route.request().postDataJSON(); posts.push(body);
+        if (body.kind === 'chat') {
+          await chatGate;
+          if (failChat) return json({ detail: '模拟 AI 回复失败' }, 503);
+        }
         const record = { id: `record-${++count}`, kind: body.kind, payload: { request: body, status: body.kind === 'chat' ? 'answered' : 'saved', reply: body.kind === 'chat' ? '这句会输出 7。\n```python\nprint(7)  # 显示结果\n```' : undefined } };
         records[student].push(record); return json({ success: true, data: record });
       }
@@ -61,7 +68,9 @@ const root = process.env.STUDENT_BUILD_DIR || path.resolve(__dirname, '../dist')
     await page.locator('.cm-content').waitFor();
     assert.equal(await page.locator('.cm-content').innerText(), 'print(7)');
     // The companion is a local launcher, not another chat session or model call.
-    const pet = page.getByRole('button', { name: '小精灵：打开 AI 助手', exact: true });
+    const pet = page.getByRole('button', { name: '小精灵：展开工具', exact: true });
+    assert.equal(await page.locator('.floating-companion').count(), 1);
+    assert.equal(await page.locator('.student-theme-float').count(), 0);
     await page.getByRole('button', { name: '收起 AI 助手', exact: true }).click();
     const start = await pet.boundingBox();
     await page.mouse.move(start.x + 34, start.y + 34); await page.mouse.down();
@@ -82,8 +91,34 @@ const root = process.env.STUDENT_BUILD_DIR || path.resolve(__dirname, '../dist')
     assert.ok(Math.abs((await pet.boundingBox()).x - moved.x) < 1, 'remember position after reload');
     await page.getByRole('button', { name: '收起 AI 助手', exact: true }).click();
     await pet.click();
+    assert.equal(await page.getByRole('textbox', { name: '向 AI 提问', exact: true }).isVisible(), false, 'opening tools must not open chat');
+    await page.getByRole('button', { name: '提问', exact: true }).click();
     assert.equal(await page.getByRole('textbox', { name: '向 AI 提问', exact: true }).isVisible(), true);
     assert.equal(posts.filter(p => p.kind === 'chat').length, 0, 'opening does not send a model request');
+    const initialTheme = await page.locator('html').getAttribute('data-theme');
+    const themeSurfaces = ['.preparation', '.preparation-chat', '.preparation-chat textarea', '.preparation-editor .cm-editor'];
+    const readSurfaces = () => Promise.all(themeSurfaces.map(selector => page.locator(selector).evaluate(el => getComputedStyle(el).backgroundColor)));
+    const initialSurfaces = await readSurfaces();
+    await page.screenshot({ path: path.join(require('node:os').tmpdir(), `cognisync-preparation-theme-${initialTheme}.png`) });
+    await pet.click();
+    await page.getByRole('button', { name: '切换模式', exact: true }).click();
+    const changedTheme = await page.locator('html').getAttribute('data-theme');
+    assert.notEqual(changedTheme, initialTheme);
+    const changedSurfaces = await readSurfaces();
+    themeSurfaces.forEach((selector, index) => assert.notEqual(changedSurfaces[index], initialSurfaces[index], `${selector} must follow theme`));
+    assert.equal(await page.locator('.cm-content').innerText(), 'print(7)', 'theme switch must preserve the code');
+    await page.screenshot({ path: path.join(require('node:os').tmpdir(), `cognisync-preparation-theme-${changedTheme}.png`) });
+    assert.equal(await pet.getAttribute('aria-expanded'), 'false');
+    await page.reload(); await pet.waitFor();
+    assert.equal(await page.locator('html').getAttribute('data-theme'), changedTheme);
+    await pet.press('Enter');
+    assert.equal(await page.getByRole('group', { name: '小精灵工具' }).isVisible(), true);
+    await page.keyboard.press('Escape');
+    assert.equal(await pet.getAttribute('aria-expanded'), 'false');
+    assert.equal(await pet.evaluate(el => el === document.activeElement), true);
+    await pet.click();
+    await page.locator('.preparation-header strong').click();
+    assert.equal(await pet.getAttribute('aria-expanded'), 'false');
     await page.emulateMedia({ reducedMotion: 'reduce' });
     assert.equal(await pet.locator('.question-companion').evaluate(el => getComputedStyle(el).animationName), 'none');
     await page.getByRole('button', { name: '收起 AI 助手', exact: true }).click();
@@ -98,12 +133,17 @@ const root = process.env.STUDENT_BUILD_DIR || path.resolve(__dirname, '../dist')
     assert.equal(await page.getByRole('textbox', { name: '向 AI 提问', exact: true }).isVisible(), false);
     await page.waitForFunction(() => Math.abs(document.querySelector('.floating-companion').getBoundingClientRect().x - 56) < 2, null, { timeout: 2000 }).catch(async () => { throw Error(`Touch position: ${JSON.stringify({ start: touchStart, end: await pet.boundingBox() })}`); });
     await cdp.detach();
+    await pet.click();
+    const menu = await page.getByRole('group', { name: '小精灵工具' }).boundingBox();
+    assert.ok(menu.x >= 0 && menu.x + menu.width <= 390 && menu.y >= 0 && menu.y + menu.height <= 844);
     await page.screenshot({ path: path.join(require('node:os').tmpdir(), 'cognisync-companion-mobile.png') });
+    await page.keyboard.press('Escape');
     await page.setViewportSize({ width: 1280, height: 720 });
     await pet.press('Enter');
     await page.emulateMedia({ reducedMotion: 'no-preference' });
     await page.getByRole('button', { name: /作业与资料/ }).click();
     await page.getByRole('heading', { name: '独立创作任务' }).waitFor();
+    assert.equal(await page.locator('.prep-material-dialog').evaluate(el => getComputedStyle(el).backgroundColor), changedSurfaces[2], 'assignment dialog follows the same theme as the composer surface');
     const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: '下载作业包' }).click()]);
     assert.ok(download.suggestedFilename().endsWith('.zip'));
     await page.locator('input[type=file]').setInputFiles({ name: 'submission.zip', mimeType: 'application/zip', buffer: Buffer.from('fixture-only') });
@@ -131,11 +171,47 @@ const root = process.env.STUDENT_BUILD_DIR || path.resolve(__dirname, '../dist')
     const question = page.getByRole('textbox', { name: '向 AI 提问' });
     await question.fill('解释一下'); await question.press('Shift+Enter');
     assert.equal(posts.filter(p => p.kind === 'chat').length, 0);
+    await question.dispatchEvent('keydown', { key: 'Enter', keyCode: 229, isComposing: true });
+    assert.equal(posts.filter(p => p.kind === 'chat').length, 0);
+    let releaseChat;
+    chatGate = new Promise(resolve => { releaseChat = resolve; });
     await question.press('Enter');
+    assert.equal(await question.inputValue(), '', 'preparation input clears before the response');
+    await page.getByText('解释一下', { exact: true }).waitFor();
+    await page.getByText('正在回复…', { exact: true }).waitFor();
+    await question.fill('下一句还没写完'); await question.press('Enter');
+    releaseChat();
     await page.getByText('这句会输出 7。', { exact: true }).waitFor();
+    assert.equal(await question.inputValue(), '下一句还没写完', 'reply preserves next draft');
+    assert.equal(await page.locator('.preparation-question').count(), 1, 'optimistic turn replaced, not duplicated');
     assert.equal(posts.filter(p => p.kind === 'chat').length, 1);
     assert.equal(posts.at(-1).code, 'print(19)');
     assert.equal(posts.at(-1).last_run_code, 'print(7)');
+    const verifyContrast = async () => {
+      const ratios = await page.locator('.preparation-messages article').evaluateAll(articles => {
+        const luminance = color => {
+          const rgb = color.match(/[\d.]+/g).slice(0, 3).map(Number).map(n => { n /= 255; return n <= .04045 ? n / 12.92 : ((n + .055) / 1.055) ** 2.4; });
+          return rgb[0] * .2126 + rgb[1] * .7152 + rgb[2] * .0722;
+        };
+        return articles.map(article => {
+          const p = getComputedStyle(article.querySelector('p')), a = luminance(p.color), b = luminance(getComputedStyle(article).backgroundColor);
+          return { ratio: (Math.max(a, b) + .05) / (Math.min(a, b) + .05), size: parseFloat(p.fontSize) };
+        });
+      });
+      assert.ok(ratios.every(item => item.ratio >= 4.5 && item.size >= 16), JSON.stringify(ratios));
+    };
+    await verifyContrast();
+    await page.screenshot({ path: path.join(require('node:os').tmpdir(), 'cognisync-preparation-chat-first-theme.png') });
+    await pet.click(); await page.getByRole('button', { name: '切换模式', exact: true }).click();
+    await verifyContrast();
+    await page.screenshot({ path: path.join(require('node:os').tmpdir(), 'cognisync-preparation-chat-second-theme.png') });
+    failChat = true;
+    await question.fill('失败时保留我的问题');
+    await page.getByRole('button', { name: '发送问题' }).click();
+    await page.getByText('模拟 AI 回复失败', { exact: true }).waitFor();
+    assert.equal(await question.inputValue(), '失败时保留我的问题');
+    assert.equal(await page.getByText('暂未确认回复，问题已保留', { exact: true }).count(), 1);
+    failChat = false;
     await page.reload(); await page.locator('.cm-content').waitFor();
     assert.equal(await page.locator('.cm-content').innerText(), 'print(19)');
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
@@ -147,6 +223,10 @@ const root = process.env.STUDENT_BUILD_DIR || path.resolve(__dirname, '../dist')
     pending = { id: 'batch', phase: 'pre', revision: 1, questions, served_at: new Date().toISOString() };
     await page.reload();
     await page.getByRole('region', { name: '课堂问卷' }).waitFor();
+    await pet.click();
+    assert.equal(await page.getByRole('button', { name: '提问', exact: true }).isDisabled(), true, 'questionnaire must not expose a stale page assistant');
+    assert.equal(await page.getByRole('button', { name: '切换模式', exact: true }).isEnabled(), true);
+    await page.keyboard.press('Escape');
     assert.equal(await page.getByRole('button', { name: '下一题', exact: true }).isDisabled(), true);
     await page.getByLabel('看运行结果', { exact: true }).check();
     await page.getByRole('button', { name: '下一题', exact: true }).click();
@@ -174,6 +254,9 @@ const root = process.env.STUDENT_BUILD_DIR || path.resolve(__dirname, '../dist')
     classroom = { ...classroom, lesson_entry: null, session: { ...classroom.session, state: 'closed' } };
     await page.waitForFunction(() => document.querySelector('textarea')?.placeholder.includes('老师已关闭 AI'));
     assert.equal(await page.getByRole('button', { name: '发送问题' }).isDisabled(), true);
+    await pet.click();
+    assert.equal(await page.getByRole('button', { name: '提问', exact: true }).isDisabled(), true, 'teacher disabling AI must disable companion question action');
+    await page.keyboard.press('Escape');
     assert.equal(await page.getByRole('button', { name: '运行', exact: true }).isDisabled(), false);
     student = 'ui-student-b';
     await page.reload(); await page.locator('.cm-content').waitFor();

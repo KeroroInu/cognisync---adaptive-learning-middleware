@@ -1,0 +1,17 @@
+.teacher-polls { margin:12px 0; }
+.teacher-polls > header,.teacher-poll-result > header { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
+.teacher-polls > header p { font-size:14px; margin-top:4px; }
+.teacher-polls form { margin-top:16px; }
+.teacher-poll-options { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.teacher-polls input { box-sizing:border-box; }
+.teacher-polls [type=submit] { justify-self:start; }
+.teacher-poll-result { margin-top:16px; padding:16px; border:1px solid var(--line-strong); border-radius:12px; background:var(--surface-muted); }
+.teacher-poll-result strong { overflow-wrap:anywhere; }
+.teacher-poll-result header > span { color:var(--text-secondary); font-size:14px; }
+.teacher-poll-count { margin:12px 0; }
+.teacher-poll-count > div { display:flex; justify-content:space-between; gap:14px; }
+.teacher-poll-count span { overflow-wrap:anywhere; min-width:0; }
+.teacher-poll-count b { white-space:nowrap; }
+.teacher-poll-count progress { width:100%; height:10px; accent-color:#819e38; }
+.teacher-polls [role=alert] { color:var(--text-primary); margin:12px 0; }
+@media(max-width:600px) { .teacher-poll-options { grid-template-columns:1fr; } }

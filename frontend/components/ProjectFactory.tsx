@@ -25,6 +25,7 @@ import {
   type SnakeRuntimeEvidence,
 } from '../data/snakeProjectBlueprint';
 import type { ScaffoldCompletion } from './ProjectScaffoldAssistant';
+import { createRequestId, observationArtifacts, type ReportKeyMoment } from '../services/stageEvents';
 import './ProjectFactory.css';
 
 export type { ProjectStage } from '../data/snakeProjectBlueprint';
@@ -49,6 +50,7 @@ interface ObservationStageProps {
   onOpenProject: () => void;
   onContinue: () => void;
   onCardCountChange: (count: number) => void;
+  onReportKeyMoment?: ReportKeyMoment;
 }
 
 interface StagePreviewProps {
@@ -82,6 +84,14 @@ export interface StudentObservationCard {
   observationText: string;
   source: 'student' | 'ai-assisted';
   createdAt: string;
+  updatedAt?: string;
+  provenance?: {
+    kind: 'runtime-record' | 'student-note' | 'ai-assisted';
+    studentNote: string;
+    aiRequestId?: string;
+    originalAiDraft?: string;
+    confirmedAt: string;
+  };
 }
 
 export const ProjectFactoryHeader: React.FC<FactoryHeaderProps> = ({
@@ -172,6 +182,7 @@ export const ProjectObservationStage: React.FC<ObservationStageProps> = ({
   onOpenProject,
   onContinue,
   onCardCountChange,
+  onReportKeyMoment,
 }) => {
   const isZh = language === 'zh';
   const storageKey = `cognisync:project-observation-cards:v2:${storageScope}`;
@@ -187,6 +198,20 @@ export const ProjectObservationStage: React.FC<ObservationStageProps> = ({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const [draftSource, setDraftSource] = useState<'student' | 'ai-assisted'>('student');
+  const [saving, setSaving] = useState(false);
+  const [observationHint, setObservationHint] = useState<number | null>(null);
+  const observationActions = isZh ? [
+    ['转一次方向', '先向前走，再按另一个方向。哪些按键能改变方向？'],
+    ['吃到一个食物', '看看蛇身、分数和食物的位置，各有什么变化。'],
+    ['碰到边界', '蛇头到达边界时，游戏会怎样？'],
+    ['重新开始', '对比重开前后：哪些东西变回去了？'],
+  ] : [
+    ['Try turning', 'Move forward, then try another direction. Which keys change it?'],
+    ['Eat some food', 'Notice the snake length, score and food position.'],
+    ['Reach an edge', 'What happens when the head reaches the edge?'],
+    ['Restart', 'Compare before and after: what changes back?'],
+  ];
+  const [aiOrigin, setAiOrigin] = useState<{aiRequestId?: string; originalAiDraft?: string}>({});
   const consumedCompletionRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -200,15 +225,18 @@ export const ProjectObservationStage: React.FC<ObservationStageProps> = ({
     setSelectedEvidenceId(scaffoldCompletion.evidenceId ?? '');
     setDraft(scaffoldCompletion.text);
     setDraftSource('ai-assisted');
+    setAiOrigin({aiRequestId: scaffoldCompletion.requestId, originalAiDraft: scaffoldCompletion.text});
   }, [scaffoldCompletion]);
 
   const hasOpenedProject = hasProjectRun(evidence);
   const visibleEvidence = useMemo(() => evidence.slice(-8).reverse(), [evidence]);
   const selectedEvidence = evidence.find(item => item.id === selectedEvidenceId);
+  const editingCard = cards.find(item => item.id === editingId && item.evidenceId === selectedEvidenceId);
+  // A saved citation stays editable after the rolling runtime buffer evicts its event.
+  const selectedEvidenceText = selectedEvidence ? formatSnakeEvidence(selectedEvidence, language) : editingCard?.evidenceText;
 
   const selectEvidence = (id: string) => {
     setSelectedEvidenceId(id);
-    setDraftSource('student');
   };
 
   const resetDraft = () => {
@@ -216,35 +244,65 @@ export const ProjectObservationStage: React.FC<ObservationStageProps> = ({
     setSelectedEvidenceId('');
     setDraft('');
     setDraftSource('student');
+    setAiOrigin({});
   };
 
   const editObservation = (card: StudentObservationCard) => {
+    if (saving) return;
     setEditingId(card.id);
     setSelectedEvidenceId(card.evidenceId);
-    setDraft(card.observationText);
+    setDraft(card.provenance?.studentNote ?? card.observationText);
     setDraftSource(card.source);
+    setAiOrigin({aiRequestId: card.provenance?.aiRequestId, originalAiDraft: card.provenance?.originalAiDraft});
     window.requestAnimationFrame(() => {
       document.querySelector('.observation-composer')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     });
   };
 
-  const saveObservation = () => {
+  const saveObservation = async () => {
     const text = draft.trim();
-    if (!selectedEvidence || !text) return;
+    if (!selectedEvidenceText || saving) return;
+    const now = new Date().toISOString();
+    const origin = draftSource === 'ai-assisted' && text ? 'ai-assisted' : text ? 'student-note' : 'runtime-record';
     const card: StudentObservationCard = {
-      id: editingId ?? `observation-${Date.now()}`,
-      evidenceId: selectedEvidence.id,
-      evidenceText: formatSnakeEvidence(selectedEvidence, language),
-      observationText: text,
-      source: draftSource,
+      id: editingId ?? `observation-${createRequestId()}`,
+      evidenceId: selectedEvidenceId,
+      evidenceText: selectedEvidenceText,
+      observationText: text || selectedEvidenceText,
+      source: origin === 'ai-assisted' ? 'ai-assisted' : 'student',
+      updatedAt: now,
+      provenance: {kind: origin, studentNote: text, ...(origin === 'ai-assisted' ? aiOrigin : {}), confirmedAt: now},
       createdAt: editingId
         ? cards.find(item => item.id === editingId)?.createdAt ?? new Date().toISOString()
-        : new Date().toISOString(),
+        : now,
     };
-    setCards(current => editingId
-      ? current.map(item => item.id === editingId ? card : item)
-      : [...current, card].slice(-8));
-    resetDraft();
+    const next = editingId ? cards.map(item => item.id === editingId ? card : item) : [...cards, card];
+    // Commit the local snapshot before the shared reporter flushes it to the server.
+    window.localStorage.setItem(storageKey, JSON.stringify(next));
+    setCards(next);
+    setSaving(true);
+    try {
+      const recorded = await onReportKeyMoment?.({stage: 'observe', eventType: 'structure_change',
+        detail: {action: editingId ? 'observation_revised' : 'observation_confirmed', cardId: card.id, provenance: origin},
+        artifacts: observationArtifacts([card], 'structure_edit')});
+      // Keep the card selected on a failed delivery, so retry uses the same stable artifact.
+      if (recorded === false) setEditingId(card.id);
+      else resetDraft();
+    } finally { setSaving(false); }
+  };
+
+  const deleteObservation = async (card: StudentObservationCard) => {
+    if (saving) return;
+    setSaving(true);
+    try {
+      const artifacts = observationArtifacts([card], 'structure_edit').map(item => ({...item,
+        content: {...item.content, deleted: true, deletedAt: new Date().toISOString()}}));
+      const recorded = await onReportKeyMoment?.({stage: 'observe', eventType: 'structure_change',
+        detail: {action: 'observation_deleted', cardId: card.id}, artifacts});
+      if (recorded === false) return;
+      setCards(current => current.filter(item => item.id !== card.id));
+      if (editingId === card.id) resetDraft();
+    } finally { setSaving(false); }
   };
 
   return (
@@ -263,7 +321,7 @@ export const ProjectObservationStage: React.FC<ObservationStageProps> = ({
           <h3>{isZh ? '先玩一局，找找变化。' : 'Play a round. Notice what changes.'}</h3>
           <span>
             {isZh
-              ? '一次改变一个操作，看看转向、进食或重开后有什么变化。'
+              ? '先发现变化，不用猜函数名称。可以挑一个操作试试。'
               : 'Try turning, eating food and restarting. What changes?'}
           </span>
         </div>
@@ -271,10 +329,15 @@ export const ProjectObservationStage: React.FC<ObservationStageProps> = ({
         <button type="button" className="project-run-card" onClick={onOpenProject}>
           <span className="project-run-icon"><Play size={25} fill="currentColor" /></span>
           <span>
-            <strong>{hasOpenedProject ? (isZh ? '再玩一局' : 'Play again') : (isZh ? '开始体验' : 'Play the example')}</strong>
+            <strong>{isZh ? '开始游戏' : 'Start game'}</strong>
           </span>
           <ArrowRight size={22} />
         </button>
+
+        <div className="observation-try-actions" aria-label={isZh?'可以试试':'Things to try'}>
+          {observationActions.map(([label],index)=><button key={label} type="button" aria-pressed={observationHint===index} onClick={()=>setObservationHint(index)}>{label}</button>)}
+          {observationHint!==null?<p role="status">{observationActions[observationHint][1]}</p>:null}
+        </div>
 
       </article>
 
@@ -286,7 +349,7 @@ export const ProjectObservationStage: React.FC<ObservationStageProps> = ({
         </header>
 
         <p className="observation-capture-hint">
-          {isZh ? '选一条记录，用自己的话说说你发现的变化。' : 'Choose a record and describe the change in your own words.'}
+          {isZh ? '选一条记录直接保存，也可以加一句发现或疑问。' : 'Save a record directly, or add a thought or question.'}
         </p>
 
         <section className="runtime-evidence-section">
@@ -324,10 +387,10 @@ export const ProjectObservationStage: React.FC<ObservationStageProps> = ({
           </div>
           <div className="observation-source-line">
             <strong>{isZh ? '选中记录' : 'Selected record'}</strong>
-            <span>{selectedEvidence ? formatSnakeEvidence(selectedEvidence, language) : (isZh ? '请先选择上方的一条运行记录' : 'Choose one runtime record above')}</span>
+            <span>{selectedEvidenceText || (isZh ? '请先选择上方的一条运行记录' : 'Choose one runtime record above')}</span>
           </div>
           <label>
-            <span>{isZh ? '我观察到' : 'I observed'}</span>
+            <span>{isZh ? '我的想法（选填）' : 'My thought (optional)'}</span>
             <textarea
               value={draft}
               onChange={event => {
@@ -336,18 +399,19 @@ export const ProjectObservationStage: React.FC<ObservationStageProps> = ({
               }}
               maxLength={100}
               rows={2}
-              placeholder={isZh ? '用一句短话写下变化，不需要解释原因……' : 'Write the change in one short sentence; do not explain it yet…'}
+              placeholder={isZh ? '不用重复记录。有什么发现、猜想或想问的？' : 'No need to repeat the record. Any thought, prediction or question?'}
             />
           </label>
           <div className="observation-composer-actions">
             <small>{draft.length}/100</small>
             <div>
               {editingId && <button type="button" className="is-secondary" onClick={resetDraft}>{isZh ? '取消修改' : 'Cancel'}</button>}
-              <button type="button" disabled={!selectedEvidence || !draft.trim()} onClick={saveObservation}>
-                {editingId ? (isZh ? '保存修改' : 'Save changes') : (isZh ? '保存观察卡' : 'Save observation')}<ArrowRight size={15} />
+              <button type="button" disabled={!selectedEvidenceText || saving || (!editingId && cards.length >= 40)} onClick={() => void saveObservation()}>
+                {saving ? (isZh ? '正在保存…' : 'Saving…') : editingId ? (isZh ? '保存修改' : 'Save changes') : (isZh ? '保存观察卡' : 'Save observation')}<ArrowRight size={15} />
               </button>
             </div>
           </div>
+          {cards.length >= 40 && !editingId && <small>{isZh ? '已保存40张，可以修改或整理已有卡片。' : '40 cards saved. Edit or organize the existing cards.'}</small>}
         </section>
 
       </article>
@@ -361,13 +425,15 @@ export const ProjectObservationStage: React.FC<ObservationStageProps> = ({
           <section className="saved-observation-list">
             <div>
               {cards.map((card, index) => (
-                <article key={card.id}>
-                  <span>{String(index + 1).padStart(2, '0')}</span>
-                  <p>{card.observationText}</p>
+                <article key={card.id} aria-label={`${isZh ? '观察卡' : 'Observation'} ${index + 1}`}>
+                  <span className="observation-card-rank">{String(index + 1).padStart(2, '0')}</span>
+                  <p tabIndex={0}>{card.observationText}</p>
                   {card.source === 'ai-assisted' && <small>{isZh ? 'AI辅助' : 'AI-assisted'}</small>}
+                  {card.provenance?.kind === 'runtime-record' && <small>{isZh ? '运行记录' : 'Runtime record'}</small>}
+                  <span className="observation-card-rank observation-card-corner" aria-hidden="true">{String(index + 1).padStart(2, '0')}</span>
                   <div className="saved-observation-actions">
-                    <button type="button" onClick={() => editObservation(card)} aria-label={isZh ? '修改观察卡' : 'Edit observation'}><PencilLine size={13} /></button>
-                    <button type="button" onClick={() => setCards(current => current.filter(item => item.id !== card.id))} aria-label={isZh ? '删除观察卡' : 'Delete observation'}><Trash2 size={13} /></button>
+                    <button type="button" disabled={saving} onClick={() => editObservation(card)} aria-label={isZh ? '修改观察卡' : 'Edit observation'}><PencilLine size={13} /></button>
+                    <button type="button" disabled={saving} onClick={() => void deleteObservation(card)} aria-label={isZh ? '删除观察卡' : 'Delete observation'}><Trash2 size={13} /></button>
                   </div>
                 </article>
               ))}

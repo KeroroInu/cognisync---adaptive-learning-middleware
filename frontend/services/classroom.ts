@@ -7,9 +7,10 @@ export interface ClassroomSession {
   id: string; class_name: string; title: string;
   state: 'open' | 'closing' | 'closed'; closes_at: string | null;
 }
-export interface ClassroomPrompt { id: string; question: AssessmentQuestion; questions?: AssessmentQuestion[]; title?: string; served_at: string }
+export interface ClassroomPrompt { id: string; kind?: 'poll'; question: AssessmentQuestion; questions?: AssessmentQuestion[]; title?: string; served_at: string }
 export interface LessonEntry { task_id: string; lesson_id: string; session_id: string; title: string; group: string }
-export interface ClassroomState { session: ClassroomSession | null; prompt: ClassroomPrompt | null; lesson_entry?: LessonEntry | null }
+export interface ClassroomNoticeData { id: string; content: string; expires_at: string }
+export interface ClassroomState { session: ClassroomSession | null; prompt: ClassroomPrompt | null; lesson_entry?: LessonEntry | null; notice?: ClassroomNoticeData | null; notices?: ClassroomNoticeData[] }
 
 export class ClassroomError extends Error {
   constructor(message: string, public status: number, public code?: string) { super(message); this.name = 'ClassroomError'; }
@@ -34,7 +35,7 @@ async function classroomRequest<T>(path: string, body?: unknown): Promise<T> {
   const timeout = window.setTimeout(() => controller.abort(), 12000);
   try {
     const response = await classroomFetch(`${import.meta.env.VITE_API_BASE_URL ?? ''}/api/classroom${path}`, {
-      signal: controller.signal, method: body === undefined ? 'GET' : 'POST',
+      signal: controller.signal, cache: 'no-store', method: body === undefined ? 'GET' : 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('cognisync-token') || ''}` },
       body: body === undefined ? undefined : JSON.stringify(body),
     });

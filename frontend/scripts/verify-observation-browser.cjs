@@ -23,10 +23,13 @@ const root = path.resolve(__dirname, '../dist');
       const json = data => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ success: true, data }) });
       if (pathname === '/api/auth/me') return json({ user: { id: 'ui-observer', name: '测试同学', experimentGroup: 'pdt', hasCompletedOnboarding: true }, profile: null });
       if (pathname === '/api/assessments/pending') return json(null);
+      if (pathname === '/api/learning-support/state') return json({ level:0, paused:false, history:[], practice_available:false });
+      if (pathname === '/api/project-review/current') return json(null);
       if (pathname === '/api/classroom/state') return json({ session: { id: 's', title: '观察课堂', state: 'open', class_name: '解构班' }, prompt: null, lesson_entry: { task_id: 't', lesson_id: 'l', session_id: 's', title: '观察课堂', group: 'pdt' } });
       if (pathname === '/api/materials' || pathname === '/api/preparation/records') return json([]);
       if (pathname === '/api/research/active-task') return json({ id: 't', title: '贪吃蛇', code_content: '', workspace_data: workspace, is_completed: false });
       if (pathname === '/api/research/tasks/t/save-workspace') { workspace = route.request().postDataJSON().workspace_data; return json({}); }
+      if (pathname.endsWith('/stage-events')) return json({ event_id:'observation-event', replayed:false });
       if (pathname.startsWith('/api/')) { unknown.push(pathname); return route.fulfill({ status: 404, body: '{}' }); }
       const file = path.resolve(root, '.' + (pathname === '/' ? '/index.html' : decodeURIComponent(pathname)));
       if (!file.startsWith(root + '/')) return route.abort();
@@ -41,6 +44,10 @@ const root = path.resolve(__dirname, '../dist');
     assert.equal(await page.locator('.lesson-return').count(), 0);
     const cards = page.locator('.saved-observation-list article');
     assert.equal(await cards.count(), 6);
+    assert.equal(await page.locator('.observation-try-actions button').count(), 4);
+    await page.locator('.observation-try-actions button').first().click();
+    assert.ok(await page.locator('.observation-try-actions [role="status"]').isVisible());
+    assert.equal(await cards.count(), 6, 'hints must not generate student observation cards');
     const last = await cards.last().boundingBox();
     assert.ok(last.y + last.height <= 720, `sixth card below viewport: ${JSON.stringify(last)}`);
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
@@ -63,7 +70,10 @@ const root = path.resolve(__dirname, '../dist');
     await page.locator('.observation-composer-actions button').last().click();
     assert.equal(await cards.count(), 6, 'editing must not add another card');
     assert.ok((await cards.last().innerText()).includes('我按下方向键'));
-    for (let i = 0; i < 6; i++) await cards.first().getByRole('button', { name: '删除观察卡' }).click();
+    for (let i = 0; i < 6; i++) {
+      await cards.first().getByRole('button', { name: '删除观察卡' }).click();
+      await page.waitForFunction(expected => document.querySelectorAll('.saved-observation-list article').length === expected, 5 - i);
+    }
     await page.getByText('保存后，你的发现会放在这里。', { exact: true }).waitFor();
     assert.deepEqual(errors, []); assert.deepEqual(unknown, []);
     console.log('PASS: six cards above desktop fold, return preserves login/cards, mobile cards reachable, edit/save/delete and empty state, no horizontal overflow or runtime errors');

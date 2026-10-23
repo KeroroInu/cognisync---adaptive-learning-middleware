@@ -32,6 +32,7 @@ import {
   type StudentPathPlan,
 } from '../data/projectPath';
 import type { StudentFunctionCard } from './ProjectFunctionStage';
+import { SNAKE_BUILD_FUNCTIONS } from '../data/snakeBuildFunctions';
 import { mechanismArtifact, type ReportKeyMoment } from '../services/stageEvents';
 import './ProjectMechanismStage.css';
 
@@ -42,6 +43,7 @@ interface Props {
   onContinue: () => void;
   /** 上报关键教学事件。由 Research.tsx 注入，内部已处理幂等键与重试。 */
   onReportKeyMoment?: ReportKeyMoment;
+  onFocusChange?: (cardId: string) => void;
 }
 
 interface DragState {
@@ -130,11 +132,13 @@ export const ProjectMechanismStage: React.FC<Props> = ({
   onBack,
   onContinue,
   onReportKeyMoment,
+  onFocusChange,
 }) => {
   const isZh = language === 'zh';
   const functionKey = `cognisync:project-function-cards:v1:${storageScope}`;
   const pathKey = `cognisync:project-path-plan:v1:${storageScope}`;
   const [cards] = useState<StudentFunctionCard[]>(() => readStoredList(functionKey));
+  const referenceDialog = useRef<HTMLDialogElement>(null);
   const [plan, setPlan] = useState<StudentPathPlan>(() => {
     const initial = createInitialPathPlan(readStoredList<StudentFunctionCard>(functionKey));
     const stored = readStoredObject(pathKey, initial);
@@ -168,6 +172,7 @@ export const ProjectMechanismStage: React.FC<Props> = ({
   }, [draggingId, pathKey, plan]);
 
   const activeCard = cards.find(card => card.id === activeCardId) ?? cards[0];
+  useEffect(() => { onFocusChange?.(activeCard?.id ?? ''); }, [activeCard?.id, onFocusChange]);
   const diagram = activeCard ? plan.functionMechanisms?.[activeCard.id] ?? EMPTY_MECHANISM : EMPTY_MECHANISM;
   const selectedNode = diagram.flowNodes.find(node => node.id === selectedNodeId);
   const selectedEdge = diagram.diagramEdges.find(edge => edge.id === selectedEdgeId);
@@ -910,10 +915,31 @@ export const ProjectMechanismStage: React.FC<Props> = ({
       <footer className="mechanism-stage-footer">
         <button type="button" onClick={onBack}>{isZh ? '返回功能卡' : 'Back to functions'}</button>
         <span>{isZh ? '每张功能卡的流程会作为后续编码和 AI 提示的依据' : 'Each flow guides later coding and AI scaffolding.'}</span>
-        <button type="button" className="is-primary" disabled={!allCompleted} onClick={onContinue}>
-          {isZh ? '进入七函数建构' : 'Build the seven functions'}<ArrowRight size={17} />
+        <button type="button" className="is-primary" disabled={!allCompleted} onClick={() => referenceDialog.current?.showModal()}>
+          {isZh ? '对照后开始编程' : 'Compare and start coding'}<ArrowRight size={17} />
         </button>
       </footer>
+      <dialog ref={referenceDialog} className="function-reference-dialog" aria-labelledby="function-reference-title">
+        <header>
+          <h2 id="function-reference-title">{isZh ? '把想法接到代码上' : 'Connect your ideas to code'}</h2>
+          <button type="button" aria-label={isZh ? '关闭' : 'Close'} onClick={() => referenceDialog.current?.close()}><X size={20} /></button>
+        </header>
+        <p>{isZh ? '下面是本课的一种分工方式，不是唯一答案。看看你的功能卡和它们有哪些联系。' : 'This is one way to organize the program, not the only answer. Compare it with your cards.'}</p>
+        <div className="function-reference-list">
+          {SNAKE_BUILD_FUNCTIONS.map((item, index) => (
+            <div key={item.id}>
+              <span>{isZh ? ['开始或重新开始', '按下方向键', '蛇向前走一格', '出现新的食物', '吃到食物后变长、加分', '撞到边界或自己', '不按键也在不断前进'][index] : ['Start or restart', 'Press a direction key', 'Move forward one cell', 'New food appears', 'Grow and score after eating', 'Hit the wall or itself', 'Keep moving without pressing keys'][index]}</span>
+              <ArrowRight size={15} aria-hidden="true" />
+              <strong>{isZh ? item.titleZh : item.titleEn}</strong>
+            </div>
+          ))}
+        </div>
+        <p>{isZh ? '比如“吃到食物”既涉及增长和计分，也涉及生成下一个食物。一条发现可以拆出多个功能，不用把原来的卡片改成七张。' : 'Eating involves growth, scoring and the next food. One observation can lead to several functions; you do not need seven cards.'}</p>
+        <footer>
+          <button type="button" onClick={() => referenceDialog.current?.close()}>{isZh ? '再看看我的流程' : 'Review my flow'}</button>
+          <button type="button" className="is-primary" onClick={() => { referenceDialog.current?.close(); onContinue(); }}>{isZh ? '开始编程' : 'Start coding'}<ArrowRight size={16} /></button>
+        </footer>
+      </dialog>
     </section>
   );
 };

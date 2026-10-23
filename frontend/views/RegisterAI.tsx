@@ -73,7 +73,7 @@ export const RegisterAI: React.FC<Props> = ({ language, onComplete, onBack }) =>
             : 'You have already completed onboarding. Please enter the system directly.');
           // 可选：自动跳转到 dashboard
           setTimeout(() => {
-            onComplete({ cognition: 50, affect: 50, behavior: 50 }, [], []);
+            onComplete({ cognition: 50, affect: 50, behavior: 50, lastUpdate: new Date().toISOString() }, [], []);
           }, 2000);
         } else {
           setError(errorMessage);

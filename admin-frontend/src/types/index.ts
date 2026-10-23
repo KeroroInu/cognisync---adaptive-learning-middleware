@@ -23,12 +23,17 @@ export interface User {
   student_id: string;
   email: string | null;
   name: string;
+  gender?: 'male' | 'female' | null;
+  school_class?: string | null;
   role: string;
   is_active: boolean;
   created_at: string;
   last_active_at: string | null;
   class_name: string | null;
   experiment_group: 'unassigned' | 'pdt' | 'ai_pbl' | 'lecture';
+  submission_count?: number;
+  download_count?: number;
+  last_submitted_at?: string | null;
 }
 
 export interface UsersListResponse {
@@ -327,7 +332,9 @@ export interface ProjectBlueprintsResponse {
 
 export interface LlmRoleConfig {
   provider: string;
-  api_key: string;
+  api_key?: string;
+  has_api_key?: boolean;
+  clear_api_key?: boolean;
   base_url: string;
   model: string;
 }

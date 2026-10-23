@@ -1,5 +1,6 @@
 import React, { Suspense, useCallback, useState, useEffect } from 'react';
 import { Layout } from './components/Layout';
+import { CompanionTools } from './components/CompanionTools';
 import { Login } from './views/Login';
 import { Register } from './views/Register';
 import type { PendingScaleRegistration } from './views/Register';
@@ -9,6 +10,7 @@ import { useAppStore } from './services/store';
 import type { User, UserProfile } from './types';
 import { classroomEntry } from './utils/classroomEntry';
 import { AssessmentGate } from './components/AssessmentGate';
+import { ProjectReviewGate } from './components/ProjectReviewGate';
 import { ClassroomGate } from './components/ClassroomGate';
 import type { ClassroomState } from './services/classroom';
 const Preparation = React.lazy(() => import('./views/Preparation').then(module => ({ default: module.Preparation })));
@@ -18,7 +20,7 @@ const Chat = React.lazy(() => import('./views/Chat').then(module => ({ default: 
 const KnowledgeGraph = React.lazy(() => import('./views/KnowledgeGraph').then(module => ({ default: module.KnowledgeGraph })));
 const Calibration = React.lazy(() => import('./views/Calibration').then(module => ({ default: module.Calibration })));
 const Evidence = React.lazy(() => import('./views/Evidence').then(module => ({ default: module.Evidence })));
-const Research = React.lazy(() => import('./views/Research').then(module => ({ default: module.Research })));
+const ClassroomSnakeWorkspace = React.lazy(() => import('./views/ClassroomSnakeWorkspace').then(module => ({ default: module.ClassroomSnakeWorkspace })));
 const Scales = React.lazy(() => import('./views/Scales').then(module => ({ default: module.Scales })));
 
 // 视图类型定义
@@ -217,7 +219,7 @@ function App() {
 
     switch (currentView) {
       case 'preparation':
-        return <Preparation key={state.user.id} userId={state.user.id} name={state.user.name} classroom={classroom}
+        return <Preparation key={state.user.id} userId={state.user.id} name={state.user.name} classroom={classroom} theme={theme}
           onEnter={() => { if (classroom?.lesson_entry) setCurrentView('research'); }} onLogout={handleLogout} />;
       case 'dashboard':
         return (
@@ -244,8 +246,6 @@ function App() {
             isResearchMode={state.isResearchMode}
             theme={theme}
             userId={state.user?.id}
-            studentId={state.user?.student_id}
-            experimentGroup={state.user.experimentGroup ?? 'unassigned'}
             onNewConversation={handleNewConversation}
           />
         );
@@ -285,15 +285,12 @@ function App() {
 
       case 'research':
         return (
-          <Research
+          <ClassroomSnakeWorkspace
             key={state.user.id}
-            onUpdateProfile={updateProfile}
             onReturnToPreparation={() => setCurrentView('preparation')}
             language={state.language}
             theme={theme}
             userId={state.user.id}
-            studentId={state.user?.student_id}
-            experimentGroup={state.user.experimentGroup ?? 'unassigned'}
           />
         );
 
@@ -321,25 +318,31 @@ function App() {
   };
 
   // 主渲染逻辑
+  const withCompanion = (content: React.ReactNode) => <CompanionTools key={state.user?.id ?? 'guest'}
+    userId={state.user?.id ?? 'guest'} theme={theme} language={state.language} onToggleTheme={toggleTheme} contextKey={currentView}>
+    {content}
+  </CompanionTools>;
   if (!state.user) {
     // 未登录状态：显示认证相关视图（无 Layout）
-    return <>{renderAuthView()}</>;
+    return withCompanion(renderAuthView());
   }
 
   // 已登录但尚未恢复用户入口：先不渲染旧学习首页，避免闪现后再跳转
   if (!entryResolved) {
-    return <div className="view-loading" role="status">正在读取当前项目…</div>;
+    return withCompanion(<div className="view-loading" role="status">正在读取当前项目…</div>);
   }
 
   // 已登录但未完成 onboarding：显示 onboarding 视图（无 Layout）
   if (['register', 'register-scale', 'register-ai'].includes(currentView)) {
-    return <>{renderAuthView()}</>;
+    return withCompanion(renderAuthView());
   }
 
   // 已登录且完成 onboarding：使用 Layout 包裹应用内容
   return (
+    <>
+    <ProjectReviewGate key={state.user.id} userId={state.user.id}>
     <AssessmentGate key={state.user.id} userId={state.user.id} onLogout={handleLogout}>
-    <ClassroomGate key={state.user.id} userId={state.user.id} onLogout={handleLogout}
+    {withCompanion(<ClassroomGate key={state.user.id} userId={state.user.id} onLogout={handleLogout}
       preparation={currentView === 'preparation'} onState={setClassroom} onReturn={() => setCurrentView('preparation')}>
     {currentView === 'preparation' ? <Suspense fallback={<div role="status">正在打开准备区…</div>}>{renderProtectedContent()}</Suspense> :
     <Layout
@@ -356,8 +359,10 @@ function App() {
         {renderProtectedContent()}
       </Suspense>
     </Layout>}
-    </ClassroomGate>
+    </ClassroomGate>)}
     </AssessmentGate>
+    </ProjectReviewGate>
+    </>
   );
 }
 

@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Plus, Copy, X, Trash2, ArrowUp, ArrowDown, Save } from 'lucide-react';
 import { assessmentAdmin, emptyQuestion, type AssessmentDraft, type AssessmentQuestion, type AssessmentRound } from '../lib/assessments';
 import './Assessments.css';
+import { AssessmentPreview } from '../components/AssessmentPreview';
+import { TEACHING_CLASSES } from '../lib/teachingClasses';
 
 export function Assessments() {
   const [rounds, setRounds] = useState<AssessmentRound[]>([]);
@@ -11,14 +13,21 @@ export function Assessments() {
   const [message, setMessage] = useState('');
   const [editing, setEditing] = useState<{ id?: string; draft: AssessmentDraft } | null>(null);
   const [confirmation, setConfirmation] = useState<AssessmentRound | null>(null);
+  const [preview, setPreview] = useState<AssessmentRound | null>(null);
+  const [className, setClassName] = useState('解构班');
+  const library = rounds.filter(item => !item.published_at).sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
+  const needsReview = (item: AssessmentRound) => item.source.includes('题本代码：cps_');
+  const history = rounds.filter(item => item.published_at && item.class_name === className);
+  const sending = useRef(false);
+  const deliveryRequest = useRef<{ key: string; id: string } | null>(null);
   const load = useCallback(async () => {
     try { setRounds(await assessmentAdmin<AssessmentRound[]>()); setError(''); }
     catch (e) { setError(String(e instanceof Error ? e.message : e)); }
     finally { setLoading(false); }
   }, []);
   useEffect(() => { void load(); }, [load]);
-  const create = (phase: 'pre' | 'post') => {
-    setEditing({ draft: { phase, name: phase === 'pre' ? '课前问卷' : '课后问卷', class_name: '', source: '', questions: [emptyQuestion()] } });
+  const create = () => {
+    setEditing({ draft: { phase: 'pre', name: '课堂问卷', class_name: className, source: '', questions: [emptyQuestion()] } });
     setError(''); setMessage('');
   };
   function edit(item: AssessmentRound, copy: boolean) {
@@ -33,7 +42,7 @@ export function Assessments() {
     setBusy(true); setError('');
     try {
       await assessmentAdmin(editing.id ? `/${editing.id}` : '', editing.draft, editing.id ? 'PUT' : 'POST');
-      setEditing(null); setMessage('草稿已保存。点击“开放”后，学生才能看到。'); await load();
+      setEditing(null); setMessage('草稿已保存。选好班级，再点击“发给该班”。'); await load();
     } catch (e) { setError(e instanceof Error ? e.message : '保存失败'); }
     finally { setBusy(false); }
   }
@@ -42,62 +51,95 @@ export function Assessments() {
     setBusy(true); setError('');
     try {
       await assessmentAdmin(`/${item.id}/availability`, { enabled: !item.enabled });
-      setConfirmation(null); setMessage(item.enabled ? '已关闭，已提交的答案保留。' : '已开放。已登录的学生会收到提醒；重新进入时先回答问卷。'); await load();
+      setConfirmation(null); setMessage(item.enabled ? '已结束填写，已提交的答案保留。' : '已开放。学生可在“问卷与测试”中填写。'); await load();
     } catch (e) { setError(e instanceof Error ? e.message : '更新失败'); }
     finally { setBusy(false); }
+  }
+  async function distribute(item: AssessmentRound) {
+    if (sending.current) return;
+    sending.current = true; setBusy(true); setError('');
+    const key = `${item.id}:${className}`;
+    if (deliveryRequest.current?.key !== key) deliveryRequest.current = { key, id: crypto.randomUUID() };
+    try {
+      const delivered = await assessmentAdmin<AssessmentRound>(`/${item.id}/distribute`, { class_name: className, request_id: deliveryRequest.current.id });
+      setConfirmation(null); deliveryRequest.current = null;
+      setMessage(delivered.enabled ? `已发给${className}。学生点击顶部“问卷与测试”即可填写；其他班不会收到。` : '这次发放已经结束，没有重新开启。需要再做一次时请重新发放。');
+      await load();
+    } catch (e) { setError(e instanceof Error ? e.message : '发放未确认，请重试'); }
+    finally { sending.current = false; setBusy(false); }
   }
   function patchQuestion(index: number, patch: Partial<AssessmentQuestion>) {
     setEditing(prev => prev && ({ ...prev, draft: { ...prev.draft, questions: prev.draft.questions.map((q, i) => i === index ? { ...q, ...patch } : q) } }));
   }
-  async function exportRound(item: AssessmentRound) {
+  async function exportRound(item: AssessmentRound, definition = false) {
     setBusy(true); setError('');
     try {
-      const response = await fetch(`/api/admin/assessments/${item.id}/export`, { headers: { Authorization: `Bearer ${localStorage.getItem('auth_token') || ''}` } });
+      const response = await fetch(`/api/admin/assessments/${item.id}/${definition ? 'definition' : 'export'}`, { headers: { Authorization: `Bearer ${localStorage.getItem('auth_token') || ''}` } });
       if (!response.ok) { const error = await response.json(); throw new Error(typeof error.detail === 'string' ? error.detail : '导出失败'); }
       const url = URL.createObjectURL(await response.blob());
-      const link = document.createElement('a'); link.href = url; link.download = `问卷答卷-${item.id}.csv`; link.click(); setTimeout(() => URL.revokeObjectURL(url), 10000);
+      const link = document.createElement('a'); link.href = url; link.download = `${definition ? '题本' : '问卷答卷'}-${item.id}.${definition ? 'json' : 'csv'}`; link.click(); setTimeout(() => URL.revokeObjectURL(url), 10000);
     } catch (cause) { setError(cause instanceof Error ? cause.message : '导出失败，请重试'); }
     finally { setBusy(false); }
   }
   return <div className="assessment-admin">
-    <header><div><h1>问卷与量表</h1><p>首次题本可包含学情问卷和量表。开放后先填写再入课，同一版本已交过的不再重复。</p></div></header>
+    <header><div><h1>题本库</h1><p>选好班级，直接发放已有试卷、问卷或量表。</p></div></header>
+    <div className="assessment-delivery-toolbar"><nav aria-label="发放班级">{TEACHING_CLASSES.map(c => <button key={c.name} disabled={busy} aria-pressed={className === c.name} onClick={() => setClassName(c.name)}>{c.name}</button>)}</nav><button disabled={busy} onClick={create}><Plus size={16} />自定义题本</button></div>
     {error && <p className="assessment-error" role="alert">{error}<button onClick={() => void load()}>重新读取</button></p>}
     {message && <p role="status" className="assessment-message">{message}</p>}
-    {loading ? <p role="status">正在读取…</p> : <div className="assessment-phases">{(['pre', 'post'] as const).map(phase => <section key={phase}>
-      <header><h2>{phase === 'pre' ? '首次填写' : '课后填写'}</h2><button disabled={busy} onClick={() => create(phase)}><Plus size={16} />新建题本</button></header>
-      <p>{phase === 'pre' ? '账号注册完成后，先回答已开放的问卷，再进入课堂。' : '课堂结束后由老师开放，不需要学生重新注册。'}</p>
-      {rounds.filter(r => r.phase === phase).length === 0 && <div className="assessment-empty">尚未安排 · 不会拦住学生入课</div>}
-      {rounds.filter(r => r.phase === phase).map(item => <article key={item.id}>
-        <div className="assessment-round-title"><strong>{item.name}</strong><span className={item.enabled ? 'is-open' : ''}>{item.enabled ? '开放中' : '已关闭'}</span></div>
-        <p>{item.class_name || '所有班级'} · 第 {item.revision} 版 · {item.questions.length} 题 · {item.response_count} 份答卷</p>
+    {loading ? <p role="status">正在读取…</p> : <div className="assessment-phases"><section>
+      <header><h2>选择题本</h2><span>当前发放给：{className}</span></header>
+      {library.length === 0 && <div className="assessment-empty">题本库暂无内容。</div>}
+      {library.filter(item => !needsReview(item)).map(item => <article key={item.id}>
+        <div className="assessment-round-title"><strong>{item.name}</strong><span>{item.questions.filter(q => !q.parent_id).length} 题</span></div>
+        <div className="assessment-actions"><button className="assessment-primary" disabled={busy} onClick={() => setConfirmation(item)}>发给{className}</button><button disabled={busy} onClick={() => setPreview(item)}>预览题目</button></div>
+        <details><summary>来源、评分与编辑</summary><p>{item.source}</p><div className="assessment-actions"><button disabled={busy} onClick={() => edit(item, false)}>编辑题目</button><button disabled={busy} onClick={() => edit(item, true)}><Copy size={16} />复制</button><button disabled={busy} onClick={() => void exportRound(item, true)}>下载题本</button></div></details>
+      </article>)}
+      {library.some(needsReview) && <details><summary>待审阅材料</summary><p>以下自编量表尚未完成审定，暂不提供快捷发放。</p>{library.filter(needsReview).map(item => <article key={item.id}><strong>{item.name}</strong><p>{item.source}</p><button onClick={() => setPreview(item)}>预览题目</button><button onClick={() => edit(item, false)}>编辑草稿</button></article>)}</details>}
+      <details open={history.some(item => item.enabled)}><summary>{className}的发放记录 · {history.length} 次</summary>
+      {[...history].sort((a, b) => Number(b.enabled) - Number(a.enabled)).map(item => <article key={item.id}>
+        <div className="assessment-round-title"><strong>{item.name}</strong><span className={item.enabled ? 'is-open' : ''}>{item.enabled ? '开放中' : item.published_at ? '已关闭' : '未开放草稿'}</span></div>
+        <p>{item.class_name || '所有班级'} · 第 {item.revision} 版 · {item.questions.filter(q => !q.parent_id).length} 个主问题 · {item.response_count} 份答卷</p>
+        <details><summary>来源、用途与计分说明</summary><p>{item.source || '尚未填写'}</p></details>
         <div className="assessment-actions">
-          <button disabled={busy} className={item.enabled ? '' : 'assessment-primary'} onClick={() => item.enabled ? void toggle(item) : setConfirmation(item)}>{item.enabled ? '关闭' : '开放'}</button>
+          <button disabled={busy} onClick={() => setPreview(item)}>试填预览</button>
+          <button disabled={busy || (item.enabled && item.class_name === className)} className="assessment-primary" onClick={() => setConfirmation(item)}>{item.enabled && item.class_name === className ? `${className}填写中` : `发给${className}`}</button>
+          {item.enabled && <button disabled={busy} onClick={() => void toggle(item)}>结束填写</button>}
           <button disabled={busy} onClick={() => edit(item, false)}>{item.published_at ? '修改为新版' : '编辑题目'}</button>
           <button disabled={busy} onClick={() => edit(item, true)} title="复制题本"><Copy size={16} />复制</button>
           <button disabled={busy} onClick={() => void exportRound(item)}>导出答卷 CSV</button>
+          <button disabled={busy} onClick={() => void exportRound(item, true)}>下载题本</button>
         </div>
       </article>)}
-    </section>)}</div>}
+      </details>
+    </section></div>}
     <p className="assessment-help">答卷与题本版本会进入“数据导出 → 课堂研究包”。本页不自动评分，也不更改学生画像。旧量表库和历史答案保持原状。</p>
+    {preview && <AssessmentPreview round={preview} close={() => setPreview(null)} />}
     {confirmation && <div className="assessment-overlay"><section role="dialog" aria-modal="true" aria-labelledby="publish-title" className="assessment-confirm">
-      <h2 id="publish-title">开放这份问卷？</h2><p>{confirmation.name} · {confirmation.class_name || '所有班级'}</p>
-      <p>请确认题目、选项和来源已核对。同一范围的旧版会关闭；已完成旧版的学生也需要回答新版本。关闭后再开放同一版本，不要求重复作答。</p>
-      <div className="assessment-actions"><button disabled={busy} onClick={() => setConfirmation(null)}>再检查一下</button><button disabled={busy} className="assessment-primary" onClick={() => void toggle(confirmation)}>确认开放</button></div>
+      <h2 id="publish-title">发给{className}？</h2><p>{confirmation.name}</p>
+      <p><strong>接收班级：{className}</strong></p>
+      <details><summary>查看来源与评分说明</summary><p>{confirmation.source}</p></details>
+      <p>本班一次填写一份，正在填写的旧安排会结束，已交答卷保留。本次单独记录，做过这份题的学生也会收到新一轮；其他班不受影响。</p>
+      {error && <p role="alert" className="assessment-error">{error}</p>}
+      <div className="assessment-actions"><button disabled={busy} onClick={() => setConfirmation(null)}>取消</button><button disabled={busy} className="assessment-primary" onClick={() => void distribute(confirmation)}>{busy ? '正在发放…' : '确认发放'}</button></div>
     </section></div>}
     {editing && <div className="assessment-overlay"><section className="assessment-editor" role="dialog" aria-modal="true" aria-labelledby="assessment-editor-title">
-      <header><h2 id="assessment-editor-title">{editing.id ? '编辑题目' : '新题本'} · {editing.draft.phase === 'pre' ? '前测' : '后测'}</h2><button disabled={busy} aria-label="关闭编辑" onClick={() => setEditing(null)}><X size={18} /></button></header>
+      <header><h2 id="assessment-editor-title">{editing.id ? '编辑题目' : '新题本'}</h2><button disabled={busy} aria-label="关闭编辑" onClick={() => setEditing(null)}><X size={18} /></button></header>
       <div className="assessment-editor-body">
         <div className="assessment-meta"><label>教师看到的名称<input maxLength={200} value={editing.draft.name} onChange={e => setEditing({ ...editing, draft: { ...editing.draft, name: e.target.value } })} /></label>
-        <label>班级（留空为所有班级）<input disabled={Boolean(editing.id)} maxLength={100} value={editing.draft.class_name} onChange={e => setEditing({ ...editing, draft: { ...editing.draft, class_name: e.target.value } })} /></label></div>
+        <p>保存题目即可，发放时再选接收班级。</p></div>
         <label>来源与计分说明（教师备查，不展示给学生）<textarea maxLength={2000} rows={2} placeholder="填写量表来源、版本及计分说明；不要把示例题当作正式量表。" value={editing.draft.source} onChange={e => setEditing({ ...editing, draft: { ...editing.draft, source: e.target.value } })} /></label>
         {editing.draft.questions.map((q, index) => <fieldset key={q.id} className="assessment-question"><legend>第 {index + 1} 题</legend>
-          <div className="assessment-actions"><select aria-label={`第${index + 1}题类型`} value={q.type} onChange={e => patchQuestion(index, { type: e.target.value as AssessmentQuestion['type'], max_selections: null, options: e.target.value === 'text' ? [] : q.options.length ? q.options : emptyQuestion().options })}><option value="choice">单选 / 量表题</option><option value="multiple">多选题</option><option value="text">简答题</option></select>
+          <div className="assessment-actions"><select aria-label={`第${index + 1}题类型`} value={q.type} onChange={e => patchQuestion(index, { type: e.target.value as AssessmentQuestion['type'], skip_label: '', max_selections: null, options: e.target.value === 'text' ? [] : q.options.length ? q.options : emptyQuestion().options })}><option value="choice">单选 / 量表题</option><option value="multiple">多选题</option><option value="text">简答题</option></select>
             <label className="assessment-checkbox"><input type="checkbox" checked={q.required} onChange={e => patchQuestion(index, { required: e.target.checked })} />必答</label>
             <button aria-label={`上移第${index + 1}题`} disabled={index === 0} onClick={() => { const questions = [...editing.draft.questions]; [questions[index - 1], questions[index]] = [questions[index], questions[index - 1]]; setEditing({ ...editing, draft: { ...editing.draft, questions } }); }}><ArrowUp size={15} /></button>
             <button aria-label={`下移第${index + 1}题`} disabled={index === editing.draft.questions.length - 1} onClick={() => { const questions = [...editing.draft.questions]; [questions[index + 1], questions[index]] = [questions[index], questions[index + 1]]; setEditing({ ...editing, draft: { ...editing.draft, questions } }); }}><ArrowDown size={15} /></button>
             <button aria-label={`删除第${index + 1}题`} disabled={editing.draft.questions.length === 1} onClick={() => setEditing({ ...editing, draft: { ...editing.draft, questions: editing.draft.questions.filter((_, i) => i !== index) } })}><Trash2 size={15} /></button>
           </div>
           <textarea aria-label={`第${index + 1}题题目`} maxLength={2000} rows={2} placeholder="粘贴题目原文，不需要改成聊天口吻。" value={q.text} onChange={e => patchQuestion(index, { text: e.target.value })} />
+          <label>作答说明<textarea maxLength={1000} rows={2} value={q.hint || ''} onChange={e => patchQuestion(index, { hint: e.target.value })} /></label>
+          {q.parent_id && <p>补充字段：{q.id}，与主问题 {q.parent_id} 同页显示。</p>}
+          {(q.code || editing.draft.questions.some(other => other.code)) && <label>题目代码（保留缩进，不执行）<textarea maxLength={6000} rows={5} value={q.code || ''} onChange={e => patchQuestion(index, { code: e.target.value })} /></label>}
+          {q.skip_label && <label>简答题的勾选项<input maxLength={100} value={q.skip_label} onChange={e => patchQuestion(index, { skip_label: e.target.value })} /></label>}
           {q.show_if?.length ? <p>显示条件：{q.show_if.map(c => { const source = editing.draft.questions.find(other => other.id === c.question_id); return `“${source?.text || c.question_id}”选择${c.values.map(v => source?.options.find(o => o.value === v)?.label || v).join('或')}`; }).join('，并且')}。修改引用的选项后需同步题本规则。</p> : null}
           {q.type === 'multiple' && <label>最多选几项（留空不限）<input type="number" min={1} max={q.options.length} value={q.max_selections ?? ''} onChange={e => patchQuestion(index, { max_selections: e.target.value ? Number(e.target.value) : null })} /></label>}
           {q.type !== 'text' && <div className={`assessment-option-list${q.type === 'multiple' ? ' is-multiple' : ''}`}>{q.options.map((option, j) => <div key={j}>

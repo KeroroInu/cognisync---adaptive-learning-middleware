@@ -2,8 +2,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { adminApi } from '../lib/adminApi';
 import type { User } from '../types';
+import './Users.css';
 import { TEACHING_CLASSES, isTeachingClass } from '../lib/teachingClasses';
 import { Search, ChevronLeft, ChevronRight, Edit2, Trash2, Eye, X, Save, Download, KeyRound } from 'lucide-react';
+
+const ROLE_LABELS: Record<string, string> = { learner: '学生', student: '学生', user: '学生', admin: '管理员', teacher: '教师' };
 
 const GROUP_LABELS: Record<User['experiment_group'], string> = {
   unassigned: '未分组',
@@ -17,6 +20,10 @@ export const Users = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
+  const [groupFilter, setGroupFilter] = useState('');
+  const [bulkError, setBulkError] = useState('');
+  const bulkLock = useRef(false);
+  const listSequence = useRef(0);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const pageSize = 10;
@@ -28,11 +35,36 @@ export const Users = () => {
   // Edit modal state
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [editName, setEditName] = useState('');
+  const [editStudentId, setEditStudentId] = useState('');
+  const [editGender, setEditGender] = useState<User['gender']>(null);
+  const [editSchoolClass, setEditSchoolClass] = useState('');
+  const [saveNotice, setSaveNotice] = useState('');
   const [editIsActive, setEditIsActive] = useState(true);
   const [editClassName, setEditClassName] = useState('');
   const [editExperimentGroup, setEditExperimentGroup] = useState<User['experiment_group']>('unassigned');
   const [editLoading, setEditLoading] = useState(false);
   const [editError, setEditError] = useState('');
+  const editLock = useRef(false);
+  const editDialog = useRef<HTMLDivElement>(null);
+  const closeEdit = useCallback(() => { if (!editLock.current) setEditingUser(null); }, []);
+
+  useEffect(() => {
+    if (!editingUser) return;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const dialog = editDialog.current;
+    dialog?.focus();
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') { event.preventDefault(); closeEdit(); }
+      if (event.key !== 'Tab' || !dialog) return;
+      const controls = Array.from(dialog.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled)'));
+      const first = controls[0]; const last = controls[controls.length - 1];
+      if (!first) { event.preventDefault(); return; }
+      if (event.shiftKey && (document.activeElement === first || document.activeElement === dialog)) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && (document.activeElement === last || document.activeElement === dialog)) { event.preventDefault(); first.focus(); }
+    }
+    document.addEventListener('keydown', onKeyDown);
+    return () => { document.removeEventListener('keydown', onKeyDown); previousFocus?.focus(); };
+  }, [editingUser, closeEdit]);
 
   // Reset password modal state
   const [resetUser, setResetUser] = useState<User | null>(null);
@@ -72,17 +104,19 @@ export const Users = () => {
   }, [resetUser, closeReset]);
 
   const loadUsers = useCallback(async () => {
+    const sequence = ++listSequence.current;
     try {
       setLoading(true);
-      const data = await adminApi.getUsers(page, pageSize, query);
+      const data = await adminApi.getUsers(page, pageSize, query, groupFilter);
+      if (sequence !== listSequence.current) return;
       setUsers(data.users);
       setTotal(data.total);
     } catch (err) {
-      console.error('Failed to load users:', err);
+      if (sequence === listSequence.current) setBulkError(err instanceof Error ? err.message : '学生名单加载失败，请刷新');
     } finally {
-      setLoading(false);
+      if (sequence === listSequence.current) setLoading(false);
     }
-  }, [page, query]);
+  }, [page, query, groupFilter]);
 
   useEffect(() => {
     void loadUsers();
@@ -91,12 +125,17 @@ export const Users = () => {
   const handleSearch = (value: string) => {
     setQuery(value);
     setPage(1);
+    setSelectedIds(new Set());
   };
 
   const handleEdit = (e: React.MouseEvent, user: User) => {
     e.stopPropagation();
     setEditingUser(user);
     setEditName(user.name || '');
+    setEditStudentId(user.student_id);
+    setEditGender(user.gender ?? null);
+    setEditSchoolClass(user.school_class || '');
+    setSaveNotice('');
     setEditIsActive(user.is_active ?? true);
     setEditClassName(user.class_name || '');
     setEditExperimentGroup(user.experiment_group || 'unassigned');
@@ -104,21 +143,29 @@ export const Users = () => {
   };
 
   const handleEditSave = async () => {
-    if (!editingUser) return;
+    if (!editingUser || editLock.current) return;
+    if (!editName.trim() || !editStudentId.trim() || /\s/.test(editStudentId.trim())) {
+      setEditError('请填写姓名和完整学号，学号中不要包含空格。'); return;
+    }
     try {
+      editLock.current = true;
       setEditLoading(true);
       setEditError('');
       await adminApi.updateUser(editingUser.id, {
-        name: editName,
-        is_active: editIsActive,
-        class_name: editClassName,
-        experiment_group: editExperimentGroup,
+        ...(editName.trim() !== editingUser.name ? { name: editName.trim() } : {}),
+        ...(editStudentId.trim() !== editingUser.student_id ? { student_id: editStudentId.trim() } : {}),
+        ...(editGender !== (editingUser.gender ?? null) ? { gender: editGender } : {}),
+        ...(editSchoolClass !== (editingUser.school_class || '') ? { school_class: editSchoolClass || null } : {}),
+        ...(editIsActive !== editingUser.is_active ? { is_active: editIsActive } : {}),
+        ...(editClassName !== (editingUser.class_name || '') ? { class_name: editClassName, experiment_group: editExperimentGroup } : {}),
       });
+      setSaveNotice('资料已保存。作品和答卷仍保留在原账号下。');
       setEditingUser(null);
       await loadUsers();
     } catch (err) {
       setEditError(err instanceof Error ? err.message : 'Failed to save changes');
     } finally {
+      editLock.current = false;
       setEditLoading(false);
     }
   };
@@ -201,19 +248,44 @@ export const Users = () => {
   };
 
   const toggleSelectAll = () => {
-    if (users.every(u => selectedIds.has(u.id))) {
+    const students = users.filter(u => ['learner', 'student', 'user'].includes(u.role));
+    if (students.every(u => selectedIds.has(u.id))) {
       setSelectedIds(prev => {
         const next = new Set(prev);
-        users.forEach(u => next.delete(u.id));
+        students.forEach(u => next.delete(u.id));
         return next;
       });
     } else {
       setSelectedIds(prev => {
         const next = new Set(prev);
-        users.forEach(u => next.add(u.id));
+        students.forEach(u => next.add(u.id));
         return next;
       });
     }
+  };
+
+  const selectUnassigned = async () => {
+    if (bulkLock.current) return;
+    bulkLock.current = true; setBulkLoading(true); setBulkError(''); setSaveNotice('');
+    try {
+      const { ids } = await adminApi.getUnassignedStudentIds(query);
+      setSelectedIds(new Set(ids)); setGroupFilter('unassigned'); setPage(1);
+      if (!ids.length) setSaveNotice('当前没有符合搜索条件的未分组学生。');
+    } catch (err) { setBulkError(err instanceof Error ? err.message : '选择失败，请重试'); }
+    finally { bulkLock.current = false; setBulkLoading(false); }
+  };
+
+  const assignSelected = async (className: string) => {
+    if (bulkLock.current || !selectedIds.size) return;
+    if (!window.confirm(`将所选 ${selectedIds.size} 位未分组学生分入${className}？`)) return;
+    bulkLock.current = true; setBulkLoading(true); setBulkError(''); setSaveNotice('');
+    try {
+      const result = await adminApi.assignStudents(Array.from(selectedIds), className);
+      setSelectedIds(new Set()); setPage(1);
+      setSaveNotice(`已将 ${result.assigned} 位学生分入${result.class_name}。学校班级、作品和答卷不变。`);
+      await loadUsers();
+    } catch (err) { setBulkError(err instanceof Error ? err.message : '分组失败，请重试'); }
+    finally { bulkLock.current = false; setBulkLoading(false); }
   };
 
   const handleExportSelected = async () => {
@@ -262,15 +334,17 @@ export const Users = () => {
   };
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="users-page">
       {/* Edit Modal */}
       {editingUser && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="glass-card rounded-2xl p-6 w-full max-w-md mx-4">
+          <div ref={editDialog} tabIndex={-1} role="dialog" aria-modal="true" aria-label="编辑用户" className="glass-card users-dialog users-edit-dialog rounded-2xl p-6 w-full max-w-md mx-4">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold" style={{ color: 'var(--text-primary)' }}>编辑用户</h2>
+              <h2 className="text-xl font-bold" style={{ color: 'var(--text-primary)' }}>修改学生资料</h2>
               <button
-                onClick={() => setEditingUser(null)}
+                onClick={closeEdit}
+                disabled={editLoading}
+                aria-label="关闭编辑"
                 className="p-1 rounded-lg transition-opacity hover:opacity-60"
                 style={{ color: 'var(--text-light)' }}
               >
@@ -280,77 +354,84 @@ export const Users = () => {
 
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-tertiary)' }}>学号（只读）</label>
+                <label htmlFor="edit-student-id" className="block text-sm font-medium mb-1" style={{ color: 'var(--text-tertiary)' }}>学号（完整序号）</label>
                 <input
+                  id="edit-student-id"
                   type="text"
-                  value={editingUser.student_id}
-                  disabled
-                  className="w-full px-3 py-2 rounded-lg opacity-50 cursor-not-allowed"
+                  value={editStudentId}
+                  onChange={event => setEditStudentId(event.target.value)}
+                  disabled={editLoading || editingUser.role === 'admin'}
+                  maxLength={50}
+                  aria-describedby="edit-student-id-help"
+                  className="w-full px-3 py-2 rounded-lg"
                   style={inputStyle}
                 />
+                <p id="edit-student-id-help" className="users-edit-hint">G 开头、含 20xx 的完整学号。修改后用新学号登录。</p>
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-tertiary)' }}>邮箱（只读，可选）</label>
+                <label htmlFor="edit-student-name" className="block text-sm font-medium mb-1" style={{ color: 'var(--text-tertiary)' }}>姓名</label>
                 <input
-                  type="text"
-                  value={editingUser.email ?? '—'}
-                  disabled
-                  className="w-full px-3 py-2 rounded-lg opacity-50 cursor-not-allowed"
-                  style={inputStyle}
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-tertiary)' }}>用户名称</label>
-                <input
+                  id="edit-student-name"
                   type="text"
                   value={editName}
                   onChange={(e) => setEditName(e.target.value)}
-                  placeholder="输入用户名称"
+                  placeholder="填写学生姓名"
+                  disabled={editLoading}
+                  maxLength={50}
                   className="w-full px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                   style={inputStyle}
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-tertiary)' }}>班级</label>
+                <label htmlFor="edit-student-gender" className="block text-sm font-medium mb-1" style={{ color: 'var(--text-tertiary)' }}>性别</label>
+                <select id="edit-student-gender" value={editGender ?? ''} onChange={event => setEditGender((event.target.value || null) as User['gender'])} disabled={editLoading} className="w-full px-3 py-2 rounded-lg" style={inputStyle}>
+                  <option value="">未填写</option><option value="male">男</option><option value="female">女</option>
+                </select>
+              </div>
+
+              <div>
+                <label htmlFor="edit-school-class" className="block text-sm font-medium mb-1" style={{ color: 'var(--text-tertiary)' }}>学校班级</label>
+                <select id="edit-school-class" value={editSchoolClass} onChange={event => setEditSchoolClass(event.target.value)} disabled={editLoading} className="w-full px-3 py-2 rounded-lg" style={inputStyle}>
+                  <option value="">未填写</option>{['高一', '高二', '高三'].flatMap(grade => [1, 2, 3, 4, 5, 6, 7].map(number => { const value = `${grade}（${number}）班`; return <option key={value} value={value}>{value}</option>; }))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-tertiary)' }}>教学分组（仅教师设置）</label>
                 <div role="group" aria-label="学生班级" className="flex gap-3">{TEACHING_CLASSES.map(item => <button key={item.name} type="button" disabled={editLoading} aria-pressed={editClassName === item.name}
-                  className="flex-1 px-3 py-2 rounded-lg border" style={{ ...inputStyle, background: editClassName === item.name ? '#e5f7b3' : 'var(--bg-secondary)' }}
+                  className="flex-1 px-3 py-2 rounded-lg border" style={{ ...inputStyle, background: editClassName === item.name ? 'var(--teacher-accent)' : 'var(--bg-secondary)', color: editClassName === item.name ? '#263719' : 'var(--text-primary)' }}
                   onClick={() => { setEditClassName(item.name); setEditExperimentGroup(item.group); }}>{item.name}</button>)}</div>
                 {!isTeachingClass(editClassName) && <p className="text-sm mt-2" style={{ color: 'var(--text-tertiary)' }}>当前：{editClassName || '未分班'}。选班后保存，才会调整归属。</p>}
               </div>
 
-              <div>
-                <p className="text-sm" style={{ color: 'var(--text-tertiary)' }}>课堂类型：{GROUP_LABELS[editExperimentGroup]}（随班级保存）</p>
-              </div>
+              <p className="users-edit-hint">改班只影响后续任务。已提交的作品、答卷和原班级记录不变。</p>
 
               <div className="flex items-center gap-3">
                 <label className="text-sm font-medium" style={{ color: 'var(--text-tertiary)' }}>账户状态</label>
                 <button
+                  disabled={editLoading}
                   onClick={() => setEditIsActive(!editIsActive)}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                    editIsActive ? 'bg-green-500' : 'bg-gray-400'
-                  }`}
+                  className="users-status-toggle"
+                  role="switch"
+                  aria-label="启用账号"
+                  aria-checked={editIsActive}
                 >
-                  <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                      editIsActive ? 'translate-x-6' : 'translate-x-1'
-                    }`}
-                  />
+                  <span />
                 </button>
                 <span className="text-sm" style={{ color: 'var(--text-light)' }}>
-                  {editIsActive ? '已激活' : '已禁用'}
+                  {editIsActive ? '正常' : '已停用'}
                 </span>
               </div>
 
               {editError && (
-                <p className="text-sm text-red-500">{editError}</p>
+                <p role="alert" className="text-sm text-red-500">{editError}</p>
               )}
 
               <div className="flex gap-3 pt-2">
                 <button
-                  onClick={() => setEditingUser(null)}
+                  onClick={closeEdit}
+                  disabled={editLoading}
                   className="flex-1 px-4 py-2 rounded-lg border transition-opacity hover:opacity-70"
                   style={{ borderColor: 'var(--glass-border)', color: 'var(--text-secondary)' }}
                 >
@@ -362,7 +443,7 @@ export const Users = () => {
                   className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 text-white hover:opacity-90 disabled:opacity-50 transition-opacity"
                 >
                   <Save size={16} />
-                  {editLoading ? '保存中...' : '保存'}
+                  {editLoading ? '保存中…' : '保存'}
                 </button>
               </div>
             </div>
@@ -373,7 +454,7 @@ export const Users = () => {
       {/* Reset Password Modal */}
       {resetUser && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-          <div ref={resetDialog} role="dialog" aria-modal="true" aria-labelledby="reset-password-title" tabIndex={-1} className="glass-card rounded-2xl p-6 w-full max-w-md mx-4" style={{ maxHeight: '92dvh', overflowY: 'auto' }}>
+          <div ref={resetDialog} role="dialog" aria-modal="true" aria-labelledby="reset-password-title" tabIndex={-1} className="glass-card users-dialog rounded-2xl p-6 w-full max-w-md mx-4" style={{ maxHeight: '92dvh', overflowY: 'auto' }}>
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <KeyRound size={20} style={{ color: '#f59e0b' }} />
@@ -474,34 +555,33 @@ export const Users = () => {
         </div>
       )}
 
-      {/* Search */}
-      <p style={{ color: 'var(--text-secondary)' }}>学生自行设置密码。忘记时，点击对应学生右侧的钥匙按钮重设；后台不显示原密码。</p>
-      <div className="glass-card p-4 rounded-xl">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
-          <input
-            type="text"
-            placeholder="搜索用户（姓名、学号或邮箱）"
-            value={query}
-            onChange={(e) => handleSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-            style={{
-              backgroundColor: 'var(--bg-secondary)',
-              color: 'var(--text-primary)',
-              border: '1px solid var(--glass-border)',
-            }}
-          />
-        </div>
+      <header className="users-heading">
+        <div><h1>学生管理</h1><p>查看学生信息、分班和账号状态。</p></div>
+        <p className="users-password-help">忘记密码？点击学生右侧的钥匙重设，原密码不可查看。</p>
+      </header>
+      {saveNotice && <p className="users-save-notice" role="status">{saveNotice}</p>}
+      {bulkError && <p className="classroom-error" role="alert">{bulkError}</p>}
+      <div className="users-toolbar">
+        <label className="users-search">
+          <Search size={18} aria-hidden="true" />
+          <input type="search" aria-label="搜索学生" disabled={bulkLoading} placeholder="搜索姓名、学号或邮箱" value={query} onChange={e => handleSearch(e.target.value)} />
+        </label>
+        <select aria-label="按教学分组筛选" value={groupFilter} disabled={bulkLoading} onChange={event => { setGroupFilter(event.target.value); setPage(1); setSelectedIds(new Set()); }}>
+          <option value="">全部账号</option><option value="unassigned">未分组学生</option><option value="pdt">解构班</option><option value="ai_pbl">开发班</option>
+        </select>
+        <button type="button" disabled={bulkLoading} onClick={() => void selectUnassigned()}>全选未分组（跨页）</button>
+        <button type="button" disabled={loading || bulkLoading} onClick={() => void loadUsers()}>刷新名单</button>
+        <span className="users-count" aria-live="polite">{loading ? '正在读取…' : query ? '找到 ' + total + ' 个账号' : '共 ' + total + ' 个账号'}</span>
       </div>
 
       {/* Bulk Action Bar */}
       {selectedIds.size > 0 && (
-        <div className="glass-card p-3 rounded-xl flex items-center justify-between gap-4"
-          style={{ border: '1px solid rgba(99,102,241,0.4)', background: 'rgba(99,102,241,0.08)' }}>
+        <div className="users-bulk-bar">
           <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
             已选 {selectedIds.size} 位用户
           </span>
           <div className="flex gap-2">
+            {TEACHING_CLASSES.map(item => <button key={item.name} className="users-assign-button" disabled={bulkLoading} onClick={() => void assignSelected(item.name)}>分入{item.name}</button>)}
             <button
               onClick={handleExportSelected}
               disabled={bulkLoading}
@@ -522,6 +602,7 @@ export const Users = () => {
             </button>
             <button
               onClick={() => setSelectedIds(new Set())}
+              disabled={bulkLoading}
               className="px-3 py-1.5 rounded-lg text-sm transition-colors"
               style={{ color: 'var(--text-light)' }}
             >
@@ -532,25 +613,28 @@ export const Users = () => {
       )}
 
       {/* Users Table */}
-      <div className="glass-card rounded-2xl overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead style={{ backgroundColor: 'var(--bg-tertiary)' }}>
+      <div className="users-table-panel">
+        <div className="users-table-scroll" role="region" aria-label="学生名单" tabIndex={0}>
+          <table className="users-table">
+            <thead>
               <tr>
                 <th className="px-4 py-4 text-left">
                   <input
                     type="checkbox"
-                    checked={users.length > 0 && users.every(u => selectedIds.has(u.id))}
+                    aria-label="选择本页全部学生"
+                    checked={users.some(u => ['learner', 'student', 'user'].includes(u.role)) && users.filter(u => ['learner', 'student', 'user'].includes(u.role)).every(u => selectedIds.has(u.id))}
+                    disabled={loading || bulkLoading}
                     onChange={toggleSelectAll}
                     className="w-4 h-4 rounded accent-indigo-500 cursor-pointer"
                   />
                 </th>
                 <th className="px-6 py-4 text-left text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>学号</th>
                 <th className="px-6 py-4 text-left text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>姓名</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>邮箱</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>性别</th>
                 <th className="px-6 py-4 text-left text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>角色</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>班级 / 条件</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>状态</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>班级</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>作品提交</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>账号状态</th>
                 <th className="px-6 py-4 text-left text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>最后活跃</th>
                 <th className="px-6 py-4 text-left text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>操作</th>
               </tr>
@@ -558,7 +642,7 @@ export const Users = () => {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={9} className="px-6 py-12 text-center">
+                  <td colSpan={10} className="px-6 py-12 text-center">
                     <div className="flex justify-center">
                       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500"></div>
                     </div>
@@ -566,7 +650,7 @@ export const Users = () => {
                 </tr>
               ) : users.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-6 py-12 text-center" style={{ color: 'var(--text-light)' }}>
+                  <td colSpan={10} className="px-6 py-12 text-center" style={{ color: 'var(--text-light)' }}>
                     暂无用户
                   </td>
                 </tr>
@@ -574,15 +658,14 @@ export const Users = () => {
                 users.map((user) => (
                   <tr
                     key={user.id}
-                    className="border-t transition-colors"
-                    style={{ borderColor: 'var(--glass-border)' }}
-                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--bg-secondary)')}
-                    onMouseLeave={e => (e.currentTarget.style.backgroundColor = '')}
+                    className={selectedIds.has(user.id) ? 'is-selected' : ''}
                   >
                     <td className="px-4 py-4">
                       <input
                         type="checkbox"
+                        aria-label={'选择' + user.name}
                         checked={selectedIds.has(user.id)}
+                        disabled={bulkLoading || !['learner', 'student', 'user'].includes(user.role)}
                         onChange={() => toggleSelect(user.id)}
                         onClick={e => e.stopPropagation()}
                         className="w-4 h-4 rounded accent-indigo-500 cursor-pointer"
@@ -590,67 +673,64 @@ export const Users = () => {
                     </td>
                     <td className="px-6 py-4 text-sm font-mono" style={{ color: 'var(--text-primary)' }}>{user.student_id}</td>
                     <td className="px-6 py-4 text-sm" style={{ color: 'var(--text-primary)' }}>{user.name}</td>
-                    <td className="px-6 py-4 text-sm" style={{ color: 'var(--text-light)' }}>{user.email ?? '—'}</td>
+                    <td className="px-6 py-4 text-sm" style={{ color: 'var(--text-light)' }}>{user.gender === 'male' ? '男' : user.gender === 'female' ? '女' : '未填写'}</td>
                     <td className="px-6 py-4 text-sm">
-                      <span className="px-2 py-1 rounded text-xs" style={{
-                        backgroundColor: 'var(--bg-tertiary)',
-                        border: '1px solid var(--glass-border)',
-                        color: 'var(--text-secondary)',
-                      }}>
-                        {user.role}
-                      </span>
+                      <span className="users-badge users-role">{ROLE_LABELS[user.role] || '其他'}</span>
                     </td>
                     <td className="px-6 py-4 text-sm">
-                      <div className="font-medium" style={{ color: 'var(--text-primary)' }}>{user.class_name || '—'}</div>
-                      <div className="text-xs mt-1" style={{ color: 'var(--text-light)' }}>{GROUP_LABELS[user.experiment_group || 'unassigned']}</div>
+                      <div className="font-medium" style={{ color: 'var(--text-primary)' }}>{user.school_class || user.class_name || '—'}</div>
+                      {user.school_class && user.class_name && <div className="users-group-note">{user.class_name}</div>}
+                      {!isTeachingClass(user.class_name || '') && <div className="users-group-note">{GROUP_LABELS[user.experiment_group || 'unassigned']}</div>}
+                    </td>
+                    <td className="users-work-count" title={user.last_submitted_at ? `最近提交：${new Date(user.last_submitted_at).toLocaleString('zh-CN')}` : '尚未提交作品'}>
+                      <strong>{user.submission_count ?? 0} 份</strong>
+                      <span>下载 {user.download_count ?? 0} 次</span>
                     </td>
                     <td className="px-6 py-4 text-sm">
-                      <span className={`px-2 py-1 rounded text-xs ${user.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
-                        {user.is_active ? '已激活' : '已禁用'}
-                      </span>
+                      <span className={'users-badge ' + (user.is_active ? 'is-active' : 'is-inactive')}><i aria-hidden="true" />{user.is_active ? '正常' : '已停用'}</span>
                     </td>
                     <td className="px-6 py-4 text-sm" style={{ color: 'var(--text-secondary)' }}>
                       {user.last_active_at ? new Date(user.last_active_at).toLocaleDateString('zh-CN') : '—'}
                     </td>
                     <td className="px-6 py-4 text-sm">
-                      <div className="flex items-center gap-2">
+                      <div className="users-row-actions">
                         <button
                           onClick={() => navigate(`/users/${user.id}`)}
-                          className="p-2 rounded-lg transition-opacity hover:opacity-70"
-                          style={{ background: 'rgba(99,102,241,0.1)', color: '#6366f1' }}
+                          className="users-icon-button"
                           title="查看详情"
+                          aria-label="查看详情"
                         >
                           <Eye size={16} />
                         </button>
                         <button
                           onClick={(e) => handleEdit(e, user)}
-                          className="p-2 rounded-lg transition-opacity hover:opacity-70"
-                          style={{ background: 'rgba(59,130,246,0.1)', color: '#3b82f6' }}
+                          className="users-icon-button"
                           title="编辑用户"
+                          aria-label="编辑用户"
                         >
                           <Edit2 size={16} />
                         </button>
                         <button
                           onClick={(e) => handleOpenReset(e, user)}
-                          className="p-2 rounded-lg transition-opacity hover:opacity-70"
-                          style={{ background: 'rgba(245,158,11,0.1)', color: '#f59e0b' }}
+                          className="users-icon-button"
                           title="重置密码"
+                          aria-label="重置密码"
                         >
                           <KeyRound size={16} />
                         </button>
                         <button
                           onClick={(e) => handleExportUser(e, user)}
-                          className="p-2 rounded-lg transition-opacity hover:opacity-70"
-                          style={{ background: 'rgba(16,185,129,0.1)', color: '#10b981' }}
+                          className="users-icon-button"
                           title="导出用户数据 (CSV)"
+                          aria-label="导出用户数据 (CSV)"
                         >
                           <Download size={16} />
                         </button>
                         <button
                           onClick={(e) => handleDelete(e, user)}
-                          className="p-2 rounded-lg transition-opacity hover:opacity-70"
-                          style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444' }}
+                          className="users-icon-button is-danger"
                           title="删除用户"
+                          aria-label="删除用户"
                         >
                           <Trash2 size={16} />
                         </button>
@@ -665,12 +745,13 @@ export const Users = () => {
 
         {/* Pagination */}
         {total > pageSize && (
-          <div className="flex items-center justify-between px-6 py-4 border-t" style={{ borderColor: 'var(--glass-border)' }}>
+          <div className="users-pagination">
             <div className="text-sm" style={{ color: 'var(--text-secondary)' }}>
               共 {total} 位，第 {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, total)} 位
             </div>
             <div className="flex space-x-2">
               <button
+                aria-label="上一页"
                 onClick={() => setPage(p => Math.max(1, p - 1))}
                 disabled={page === 1}
                 className="px-4 py-2 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-opacity hover:opacity-70"
@@ -682,6 +763,7 @@ export const Users = () => {
                 第 {page} / {totalPages} 页
               </span>
               <button
+                aria-label="下一页"
                 onClick={() => setPage(p => Math.min(totalPages, p + 1))}
                 disabled={page === totalPages}
                 className="px-4 py-2 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-opacity hover:opacity-70"

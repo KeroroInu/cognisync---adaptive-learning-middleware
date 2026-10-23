@@ -25,14 +25,23 @@ export const RetroLearningTerminal: React.FC<Props> = ({ language }) => {
   const dragRef = useRef({ pointerId: -1, startX: 0, startY: 0, rotationX: 0, rotationY: 0 });
 
   useEffect(() => {
-    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (reducedMotion) return undefined;
-
-    const timer = window.setInterval(() => {
-      setSnakeFrame(current => (current + 1) % snakePath.length);
-    }, 180);
-
-    return () => window.clearInterval(timer);
+    const motion = window.matchMedia('(prefers-reduced-motion: reduce)');
+    let timer: number | undefined;
+    const update = () => {
+      window.clearInterval(timer);
+      timer = undefined;
+      if (!motion.matches) {
+        timer = window.setInterval(() => {
+          setSnakeFrame(current => (current + 1) % snakePath.length);
+        }, 180);
+      }
+    };
+    update();
+    motion.addEventListener('change', update);
+    return () => {
+      window.clearInterval(timer);
+      motion.removeEventListener('change', update);
+    };
   }, []);
 
   const snakeCells = useMemo(() => {
@@ -77,9 +86,9 @@ export const RetroLearningTerminal: React.FC<Props> = ({ language }) => {
   const resetRotation = () => setRotation({ x: -2, y: 4 });
 
   return (
-    <div className="retro-terminal-scene" aria-label={isZh ? '贪吃蛇学习项目与画像卡片展示' : 'Snake learning project and learner cards'}>
+    <div className="retro-terminal-scene" aria-label={isZh ? '贪吃蛇编程课堂展示' : 'Snake programming classroom display'}>
       <div className="terminal-scene-label">
-        <span>COGNISYNC DECONSTRUCTION LAB / 01</span>
+        <span>SFLS CODING CLASSROOM / 01</span>
         <span>{isZh ? '项目：贪吃蛇' : 'PROJECT: SNAKE'}</span>
       </div>
 
@@ -101,7 +110,7 @@ export const RetroLearningTerminal: React.FC<Props> = ({ language }) => {
           <div className="retro-screen-frame">
             <div className="retro-screen">
               <div className="retro-screen-topline">
-                <span>COGNISYNC_OS</span>
+                <span>SFLS_OS</span>
                 <span>READY ●</span>
               </div>
               <div className="snake-title-row">
@@ -130,7 +139,7 @@ export const RetroLearningTerminal: React.FC<Props> = ({ language }) => {
                 })}
               </div>
               <div className="retro-screen-footer">
-                <span>OBSERVE → DECONSTRUCT → REBUILD</span>
+                <span>CODE · PLAY · CREATE</span>
                 <span>LEVEL 01</span>
               </div>
             </div>
@@ -144,14 +153,14 @@ export const RetroLearningTerminal: React.FC<Props> = ({ language }) => {
 
           <div className="terminal-stickers" aria-hidden="true">
             <div className="terminal-sticker terminal-sticker-profile">
-              <span>LEARNER / 01</span>
-              <strong>{isZh ? '结构探索者' : 'STRUCTURE SCOUT'}</strong>
-              <small>{isZh ? '起始画像 · 非能力评级' : 'STARTING PROFILE'}</small>
+              <span>CODING CLASSROOM</span>
+              <strong>{isZh ? '让想法运行起来' : 'MAKE IDEAS RUN'}</strong>
+              <small>{isZh ? '编程 · 创作 · 探索' : 'CODE · CREATE · EXPLORE'}</small>
             </div>
             <div className="terminal-sticker terminal-sticker-project">
               <span>PROJECT CARD</span>
               <strong>SNAKE</strong>
-              <small>DECONSTRUCT / REBUILD / VERIFY</small>
+              <small>YOUR NEXT CREATION</small>
             </div>
             <div className="terminal-sticker terminal-sticker-next">
               <span>NEXT</span>
@@ -171,7 +180,7 @@ export const RetroLearningTerminal: React.FC<Props> = ({ language }) => {
       </div>
 
       <p className="terminal-scene-note">
-        {isZh ? '拖动电脑旋转 · 双击复位 · 从完整项目出发，由解构走向建构' : 'Drag to rotate · Double-click to reset · Move from deconstruction to reconstruction'}
+        {isZh ? '拖动电脑旋转 · 双击复位' : 'Drag to rotate · Double-click to reset'}
       </p>
     </div>
   );

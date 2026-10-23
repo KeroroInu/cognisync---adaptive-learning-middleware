@@ -1,8 +1,10 @@
+import { assertReviewResponse, reviewGeneration } from './projectReview';
 export interface PreparationRecord {
   id: string; kind: 'save' | 'run' | 'chat'; created_at: string; session_id: string | null;
-  payload: { request: { code: string; message: string; output: string[]; error: string }; status: string; reply?: string };
+  payload: { request: { code: string; message: string; output: string[]; error: string }; status: string; reply?: string; support?: import('../components/SupportTools').SupportState };
 }
 export async function preparationRequest<T>(body?: unknown): Promise<T> {
+  const reviewEpoch = reviewGeneration();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 90000);
   try {
@@ -13,6 +15,7 @@ export async function preparationRequest<T>(body?: unknown): Promise<T> {
     });
     const result = await response.json().catch(() => null);
     if (!response.ok || !result?.success) throw new Error(typeof result?.detail === 'string' ? result.detail : '没有保存成功，请稍后重试。');
+    if (body && typeof body === 'object' && 'kind' in body && body.kind === 'chat') assertReviewResponse(reviewEpoch);
     return result.data;
   } catch (error) {
     if (controller.signal.aborted) throw new Error('连接超时，先刷新查看记录；草稿仍在本机。');

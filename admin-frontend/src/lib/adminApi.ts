@@ -63,9 +63,13 @@ class AdminApiClient {
       
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
+        const detail = errorData.detail;
+        const detailMessage = typeof detail === 'string' ? detail
+          : Array.isArray(detail) ? detail.map(item => item.msg).filter(Boolean).join('；')
+          : detail?.message;
         throw new Error(
           errorData.message ||
-          errorData.detail ||
+          detailMessage ||
           `HTTP ${response.status}: ${response.statusText}`
         );
       }
@@ -101,14 +105,23 @@ class AdminApiClient {
   }
 
   // Users
-  async getUsers(page: number = 1, pageSize: number = 10, query?: string): Promise<UsersListResponse> {
+  async getUsers(page: number = 1, pageSize: number = 10, query?: string, group?: string): Promise<UsersListResponse> {
     const params = new URLSearchParams({
       page: page.toString(),
       page_size: pageSize.toString(),
     });
     if (query) params.append('query', query);
+    if (group) params.append('experiment_group', group);
     
     return this.request<UsersListResponse>(`/users?${params}`);
+  }
+
+  async getUnassignedStudentIds(query: string): Promise<{ ids: string[] }> {
+    return this.request(`/users/unassigned-ids?${new URLSearchParams({ query })}`);
+  }
+
+  async assignStudents(userIds: string[], className: string): Promise<{ assigned: number; class_name: string }> {
+    return this.request('/users/batch-assign', { method: 'POST', body: JSON.stringify({ user_ids: userIds, class_name: className }) });
   }
 
   async getUserDetail(userId: string): Promise<UserDetail> {
@@ -146,7 +159,7 @@ class AdminApiClient {
     return this.request<{ deleted: boolean }>(`/users/${userId}`, { method: 'DELETE' });
   }
 
-  async updateUser(userId: string, data: { name?: string; is_active?: boolean; class_name?: string; experiment_group?: User['experiment_group'] }): Promise<{ id: string; email: string; name: string; is_active: boolean }> {
+  async updateUser(userId: string, data: { name?: string; student_id?: string; gender?: User['gender']; school_class?: string | null; is_active?: boolean; class_name?: string; experiment_group?: User['experiment_group'] }): Promise<{ id: string; email: string; name: string; is_active: boolean }> {
     return this.request(`/users/${userId}`, {
       method: 'PATCH',
       body: JSON.stringify(data),

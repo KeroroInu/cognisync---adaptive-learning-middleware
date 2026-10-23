@@ -4,10 +4,11 @@ import { MemoryRouter } from 'react-router-dom';
 import { Classroom } from './Classroom';
 
 describe('classroom initial interface', () => {
-  it('loads session state before exposing class controls and keeps research export discoverable', () => {
+  it('loads class content without a start/end control and keeps research export discoverable', () => {
     const html = renderToStaticMarkup(<MemoryRouter><Classroom /></MemoryRouter>);
-    expect(html).toContain('正在读取课堂');
-    expect(html).toContain('新的一课');
+    expect(html).toContain('正在读取');
+    expect(html).not.toContain('新的一课');
+    expect(html).not.toContain('开始上课');
     expect(html).toContain('解构班');
     expect(html).toContain('开发班');
     expect(html).toContain('数据导出');

@@ -7,7 +7,7 @@ type Provider = 'openai' | 'deepseek' | 'ollama' | 'lmstudio' | 'mock';
 
 const PROVIDERS: { value: Provider; label: string; needsKey: boolean; defaultUrl: string; defaultModel: string }[] = [
   { value: 'openai', label: 'OpenAI', needsKey: true, defaultUrl: 'https://api.openai.com/v1', defaultModel: 'gpt-4o-mini' },
-  { value: 'deepseek', label: 'DeepSeek', needsKey: true, defaultUrl: 'https://api.deepseek.com/v1', defaultModel: 'deepseek-chat' },
+  { value: 'deepseek', label: 'DeepSeek', needsKey: true, defaultUrl: 'https://api.deepseek.com/v1', defaultModel: 'deepseek-flash' },
   { value: 'ollama', label: 'Ollama（本地）', needsKey: false, defaultUrl: 'http://localhost:11434/v1', defaultModel: 'llama3.2' },
   { value: 'lmstudio', label: 'LM Studio（本地）', needsKey: false, defaultUrl: 'http://localhost:1234/v1', defaultModel: 'local-model' },
   { value: 'mock', label: 'Mock（测试用）', needsKey: false, defaultUrl: '', defaultModel: '' },
@@ -95,8 +95,8 @@ function RoleDisplayCard({ title, description, config, icon, onEdit }: {
             {providerMeta.needsKey && (
               <div className="flex items-center justify-between py-2.5">
                 <span className="text-xs" style={{ color: 'var(--text-light)' }}>API Key</span>
-                <span className="text-sm" style={{ color: config.api_key ? '#10b981' : 'rgba(239,68,68,0.8)' }}>
-                  {config.api_key ? '● ● ● ● ● 已设置' : '未配置'}
+                <span className="text-sm" style={{ color: config.has_api_key ? '#10b981' : 'rgba(239,68,68,0.8)' }}>
+                  {config.has_api_key ? '● ● ● ● ● 已设置' : '未配置'}
                 </span>
               </div>
             )}
@@ -121,7 +121,7 @@ function EditModal({ role, title, initial, onSave, onClose }: {
   onSave: (config: LlmRoleConfig) => void;
   onClose: () => void;
 }) {
-  const [form, setForm] = useState<LlmRoleConfig>(initial);
+  const [form, setForm] = useState<LlmRoleConfig>({ ...initial, api_key: '' });
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState('');
@@ -133,8 +133,9 @@ function EditModal({ role, title, initial, onSave, onClose }: {
     setForm(prev => ({
       ...prev,
       provider,
-      base_url: prev.base_url || meta.defaultUrl,
-      model: prev.model || meta.defaultModel,
+      api_key: '',
+      base_url: meta.defaultUrl,
+      model: meta.defaultModel,
     }));
   };
 
@@ -143,11 +144,10 @@ function EditModal({ role, title, initial, onSave, onClose }: {
     setStatus('idle');
     try {
       await adminApi.saveLlmConfig(role, form);
-      setStatus('success');
-      setTimeout(() => {
-        onSave(form);
-        onClose();
-      }, 800);
+      const saved = await adminApi.getLlmConfig();
+      setForm(prev => ({ ...prev, api_key: '' }));
+      onSave(saved[role]);
+      onClose();
     } catch (err: unknown) {
       setErrorMsg(err instanceof Error ? err.message : '保存失败');
       setStatus('error');
@@ -196,7 +196,8 @@ function EditModal({ role, title, initial, onSave, onClose }: {
                   type="password"
                   value={form.api_key}
                   onChange={e => setForm(prev => ({ ...prev, api_key: e.target.value }))}
-                  placeholder="sk-..."
+                  autoComplete="new-password"
+                  placeholder={initial.has_api_key ? '留空保留原 key；更换服务需重新填写' : '粘贴 API key'}
                   className="w-full px-3 py-2 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
                   style={fieldStyle}
                 />

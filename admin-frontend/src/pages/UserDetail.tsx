@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { adminApi } from '../lib/adminApi';
 import { TeacherNotes } from '../components/TeacherNotes';
+import { StudentArtifacts } from '../components/StudentArtifacts';
 import type {
   UserDetail as UserDetailType, ChatMessage, ProfileSnapshot,
   ScaleResponse, CalibrationLog, GraphNode, GraphEdge,
@@ -9,7 +10,7 @@ import type {
 import {
   ArrowLeft, MessageSquare, TrendingUp, FileText,
   ArrowUp, ArrowDown, Minus,
-  Activity, Network, Download, Loader,
+  Activity, Network, Download, Loader, Code2,
 } from 'lucide-react';
 
 // ── Mini SVG trend chart ──────────────────────────────────────────────────────
@@ -126,12 +127,6 @@ const KnowledgeGraphPreview = ({ nodes, edges }: { nodes: GraphNode[]; edges: Gr
         const target = positions.get(edge.target)!;
         return <line key={`${edge.source}-${edge.target}-${index}`} x1={source.x} y1={source.y} x2={target.x} y2={target.y} stroke="var(--glass-border)" strokeWidth={Math.max(1, edge.weight * 2)} />;
       })}
-      {!visibleEdges.length && visible.map((node, index) => {
-        if (index === 0) return null;
-        const source = positions.get(visible[0].id)!;
-        const target = positions.get(node.id)!;
-        return <line key={`fallback-${node.id}`} x1={source.x} y1={source.y} x2={target.x} y2={target.y} stroke="var(--glass-border)" strokeDasharray="4 5" />;
-      })}
       {visible.map(node => {
         const p = positions.get(node.id)!;
         const color = node.mastery >= 75 ? '#4d7c0f' : node.mastery >= 50 ? '#6366f1' : node.mastery >= 25 ? '#ca8a04' : '#dc5b45';
@@ -172,35 +167,45 @@ export const UserDetail = () => {
   const [graphEdges, setGraphEdges] = useState<GraphEdge[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [activeTab, setActiveTab] = useState<'notes' | 'messages' | 'profiles' | 'scales' | 'calibration' | 'graph'>('notes');
+  const [activeTab, setActiveTab] = useState<'artifacts' | 'notes' | 'messages' | 'profiles' | 'scales' | 'calibration' | 'graph'>('artifacts');
   const [profileFilter, setProfileFilter] = useState<'all' | 'system' | 'user'>('all');
   const [expandedScales, setExpandedScales] = useState<Set<string>>(new Set());
   const [exporting, setExporting] = useState<string | null>(null);
+  const loadRevision = useRef(0);
 
   const loadData = useCallback(async () => {
     if (!userId) return;
+    const revision = ++loadRevision.current;
     try {
       setLoading(true);
       setError('');
-      const [userRes, messagesRes, profilesRes, scalesRes, calibRes, graphRes] = await Promise.all([
-        adminApi.getUserDetail(userId),
+      setActiveTab('artifacts');
+      setMessages([]); setProfiles([]); setScaleResponses([]); setCalibrationLogs([]);
+      setGraphNodes([]); setGraphEdges([]); setExpandedScales(new Set());
+      // Offline submissions do not depend on the legacy graph/profile endpoints.
+      const legacyData = Promise.allSettled([
         adminApi.getUserMessages(userId, 200),
         adminApi.getUserProfiles(userId),
         adminApi.getUserScaleResponses(userId),
         adminApi.getUserCalibrationLogs(userId),
         adminApi.getUserGraph(userId),
       ]);
+      const userRes = await adminApi.getUserDetail(userId);
+      if (revision !== loadRevision.current) return;
       setUserDetail(userRes);
-      setMessages(messagesRes.messages);
-      setProfiles(profilesRes);
-      setScaleResponses(scalesRes);
-      setCalibrationLogs(calibRes);
-      setGraphNodes(graphRes.nodes);
-      setGraphEdges(graphRes.edges);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load user data');
-    } finally {
       setLoading(false);
+      const [messagesRes, profilesRes, scalesRes, calibRes, graphRes] = await legacyData;
+      if (revision !== loadRevision.current) return;
+      setMessages(messagesRes.status === 'fulfilled' ? messagesRes.value.messages : []);
+      setProfiles(profilesRes.status === 'fulfilled' ? profilesRes.value : []);
+      setScaleResponses(scalesRes.status === 'fulfilled' ? scalesRes.value : []);
+      setCalibrationLogs(calibRes.status === 'fulfilled' ? calibRes.value : []);
+      setGraphNodes(graphRes.status === 'fulfilled' ? graphRes.value.nodes : []);
+      setGraphEdges(graphRes.status === 'fulfilled' ? graphRes.value.edges : []);
+    } catch (err) {
+      if (revision === loadRevision.current) setError(err instanceof Error ? err.message : '读取学生信息失败，请刷新后重试。');
+    } finally {
+      if (revision === loadRevision.current) setLoading(false);
     }
   }, [userId]);
 
@@ -208,6 +213,7 @@ export const UserDetail = () => {
     if (userId) {
       void loadData();
     }
+    return () => { loadRevision.current += 1; };
   }, [userId, loadData]);
 
   const toggleScale = (id: string) => {
@@ -276,8 +282,9 @@ export const UserDetail = () => {
   const initials = (userDetail.name || userDetail.student_id || '').slice(0, 2).toUpperCase();
 
   const TABS = [
+    { key: 'artifacts', label: '作品与 SFLS 对话', icon: Code2, count: null },
     { key: 'notes', label: '课堂点评', icon: FileText, count: null },
-    { key: 'messages', label: '对话记录', icon: MessageSquare, count: messages.length },
+    { key: 'messages', label: '网页助手对话', icon: MessageSquare, count: messages.length },
     { key: 'profiles', label: '画像变化', icon: TrendingUp, count: profiles.length },
     { key: 'scales', label: '量表评分', icon: FileText, count: scaleResponses.length },
     { key: 'calibration', label: '自评修正', icon: Activity, count: calibrationLogs.length },
@@ -285,7 +292,7 @@ export const UserDetail = () => {
   ] as const;
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="student-detail-page space-y-6 animate-fade-in">
       {/* Back button */}
       <button onClick={() => navigate('/users')}
         className="flex items-center gap-2 transition-colors" style={{ color: 'var(--brand-blue)' }}>
@@ -293,12 +300,12 @@ export const UserDetail = () => {
       </button>
 
       {/* ── User Info Header ── */}
-      <div className="glass-card p-6 rounded-2xl stagger-1">
+      <div className="glass-card student-detail-header p-6 rounded-2xl stagger-1">
         <div className="flex flex-col md:flex-row md:items-start gap-6">
           {/* Avatar + basic info */}
           <div className="flex items-center gap-4">
             <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-xl font-bold text-white flex-shrink-0"
-              style={{ background: 'var(--brand-purple)', color: 'var(--text-primary)', border: '1px solid var(--text-primary)' }}>
+              style={{ background: 'var(--brand-purple)', color: '#263719', border: '1px solid var(--line-strong)' }}>
               {initials}
             </div>
             <div>
@@ -309,7 +316,7 @@ export const UserDetail = () => {
               <div className="flex gap-2 mt-2 flex-wrap">
                 <span className="px-2 py-0.5 rounded text-xs font-medium"
                   style={{ backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--glass-border)' }}>
-                  {userDetail.role}
+                  {{ learner: '学生', student: '学生', admin: '教师', teacher: '教师' }[userDetail.role] || userDetail.role}
                 </span>
                 <span className="px-2 py-0.5 rounded text-xs font-medium"
                   style={{ backgroundColor: 'var(--surface-muted)', border: '1px solid var(--glass-border)' }}>
@@ -326,25 +333,8 @@ export const UserDetail = () => {
             </div>
           </div>
 
-          {/* Stats */}
-          <div className="flex gap-6 md:ml-auto flex-wrap">
-            {[
-              { label: '消息总数', value: userDetail.messages_count, icon: MessageSquare, color: 'text-indigo-500' },
-              { label: '会话数', value: userDetail.sessions_count, icon: TrendingUp, color: 'text-purple-500' },
-              { label: '量表完成', value: userDetail.responses_count, icon: FileText, color: 'text-pink-500' },
-            ].map(({ label, value, icon: Icon, color }) => (
-              <div key={label} className="text-center">
-                <div className={`flex items-center gap-1 justify-center ${color}`}>
-                  <Icon size={16} />
-                  <span className="text-2xl font-bold">{value}</span>
-                </div>
-                <p className="text-xs mt-0.5" style={{ color: 'var(--text-light)' }}>{label}</p>
-              </div>
-            ))}
-          </div>
-
           {/* Dates */}
-          <div className="text-sm space-y-1 md:text-right flex-shrink-0" style={{ color: 'var(--text-light)' }}>
+          <div className="text-sm space-y-1 md:ml-auto md:text-right flex-shrink-0" style={{ color: 'var(--text-light)' }}>
             <p>注册：{new Date(userDetail.created_at).toLocaleDateString('zh-CN')}</p>
             {userDetail.last_active_at && (
               <p>活跃：{new Date(userDetail.last_active_at).toLocaleDateString('zh-CN')}</p>
@@ -355,7 +345,9 @@ export const UserDetail = () => {
       </div>
 
       {/* ── Teacher diagnostic window ── */}
-      <section className="glass-card rounded-2xl overflow-hidden stagger-2">
+      {(currentProfile || graphNodes.length > 0) && <details className="student-detail-legacy-summary">
+        <summary>查看已有的平台画像与概念记录（不含本次作品的自动评分）</summary>
+      <section className="rounded-2xl overflow-hidden">
         <div className="px-6 py-4 flex flex-wrap items-center justify-between gap-3 border-b" style={{ borderColor: 'var(--glass-border)' }}>
           <div>
             <p className="text-xs font-bold tracking-widest" style={{ color: 'var(--brand-green)' }}>STUDENT DIAGNOSTIC</p>
@@ -394,20 +386,18 @@ export const UserDetail = () => {
           </div>
         </div>
       </section>
+      </details>}
 
       {/* ── Tabs ── */}
-      <div className="glass-card rounded-2xl overflow-hidden stagger-3">
-        <div className="flex border-b overflow-x-auto" style={{ borderColor: 'var(--glass-border)' }}>
-          {TABS.map(({ key, label, icon: Icon, count }) => (
+      <div className="glass-card student-detail-records rounded-2xl overflow-hidden stagger-3">
+        <div className="student-detail-tabs" role="tablist" aria-label="学生资料">
+          {TABS.filter(tab => tab.count === null || tab.count > 0).map(({ key, label, icon: Icon, count }) => (
             <button
               key={key}
+              role="tab"
+              aria-selected={activeTab === key}
               onClick={() => setActiveTab(key)}
-              className={`flex-shrink-0 px-4 py-4 text-sm font-medium transition-colors ${
-                activeTab === key
-                  ? 'border-b-2 border-indigo-500 text-indigo-600'
-                  : 'hover:bg-gray-50'
-              }`}
-              style={activeTab !== key ? { color: 'var(--text-light)' } : {}}
+              className="flex-shrink-0 text-sm"
             >
               <div className="flex items-center justify-center gap-2">
                 <Icon size={16} />
@@ -421,7 +411,8 @@ export const UserDetail = () => {
           ))}
         </div>
 
-        <div className="p-6">
+        <div className="student-detail-tab-content">
+          {activeTab === 'artifacts' && userId && <StudentArtifacts key={userId} userId={userId} />}
           {activeTab === 'notes' && userId && <TeacherNotes key={userId} userId={userId} />}
 
           {/* ════ MESSAGES TAB ════ */}

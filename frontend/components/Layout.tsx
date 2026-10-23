@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { translations } from '../utils/translations';
 import type { Language, User } from '../types';
+import { AssessmentEntry } from './AssessmentEntry';
 
 type View = 'preparation' | 'dashboard' | 'chat' | 'graph' | 'calibration' | 'evidence' | 'research' | 'scales';
 type Theme = 'light' | 'dark';
@@ -185,6 +186,7 @@ export const Layout: React.FC<Props> = ({
           </nav>
 
           <div className="workspace-actions">
+            <AssessmentEntry />
             <div className="workspace-online" title={t.systemActive}>
               <span className="status-dot" />
               <Activity size={14} />

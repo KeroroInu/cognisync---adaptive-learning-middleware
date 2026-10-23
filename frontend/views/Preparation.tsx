@@ -1,10 +1,12 @@
 import React, { Suspense, useEffect, useRef, useState } from 'react';
-import { ArrowRight, Code2, LogOut, Play, Send, X } from 'lucide-react';
+import { Code2, LogOut, Play, Send, X } from 'lucide-react';
 import type { ClassroomState } from '../services/classroom';
 import { preparationDraftKey, preparationRequest, type PreparationRecord } from '../services/preparation';
 import './Preparation.css';
 import { ClassroomMaterials } from '../components/ClassroomMaterials';
-import { FloatingCompanion } from '../components/FloatingCompanion';
+import { AssessmentEntry } from '../components/AssessmentEntry';
+import { useCompanionAssistant } from '../components/CompanionTools';
+import { SupportTools, type SupportChoice, type SupportState } from '../components/SupportTools';
 
 const Editor = React.lazy(() => import('../components/ResearchCodeEditor'));
 const STARTER = '# 在这里试一小段 Python\nprint("你好，Python！")\n';
@@ -20,12 +22,13 @@ function Reply({ text }: { text: string }) {
     ? <pre key={index}><code>{part}</code></pre> : <p key={index}>{part}</p>)}</>;
 }
 
-export function Preparation({ userId, name, classroom, onEnter, onLogout }: {
-  userId: string; name: string; classroom: ClassroomState | null; onEnter: () => void; onLogout: () => void;
+export function Preparation({ userId, name, classroom, onEnter, onLogout, theme }: {
+  userId: string; name: string; classroom: ClassroomState | null; onEnter: () => void; onLogout: () => void; theme: 'light' | 'dark';
 }) {
   const [code, setCode] = useState(() => readDraft(userId)?.code ?? STARTER);
   const [message, setMessage] = useState(() => readDraft(userId)?.message ?? '');
   const [records, setRecords] = useState<PreparationRecord[]>([]);
+  const [support, setSupport] = useState<SupportState | null>(null);
   const [ready, setReady] = useState(false);
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [output, setOutput] = useState<string[]>([]);
@@ -37,16 +40,25 @@ export function Preparation({ userId, name, classroom, onEnter, onLogout }: {
   const [sending, setSending] = useState(false);
   const [showOutput, setShowOutput] = useState(true);
   const [chatOpen, setChatOpen] = useState(true);
+  const [workspace, setWorkspace] = useState<'tasks' | 'python'>('tasks');
   const chatPanel = useRef<HTMLElement>(null);
+  const composer = useRef<HTMLTextAreaElement>(null);
+  const conversation = useRef<HTMLDivElement>(null);
+  const composing = useRef(false);
+  const followConversation = useRef(true);
   const alive = useRef(true);
   const busyRun = useRef(false);
   const busyChat = useRef(false);
   const latest = useRef({ code, message });
   const savedCode = useRef<string | null>(null);
   const saveChain = useRef(Promise.resolve());
-  const entry = classroom?.lesson_entry;
-  const aiOpen = !classroom?.session || classroom.session.state === 'open';
+  const aiOpen = true;
   latest.current = { code, message };
+
+  useEffect(() => { setSupport(null); }, [userId, classroom?.session?.id]);
+  useEffect(() => {
+    if (chatOpen && followConversation.current && conversation.current) conversation.current.scrollTop = conversation.current.scrollHeight;
+  }, [records, chatOpen]);
 
   useEffect(() => {
     alive.current = true;
@@ -70,8 +82,8 @@ export function Preparation({ userId, name, classroom, onEnter, onLogout }: {
   }, [code, message, ready, userId]);
 
   useEffect(() => {
-    if (!ready) return;
-    if (code === savedCode.current) return;
+    if (!ready || workspace !== 'python') return;
+    if (code === (savedCode.current ?? STARTER)) return;
     setSaveLabel('待同步');
     const timer = setTimeout(() => {
       const snapshot = code;
@@ -85,7 +97,7 @@ export function Preparation({ userId, name, classroom, onEnter, onLogout }: {
       });
     }, 1000);
     return () => clearTimeout(timer);
-  }, [code, ready, userId]);
+  }, [code, ready, userId, workspace]);
 
   async function run() {
     if (busyRun.current) return;
@@ -103,47 +115,77 @@ export function Preparation({ userId, name, classroom, onEnter, onLogout }: {
     finally { busyRun.current = false; if (alive.current) setRunning(false); }
   }
 
-  async function send(event: React.FormEvent) {
-    event.preventDefault();
-    if (!ready || !message.trim() || busyChat.current || !aiOpen) return;
+  async function send(choice?: SupportChoice) {
+    if (!ready || (!message.trim() && !choice) || busyChat.current || !aiOpen) return;
     busyChat.current = true; setSending(true); setError('');
-    const question = message;
+    const question = choice?.text ?? message.trim();
+    const requestId = crypto.randomUUID();
+    followConversation.current = true;
+    if (!choice) { setMessage(''); composer.current?.focus(); }
+    // Show the student's turn before waiting for the model; replace it in place
+    // with the server record so history has no duplicate question.
+    setRecords(previous => [...previous, { id: requestId, kind: 'chat', created_at: new Date().toISOString(), session_id: classroom?.session?.id ?? null,
+      payload: { request: { code, message: question, output, error: runError }, status: 'client_sending' } }]);
     try {
-      const record = await preparationRequest<PreparationRecord>({ request_id: crypto.randomUUID(), kind: 'chat', code, last_run_code: runCode, message: question, output, error: runError });
+      const record = await preparationRequest<PreparationRecord>({ request_id: requestId, kind: 'chat', code, last_run_code: runCode, message: question, output, error: runError,
+        support_action: choice?.action ?? 'message', support_practice_id: choice?.practiceId, support_answer: choice?.answer });
       if (alive.current) {
-        setRecords(previous => [...previous, record]);
-        if (latest.current.message === question) setMessage('');
+        setRecords(previous => previous.map(item => item.id === requestId ? record : item));
+        if (record.payload.support) setSupport(record.payload.support);
       }
-    } catch (cause) { if (alive.current) setError(cause instanceof Error ? cause.message : '没有发送成功'); }
+    } catch (cause) {
+      if (alive.current) {
+        setError(cause instanceof Error ? cause.message : '没有发送成功');
+        setRecords(previous => previous.map(item => item.id === requestId ? { ...item, payload: { ...item.payload, status: 'client_error' } } : item));
+        if (!choice) setMessage(draft => draft || question);
+      }
+    }
     finally { busyChat.current = false; if (alive.current) setSending(false); }
   }
 
+  useCompanionAssistant(aiOpen, chatOpen && workspace === 'python', sending, () => {
+    setWorkspace('python');
+    setChatOpen(true);
+    requestAnimationFrame(() => { const input = chatPanel.current?.querySelector('textarea'); input?.focus(); input?.scrollIntoView({ block: 'nearest' }); });
+  });
+
   return <main className="preparation">
-    <header className="preparation-header"><div><strong>准备区</strong><span>{name}，先试一试。</span></div>
-      <div><ClassroomMaterials sessionId={classroom?.session?.id} />{entry ? <button className="prep-primary" disabled={running || sending} onClick={onEnter}>进入本课：{entry.title}<ArrowRight size={18} /></button>
-        : <span role="status">{classroom ? '等待老师开始本课' : '正在连接课堂…'}</span>}<button aria-label="退出登录" onClick={onLogout}><LogOut size={18} /></button></div>
+    <header className="preparation-header"><div className="preparation-brand"><span className="studio-brand-mark" aria-hidden="true">S</span><strong>SFLS<span>课堂工作台</span></strong></div>
+      <nav aria-label="课堂导航"><button aria-pressed={workspace === 'tasks'} onClick={() => setWorkspace('tasks')}>我的课堂</button><button aria-pressed={workspace === 'python'} onClick={() => setWorkspace('python')}><Code2 size={15} />Python 小实验</button><AssessmentEntry /></nav>
+      <div className="preparation-identity"><span>{name} · {classroom?.session?.class_name || '我的课堂'}</span><button aria-label="退出登录" title="退出登录" onClick={onLogout}><LogOut size={17} /></button></div>
     </header>
     {error ? <div className="preparation-error" role="alert">{error} {!ready && <button onClick={() => setLoadAttempt(value => value + 1)}>重新读取</button>}</div> : null}
-    {aiOpen && <FloatingCompanion userId={userId} open={chatOpen} busy={sending} onActivate={() => {
-      setChatOpen(true);
-      requestAnimationFrame(() => { const input = chatPanel.current?.querySelector('textarea'); input?.focus(); input?.scrollIntoView({ block: 'nearest' }); });
-    }} />}
-    <div className={`preparation-grid${chatOpen ? '' : ' chat-collapsed'}`}>
+    <div hidden={workspace !== 'tasks'} className="preparation-task-area"><ClassroomMaterials sessionId={classroom?.session?.id} userId={userId} embedded onToolboxOpen={() => setWorkspace('tasks')} onPython={() => setWorkspace('python')} /></div>
+    {workspace === 'python' && <div className={`preparation-grid${chatOpen ? '' : ' chat-collapsed'}`}>
       <section className="preparation-code" aria-label="Python 小实验">
         <header><span><Code2 size={18} />Python 小实验</span><small role="status">{saveLabel}</small></header>
-        <div className="preparation-editor">{ready ? <Suspense fallback={<p>正在打开编辑器…</p>}><Editor value={code} language="python" theme="dark" onChange={value => { if (value.length <= 50000) setCode(value); }} /></Suspense> : <p className="preparation-loading">先恢复你的草稿，再开始。</p>}</div>
+        <div className="preparation-editor">{ready ? <Suspense fallback={<p>正在打开编辑器…</p>}><Editor value={code} language="python" theme={theme} onChange={value => { if (value.length <= 50000) setCode(value); }} /></Suspense> : <p className="preparation-loading">先恢复你的草稿，再开始。</p>}</div>
         <div className="preparation-output"><button aria-expanded={showOutput} onClick={() => setShowOutput(value => !value)}>输出 {showOutput ? '⌄' : '›'}</button>
           {runCode !== null && runCode !== code ? <small>代码已修改，下面是上次运行的结果。</small> : null}
           {showOutput ? <pre aria-label="运行输出">{output.join('\n') || '运行后在这里看结果。'}{runError ? `\n${runError}` : ''}</pre> : null}</div>
         <footer><details><summary>能做什么？</summary>基础 Python、print、math、random。暂不支持 input、文件和桌面窗口。</details><button className="prep-primary" disabled={running || !ready} onClick={() => void run()}><Play size={17} />{running ? '运行中…' : '运行'}</button></footer>
       </section>
-      <section ref={chatPanel} className="preparation-chat" aria-label="AI 对话" hidden={!chatOpen}><header><strong>一起试试</strong><span>AI 能看到左边的代码和运行输出</span>{aiOpen && <button aria-label="收起 AI 助手" onClick={() => setChatOpen(false)}><X size={17} /></button>}</header>
-        <div className="preparation-messages" aria-live="polite">
-          {!records.some(item => item.kind === 'chat') ? <p className="preparation-welcome">想试什么？写几行，或者问我一句。</p> : records.filter(item => item.kind === 'chat').map(item => <article key={item.id}><p className="preparation-question">{item.payload.request.message}</p><div><Reply text={item.payload.reply || '这条提问已保存，尚未收到回复。'} /></div></article>)}
-          {sending ? <p role="status">AI 正在回复…</p> : null}
+      <section ref={chatPanel} className="preparation-chat" aria-label="AI 对话" hidden={!chatOpen}><header><strong>一起试试</strong><span>只看到这里的小实验，不会读取电脑里的 SFLS 工程</span>{aiOpen && <button aria-label="收起 AI 助手" onClick={() => setChatOpen(false)}><X size={17} /></button>}</header>
+        <div ref={conversation} className="preparation-messages" role="log" aria-label="训练区对话" aria-live="polite" aria-relevant="additions text" onScroll={event => {
+          const element = event.currentTarget;
+          followConversation.current = element.scrollHeight - element.scrollTop - element.clientHeight < 60;
+        }}>
+          {!records.some(item => item.kind === 'chat') ? <p className="preparation-welcome">想试什么？写几行，或者问我一句。</p> : records.filter(item => item.kind === 'chat').map(item => <div className="preparation-turn" key={item.id}>
+            <article className="preparation-question" aria-label="我的消息"><small>我</small><p>{item.payload.request.message}</p>{item.payload.status === 'client_error' && <small>暂未确认回复，问题已保留</small>}</article>
+            {item.payload.status !== 'client_error' && <article className="preparation-answer" aria-label="AI 的回复"><small>贪贪 · AI</small>{item.payload.status === 'client_sending' ? <p role="status">正在回复…</p> : <Reply text={item.payload.reply || '这条提问已保存，尚未收到回复。'} />}</article>}
+          </div>)}
         </div>
-        <form onSubmit={event => void send(event)}><textarea aria-label="向 AI 提问" placeholder={aiOpen ? '哪里不明白？Enter 发送，Shift+Enter 换行' : '老师已关闭 AI，仍可测试 Python'} value={message} maxLength={4000} onChange={event => setMessage(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} /><button className="prep-primary" aria-label="发送问题" disabled={sending || !ready || !aiOpen || !message.trim()}><Send size={20} /></button></form>
+        <details className="preparation-help" open={support?.practice ? true : undefined}><summary>需要一点提示？</summary>
+          <SupportTools key={classroom?.session?.id || 'preparation'} entry="preparation" busy={sending || !ready || !aiOpen}
+            response={support} onAction={choice => void send(choice)} />
+        </details>
+        <form className="preparation-composer" onSubmit={event => { event.preventDefault(); if (!composing.current) void send(); }}>
+          <textarea ref={composer} aria-label="向 AI 提问" aria-describedby="preparation-chat-hint" placeholder={aiOpen ? '输入你的问题…' : '老师已关闭 AI，仍可测试 Python'} value={message} rows={2} maxLength={4000} onChange={event => setMessage(event.target.value)}
+            onCompositionStart={() => { composing.current = true; }} onCompositionEnd={() => { composing.current = false; }}
+            onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !composing.current && !event.nativeEvent.isComposing && event.nativeEvent.keyCode !== 229) { event.preventDefault(); if (!event.repeat) void send(); } }} />
+          <div className="preparation-composer-footer"><small id="preparation-chat-hint">{sending ? '等回复时也可以先写下一句' : 'Enter 发送 · Shift + Enter 换行'}</small><button type="submit" className="prep-primary" aria-label="发送问题" disabled={sending || !ready || !aiOpen || !message.trim()}><Send size={16} />{sending ? '回复中' : '发送'}</button></div>
+        </form>
       </section>
-    </div>
+    </div>}
   </main>;
 }
