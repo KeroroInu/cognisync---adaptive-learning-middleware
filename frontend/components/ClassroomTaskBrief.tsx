@@ -60,6 +60,20 @@ const COPY: Record<User['experimentGroup'], Record<Language, BriefCopy>> = {
       route: ['Learn', 'Follow', 'Code', 'Check'],
     },
   },
+  experience: {
+    zh: {
+      badge: '体验组',
+      title: '和 SFLS 一起完成你的作品',
+      body: '先看老师发布的任务要求，下载自己的任务包，再和 SFLS 讨论、制作并提交作品。',
+      route: ['查看任务', '下载任务包', '协作制作', '提交作品'],
+    },
+    en: {
+      badge: 'Experience group',
+      title: 'Create your project with SFLS',
+      body: 'Read your teacher’s task, download your own task package, then create and submit your project with SFLS.',
+      route: ['Read task', 'Download', 'Create', 'Submit'],
+    },
+  },
   unassigned: {
     zh: {
       badge: '课堂任务',

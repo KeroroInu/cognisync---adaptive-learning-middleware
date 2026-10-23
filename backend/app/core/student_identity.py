@@ -1,5 +1,14 @@
 """School identity rules; UUIDs, not changeable school numbers, own research data."""
-TEACHING_GROUPS = {"解构班": "pdt", "开发班": "ai_pbl"}
+from typing import Literal
+
+TeachingClass = Literal["解构班", "开发班", "体验组"]
+TeachingGroup = Literal["pdt", "ai_pbl", "experience"]
+
+# Experience classes are separate from both research conditions. The legacy
+# ``lecture`` group is historical evidence only and must not be reused.
+TEACHING_GROUPS: dict[TeachingClass, TeachingGroup] = {
+    "解构班": "pdt", "开发班": "ai_pbl", "体验组": "experience",
+}
 
 
 def clean_school_class(value):

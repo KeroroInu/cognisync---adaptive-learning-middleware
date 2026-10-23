@@ -102,7 +102,7 @@ class User(Base, UUIDMixin):
         default="unassigned",
         nullable=False,
         index=True,
-        comment="实验条件：unassigned | pdt | ai_pbl | lecture"
+        comment="课堂分组：unassigned | pdt | ai_pbl | experience（非实验体验）| lecture（历史）"
     )
 
     created_at: Mapped[datetime] = mapped_column(

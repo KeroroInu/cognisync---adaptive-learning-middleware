@@ -30,7 +30,7 @@ export interface User {
   created_at: string;
   last_active_at: string | null;
   class_name: string | null;
-  experiment_group: 'unassigned' | 'pdt' | 'ai_pbl' | 'lecture';
+  experiment_group: 'unassigned' | 'pdt' | 'ai_pbl' | 'experience' | 'lecture';
   submission_count?: number;
   download_count?: number;
   last_submitted_at?: string | null;
@@ -198,7 +198,7 @@ export interface ResearchTask {
   ai_prompt: string | null;
   code_content: string;
   language: string;
-  target_group: 'all' | 'unassigned' | 'pdt' | 'ai_pbl' | 'lecture';
+  target_group: 'all' | 'unassigned' | 'pdt' | 'ai_pbl' | 'experience' | 'lecture';
   task_kind: 'learning' | 'transfer_test';
   test_template: 'maze_treasure_v1' | null;
   ai_enabled: boolean;

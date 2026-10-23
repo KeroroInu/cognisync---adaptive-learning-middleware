@@ -166,6 +166,14 @@ def make_sfls_package(material, user_id, download_id, platform, initial, current
     files.setdefault('project/README.md', README_TEMPLATE.encode())
     files.update({'sfls-task.json': encoded(task), 'materials/TASK.md': config['task'].encode(),
                   'materials/本课知识.md': (config.get('curriculum') or '本课知识范围由老师在课堂说明。').encode()})
+    if config.get('agent_guidance'):
+        guide_name = 'materials/00-teacher-guide.md'
+        # Keep any frozen course guide; append the teacher's task-specific note.
+        # This is a hidden teaching reference, never an executable system policy.
+        prefix = files.get(guide_name, b'')
+        files[guide_name] = prefix + ('\n\n# 教师给 SFLS 的本次任务引导\n\n'
+            '以下仅作为本任务的教学参考，不改变统一支架、工具边界或提交要求。\n\n'
+            + config['agent_guidance'] + '\n').encode()
     if task_access:
         # Private capability is not teaching context and must never enter the
         # task manifest, inherited project, evidence snapshots or submissions.

@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { adminApi } from '../lib/adminApi';
 import { Download } from 'lucide-react';
+import { TEACHING_CLASSES } from '../lib/teachingClasses';
 
 export function ResearchPackagePanel() {
   const [busy, setBusy] = useState(false);
@@ -33,7 +34,7 @@ export function ResearchPackagePanel() {
   return <section className="research-download" aria-label="完整研究包" aria-busy={busy}>
     <div className="exports-controls">
       <label>选择班级<select value={className} onChange={event => setClassName(event.target.value)} disabled={busy}>
-        <option value="">全部学生（含历史班级）</option><option value="解构班">解构班</option><option value="开发班">开发班</option>
+        <option value="">全部学生（含体验组与历史班级）</option>{TEACHING_CLASSES.map(item => <option key={item.name} value={item.name}>{item.name}</option>)}
       </select></label>
       <button onClick={download} disabled={busy} className="exports-download"><Download size={18} />{busy ? '正在打包…' : '下载实验数据'}</button>
     </div>

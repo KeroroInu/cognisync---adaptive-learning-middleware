@@ -12,6 +12,7 @@ const GROUP_LABELS: Record<User['experiment_group'], string> = {
   unassigned: '未分组',
   pdt: '项目解构式',
   ai_pbl: '常规 AI 协作',
+  experience: '体验组',
   lecture: '历史讲授组',
 };
 
@@ -567,7 +568,7 @@ export const Users = () => {
           <input type="search" aria-label="搜索学生" disabled={bulkLoading} placeholder="搜索姓名、学号或邮箱" value={query} onChange={e => handleSearch(e.target.value)} />
         </label>
         <select aria-label="按教学分组筛选" value={groupFilter} disabled={bulkLoading} onChange={event => { setGroupFilter(event.target.value); setPage(1); setSelectedIds(new Set()); }}>
-          <option value="">全部账号</option><option value="unassigned">未分组学生</option><option value="pdt">解构班</option><option value="ai_pbl">开发班</option>
+          <option value="">全部账号</option><option value="unassigned">未分组学生</option>{TEACHING_CLASSES.map(item => <option key={item.group} value={item.group}>{item.name}</option>)}
         </select>
         <button type="button" disabled={bulkLoading} onClick={() => void selectUnassigned()}>全选未分组（跨页）</button>
         <button type="button" disabled={loading || bulkLoading} onClick={() => void loadUsers()}>刷新名单</button>

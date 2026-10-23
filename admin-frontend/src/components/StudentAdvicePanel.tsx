@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { TEACHING_CLASSES } from '../lib/teachingClasses';
 
 interface AdviceItem {
   id: string; name: string; student_id: string; class_name: string | null;
@@ -38,7 +39,7 @@ export function StudentAdvicePanel() {
       <p>学生通过 SFLS 的 /advice 发送，保留原文。建议也包含在上方数据下载中，不作为能力得分。</p>
       <div className="advice-controls">
         <label>班级 <select value={className} onChange={event => { setClassName(event.target.value); setOffset(0); }}>
-          <option value="">全部班级</option><option>解构班</option><option>开发班</option>
+          <option value="">全部班级</option>{TEACHING_CLASSES.map(item => <option key={item.name}>{item.name}</option>)}
         </select></label>
         <button type="button" disabled={busy} onClick={() => setRefresh(value => value + 1)}>刷新</button>
       </div>

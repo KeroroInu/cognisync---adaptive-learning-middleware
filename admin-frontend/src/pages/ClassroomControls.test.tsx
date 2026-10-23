@@ -5,9 +5,10 @@ import { Classroom } from './Classroom';
 import { ClassroomNotices } from '../components/ClassroomNotices';
 
 describe('simple classroom controls', () => {
-  it('offers exactly the two class destinations without a lesson-start workflow', () => {
+  it('offers the two classes and an independent experience destination without a lesson-start workflow', () => {
     const html = renderToStaticMarkup(<MemoryRouter><Classroom /></MemoryRouter>);
     expect(html).toContain('解构班'); expect(html).toContain('开发班');
+    expect(html).toContain('体验组');
     for (const old of ['新的一课', '开始上课', '重新开放课堂', '确认下课']) expect(html).not.toContain(old);
   });
   it('keeps notification composition collapsed until requested', () => {

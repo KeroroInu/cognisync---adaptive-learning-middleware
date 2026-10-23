@@ -4,7 +4,7 @@
 from uuid import UUID
 from fastapi import APIRouter, Depends, Query, HTTPException, Response
 from pydantic import BaseModel, Field, field_validator
-from app.core.student_identity import TEACHING_GROUPS, clean_student_id, student_id_filter, clean_school_class
+from app.core.student_identity import TeachingClass, TEACHING_GROUPS, clean_student_id, student_id_filter, clean_school_class
 from sqlalchemy import select, func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -65,7 +65,7 @@ async def unassigned_ids(query: Optional[str] = None, db: AsyncSession = Depends
 
 class AssignStudentsRequest(BaseModel):
     user_ids: list[UUID] = Field(min_length=1, max_length=1000)
-    class_name: Literal["解构班", "开发班"]
+    class_name: TeachingClass
 
 
 @router.post("/users/batch-assign", dependencies=[Depends(verify_admin_key)])
@@ -185,7 +185,7 @@ class UpdateUserRequest(BaseModel):
     class_name: Optional[str] = None
     school_class: Optional[str] = None
     _valid_school_class = field_validator("school_class")(clean_school_class)
-    experiment_group: Optional[Literal["unassigned", "pdt", "ai_pbl", "lecture"]] = None
+    experiment_group: Optional[Literal["unassigned", "pdt", "ai_pbl", "experience", "lecture"]] = None
 
     @field_validator("student_id")
     @classmethod
@@ -227,7 +227,7 @@ async def update_user(
         raise HTTPException(status_code=404, detail="User not found")
 
     if body.experiment_group == "lecture" and user.experiment_group != "lecture":
-        raise HTTPException(422, "本轮实验仅分配项目解构＋AI、常规 AI 协作两组；讲授组仅保留历史记录")
+        raise HTTPException(422, "讲授组仅保留历史记录；体验学生请选择体验组")
 
     group = TEACHING_GROUPS.get(body.class_name if body.class_name is not None else user.class_name)
     if group and body.experiment_group is not None and body.experiment_group != group:

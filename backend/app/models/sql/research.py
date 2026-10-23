@@ -96,7 +96,7 @@ class ResearchTask(Base, UUIDMixin):
         String(20),
         nullable=False,
         default="all",
-        comment="投放实验条件：all | pdt | ai_pbl | lecture | unassigned",
+        comment="投放组别：all | pdt | ai_pbl | experience | lecture（历史）| unassigned",
     )
 
     task_kind: Mapped[ResearchTaskKind] = mapped_column(

@@ -11,6 +11,7 @@ describe('classroom initial interface', () => {
     expect(html).not.toContain('开始上课');
     expect(html).toContain('解构班');
     expect(html).toContain('开发班');
+    expect(html).toContain('体验组');
     expect(html).toContain('数据导出');
     expect(html).not.toContain('准备一组题');
     expect(html).not.toContain('发布到学生页面');

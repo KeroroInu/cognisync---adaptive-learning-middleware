@@ -48,7 +48,7 @@ def material_row(item, student=False):
     row['max_submissions'] = MAX_SUBMISSIONS
     row['configuration'] = {key: value for key, value in item.configuration.items() if key != 'lesson_pack'}
     if student:
-        for key in ('statistics_started_at', 'statistics_excluded_user_ids', 'statistics_excluded_student_ids'):
+        for key in ('statistics_started_at', 'statistics_excluded_user_ids', 'statistics_excluded_student_ids', 'agent_guidance'):
             row['configuration'].pop(key, None)
     if item.configuration.get('lesson_pack'):
         row['configuration']['lesson_pack_version'] = item.configuration['lesson_pack']['version']
@@ -122,6 +122,7 @@ class PackageInput(BaseModel):
     runtime: Literal['pi', 'sfls'] = 'pi'
     project_id: str = Field(default='snake-course', pattern=r'^[A-Za-z0-9_-]{1,100}$')
     curriculum: str = Field(default='', max_length=16000)
+    agent_guidance: str = Field(default='', max_length=8000)
     inherit_previous: bool = False
     worksheet: WorksheetTemplate | None = None
 
@@ -137,6 +138,10 @@ def package_configuration(body: PackageInput):
     if kind == 'sfls':
         configuration = {'task': body.task, 'phase': body.phase, 'project_id': body.project_id, 'curriculum': body.curriculum,
                          'inherit_previous': body.inherit_previous, 'sfls_version': SFLS_VERSION, 'policy_version': POLICY_VERSION}
+        if body.agent_guidance:
+            # Optional on new publications only: do not rewrite legacy snapshots
+            # or change their retry equality / declared submission contract.
+            configuration['agent_guidance'] = body.agent_guidance
         if body.worksheet:
             configuration['worksheet'] = worksheet.frozen_template(body.worksheet.model_dump())
             bundle = freeze_lesson_pack(body.worksheet.lesson_id)
@@ -149,8 +154,10 @@ def package_configuration(body: PackageInput):
 
 @admin_router.post('/sessions/{session_id}/packages')
 async def publish_package(session_id: UUID, body: PackageInput, db: AsyncSession = Depends(get_db), teacher: User = Depends(get_current_user)):
-    await locked_session(db, session_id)
-    if body.worksheet and (await db.get(ClassroomSession, session_id)).created_by != teacher.id:
+    session = await locked_session(db, session_id)
+    if session.class_name == '体验组' and body.worksheet:
+        raise HTTPException(422, '体验组请自定义任务，不使用实验班的课程模板')
+    if body.worksheet and session.created_by != teacher.id:
         raise HTTPException(403, '只能为本人负责的课次配置任务单')
     kind = body.runtime
     configuration = package_configuration(body)

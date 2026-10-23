@@ -39,7 +39,7 @@ class ResearchTaskCreate(BaseModel):
     ai_prompt: Optional[str] = None
     code_content: str
     language: str = "python"
-    target_group: Literal["all", "pdt", "ai_pbl", "unassigned"] = "all"
+    target_group: Literal["all", "pdt", "ai_pbl", "experience", "unassigned"] = "all"
     task_kind: Literal["learning"] = "learning"
     test_template: None = None
     ai_enabled: bool = True
@@ -52,7 +52,7 @@ class ResearchTaskUpdate(BaseModel):
     ai_prompt: Optional[str] = None
     code_content: Optional[str] = None
     language: Optional[str] = None
-    target_group: Optional[Literal["all", "pdt", "ai_pbl", "lecture", "unassigned"]] = None
+    target_group: Optional[Literal["all", "pdt", "ai_pbl", "experience", "lecture", "unassigned"]] = None
     task_kind: Optional[Literal["learning"]] = None
     test_template: None = None
     ai_enabled: Optional[bool] = None

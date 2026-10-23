@@ -265,7 +265,7 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
     if data.mode == 'classroom' and data.class_name is not None:
         data.class_name = data.class_name.strip()
         if data.class_name not in TEACHING_GROUPS:
-            raise HTTPException(422, "请选择解构班或开发班")
+            raise HTTPException(422, "请选择解构班、开发班或体验组")
 
     logger.info(f"[REGISTER] Attempting registration for student_id: {data.student_id}, mode: {data.mode}")
 

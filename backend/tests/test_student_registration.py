@@ -55,7 +55,7 @@ async def test_reject_invalid_school_class(client, invalid):
     assert result.status_code == 422
 
 
-@pytest.mark.parametrize('class_name,group', [('解构班', 'pdt'), ('开发班', 'ai_pbl')])
+@pytest.mark.parametrize('class_name,group', [('解构班', 'pdt'), ('开发班', 'ai_pbl'), ('体验组', 'experience')])
 async def test_registration_assigns_class_and_login_identity(client, test_db, class_name, group):
     data, headers = await create(client, className=class_name, student_id=' g2026001234 ')
     assert data['user']['student_id'] == 'G2026001234'

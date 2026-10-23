@@ -8,7 +8,7 @@ import { RegisterScale } from './views/RegisterScale';
 import { RegisterAI } from './views/RegisterAI';
 import { useAppStore } from './services/store';
 import type { User, UserProfile } from './types';
-import { classroomEntry } from './utils/classroomEntry';
+import { classroomEntry, studentViews } from './utils/classroomEntry';
 import { AssessmentGate } from './components/AssessmentGate';
 import { ProjectReviewGate } from './components/ProjectReviewGate';
 import { ClassroomGate } from './components/ClassroomGate';
@@ -75,12 +75,7 @@ function App() {
 
   useEffect(() => {
     if (!state.user) return;
-    const allowed: Record<User['experimentGroup'], AppView[]> = {
-      pdt: ['preparation', 'evidence', 'research', 'scales'],
-      ai_pbl: ['preparation', 'evidence', 'research', 'scales'],
-      lecture: ['preparation', 'evidence', 'scales'],
-      unassigned: ['preparation', 'scales'],
-    };
+    const allowed: Record<User['experimentGroup'], AppView[]> = studentViews;
     if (requiresAuth(currentView) && !allowed[state.user.experimentGroup ?? 'unassigned'].includes(currentView as AppView)) {
       setCurrentView('preparation');
     }

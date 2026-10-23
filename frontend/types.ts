@@ -114,7 +114,7 @@ export interface User {
   hasCompletedOnboarding: boolean;
   onboardingMode?: 'classroom' | 'scale' | 'ai';
   className?: string;
-  experimentGroup: 'unassigned' | 'pdt' | 'ai_pbl' | 'lecture';
+  experimentGroup: 'unassigned' | 'pdt' | 'ai_pbl' | 'lecture' | 'experience';
 }
 
 export interface AuthResponse {
@@ -277,7 +277,7 @@ export interface ResearchTask {
   ai_prompt: string | null;
   code_content: string;
   language: string;
-  target_group: 'all' | 'unassigned' | 'pdt' | 'ai_pbl' | 'lecture';
+  target_group: 'all' | 'unassigned' | 'pdt' | 'ai_pbl' | 'lecture' | 'experience';
   task_kind: 'learning' | 'transfer_test';
   test_template: 'maze_treasure_v1' | null;
   ai_enabled: boolean;

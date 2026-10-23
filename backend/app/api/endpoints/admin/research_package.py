@@ -18,7 +18,7 @@ router = APIRouter(tags=["Admin - Research Package"], dependencies=[Depends(veri
 @router.get("/export/research-package")
 async def export_research_package(
     class_name: str | None = Query(None, min_length=1, max_length=100),
-    group: Literal["pdt", "ai_pbl", "lecture", "unassigned"] | None = None,
+    group: Literal["pdt", "ai_pbl", "experience", "lecture", "unassigned"] | None = None,
     include_identity: bool = False,
     include_graph: bool = True,
     include_originals: bool = True,

@@ -50,6 +50,7 @@ const TARGET_GROUPS: Array<{ value: ResearchTask['target_group']; label: string 
   { value: 'all', label: '全部实验组（公共任务）' },
   { value: 'pdt', label: '项目解构式教学组' },
   { value: 'ai_pbl', label: '常规 AI 协作' },
+  { value: 'experience', label: '体验组' },
   { value: 'lecture', label: '历史讲授组' },
   { value: 'unassigned', label: '未分组学生' },
 ];

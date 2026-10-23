@@ -1,6 +1,5 @@
 """Teacher-to-class copyable notices, not questionnaires or research evidence."""
 from datetime import datetime, timedelta
-from typing import Literal
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
@@ -11,13 +10,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.endpoints.auth import get_current_user
 from app.core.security import verify_admin_key
+from app.core.student_identity import TeachingClass
 from app.db.postgres import get_db
 from app.models.sql.classroom_notice import ClassroomNotice
 from app.models.sql.user import User
 from app.services.classroom_notice import active_notice, active_notices, notice_row
 
 router = APIRouter(prefix="/classroom", tags=["Admin Classroom"], dependencies=[Depends(verify_admin_key)])
-NoticeClass = Literal["解构班", "开发班"]
+NoticeClass = TeachingClass
 NOTICE_LOCK = 739204825
 
 

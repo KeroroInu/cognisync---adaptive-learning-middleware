@@ -320,7 +320,7 @@ export const UserDetail = () => {
                 </span>
                 <span className="px-2 py-0.5 rounded text-xs font-medium"
                   style={{ backgroundColor: 'var(--surface-muted)', border: '1px solid var(--glass-border)' }}>
-                  {userDetail.class_name || '未填班级'} · {{ unassigned: '等待教师安排', pdt: '项目解构＋AI组', ai_pbl: '常规AI协作组', lecture: '历史讲授组' }[userDetail.experiment_group]}
+                  {userDetail.class_name || '未填班级'} · {{ unassigned: '等待教师安排', pdt: '项目解构＋AI组', ai_pbl: '常规AI协作组', experience: '体验组', lecture: '历史讲授组' }[userDetail.experiment_group]}
                 </span>
                 <span className={`px-2 py-0.5 rounded text-xs font-medium ${
                   userDetail.is_active

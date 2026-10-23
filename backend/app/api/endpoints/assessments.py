@@ -12,6 +12,7 @@ from sqlalchemy.orm import load_only
 
 from app.api.endpoints.auth import get_current_user
 from app.core.security import verify_admin_key
+from app.core.student_identity import TeachingClass
 from app.db.postgres import get_db
 from app.models.sql.assessment import AssessmentResponse, AssessmentRound
 from app.models.sql.user import User
@@ -54,7 +55,7 @@ class ToggleInput(BaseModel):
 class DistributeInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     request_id: UUID
-    class_name: Literal["解构班", "开发班"]
+    class_name: TeachingClass
 
 
 class AnswerInput(BaseModel):

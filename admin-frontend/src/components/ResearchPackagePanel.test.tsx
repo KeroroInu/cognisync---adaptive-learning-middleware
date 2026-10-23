@@ -8,6 +8,7 @@ describe('Research package controls', () => {
     expect(html).toContain('下载实验数据');
     expect(html).toContain('解构班');
     expect(html).toContain('开发班');
+    expect(html).toContain('<option value="体验组">体验组</option>');
     expect(html).not.toContain('实验组');
     expect(html).toContain('<details');
     expect(html).toContain('包含当前知识图谱');

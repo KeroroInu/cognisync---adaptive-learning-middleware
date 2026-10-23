@@ -113,7 +113,7 @@ export function TaskDesign({ materialId, userId, onDirty, tool = 'requirements' 
     {localDraft && <p>本机有未同步草稿。<button disabled={!ready || busy} onClick={() => { change({ ...localDraft, revision: design.revision }); setEditorRevision(n => n + 1); setLocalDraft(null); }}>恢复草稿</button><button onClick={() => { localStorage.removeItem(key); setLocalDraft(null); }}>使用云端版本</button></p>}
     {!ready ? <p>{error ? <button onClick={() => setLoadAttempt(value => value + 1)}>重新读取设计</button> : '正在读取你的设计…'}</p> : <>
       <div hidden={tool !== 'requirements'} className="task-requirements"><span className="studio-eyebrow">我的需求文档</span><h2>先把想法说清楚。</h2><p>想做什么？有哪些规则？怎样算做好了？已有想法写下来就行。</p>
-        <label>我的需求<textarea aria-label="我的需求" value={design.requirements} disabled={busy} maxLength={6000} rows={10} placeholder="例如：我想做一个可以重新开始的贪吃蛇。方向键控制，吃到食物变长；撞墙时停下来。" onChange={event => change({ ...design, requirements: event.target.value })} /></label>
+        <label>我的需求<textarea aria-label="我的需求" value={design.requirements} disabled={busy} maxLength={6000} rows={10} placeholder="写下你想做的作品：给谁使用、需要哪些功能、遵循什么规则，以及怎样算完成。" onChange={event => change({ ...design, requirements: event.target.value })} /></label>
         <small>只保存你的表达。已保存的文档和图会随任务包下载，也可单独下载设计。</small>
       </div>
       {boardVisited && <div hidden={tool !== 'board'} className="task-drawio-panel"><DrawioEditor key={editorRevision} saveRequest={editorSave} xml={legacyDiagram(design)} disabled={busy} onChange={xml => { if (xml !== currentDesign.current.drawio_xml) change({ ...currentDesign.current, drawio_xml: xml }); }} onSave={save} /></div>}

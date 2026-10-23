@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.endpoints.auth import get_current_user
 from app.core.security import verify_admin_key
+from app.core.student_identity import TeachingClass, TeachingGroup
 from app.db.postgres import get_db
 from app.models.sql.classroom import ClassroomControlEvent, ClassroomPublication, ClassroomResponse, ClassroomSession, ClassroomQuestionSet
 from app.models.sql.user import User
@@ -41,7 +42,7 @@ class StateInput(BaseModel):
 
 class WorkspaceInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    class_name: Literal["解构班", "开发班"]
+    class_name: TeachingClass
 
 
 @admin_router.post("/workspace")
@@ -263,7 +264,7 @@ async def student_state(response: Response, db: AsyncSession = Depends(get_db), 
 
 class LessonInput(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-    tasks: dict[Literal["pdt", "ai_pbl"], UUID] = Field(default_factory=dict, max_length=2)
+    tasks: dict[TeachingGroup, UUID] = Field(default_factory=dict, max_length=3)
     knowledge_points: list[str] = Field(default_factory=list, max_length=20)
 
 

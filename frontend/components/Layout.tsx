@@ -20,6 +20,7 @@ import {
 import { translations } from '../utils/translations';
 import type { Language, User } from '../types';
 import { AssessmentEntry } from './AssessmentEntry';
+import { studentViews } from '../utils/classroomEntry';
 
 type View = 'preparation' | 'dashboard' | 'chat' | 'graph' | 'calibration' | 'evidence' | 'research' | 'scales';
 type Theme = 'light' | 'dark';
@@ -106,12 +107,7 @@ export const Layout: React.FC<Props> = ({
   const group = user?.experimentGroup ?? 'unassigned';
   // 2026-08-24 裁定：知识图谱与自我校准不再作为学生端入口，相关数据迁入教师端单生详情。
   // 视图代码与后端接口保留，便于教师端承接后再决定是否清理。
-  const allowedViews: Record<User['experimentGroup'], View[]> = {
-    pdt: ['preparation', 'research', 'evidence', 'scales'],
-    ai_pbl: ['preparation', 'research', 'evidence', 'scales'],
-    lecture: ['preparation', 'evidence', 'scales'],
-    unassigned: ['preparation', 'scales'],
-  };
+  const allowedViews: Record<User['experimentGroup'], View[]> = studentViews;
   const navItems = allNavItems.filter(item => allowedViews[group].includes(item.id));
 
   const primaryViews: View[] = ['dashboard', 'chat', 'research'];

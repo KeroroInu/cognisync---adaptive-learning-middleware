@@ -11,6 +11,7 @@ describe('teacher setup', () => {
     const html = renderToStaticMarkup(<MemoryRouter><Users /><StudentAssistantConfig /></MemoryRouter>);
     expect(html).toContain('全选未分组（跨页）');
     expect(html).toContain('按教学分组筛选');
+    expect(html).toContain('<option value="experience">体验组</option>');
     expect(html).toContain('刷新名单');
     expect(html).toContain('学生平台 AI 助手');
     expect(html).toContain('配置 API key');
@@ -26,6 +27,15 @@ describe('teacher setup', () => {
     expect(fetcher.mock.calls[1][0]).toContain('/users/unassigned-ids?query=');
     await adminApi.assignStudents(selected.ids, '开发班');
     expect(fetcher).toHaveBeenLastCalledWith('/api/admin/users/batch-assign', expect.objectContaining({ method: 'POST', body: JSON.stringify({ user_ids: ['s1', 's2'], class_name: '开发班' }) }));
+  });
+  it('can filter and batch-assign experience students without renaming either experimental class', async () => {
+    vi.stubGlobal('localStorage', { getItem: () => 'test-token' });
+    const fetcher = vi.fn(async (_url: string, _options: RequestInit) => new Response(JSON.stringify({ success: true, data: {} })));
+    vi.stubGlobal('fetch', fetcher);
+    await adminApi.getUsers(1, 10, '', 'experience');
+    expect(fetcher.mock.calls[0][0]).toContain('experiment_group=experience');
+    await adminApi.assignStudents(['experience-student'], '体验组');
+    expect(fetcher).toHaveBeenLastCalledWith('/api/admin/users/batch-assign', expect.objectContaining({ method: 'POST', body: JSON.stringify({ user_ids: ['experience-student'], class_name: '体验组' }) }));
   });
   it('omits unchanged keys and saves only the requested role', async () => {
     vi.stubGlobal('localStorage', { getItem: () => 'test-token' });

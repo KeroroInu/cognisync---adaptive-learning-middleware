@@ -42,6 +42,13 @@ export const Dashboard: React.FC<Props> = ({ onNavigate, language, userName, exp
       intro: '跟随课堂讲解理解概念与示例，并在统一的在线环境中完成编码、运行与提交。',
       action: '进入编程练习',
     },
+    experience: {
+      kicker: 'AI PROGRAMMING EXPERIENCE / 2026',
+      platform: 'AI 编程体验平台',
+      slogan: '让想法，成为作品。',
+      intro: '查看老师发布的任务，下载到自己的电脑，和 SFLS 一起完成并提交作品。',
+      action: '查看课堂任务',
+    },
     unassigned: {
       kicker: 'PROGRAMMING LEARNING / 2026',
       platform: 'AI 时代的编程学习平台',
@@ -66,12 +73,14 @@ export const Dashboard: React.FC<Props> = ({ onNavigate, language, userName, exp
                 <span className="dashboard-platform-line">{hero.platform}</span>
                 <span className="dashboard-slogan-line">{hero.slogan}</span>
               </>
-            ) : 'From deconstruction to reconstruction.'}
+            ) : experimentGroup === 'experience' ? 'Turn an idea into a project.' : 'From deconstruction to reconstruction.'}
           </h2>
           <p className="dashboard-intro">
             {language === 'zh'
               ? hero.intro
-              : 'Observe a working project, name what it does, then rebuild it function by function with graded AI support.'}
+              : experimentGroup === 'experience'
+                ? 'Read your teacher’s task, download your own package, and create and submit your project with SFLS.'
+                : 'Observe a working project, name what it does, then rebuild it function by function with graded AI support.'}
           </p>
           <p className="dashboard-intro">
             {language === 'zh'
@@ -81,7 +90,7 @@ export const Dashboard: React.FC<Props> = ({ onNavigate, language, userName, exp
           <div className="dashboard-hero-actions">
             <button
               type="button"
-              onClick={() => onNavigate(experimentGroup === 'unassigned' ? 'scales' : 'research')}
+              onClick={() => onNavigate(experimentGroup === 'unassigned' ? 'scales' : experimentGroup === 'experience' ? 'preparation' : 'research')}
               className="hero-action hero-action-primary"
             >
               <span>{language === 'zh' ? hero.action : 'Open learning workspace'}</span>
