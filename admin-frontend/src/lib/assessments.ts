@@ -1,3 +1,5 @@
+import { createRequestId } from './requestId';
+
 export interface AssessmentQuestion {
   hint?: string;
   code?: string; skip_label?: string; parent_id?: string | null;
@@ -26,5 +28,5 @@ export async function assessmentAdmin<T>(path = '', body?: unknown, method = 'PO
   }
   return result.data as T;
 }
-export const emptyQuestion = (): AssessmentQuestion => ({ id: `q_${crypto.randomUUID().replace(/-/g, '')}`, text: '', type: 'choice', required: true,
+export const emptyQuestion = (): AssessmentQuestion => ({ id: `q_${createRequestId().replace(/-/g, '')}`, text: '', type: 'choice', required: true,
   options: [{ value: '1', label: '' }, { value: '2', label: '' }] });

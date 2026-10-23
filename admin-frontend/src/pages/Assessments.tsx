@@ -1,41 +1,83 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Plus, Copy, X, Trash2, ArrowUp, ArrowDown, Save } from 'lucide-react';
+import { Plus, Copy, X, Trash2, ArrowUp, ArrowDown, Save, Search, RefreshCw, Send, Eye, Download, ChevronDown, ClipboardList, CheckCircle2 } from 'lucide-react';
 import { assessmentAdmin, emptyQuestion, type AssessmentDraft, type AssessmentQuestion, type AssessmentRound } from '../lib/assessments';
 import './Assessments.css';
 import { AssessmentPreview } from '../components/AssessmentPreview';
 import { TEACHING_CLASSES } from '../lib/teachingClasses';
+import { createRequestId } from '../lib/requestId';
+import { ASSESSMENT_KINDS, assessmentKind, assessmentTime, filterAssessmentLibrary, requiresAssessmentReview, type AssessmentKind } from '../lib/assessmentLibrary';
 
 export function Assessments() {
   const [rounds, setRounds] = useState<AssessmentRound[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [editing, setEditing] = useState<{ id?: string; draft: AssessmentDraft } | null>(null);
-  const [confirmation, setConfirmation] = useState<AssessmentRound | null>(null);
+  const [confirmation, setConfirmation] = useState<{ round: AssessmentRound; className: string; action: 'distribute' | 'end' } | null>(null);
   const [preview, setPreview] = useState<AssessmentRound | null>(null);
   const [className, setClassName] = useState('解构班');
+  const [query, setQuery] = useState('');
+  const [kind, setKind] = useState<AssessmentKind>('全部');
   const library = rounds.filter(item => !item.published_at).sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
-  const needsReview = (item: AssessmentRound) => item.source.includes('题本代码：cps_');
-  const history = rounds.filter(item => item.published_at && item.class_name === className);
+  const ready = library.filter(item => !requiresAssessmentReview(item));
+  const reviewedLater = library.filter(requiresAssessmentReview);
+  const visibleLibrary = filterAssessmentLibrary(library, kind, query);
+  const history = rounds.filter(item => item.published_at && item.class_name === className)
+    .sort((a, b) => (b.published_at || '').localeCompare(a.published_at || ''));
+  const active = history.filter(item => item.enabled), closed = history.filter(item => !item.enabled);
   const sending = useRef(false);
   const deliveryRequest = useRef<{ key: string; id: string } | null>(null);
+  const editorInitial = useRef('');
+  const dismissDialog = useRef(() => {});
   const load = useCallback(async () => {
+    setRefreshing(true);
     try { setRounds(await assessmentAdmin<AssessmentRound[]>()); setError(''); }
     catch (e) { setError(String(e instanceof Error ? e.message : e)); }
-    finally { setLoading(false); }
+    finally { setLoading(false); setRefreshing(false); }
   }, []);
   useEffect(() => { void load(); }, [load]);
   const create = () => {
-    setEditing({ draft: { phase: 'pre', name: '课堂问卷', class_name: className, source: '', questions: [emptyQuestion()] } });
+    const draft: AssessmentDraft = { phase: 'pre', name: '课堂问卷', class_name: className, source: '', questions: [emptyQuestion()] };
+    editorInitial.current = JSON.stringify(draft); setEditing({ draft });
     setError(''); setMessage('');
   };
   function edit(item: AssessmentRound, copy: boolean) {
-    setEditing({ id: copy || item.published_at ? undefined : item.id, draft: {
+    const draft: AssessmentDraft = {
       phase: item.phase, name: item.name, class_name: item.class_name, source: item.source,
       questions: structuredClone(item.questions),
-    } });
+    };
+    editorInitial.current = JSON.stringify(draft);
+    setEditing({ id: copy || item.published_at ? undefined : item.id, draft });
     setError(''); setMessage('');
+  }
+  function closeEditor() {
+    if (busy || !editing) return;
+    if (JSON.stringify(editing.draft) !== editorInitial.current && !window.confirm('放弃未保存的修改？已保存的题目和答卷不会受影响。')) return;
+    setEditing(null); setError('');
+  }
+  const dialogOpen = !!(editing || confirmation || preview);
+  dismissDialog.current = () => { if (!busy) { if (editing) closeEditor(); else { setConfirmation(null); setPreview(null); setError(''); } } };
+  useEffect(() => {
+    if (!dialogOpen) return;
+    const previous = document.activeElement as HTMLElement | null;
+    const dialog = document.querySelector<HTMLElement>('.assessment-admin [role="dialog"]');
+    const focusable = () => Array.from(dialog?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), summary, [tabindex="0"]') || []).filter(node => node.getClientRects().length > 0);
+    focusable()[0]?.focus();
+    function keyboard(event: KeyboardEvent) {
+      if (event.key === 'Escape') { event.preventDefault(); dismissDialog.current(); }
+      if (event.key !== 'Tab') return;
+      const items = focusable(), first = items[0], last = items[items.length - 1];
+      if (!first) { event.preventDefault(); return; }
+      if (event.shiftKey && (document.activeElement === first || !dialog?.contains(document.activeElement))) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && (document.activeElement === last || !dialog?.contains(document.activeElement))) { event.preventDefault(); first.focus(); }
+    }
+    document.addEventListener('keydown', keyboard);
+    return () => { document.removeEventListener('keydown', keyboard); if (previous?.isConnected) previous.focus(); };
+  }, [dialogOpen]);
+  function confirm(item: AssessmentRound, action: 'distribute' | 'end' = 'distribute') {
+    setError(''); setMessage(''); setConfirmation({ round: item, className, action });
   }
   async function save() {
     if (!editing || busy) return;
@@ -46,24 +88,24 @@ export function Assessments() {
     } catch (e) { setError(e instanceof Error ? e.message : '保存失败'); }
     finally { setBusy(false); }
   }
-  async function toggle(item: AssessmentRound) {
+  async function endRound(item: AssessmentRound) {
     if (busy) return;
     setBusy(true); setError('');
     try {
-      await assessmentAdmin(`/${item.id}/availability`, { enabled: !item.enabled });
-      setConfirmation(null); setMessage(item.enabled ? '已结束填写，已提交的答案保留。' : '已开放。学生可在“问卷与测试”中填写。'); await load();
+      await assessmentAdmin(`/${item.id}/availability`, { enabled: false });
+      setConfirmation(null); setMessage('已结束填写，已提交的答案保留，可导出查看。'); await load();
     } catch (e) { setError(e instanceof Error ? e.message : '更新失败'); }
     finally { setBusy(false); }
   }
-  async function distribute(item: AssessmentRound) {
+  async function distribute(item: AssessmentRound, targetClass: string) {
     if (sending.current) return;
     sending.current = true; setBusy(true); setError('');
-    const key = `${item.id}:${className}`;
-    if (deliveryRequest.current?.key !== key) deliveryRequest.current = { key, id: crypto.randomUUID() };
+    const key = `${item.id}:${targetClass}`;
+    if (deliveryRequest.current?.key !== key) deliveryRequest.current = { key, id: createRequestId() };
     try {
-      const delivered = await assessmentAdmin<AssessmentRound>(`/${item.id}/distribute`, { class_name: className, request_id: deliveryRequest.current.id });
+      const delivered = await assessmentAdmin<AssessmentRound>(`/${item.id}/distribute`, { class_name: targetClass, request_id: deliveryRequest.current.id });
       setConfirmation(null); deliveryRequest.current = null;
-      setMessage(delivered.enabled ? `已发给${className}。学生点击顶部“问卷与测试”即可填写；其他班不会收到。` : '这次发放已经结束，没有重新开启。需要再做一次时请重新发放。');
+      setMessage(delivered.enabled ? `已发给${targetClass}。学生可在“问卷与测试”填写。` : '这次发放已经结束，没有重新开启。需要再做一次时请重新发放。');
       await load();
     } catch (e) { setError(e instanceof Error ? e.message : '发放未确认，请重试'); }
     finally { sending.current = false; setBusy(false); }
@@ -81,49 +123,68 @@ export function Assessments() {
     } catch (cause) { setError(cause instanceof Error ? cause.message : '导出失败，请重试'); }
     finally { setBusy(false); }
   }
+  function moreActions(item: AssessmentRound) {
+    return <details className="assessment-more"><summary>更多<ChevronDown size={14} aria-hidden="true" /></summary>
+      <div className="assessment-more-body"><div className="assessment-actions">
+        <button disabled={busy} onClick={() => edit(item, false)}>{item.published_at ? '修改为新版' : '编辑题目'}</button>
+        <button disabled={busy} onClick={() => edit(item, true)}><Copy size={15} aria-hidden="true" />复制</button>
+        <button disabled={busy} onClick={() => void exportRound(item, true)}><Download size={15} aria-hidden="true" />下载题本</button>
+      </div><p className="assessment-source">{item.source || '未填写来源与计分说明。'}</p></div>
+    </details>;
+  }
   return <div className="assessment-admin">
-    <header><div><h1>题本库</h1><p>选好班级，直接发放已有试卷、问卷或量表。</p></div></header>
-    <div className="assessment-delivery-toolbar"><nav aria-label="发放班级">{TEACHING_CLASSES.map(c => <button key={c.name} disabled={busy} aria-pressed={className === c.name} onClick={() => setClassName(c.name)}>{c.name}</button>)}</nav><button disabled={busy} onClick={create}><Plus size={16} />自定义题本</button></div>
-    {error && <p className="assessment-error" role="alert">{error}<button onClick={() => void load()}>重新读取</button></p>}
-    {message && <p role="status" className="assessment-message">{message}</p>}
-    {loading ? <p role="status">正在读取…</p> : <div className="assessment-phases"><section>
-      <header><h2>选择题本</h2><span>当前发放给：{className}</span></header>
-      {library.length === 0 && <div className="assessment-empty">题本库暂无内容。</div>}
-      {library.filter(item => !needsReview(item)).map(item => <article key={item.id}>
-        <div className="assessment-round-title"><strong>{item.name}</strong><span>{item.questions.filter(q => !q.parent_id).length} 题</span></div>
-        <div className="assessment-actions"><button className="assessment-primary" disabled={busy} onClick={() => setConfirmation(item)}>发给{className}</button><button disabled={busy} onClick={() => setPreview(item)}>预览题目</button></div>
-        <details><summary>来源、评分与编辑</summary><p>{item.source}</p><div className="assessment-actions"><button disabled={busy} onClick={() => edit(item, false)}>编辑题目</button><button disabled={busy} onClick={() => edit(item, true)}><Copy size={16} />复制</button><button disabled={busy} onClick={() => void exportRound(item, true)}>下载题本</button></div></details>
-      </article>)}
-      {library.some(needsReview) && <details><summary>待审阅材料</summary><p>以下自编量表尚未完成审定，暂不提供快捷发放。</p>{library.filter(needsReview).map(item => <article key={item.id}><strong>{item.name}</strong><p>{item.source}</p><button onClick={() => setPreview(item)}>预览题目</button><button onClick={() => edit(item, false)}>编辑草稿</button></article>)}</details>}
-      <details open={history.some(item => item.enabled)}><summary>{className}的发放记录 · {history.length} 次</summary>
-      {[...history].sort((a, b) => Number(b.enabled) - Number(a.enabled)).map(item => <article key={item.id}>
-        <div className="assessment-round-title"><strong>{item.name}</strong><span className={item.enabled ? 'is-open' : ''}>{item.enabled ? '开放中' : item.published_at ? '已关闭' : '未开放草稿'}</span></div>
-        <p>{item.class_name || '所有班级'} · 第 {item.revision} 版 · {item.questions.filter(q => !q.parent_id).length} 个主问题 · {item.response_count} 份答卷</p>
-        <details><summary>来源、用途与计分说明</summary><p>{item.source || '尚未填写'}</p></details>
-        <div className="assessment-actions">
-          <button disabled={busy} onClick={() => setPreview(item)}>试填预览</button>
-          <button disabled={busy || (item.enabled && item.class_name === className)} className="assessment-primary" onClick={() => setConfirmation(item)}>{item.enabled && item.class_name === className ? `${className}填写中` : `发给${className}`}</button>
-          {item.enabled && <button disabled={busy} onClick={() => void toggle(item)}>结束填写</button>}
-          <button disabled={busy} onClick={() => edit(item, false)}>{item.published_at ? '修改为新版' : '编辑题目'}</button>
-          <button disabled={busy} onClick={() => edit(item, true)} title="复制题本"><Copy size={16} />复制</button>
-          <button disabled={busy} onClick={() => void exportRound(item)}>导出答卷 CSV</button>
-          <button disabled={busy} onClick={() => void exportRound(item, true)}>下载题本</button>
-        </div>
-      </article>)}
-      </details>
-    </section></div>}
-    <p className="assessment-help">答卷与题本版本会进入“数据导出 → 课堂研究包”。本页不自动评分，也不更改学生画像。旧量表库和历史答案保持原状。</p>
+    <header className="assessment-page-header"><div><h1>题本库</h1><p>选好班级，找到题本，直接发放。</p></div><div className="assessment-actions">
+      <button disabled={busy || refreshing} onClick={() => void load()} aria-label="刷新题本与记录"><RefreshCw size={16} aria-hidden="true" />{refreshing ? '刷新中…' : '刷新'}</button>
+      <button disabled={busy} onClick={create}><Plus size={16} aria-hidden="true" />自定义题本</button>
+    </div></header>
+    <div className="assessment-delivery-toolbar"><nav aria-label="发放班级">{TEACHING_CLASSES.map(c => <button key={c.name} disabled={busy || dialogOpen} aria-pressed={className === c.name} onClick={() => { setClassName(c.name); setMessage(''); setError(''); }}>{c.name}</button>)}</nav><span>当前接收班级：<strong>{className}</strong></span></div>
+    {error && !dialogOpen && <p className="assessment-error assessment-feedback" role="alert">{error}<button disabled={busy || refreshing} onClick={() => void load()}>重新读取</button></p>}
+    {message && <p role="status" className="assessment-message"><CheckCircle2 size={18} aria-hidden="true" />{message}</p>}
+    <div className="assessment-workbench">
+      <section className="assessment-library-panel" aria-label="可发放题本" aria-busy={loading}>
+        <header className="assessment-section-header"><div><h2>选择题本</h2><span>{ready.length} 份可用</span></div><label className="assessment-search"><Search size={17} aria-hidden="true" /><input type="search" aria-label="搜索题本" placeholder="搜索题本名称" value={query} onChange={event => setQuery(event.target.value)} /></label></header>
+        <nav className="assessment-filters" aria-label="题本分类">{ASSESSMENT_KINDS.map(value => <button key={value} aria-pressed={kind === value} onClick={() => setKind(value)}>{value}</button>)}</nav>
+        {loading ? <div className="assessment-empty" role="status">正在读取题本…</div> : <>
+          <div className="assessment-library-list">
+            {visibleLibrary.map(item => <article key={item.id} className="assessment-library-row" aria-label={item.name}>
+              <div className="assessment-library-row-main"><div className="assessment-book-label"><ClipboardList size={20} aria-hidden="true" /><div><h3>{item.name}</h3><p>{assessmentKind(item)}<span>·</span>{item.questions.filter(q => !q.parent_id).length} 题</p></div></div>
+                <div className="assessment-actions"><button disabled={busy} onClick={() => setPreview(item)}><Eye size={16} aria-hidden="true" />预览题目</button><button className="assessment-primary" disabled={busy} onClick={() => confirm(item)}><Send size={16} aria-hidden="true" />发给{className}</button></div>
+              </div>{moreActions(item)}
+            </article>)}
+          </div>
+          {!visibleLibrary.length && <div className="assessment-empty"><ClipboardList size={28} aria-hidden="true" /><strong>{query || kind !== '全部' ? '没有找到符合条件的题本' : '还没有可发放的题本'}</strong><p>{query || kind !== '全部' ? '换个名称，或查看全部题本。' : '可以新建一份自定义题本。'}</p><button onClick={() => { if (query || kind !== '全部') { setQuery(''); setKind('全部'); } else create(); }}>{query || kind !== '全部' ? '清除筛选' : '自定义题本'}</button></div>}
+          {!!reviewedLater.length && <details className="assessment-review"><summary>待审阅材料 · {reviewedLater.length} 份<ChevronDown size={15} aria-hidden="true" /></summary><p>尚未审定，仅供预览和编辑，不直接发放。</p>{reviewedLater.map(item => <article key={item.id}><h3>{item.name}</h3><div className="assessment-actions"><button disabled={busy} onClick={() => setPreview(item)}>预览题目</button><button disabled={busy} onClick={() => edit(item, false)}>编辑草稿</button></div></article>)}</details>}
+        </>}
+      </section>
+      <aside className="assessment-delivery-panel" aria-label="本班发放记录" aria-busy={loading}>
+        <header className="assessment-section-header"><div><h2>本班发放</h2><span>{className}</span></div><button className="assessment-icon-button" aria-label="刷新本班答卷数" title="刷新答卷数" disabled={busy || refreshing} onClick={() => void load()}><RefreshCw size={16} aria-hidden="true" /></button></header>
+        {loading ? <p role="status">正在读取记录…</p> : <>
+          {!active.length && <div className="assessment-no-active"><ClipboardList size={25} aria-hidden="true" /><p>当前没有开放的题本</p><span>从题本库选一份发给本班。</span></div>}
+          {active.map(item => <article key={item.id} className="assessment-active-round" aria-label={`${item.name} · 开放中`}>
+            <span className="assessment-status is-open">开放中</span><h3>{item.name}</h3><p className="assessment-published-at">{assessmentTime(item.published_at)} 发放</p>
+            <p className="assessment-response-count">已收 <strong>{item.response_count}</strong> 份答卷</p>
+            <div className="assessment-current-actions"><button className="assessment-export" disabled={busy} onClick={() => void exportRound(item)}><Download size={16} aria-hidden="true" />导出答卷 CSV</button><button className="assessment-end" disabled={busy} onClick={() => confirm(item, 'end')}>结束填写</button></div>
+            <div className="assessment-actions"><button className="assessment-text-button" disabled={busy} onClick={() => setPreview(item)}>试填预览</button></div>{moreActions(item)}
+          </article>)}
+          <details key={className} className="assessment-history"><summary>已结束 · {closed.length} 次<ChevronDown size={15} aria-hidden="true" /></summary>
+            {!closed.length && <p>暂无已结束的发放记录。</p>}
+            {closed.map(item => <article key={item.id} className="assessment-history-row"><h3>{item.name}</h3><p>{assessmentTime(item.published_at)} · {item.response_count} 份答卷 · 第 {item.revision} 版</p><div className="assessment-actions"><button disabled={busy} onClick={() => void exportRound(item)}><Download size={15} aria-hidden="true" />导出答卷 CSV</button><button disabled={busy} onClick={() => confirm(item)}>再次发放</button><button disabled={busy} onClick={() => setPreview(item)}>试填预览</button></div>{moreActions(item)}</article>)}
+          </details>
+        </>}
+        <p className="assessment-delivery-note">每班同时开放一份。历史题本与答卷始终保留。</p>
+      </aside>
+    </div>
+    <p className="assessment-help">全部答卷和题本版本也可从“数据导出 → 课堂研究包”统一导出。</p>
     {preview && <AssessmentPreview round={preview} close={() => setPreview(null)} />}
     {confirmation && <div className="assessment-overlay"><section role="dialog" aria-modal="true" aria-labelledby="publish-title" className="assessment-confirm">
-      <h2 id="publish-title">发给{className}？</h2><p>{confirmation.name}</p>
-      <p><strong>接收班级：{className}</strong></p>
-      <details><summary>查看来源与评分说明</summary><p>{confirmation.source}</p></details>
-      <p>本班一次填写一份，正在填写的旧安排会结束，已交答卷保留。本次单独记录，做过这份题的学生也会收到新一轮；其他班不受影响。</p>
+      <header><h2 id="publish-title">{confirmation.action === 'end' ? '结束填写？' : `发给${confirmation.className}？`}</h2><button disabled={busy} aria-label="关闭确认" onClick={() => setConfirmation(null)}><X size={18} /></button></header>
+      <div className="assessment-confirm-book"><span>{confirmation.className} · {confirmation.round.questions.filter(q => !q.parent_id).length} 题</span><h3>{confirmation.round.name}</h3></div>
+      {confirmation.action === 'end' ? <p>结束后，本班学生不能继续填写本轮题本。已提交的 {confirmation.round.response_count} 份答卷保留，仍可导出。</p> : <><p>本班正在填写的旧题本会结束，已交答卷保留。此次会新开一轮，做过的学生也需重新填写；其他班不受影响。</p><details><summary>来源与评分说明</summary><p className="assessment-source">{confirmation.round.source || '未填写'}</p></details></>}
       {error && <p role="alert" className="assessment-error">{error}</p>}
-      <div className="assessment-actions"><button disabled={busy} onClick={() => setConfirmation(null)}>取消</button><button disabled={busy} className="assessment-primary" onClick={() => void distribute(confirmation)}>{busy ? '正在发放…' : '确认发放'}</button></div>
+      <footer className="assessment-actions"><button disabled={busy} onClick={() => setConfirmation(null)}>取消</button><button disabled={busy} className={confirmation.action === 'end' ? 'assessment-end' : 'assessment-primary'} onClick={() => void (confirmation.action === 'end' ? endRound(confirmation.round) : distribute(confirmation.round, confirmation.className))}>{busy ? '处理中…' : confirmation.action === 'end' ? '确认结束' : '确认发放'}</button></footer>
     </section></div>}
     {editing && <div className="assessment-overlay"><section className="assessment-editor" role="dialog" aria-modal="true" aria-labelledby="assessment-editor-title">
-      <header><h2 id="assessment-editor-title">{editing.id ? '编辑题目' : '新题本'}</h2><button disabled={busy} aria-label="关闭编辑" onClick={() => setEditing(null)}><X size={18} /></button></header>
+      <header><h2 id="assessment-editor-title">{editing.id ? '编辑题目' : '新题本'}</h2><button disabled={busy} aria-label="关闭编辑" onClick={closeEditor}><X size={18} /></button></header>
       <div className="assessment-editor-body">
         <div className="assessment-meta"><label>教师看到的名称<input maxLength={200} value={editing.draft.name} onChange={e => setEditing({ ...editing, draft: { ...editing.draft, name: e.target.value } })} /></label>
         <p>保存题目即可，发放时再选接收班级。</p></div>
